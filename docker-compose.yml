@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  ionos-ddns:
+    image: ionos-dyndns:latest  # Oder dein DockerHub-Image Name
+    container_name: ionos-ddns
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - API_PREFIX=dein_prefix
+      - API_SECRET=dein_secret
+      - DOMAINS=zuhause.deinedomain.de,cloud.deinedomain.de
+      - INTERVAL=300
+      - IP_MODE=BOTH          # Optionen: IPV4, IPV6, BOTH
+      - TZ=Europe/Berlin
+      - DEBUG=false           # Auf true setzen für detaillierte API-Logs
+    volumes:
+      - ./logs:/logs          # Speichert dyndns.json und update.json lokal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"       # Verhindert, dass Logs (vor allem im Debug) zu groß werden
+        max-file: "3"
