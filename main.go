@@ -25,6 +25,7 @@ var (
 	ipMode     = strings.ToUpper(os.Getenv("IP_MODE"))
 	ifaceName  = os.Getenv("INTERFACE")
 	healthPort = os.Getenv("HEALTH_PORT")
+  debugMode = os.Getenv("DEBUG") == "true"
 	
 	logPath    = "/logs/dyndns.json"
 	updatePath = "/logs/update.json"
@@ -268,19 +269,37 @@ func getIPv6() string {
 
 func ionosAPI(method, url string, body interface{}) ([]byte, error) {
 	var bodyReader io.Reader
+	var bodyBytes []byte
 	if body != nil {
-		jsonData, _ := json.Marshal(body)
-		bodyReader = bytes.NewBuffer(jsonData)
+		bodyBytes, _ = json.Marshal(body)
+		bodyReader = bytes.NewBuffer(bodyBytes)
 	}
+
+	if debugMode {
+		fmt.Printf("🔍 DEBUG: %s %s | Body: %s\n", method, url, string(bodyBytes))
+	}
+
 	req, _ := http.NewRequest(method, url, bodyReader)
 	req.Header.Set("X-API-Key", fmt.Sprintf("%s.%s", apiPrefix, apiSecret))
 	req.Header.Set("Content-Type", "application/json")
+
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(req)
-	if err != nil { return nil, err }
+	if err != nil {
+		if debugMode { fmt.Printf("⚠️ DEBUG-ERR: %v\n", err) }
+		return nil, err
+	}
 	defer resp.Body.Close()
-	return io.ReadAll(resp.Body)
+
+	data, err := io.ReadAll(resp.Body)
+	
+	if debugMode {
+		fmt.Printf("📥 DEBUG-RES: Status %d | Response: %s\n", resp.StatusCode, string(data))
+	}
+
+	return data, err
 }
+
 
 func getZones() ([]Zone, error) {
 	data, err := ionosAPI("GET", apiBaseURL, nil)
