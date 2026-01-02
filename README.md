@@ -4,16 +4,20 @@ Ein leichtgewichtiger DynDNS-Client für IONOS, geschrieben in Go. Das Tool aktu
 
 ## Features ✨
 
-* **Dual-Stack Support:** Aktualisiert IPv4 und IPv6 (identifiziert IPs über externe Dienste oder lokale Interfaces).
-* **Kombinierte Historie:** Speichert die letzten 30 IP-Wechsel in einer übersichtlichen `update.json`.
-* **JSON Logging:** Maschinenlesbare Logs für einfache Analyse.
-* **Healthcheck:** Integrierter HTTP-Endpunkt (`/health`) zur Überwachung des Container-Status.
-* **Minimaler Footprint:** Dank Go-Binary und Alpine Linux extrem klein (~15MB).
-* **Zeitzonen-Support:** Korrekte Zeitstempel durch `TZ`-Umgebungsvariable.
+* **Dual-Stack Support:** Aktualisiert IPv4 und IPv6.
+* **Kombinierte Historie:** Speichert die letzten 30 IP-Wechsel in der `update.json`.
+* **JSON Logging:** Maschinenlesbare Logs in `dyndns.json`.
+* **Healthcheck:** HTTP-Endpunkt (`/health`) für Container-Monitoring.
+* **Minimaler Footprint:** Basierend auf Alpine Linux (~15MB).
+* **Zeitzonen-Support:** Korrekte Zeitstempel via `TZ` Variable.
+
+---
 
 ## Voraussetzungen 📋
 
-Um dieses Tool zu nutzen, benötigst du IONOS API-Credentials (Prefix und Secret). Diese kannst du unter [developer.hosting.ionos.de](https://developer.hosting.ionos.de/) erstellen.
+Du benötigst IONOS API-Credentials (Prefix und Secret) vom [IONOS Developer Panel](https://developer.hosting.ionos.de/).
+
+---
 
 ## Schnellanleitung (Docker) 🐳
 
