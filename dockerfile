@@ -5,9 +5,7 @@ COPY main.go .
 RUN go mod init dyndns && go mod tidy
 RUN CGO_ENABLED=0 GOOS=linux go build -o dyndns main.go
 
-ENV API_PREFIX="prefix" \
-    API_SECRET="secret" \
-    DOMAINS="example.com" \
+ENV DOMAINS="example.com" \
     TZ=Europe/Berlin \
     IP_MODE="BOTH" \
     INTERFACE="eth0" \
