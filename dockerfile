@@ -10,14 +10,14 @@ ENV DOMAINS="example.com" \
     INTERFACE="eth0" \
     INTERVAL=300
 
-LABEL org.opencontainers.image.title="IONOS-DDNS-Go"
-LABEL org.opencontainers.image.description="Leichtgewichtiger DynDNS-Client für IONOS mit Dual-Stack Support"
-LABEL org.opencontainers.image.authors="CrazyUs3r"
-LABEL org.opencontainers.image.source="https://github.com/CrazyUs3r/IONOS-DDNS"
-LABEL org.opencontainers.image.version="1.1"
-
 FROM alpine:3.22
 RUN apk add --no-cache ca-certificates tzdata curl
+
+LABEL org.opencontainers.image.title="IONOS-DDNS-Go" \
+      org.opencontainers.image.description="Leichtgewichtiger DynDNS-Client fuer IONOS mit Dual-Stack Support" \
+      org.opencontainers.image.authors="CrazyUs3r" \
+      org.opencontainers.image.source="https://github.com/CrazyUs3r/IONOS-DDNS" \
+      org.opencontainers.image.version="1.1"
 
 WORKDIR /app
 
