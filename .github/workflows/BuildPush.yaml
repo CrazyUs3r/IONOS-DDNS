@@ -25,7 +25,6 @@ jobs:
       - name: Extract version from Dockerfile
         id: get_version
         run: |
-          # Sucht nach org.opencontainers.image.version="X.X"
           VERSION=$(grep 'org.opencontainers.image.version' dockerfile | cut -d '"' -f 2)
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "TAG_NAME=v$VERSION" >> $GITHUB_ENV
