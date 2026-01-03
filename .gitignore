@@ -1,0 +1,10 @@
+# Go Binary
+dyndns
+
+# Logs & History (Wichtig!)
+logs/
+*.json
+
+# OS-spezifische Dateien
+.DS_Store
+Thumbs.db
