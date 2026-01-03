@@ -1,4 +1,3 @@
-# Stage 1: Build
 FROM golang:1.22-alpine AS builder
 WORKDIR /app
 COPY main.go .
@@ -11,8 +10,12 @@ ENV DOMAINS="example.com" \
     INTERFACE="eth0" \
     INTERVAL=300
 
+LABEL org.opencontainers.image.title="IONOS-DDNS-Go"
+LABEL org.opencontainers.image.description="Leichtgewichtiger DynDNS-Client für IONOS mit Dual-Stack Support"
+LABEL org.opencontainers.image.authors="CrazyUs3r"
+LABEL org.opencontainers.image.source="https://github.com/CrazyUs3r/IONOS-DDNS"
+LABEL org.opencontainers.image.version="1.1"
 
-# Stage 2: Final Image
 FROM alpine:3.22
 RUN apk add --no-cache ca-certificates tzdata curl
 
@@ -27,7 +30,6 @@ COPY --from=builder --chown=dyndns:dyndns /app/dyndns .
 USER dyndns
 VOLUME ["/logs"]
 
-# Healthcheck auf Port 8080
 HEALTHCHECK --interval=1m --timeout=5s --retries=3 \
   CMD curl -f http://localhost:8080/health || exit 1
 
