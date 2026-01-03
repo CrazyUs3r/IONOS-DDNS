@@ -10,6 +10,10 @@ Ein leichtgewichtiger DynDNS-Client für IONOS, geschrieben in Go. Das Tool aktu
 * **Healthcheck:** HTTP-Endpunkt (`/health`) für Container-Monitoring.
 * **Minimaler Footprint:** Basierend auf Alpine Linux (~15MB).
 * **Zeitzonen-Support:** Korrekte Zeitstempel via `TZ` Variable.
+* 
+### 🌐 Internationalization
+By default, the tool uses German logs. You can switch to English by setting the environment variable:
+`LANG=EN`
 
 ---
 
