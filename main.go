@@ -17,6 +17,50 @@ import (
 	"time"
 )
 
+// ---------------- TRANSLATIONS ----------------
+
+type Phrases struct {
+	Startup      string
+	Shutdown     string
+	NoZones      string
+	Update       string
+	Created      string
+	Current      string
+	DryRunWarn   string
+	InfraHeading string
+	ConfigError  string
+	ZoneLabel    string
+}
+
+var languagePack = map[string]Phrases{
+	"DE": {
+		Startup:      "Service gestartet",
+		Shutdown:     "Service beendet",
+		NoZones:      "keine Zone gefunden",
+		Update:       "Update",
+		Created:      "Neuanlage",
+		Current:      "ist aktuell",
+		DryRunWarn:   "⚠️ DRY-RUN MODUS AKTIV: Keine DNS-Änderungen.",
+		InfraHeading: "📂 --- IONOS Infrastruktur Analyse ---",
+		ConfigError:  "❌ API Credentials fehlen!",
+		ZoneLabel:    "Zone",
+	},
+	"EN": {
+		Startup:      "Service started",
+		Shutdown:     "Service stopped",
+		NoZones:      "no zone found",
+		Update:       "Updating",
+		Created:      "Creating",
+		Current:      "is up to date",
+		DryRunWarn:   "⚠️ DRY-RUN MODE ACTIVE: No DNS changes.",
+		InfraHeading: "📂 --- IONOS Infrastructure Analysis ---",
+		ConfigError:  "❌ API Credentials missing!",
+		ZoneLabel:    "Zone",
+	},
+}
+
+var T Phrases // Globale Übersetzungs-Variable
+
 // ---------------- CONFIG & GLOBAL ----------------
 
 type Config struct {
@@ -29,6 +73,7 @@ type Config struct {
 	HealthPort string
 	DebugMode  bool
 	DryRun     bool
+	Lang       string
 }
 
 var (
@@ -37,8 +82,7 @@ var (
 	updatePath = "/logs/update.json"
 	apiBaseURL = "https://api.hosting.ionos.com/dns/v1/zones"
 	lastOk     = false
-	historyMap = make(map[string]DomainHistory)
-	histMutex  sync.Mutex // Schützt die JSON-Datei bei parallelen Zugriffen
+	histMutex  sync.Mutex
 )
 
 type Zone struct {
@@ -73,6 +117,13 @@ type DomainHistory struct {
 // ---------------- INITIALIZATION ----------------
 
 func loadConfig() Config {
+	lang := strings.ToUpper(getEnv("LANG", "DE"))
+	if _, ok := languagePack[lang]; ok {
+		T = languagePack[lang]
+	} else {
+		T = languagePack["EN"]
+	}
+
 	dStr := os.Getenv("DOMAINS")
 	rawDomains := strings.Split(dStr, ",")
 	var cleaned []string
@@ -94,13 +145,14 @@ func loadConfig() Config {
 		HealthPort: getEnv("HEALTH_PORT", "8080"),
 		DebugMode:  os.Getenv("DEBUG") == "true",
 		DryRun:     os.Getenv("DRY_RUN") == "true",
+		Lang:       lang,
 	}
 }
 
 func main() {
 	cfg = loadConfig()
 	if cfg.APIPrefix == "" || cfg.APISecret == "" {
-		log.Fatal("❌ API Credentials fehlen!")
+		log.Fatal(T.ConfigError)
 	}
 
 	go startHealthServer()
@@ -110,21 +162,20 @@ func main() {
 
 	printGroupedDomains()
 	if cfg.DryRun {
-		fmt.Println("⚠️  DRY-RUN MODUS AKTIV: Keine Echtzeit-Änderungen.")
+		fmt.Println(T.DryRunWarn)
 	}
 
-	writeJsonLog("INFO", "startup", "", "Service gestartet")
+	writeJsonLog("INFO", "startup", "", T.Startup)
 
 	ticker := time.NewTicker(time.Duration(cfg.Interval) * time.Second)
 	defer ticker.Stop()
 
-	// Sofortiger Start
 	runUpdate(true)
 
 	for {
 		select {
 		case <-stop:
-			writeJsonLog("INFO", "shutdown", "", "Service beendet")
+			writeJsonLog("INFO", "shutdown", "", T.Shutdown)
 			return
 		case <-ticker.C:
 			runUpdate(false)
@@ -167,7 +218,7 @@ func processDomain(fqdn string, zones []Zone) error {
 		}
 	}
 	if targetZone.ID == "" {
-		return fmt.Errorf("keine Zone gefunden")
+		return fmt.Errorf(T.NoZones)
 	}
 
 	detail, err := getZoneDetails(targetZone.ID)
@@ -176,7 +227,7 @@ func processDomain(fqdn string, zones []Zone) error {
 	}
 
 	var curV4, curV6 string
-	var v4Changed, v6Changed bool
+	v4Changed, v6Changed := false, false
 
 	if cfg.IPMode == "IPV4" || cfg.IPMode == "BOTH" {
 		curV4 = getPublicIP("https://4.ident.me/")
@@ -208,7 +259,7 @@ func updateDNS(fqdn, rType, currentIP string, records []Record, zoneID string) b
 
 	if existing != nil {
 		if existing.Content != currentIP {
-			msg := fmt.Sprintf("Update %s: %s -> %s", rType, existing.Content, currentIP)
+			msg := fmt.Sprintf("%s %s: %s -> %s", T.Update, rType, existing.Content, currentIP)
 			fmt.Printf("🔄 %s: %s\n", fqdn, msg)
 			if !cfg.DryRun {
 				sendUpdate(zoneID, fqdn, rType, currentIP)
@@ -216,12 +267,11 @@ func updateDNS(fqdn, rType, currentIP string, records []Record, zoneID string) b
 			}
 			return true
 		}
-		// Feedback für unveränderte Domains
-		fmt.Printf("🆗 %s: %s ist aktuell (%s)\n", fqdn, rType, currentIP)
+		fmt.Printf("🆗 %s: %s %s (%s)\n", fqdn, rType, T.Current, currentIP)
 		return false
 	}
 
-	msg := fmt.Sprintf("Neuanlage %s: %s", rType, currentIP)
+	msg := fmt.Sprintf("%s %s: %s", T.Created, rType, currentIP)
 	fmt.Printf("🆕 %s: %s\n", fqdn, msg)
 	if !cfg.DryRun {
 		sendCreate(zoneID, fqdn, rType, currentIP)
@@ -230,7 +280,7 @@ func updateDNS(fqdn, rType, currentIP string, records []Record, zoneID string) b
 	return true
 }
 
-// ---------------- API HELPERS ----------------
+// ---------------- API & HELPERS ----------------
 
 func ionosAPI(method, url string, body interface{}) ([]byte, error) {
 	var bodyReader io.Reader
@@ -238,11 +288,6 @@ func ionosAPI(method, url string, body interface{}) ([]byte, error) {
 		bodyBytes, _ := json.Marshal(body)
 		bodyReader = bytes.NewBuffer(bodyBytes)
 	}
-
-	if cfg.DebugMode {
-		fmt.Printf("🔍 DEBUG: %s %s\n", method, url)
-	}
-
 	req, _ := http.NewRequest(method, url, bodyReader)
 	req.Header.Set("X-API-Key", fmt.Sprintf("%s.%s", cfg.APIPrefix, cfg.APISecret))
 	req.Header.Set("Content-Type", "application/json")
@@ -253,18 +298,7 @@ func ionosAPI(method, url string, body interface{}) ([]byte, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	if cfg.DebugMode {
-		preview := string(data)
-		if len(preview) > 150 {
-			preview = preview[:150] + "..."
-		}
-		fmt.Printf("📥 DEBUG-RES: %d | %s\n", resp.StatusCode, preview)
-	}
+	data, _ := io.ReadAll(resp.Body)
 	return data, nil
 }
 
@@ -278,66 +312,29 @@ func sendCreate(zoneID, fqdn, rType, ip string) {
 	_, _ = ionosAPI("POST", apiBaseURL+"/"+zoneID+"/records", payload)
 }
 
-// ---------------- UI & LOGGING HELPERS ----------------
+func updateStatusFile(fqdn, ipv4, ipv6 string) {
+	histMutex.Lock()
+	defer histMutex.Unlock()
 
-func printGroupedDomains() {
-	fmt.Printf("🚀 Go-DynDNS gestartet (%s) für:\n", cfg.IPMode)
-	groups := make(map[string][]string)
-	for _, d := range cfg.Domains {
-		parts := strings.Split(d, ".")
-		if len(parts) >= 2 {
-			main := strings.Join(parts[len(parts)-2:], ".")
-			if d != main {
-				prefix := strings.TrimSuffix(d, "."+main)
-				groups[main] = append(groups[main], prefix)
-			} else if _, ok := groups[main]; !ok {
-				groups[main] = []string{}
-			}
-		}
+	fileData, err := os.ReadFile(updatePath)
+	tempMap := make(map[string]DomainHistory)
+	if err == nil {
+		_ = json.Unmarshal(fileData, &tempMap)
 	}
 
-	var mainDomains []string
-	for m := range groups {
-		mainDomains = append(mainDomains, m)
+	history := tempMap[fqdn]
+	history.IPs = append(history.IPs, IPEntry{
+		Time: time.Now().Local().Format(time.RFC3339),
+		IPv4: ipv4,
+		IPv6: ipv6,
+	})
+	if len(history.IPs) > 10 {
+		history.IPs = history.IPs[len(history.IPs)-10:]
 	}
-	sort.Strings(mainDomains)
+	tempMap[fqdn] = history
 
-	for _, main := range mainDomains {
-		fmt.Printf("\n📦 %s\n", strings.ToUpper(main))
-		subs := groups[main]
-		sort.Strings(subs)
-		if len(subs) == 0 {
-			fmt.Printf("   ┗━━ (Root Domain)\n")
-		} else {
-			for i, sub := range subs {
-				char := "┣"
-				if i == len(subs)-1 {
-					char = "┗"
-				}
-				fmt.Printf("   %s━━ %s\n", char, sub)
-			}
-		}
-	}
-	fmt.Println("\n" + strings.Repeat("-", 40))
-}
-
-func printInfrastructure(zones []Zone) {
-	fmt.Println("\n📂 --- IONOS Infrastruktur Analyse ---")
-	for _, z := range zones {
-		detail, _ := getZoneDetails(z.ID)
-		fmt.Printf("\n🌍 Zone: %s\n", z.Name)
-		var relevant []Record
-		for _, r := range detail.Records {
-			if r.Type == "A" || r.Type == "AAAA" || r.Type == "CNAME" {
-				relevant = append(relevant, r)
-			}
-		}
-		sort.Slice(relevant, func(i, j int) bool { return relevant[i].Name < relevant[j].Name })
-		for _, r := range relevant {
-			fmt.Printf("   ┣━ %-35s [%-5s] -> %s\n", r.Name, r.Type, r.Content)
-		}
-	}
-	fmt.Println("\n" + strings.Repeat("-", 40))
+	newJson, _ := json.MarshalIndent(tempMap, "", "  ")
+	_ = os.WriteFile(updatePath, newJson, 0644)
 }
 
 func writeJsonLog(level, action, domain, message string) {
@@ -356,79 +353,86 @@ func writeJsonLog(level, action, domain, message string) {
 	}
 }
 
-func updateStatusFile(fqdn, ipv4, ipv6 string) {
-	histMutex.Lock()
-	defer histMutex.Unlock()
-	fileData, err := os.ReadFile(updatePath)
-	if err == nil {
-		json.Unmarshal(fileData, &historyMap)
+func printGroupedDomains() {
+	fmt.Printf("🚀 Go-DynDNS [%s] (%s):\n", cfg.Lang, cfg.IPMode)
+	groups := make(map[string][]string)
+	for _, d := range cfg.Domains {
+		parts := strings.Split(d, ".")
+		if len(parts) >= 2 {
+			main := strings.Join(parts[len(parts)-2:], ".")
+			if d != main {
+				prefix := strings.TrimSuffix(d, "."+main)
+				groups[main] = append(groups[main], prefix)
+			} else if _, ok := groups[main]; !ok {
+				groups[main] = []string{}
+			}
+		}
 	}
+	var mainDomains []string
+	for m := range groups { mainDomains = append(mainDomains, m) }
+	sort.Strings(mainDomains)
+	for _, main := range mainDomains {
+		fmt.Printf("\n📦 %s\n", strings.ToUpper(main))
+		subs := groups[main]
+		sort.Strings(subs)
+		if len(subs) == 0 {
+			fmt.Printf("   ┗━━ (Root Domain)\n")
+		} else {
+			for i, sub := range subs {
+				char := "┣"; if i == len(subs)-1 { char = "┗" }
+				fmt.Printf("   %s━━ %s\n", char, sub)
+			}
+		}
+	}
+	fmt.Println("\n" + strings.Repeat("-", 40))
+}
 
-	history := historyMap[fqdn]
-	history.IPs = append(history.IPs, IPEntry{
-		Time: time.Now().Local().Format(time.RFC3339),
-		IPv4: ipv4,
-		IPv6: ipv6,
-	})
-	if len(history.IPs) > 30 {
-		history.IPs = history.IPs[len(history.IPs)-30:]
+func printInfrastructure(zones []Zone) {
+	fmt.Println("\n" + T.InfraHeading)
+	for _, z := range zones {
+		detail, _ := getZoneDetails(z.ID)
+		fmt.Printf("\n🌍 %s: %s\n", T.ZoneLabel, z.Name)
+		var relevant []Record
+		for _, r := range detail.Records {
+			if r.Type == "A" || r.Type == "AAAA" || r.Type == "CNAME" { relevant = append(relevant, r) }
+		}
+		sort.Slice(relevant, func(i, j int) bool { return relevant[i].Name < relevant[j].Name })
+		for _, r := range relevant {
+			fmt.Printf("   ┣━ %-35s [%-5s] -> %s\n", r.Name, r.Type, r.Content)
+		}
 	}
-	historyMap[fqdn] = history
-	newJson, _ := json.MarshalIndent(historyMap, "", "  ")
-	_ = os.WriteFile(updatePath, newJson, 0644)
+	fmt.Println("\n" + strings.Repeat("-", 40))
 }
 
 func startHealthServer() {
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		if lastOk {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("OK"))
-		} else {
-			w.WriteHeader(http.StatusServiceUnavailable)
-		}
+		if lastOk { w.WriteHeader(200); w.Write([]byte("OK")) } else { w.WriteHeader(503) }
 	})
 	_ = http.ListenAndServe(":"+cfg.HealthPort, nil)
 }
 
-// ---------------- UTIL ----------------
-
 func getZones() ([]Zone, error) {
 	data, err := ionosAPI("GET", apiBaseURL, nil)
-	if err != nil {
-		return nil, err
-	}
+	if err != nil { return nil, err }
 	var zones []Zone
 	if strings.Contains(string(data), "\"items\"") {
-		var wrapper struct {
-			Items []Zone `json:"items"`
-		}
-		if err := json.Unmarshal(data, &wrapper); err != nil {
-			return nil, err
-		}
+		var wrapper struct { Items []Zone `json:"items"` }
+		_ = json.Unmarshal(data, &wrapper)
 		zones = wrapper.Items
-	} else {
-		if err := json.Unmarshal(data, &zones); err != nil {
-			return nil, err
-		}
-	}
+	} else { _ = json.Unmarshal(data, &zones) }
 	return zones, nil
 }
 
 func getZoneDetails(id string) (ZoneDetail, error) {
-	data, err := ionosAPI("GET", apiBaseURL+"/"+id, nil)
+	data, _ := ionosAPI("GET", apiBaseURL+"/"+id, nil)
 	var detail ZoneDetail
-	if err != nil {
-		return detail, err
-	}
 	_ = json.Unmarshal(data, &detail)
 	return detail, nil
 }
 
 func getPublicIP(url string) string {
 	resp, err := http.Get(url)
-	if err != nil {
-		return ""
-	}
+	if err != nil { return "" }
 	defer resp.Body.Close()
 	ip, _ := io.ReadAll(resp.Body)
 	return strings.TrimSpace(string(ip))
@@ -440,27 +444,21 @@ func getIPv6() string {
 		addrs, _ := iface.Addrs()
 		for _, addr := range addrs {
 			ipnet, ok := addr.(*net.IPNet)
-			if ok && !ipnet.IP.IsLoopback() && ipnet.IP.To4() == nil {
-				if ipnet.IP.IsGlobalUnicast() {
-					return ipnet.IP.String()
-				}
+			if ok && !ipnet.IP.IsLoopback() && ipnet.IP.To4() == nil && ipnet.IP.IsGlobalUnicast() {
+				return ipnet.IP.String()
 			}
 		}
 	}
 	return getPublicIP("https://6.ident.me/")
 }
 
-func getEnv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
+func getEnvInt(key string, fallback int) int {
+	var res int
+	if _, err := fmt.Sscanf(os.Getenv(key), "%d", &res); err == nil { return res }
 	return fallback
 }
 
-func getEnvInt(key string, fallback int) int {
-	var res int
-	if _, err := fmt.Sscanf(os.Getenv(key), "%d", &res); err == nil {
-		return res
-	}
+func getEnv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" { return v }
 	return fallback
 }
