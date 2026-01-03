@@ -127,22 +127,28 @@ func startHealthServer() {
 // ---------------- MAIN LOGIC ----------------
 
 func main() {
-	if apiPrefix == "" || apiSecret == "" { log.Fatal("❌ API Credentials fehlen!") }
+	if apiPrefix == "" || apiSecret == "" {
+		log.Fatal("❌ API Credentials fehlen!")
+	}
 	if ifaceName == "" { ifaceName = "eth0" }
 	if ipMode == "" { ipMode = "BOTH" }
+
+	var cleanedDomains []string
+	for _, d := range domains {
+		trimmed := strings.TrimSpace(d)
+		if trimmed != "" {
+			cleanedDomains = append(cleanedDomains, trimmed)
+		}
+	}
+	sort.Strings(cleanedDomains)
+	domains = cleanedDomains
 
 	go startHealthServer()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
-	fmt.Printf("🚀 Go-DynDNS gestartet (%s) für:\n", ipMode)
-     	for _, d := range domains {
-		  d = strings.TrimSpace(d)
-		  if d != "" {
-	    		fmt.Printf("   - \"%s\"\n", d)
-		  }
-	  }
+	printGroupedDomains()
 
 	writeJsonLog("INFO", "startup", "", "Service gestartet")
 
@@ -163,6 +169,53 @@ func main() {
 			continue
 		}
 	}
+}
+
+func printGroupedDomains() {
+	fmt.Printf("🚀 Go-DynDNS gestartet (%s) für:\n", ipMode)
+	
+	groups := make(map[string][]string)
+	for _, d := range domains {
+		d = strings.ToLower(strings.TrimSpace(d))
+		parts := strings.Split(d, ".")
+		
+		if len(parts) >= 2 {
+			main := strings.Join(parts[len(parts)-2:], ".")
+			if d != main {
+				prefix := strings.TrimSuffix(d, "."+main)
+				groups[main] = append(groups[main], prefix)
+			} else {
+				if _, für := groups[main]; !für {
+					groups[main] = []string{}
+				}
+			}
+		}
+	}
+
+	var mainDomains []string
+	for m := range groups {
+		mainDomains = append(mainDomains, m)
+	}
+	sort.Strings(mainDomains)
+
+	for _, main := range mainDomains {
+		fmt.Printf("\n📦 %s\n", strings.ToUpper(main))
+		subs := groups[main]
+		sort.Strings(subs) // Subdomains innerhalb der Gruppe sortieren
+
+		if len(subs) == 0 {
+			fmt.Printf("   ┗━━ (Root Domain)\n")
+		} else {
+			for i, sub := range subs {
+				char := "┣"
+				if i == len(subs)-1 {
+					char = "┗"
+				}
+				fmt.Printf("   %s━━ %s\n", char, sub)
+			}
+		}
+	}
+	fmt.Println("\n" + strings.Repeat("-", 40))
 }
 
 func runUpdate(firstRun bool) error {
