@@ -136,7 +136,14 @@ func main() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
-	fmt.Printf("🚀 Go-DynDNS gestartet für %v (%s)\n", domains, ipMode)
+	fmt.Printf("🚀 Go-DynDNS gestartet (%s) für:\n", ipMode)
+     	for _, d := range domains {
+		  d = strings.TrimSpace(d)
+		  if d != "" {
+	    		fmt.Printf("   - \"%s\"\n", d)
+		  }
+	  }
+
 	writeJsonLog("INFO", "startup", "", "Service gestartet")
 
 	ticker := time.NewTicker(time.Duration(interval) * time.Second)
