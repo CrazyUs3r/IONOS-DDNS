@@ -2,9 +2,9 @@ name: Docker Build and Release
 
 on:
   push:
-    tags:
-      - 'v*.*.*' # Triggert nur bei Version-Tags wie v1.0.0
-  workflow_dispatch: # Ermöglicht manuelles Starten
+    branches: [ "main" ]
+    tags: [ 'v*.*.*' ]
+  workflow_dispatch:
 
 jobs:
   build-and-release:
@@ -18,17 +18,28 @@ jobs:
         with:
           go-version: '1.22'
 
-      # 1. Binaries für verschiedene Betriebssysteme bauen (Windows, Linux, Mac)
+      # 1. Version aus Dockerfile extrahieren
+      - name: Extract version from Dockerfile
+        id: get_version
+        run: |
+          # Sucht nach org.opencontainers.image.version="X.X"
+          VERSION=$(grep 'org.opencontainers.image.version' dockerfile | cut -d '"' -f 2)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "TAG_NAME=v$VERSION" >> $GITHUB_ENV
+
+      # 2. Binaries bauen
       - name: Build Binaries
         run: |
           GOOS=linux GOARCH=amd64 go build -o ionos-ddns-linux-amd64 main.go
           GOOS=windows GOARCH=amd64 go build -o ionos-ddns-windows-amd64.exe main.go
           GOOS=linux GOARCH=arm64 go build -o ionos-ddns-linux-arm64 main.go
 
-      # 2. GitHub Release erstellen und Dateien hochladen
+      # 3. GitHub Release erstellen (nutzt die extrahierte Version)
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.TAG_NAME }}
+          name: Release ${{ env.TAG_NAME }}
           files: |
             ionos-ddns-linux-amd64
             ionos-ddns-windows-amd64.exe
@@ -38,7 +49,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 3. Docker Login & Build (wie gehabt)
+      # 4. Docker Setup & Build
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -59,4 +70,4 @@ jobs:
           platforms: linux/amd64,linux/arm64 
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/ionos-ddns:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/ionos-ddns:${{ github.ref_name }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/ionos-ddns:${{ env.VERSION }}
