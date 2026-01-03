@@ -1,17 +1,44 @@
-name: Docker Build and Push
+name: Docker Build and Release
 
 on:
   push:
-    branches: [ "main" ]
+    tags:
+      - 'v*.*.*' # Triggert nur bei Version-Tags wie v1.0.0
   workflow_dispatch: # Ermöglicht manuelles Starten
 
 jobs:
-  build:
+  build-and-release:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      # 1. Binaries für verschiedene Betriebssysteme bauen (Windows, Linux, Mac)
+      - name: Build Binaries
+        run: |
+          GOOS=linux GOARCH=amd64 go build -o ionos-ddns-linux-amd64 main.go
+          GOOS=windows GOARCH=amd64 go build -o ionos-ddns-windows-amd64.exe main.go
+          GOOS=linux GOARCH=arm64 go build -o ionos-ddns-linux-arm64 main.go
+
+      # 2. GitHub Release erstellen und Dateien hochladen
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ionos-ddns-linux-amd64
+            ionos-ddns-windows-amd64.exe
+            ionos-ddns-linux-arm64
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 3. Docker Login & Build (wie gehabt)
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -24,13 +51,12 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build and push Docker Image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          # Baut für PC (amd64) und Raspberry Pi (arm64)
           platforms: linux/amd64,linux/arm64 
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/ionos-ddns:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/ionos-ddns:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/ionos-ddns:${{ github.ref_name }}
