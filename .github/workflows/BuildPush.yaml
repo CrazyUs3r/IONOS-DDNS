@@ -12,6 +12,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up QEMU
+        uses: actions/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: actions/setup-buildx-action@v3
 
@@ -26,4 +29,8 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/ionos-dyndns:latest
+          # Erstellt Images für PC und Raspberry Pi gleichzeitig
+          platforms: linux/amd64,linux/arm64 
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/ionos-ddns:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/ionos-ddns:${{ github.sha }}
