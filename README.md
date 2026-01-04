@@ -1,34 +1,31 @@
-# 🚀 IONOS DynDNS Dual-Stack (Go)
+# 🌐 IONOS DynDNS Dual-Stack (Go)
 
-Ein leistungsstarker, in Go geschriebener DynDNS-Client für IONOS. Er wurde speziell für moderne Internetanschlüsse entwickelt, die sowohl IPv4 als auch IPv6 (Dual-Stack) nutzen.
+Ein hochperformanter, in Go geschriebener Dynamic DNS Client für IONOS. Optimiert für moderne Dual-Stack Anschlüsse (IPv4 & IPv6).
 
-## ✨ Features
-* **Dual-Stack Support:** Aktualisiert A (IPv4) und AAAA (IPv6) Records gleichzeitig.
-* **Parallele Verarbeitung:** Nutzt Go-Routines, um alle Domains gleichzeitig zu prüfen.
-* **Infrastruktur-Analyse:** Zeigt beim Start eine Übersicht aller konfigurierten IONOS DNS-Einträge an.
-* **Mehrsprachig:** Unterstützt deutsche und englische Konsolenausgaben (`LANG=DE`/`LANG=EN`).
-* **Status-Historie:** Speichert eine JSON-Datei mit der Historie deiner IP-Wechsel.
-* **Multi-Architektur:** Native Docker-Images für PC (amd64) und Raspberry Pi (arm64).
+## ✨ Highlights
+* **Web-Dashboard:** Behalte deine IP-Historie und den Systemstatus direkt im Browser im Blick.
+* **Dual-Stack Ready:** Gleichzeitige Aktualisierung von A (IPv4) und AAAA (IPv6) Records.
+* **Parallele Verarbeitung:** Schnelle Updates durch Go-Routines (ideal für viele Subdomains).
+* **Multi-Architektur:** Native Unterstützung für `amd64` und `arm64` (perfekt für Raspberry Pi & Server).
+* **Smart Logging:** Verhindert doppelte Einträge in der Historie bei Neustarts.
 
-## 🚀 Installation mit Docker Compose
-Dies ist der einfachste Weg, das Tool dauerhaft auf einem Server oder NAS zu betreiben.
-
+## 🚀 Quick Start (Docker Compose)
 ```yaml
 services:
   ionos-ddns:
-    image: crazyus3r/ionos-ddns:latest
+    image: deinusername/ionos-ddns:latest
     container_name: ionos-ddns
-    restart: unless-stopped
     environment:
-      - API_PREFIX=dein_prefix
-      - API_SECRET=dein_secret
+      - API_PREFIX=dein_ionos_prefix
+      - API_SECRET=dein_ionos_secret
       - DOMAINS=domain.de,sub.domain.de
       - IP_MODE=BOTH # IPV4, IPV6 oder BOTH
-      - INTERVAL=300 # Prüfintervall in Sekunden
-      - LANG=DE      # DE oder EN
-      - TZ=Europe/Berlin
+    ports:
+      - "8080:8080" # Dashboard & Healthcheck
     volumes:
       - ./logs:/logs
+    restart: unless-stopped
+
 ```
 
 ## 🛠 Konfiguration (Umgebungsvariablen)
@@ -43,6 +40,9 @@ services:
 | `LANG` | Sprache der Logs (`DE` oder `EN`) | `DE` |
 | `DRY_RUN` | Wenn `true`, wird nichts bei IONOS geändert | `false` |
 
+
+## 📊 Dashboard
+​Erreichbar unter http://server-ip:8080. Zeigt den aktuellen API-Status und die letzten IP-Änderungen übersichtlich an.
 
 ## 📊 Monitoring & Logs
 ​Das Tool erstellt im gemounteten /logs Verzeichnis zwei Dateien:
