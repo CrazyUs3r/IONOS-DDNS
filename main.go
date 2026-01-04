@@ -59,7 +59,7 @@ var languagePack = map[string]Phrases{
 	},
 }
 
-var T Phrases // Globale Übersetzungs-Variable
+var T Phrases
 
 // ---------------- CONFIG & GLOBAL ----------------
 
@@ -112,6 +112,129 @@ type IPEntry struct {
 
 type DomainHistory struct {
 	IPs []IPEntry `json:"ips"`
+}
+
+// ---------------- WEB SERVER (HEALTH & DASHBOARD) ----------------
+
+func startHealthServer() {
+	mux := http.NewServeMux()
+
+	// 1. Docker Health Check
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		if lastOk {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("OK"))
+		} else {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+	})
+
+	// 2. Web Dashboard Logik
+	statusHandler := func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" && r.URL.Path != "/status" {
+			http.NotFound(w, r)
+			return
+		}
+
+		fileData, err := os.ReadFile(updatePath)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("Warte auf Daten..."))
+			return
+		}
+
+		var tempMap map[string]DomainHistory
+		json.Unmarshal(fileData, &tempMap)
+
+		statusClass := "status-ok"
+		statusText := "System Online"
+		if !lastOk {
+			statusClass = "status-error"
+			statusText := "API Error"
+			_ = statusText // Fix für ungenutzte Variable falls nötig
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		// WICHTIG: Alle % im CSS müssen %% sein!
+		fmt.Fprintf(w, `
+		<!DOCTYPE html>
+		<html lang="de">
+		<head>
+			<title>DynDNS Dashboard</title>
+			<meta charset="utf-8">
+			<meta name="viewport" content="width=device-width, initial-scale=1">
+			<meta http-equiv="refresh" content="60">
+			<style>
+				body { font-family: -apple-system, system-ui, sans-serif; background: #0f172a; color: #f8fafc; padding: 20px; line-height: 1.5; }
+				.container { max-width: 900px; margin: 0 auto; }
+				.header-section { margin-bottom: 30px; border-bottom: 2px solid #1e293b; padding-bottom: 20px; }
+				h1 { color: #38bdf8; margin: 0 0 15px 0; display: flex; align-items: center; gap: 12px; font-size: 1.8rem; }
+				.health-banner { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+				.status-ok { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
+				.status-error { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+				.pulse { width: 8px; height: 8px; border-radius: 50%%; background: currentColor; box-shadow: 0 0 8px currentColor; animation: pulse 2s infinite; }
+				@keyframes pulse { 0%% { opacity: 1; } 50%% { opacity: 0.4; } 100%% { opacity: 1; } }
+				.card { background: #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); border: 1px solid #334155; }
+				.domain-name { font-size: 1.25rem; font-weight: bold; color: #e2e8f0; margin-bottom: 15px; display: block; }
+				table { width: 100%%; border-collapse: collapse; font-size: 0.9rem; }
+				th { text-align: left; color: #38bdf8; background: #0f172a; padding: 12px; font-weight: 600; }
+				td { padding: 12px; border-bottom: 1px solid #334155; vertical-align: top; }
+				tr:last-child td { border-bottom: none; }
+				.time { color: #94a3b8; font-family: monospace; white-space: nowrap; }
+				.ip-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+				.ip { font-family: monospace; font-weight: 500; }
+				.badge { font-size: 0.7rem; font-weight: bold; padding: 2px 6px; border-radius: 4px; color: white; min-width: 40px; text-align: center; }
+				.badge-v4 { background: #0ea5e9; }
+				.badge-v6 { background: #8b5cf6; }
+			</style>
+		</head>
+		<body>
+			<div class="container">
+				<div class="header-section">
+					<h1><span>🌐</span> IONOS DynDNS Status</h1>
+					<div class="health-banner %s">
+						<div class="pulse"></div>
+						%s &bull; Letzter Check: %s
+					</div>
+				</div>
+		`, statusClass, statusText, time.Now().Format("15:04:05"))
+
+		keys := make([]string, 0, len(tempMap))
+		for k := range tempMap { keys = append(keys, k) }
+		sort.Strings(keys)
+
+		for _, domain := range keys {
+			fmt.Fprintf(w, "<div class='card'><span class='domain-name'>📦 %s</span>", domain)
+			fmt.Fprintf(w, "<table><thead><tr><th>Zeitpunkt</th><th>IP Adressen</th></tr></thead><tbody>")
+			
+			ips := tempMap[domain].IPs
+			for i := len(ips) - 1; i >= 0; i-- {
+				entry := ips[i]
+				t, _ := time.Parse(time.RFC3339, entry.Time)
+				fmt.Fprintf(w, "<tr><td class='time'>%s</td><td>", t.Format("02.01.2006 15:04:05"))
+				if entry.IPv4 != "" {
+					fmt.Fprintf(w, "<div class='ip-row'><span class='badge badge-v4'>IPv4</span><span class='ip'>%s</span></div>", entry.IPv4)
+				}
+				if entry.IPv6 != "" {
+					fmt.Fprintf(w, "<div class='ip-row'><span class='badge badge-v6'>IPv6</span><span class='ip'>%s</span></div>", entry.IPv6)
+				}
+				fmt.Fprintf(w, "</td></tr>")
+			}
+			fmt.Fprintf(w, "</tbody></table></div>")
+		}
+		fmt.Fprintf(w, "</div></body></html>")
+	}
+
+	mux.HandleFunc("/", statusHandler)
+	mux.HandleFunc("/status", statusHandler)
+
+	server := &http.Server{
+		Addr: ":" + cfg.HealthPort,
+		Handler: mux,
+		ReadTimeout: 5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+	_ = server.ListenAndServe()
 }
 
 // ---------------- INITIALIZATION ----------------
@@ -280,8 +403,6 @@ func updateDNS(fqdn, rType, currentIP string, records []Record, zoneID string) b
 	return true
 }
 
-// ---------------- API & HELPERS ----------------
-
 func ionosAPI(method, url string, body interface{}) ([]byte, error) {
 	var bodyReader io.Reader
 	if body != nil {
@@ -294,9 +415,7 @@ func ionosAPI(method, url string, body interface{}) ([]byte, error) {
 
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
+	if err != nil { return nil, err }
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(resp.Body)
 	return data, nil
@@ -323,13 +442,22 @@ func updateStatusFile(fqdn, ipv4, ipv6 string) {
 	}
 
 	history := tempMap[fqdn]
+
+	if len(history.IPs) > 0 {
+		lastEntry := history.IPs[len(history.IPs)-1]
+		if lastEntry.IPv4 == ipv4 && lastEntry.IPv6 == ipv6 {
+			return 
+		}
+	}
+
 	history.IPs = append(history.IPs, IPEntry{
 		Time: time.Now().Local().Format(time.RFC3339),
 		IPv4: ipv4,
 		IPv6: ipv6,
 	})
-	if len(history.IPs) > 10 {
-		history.IPs = history.IPs[len(history.IPs)-10:]
+
+	if len(history.IPs) > 30 {
+		history.IPs = history.IPs[len(history.IPs)-30:]
 	}
 	tempMap[fqdn] = history
 
@@ -402,13 +530,6 @@ func printInfrastructure(zones []Zone) {
 		}
 	}
 	fmt.Println("\n" + strings.Repeat("-", 40))
-}
-
-func startHealthServer() {
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		if lastOk { w.WriteHeader(200); w.Write([]byte("OK")) } else { w.WriteHeader(503) }
-	})
-	_ = http.ListenAndServe(":"+cfg.HealthPort, nil)
 }
 
 func getZones() ([]Zone, error) {
