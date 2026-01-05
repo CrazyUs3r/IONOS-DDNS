@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+    "html"
 	"io"
 	"log"
 	"net"
@@ -237,7 +238,9 @@ window.onload = updateClock;
 		sort.Strings(keys)
 		for _, name := range keys {
 			h := domains[name]
-			fmt.Fprintf(w, `<div class="card"><strong>%s</strong> <i>(%s)</i><table>`, name, h.Provider)
+			fmt.Fprintf(w, `<div class="card"><strong>%s</strong> <i>(%s)</i><table>`, 
+       html.EscapeString(name), 
+       html.EscapeString(h.Provider))
 			for i := len(h.IPs) - 1; i >= 0; i-- {
 				e := h.IPs[i]
 				fmt.Fprintf(w, `<tr><td style="white-space:nowrap;color:#94a3b8">%s</td><td>`, e.Time)
@@ -308,6 +311,12 @@ func ionosAPI(method, url string, body interface{}) ([]byte, error) {
 
 func syncDNS(zoneID, fqdn, rType, ip string, records []Record) (bool, error) {
 	var existing *Record
+
+   if cfg.DryRun {
+        writeLog("INFO", "DRY-RUN", fqdn, fmt.Sprintf("Simuliere: %s -> %s", rType, ip))
+        return true, nil
+   }
+
 	for _, r := range records {
 		if r.Name == fqdn && r.Type == rType { existing = &r; break }
 	}
