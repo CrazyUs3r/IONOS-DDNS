@@ -5,9 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-    "html"
+	"html"
 	"io"
-	"log"
+        "math"
+	"math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -22,11 +23,43 @@ import (
 	"time"
 )
 
+const (
+	ActionStart   = "START"
+	ActionStop    = "STOP"
+	ActionUpdate  = "UPDATE"
+	ActionCreate  = "CREATE"
+	ActionRetry   = "RETRY"
+	ActionError   = "ERROR"
+	ActionConfig  = "CONFIG"
+	ActionZone    = "ZONE"
+	ActionDryRun  = "DRY-RUN"
+)
+var actionClass = map[string]string{
+	ActionStart:  "act-start",
+	ActionStop:   "act-stop",
+	ActionUpdate: "act-update",
+	ActionCreate: "act-create",
+	ActionRetry:  "act-retry",
+	ActionError:  "act-error",
+	ActionZone:   "act-error",
+	ActionConfig: "act-error",
+	ActionDryRun: "act-dryrun",
+}
+
 // ---------------- STRUKTUREN ----------------
 
 type Phrases struct {
 	Startup, Shutdown, NoZones, Update, Created, Current,
-	DryRunWarn, ConfigError, DashTitle, StatusOk, StatusErr, LastUpdate string
+	DryRunWarn, ConfigError, DashTitle, StatusOk, StatusErr, LastUpdate,
+	InfraHeading, ZoneLabel string
+}
+
+type LogEntry struct {
+	Timestamp string `json:"timestamp"`
+	Level     string `json:"level"`
+	Action    string `json:"action"`
+	Domain    string `json:"domain"`
+	Message   string `json:"message"`
 }
 
 var languagePack = map[string]Phrases{
@@ -35,13 +68,24 @@ var languagePack = map[string]Phrases{
 		Update: "Update", Created: "Neuanlage", Current: "ist aktuell",
 		DryRunWarn: "⚠️ DRY-RUN MODUS AKTIV", ConfigError: "❌ API Credentials fehlen!",
 		DashTitle: "DynDNS Dashboard", StatusOk: "System Online", StatusErr: "API Fehler", LastUpdate: "Letzter Check",
+		InfraHeading: "Infrastruktur Übersicht", ZoneLabel: "Zone",
 	},
 	"EN": {
 		Startup: "Service started", Shutdown: "Service stopped", NoZones: "no zone found",
 		Update: "Update", Created: "Created", Current: "is up to date",
 		DryRunWarn: "⚠️ DRY-RUN MODE ACTIVE", ConfigError: "❌ API Credentials missing!",
 		DashTitle: "DynDNS Dashboard", StatusOk: "System Online", StatusErr: "API Error", LastUpdate: "Last Check",
+		InfraHeading: "Infrastructure Overview", ZoneLabel: "Zone",
 	},
+}
+var persistentActions = map[string]bool{
+	"START":   true,
+	"STOP":    true,
+	"UPDATE":  true,
+	"CREATE":  true,
+	"ERROR":   true,
+	"RETRY":   true,
+	"CONFIG":  true,
 }
 
 type IPEntry struct {
@@ -75,18 +119,19 @@ type Record struct {
 }
 
 var (
-	cfg         Config
-	T           Phrases
-	logPath     string
-	updatePath  string
-	apiBaseURL  = "https://api.hosting.ionos.com/dns/v1/zones"
-	lastOk      atomic.Bool
-	logMutex    sync.Mutex
-	statusMutex sync.Mutex
-	httpClient  = &http.Client{Timeout: 30 * time.Second}
+	cfg          Config
+	T            Phrases
+	logPath      string
+	updatePath   string
+	apiBaseURL   = "https://api.hosting.ionos.com/dns/v1/zones"
+	lastOk       atomic.Bool
+	logMutex     sync.Mutex
+	statusMutex  sync.Mutex
+	httpClient   = &http.Client{Timeout: 30 * time.Second}
+	lastErrorMsg atomic.Value
 )
 
-// ---------------- LOGGING & ANALYSE ----------------
+// ---------------- LOGGING & LOG-STRUKTUR (PORTAINER) ----------------
 
 func writeLog(level, action, domain, msg string) {
 	logMutex.Lock()
@@ -94,181 +139,159 @@ func writeLog(level, action, domain, msg string) {
 
 	now := time.Now().Local()
 	ts := now.Format("02.01.2006 15:04:05")
-	
+
 	if domain != "" {
 		fmt.Printf("[%s] [%-4s] %-35s: %s\n", ts, level, domain, msg)
 	} else {
 		fmt.Printf("[%s] [%-4s] %s\n", ts, level, msg)
 	}
 
+	if !shouldPersist(level, action) {
+		return
+	}
+
 	entry := map[string]string{
 		"timestamp": now.Format("2006-01-02T15:04:05"),
-		"level":     level, "action": action, "domain": domain, "message": msg,
+		"level":     level,
+		"action":    action,
+		"domain":    domain,
+		"message":   msg,
 	}
-	
+
 	if js, err := json.Marshal(entry); err == nil {
-		f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err == nil {
+		if f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
 			defer f.Close()
 			_, _ = f.Write(append(js, '\n'))
 		}
 	}
 }
 
-func printInfraAnalysis(zones []Zone) {
-	fmt.Println("\n📂 --- IONOS Infrastruktur Analyse ---")
-	if len(zones) == 0 {
-		fmt.Println("⚠️ Keine Zonen in diesem Account gefunden!")
+func shouldPersist(level, action string) bool {
+	// Fehler & Warnungen immer loggen
+	if level == "ERR" || level == "WARN" {
+		return persistentActions[action]
 	}
-	for _, z := range zones {
-		fmt.Printf("Zone: %s (ID: %s)\n", z.Name, z.ID)
-		for _, d := range cfg.Domains {
-			if strings.HasSuffix(d, z.Name) {
-				fmt.Printf("   ┣━ Überwacht: %s\n", d)
-			}
-		}
+
+	switch action {
+	case ActionStart, ActionStop, ActionUpdate, ActionCreate:
+		return true
 	}
-	fmt.Println("--------------------------------------\n")
+	return false
 }
-
-func updateStatusFile(fqdn, ipv4, ipv6, provider string) {
-	statusMutex.Lock()
-	defer statusMutex.Unlock()
-
-	domains := make(map[string]DomainHistory)
-	if data, err := os.ReadFile(updatePath); err == nil {
-		if errJ := json.Unmarshal(data, &domains); errJ != nil {
-			writeLog("WARN", "JSON", fqdn, "Status-Datei korrupt, erstelle neu")
-			domains = make(map[string]DomainHistory)
+func actionCSS(a string) string {
+	if c, ok := actionClass[a]; ok {
+		return c
+	}
+	return "act-default"
+}
+func printGroupedDomains() {
+	fmt.Printf("\n🚀 Go-DynDNS [%s] (Mode: %s):\n", cfg.Lang, cfg.IPMode)
+	groups := make(map[string][]string)
+	for _, d := range cfg.Domains {
+		parts := strings.Split(d, ".")
+		if len(parts) >= 2 {
+			main := strings.Join(parts[len(parts)-2:], ".")
+			if d != main {
+				prefix := strings.TrimSuffix(d, "."+main)
+				groups[main] = append(groups[main], prefix)
+			} else if _, ok := groups[main]; !ok {
+				groups[main] = []string{}
+			}
 		}
 	}
-
-	h := domains[fqdn]
-	h.Provider = provider
-	if len(h.IPs) > 0 {
-		last := h.IPs[len(h.IPs)-1]
-		if last.IPv4 == ipv4 && last.IPv6 == ipv6 { return }
-	}
-
-	h.IPs = append(h.IPs, IPEntry{
-		Time: time.Now().Local().Format("02.01.2006 15:04:05"), IPv4: ipv4, IPv6: ipv6,
-	})
-	if len(h.IPs) > 20 { h.IPs = h.IPs[len(h.IPs)-20:] }
-	domains[fqdn] = h
-
-	if js, err := json.MarshalIndent(domains, "", "  "); err == nil {
-		tmpPath := updatePath + ".tmp"
-		if errW := os.WriteFile(tmpPath, js, 0644); errW == nil {
-			if errR := os.Rename(tmpPath, updatePath); errR != nil {
-				writeLog("ERR", "FS", fqdn, "Fehler beim Umbenennen: "+errR.Error())
-			}
+	var mainDomains []string
+	for m := range groups { mainDomains = append(mainDomains, m) }
+	sort.Strings(mainDomains)
+	for _, main := range mainDomains {
+		fmt.Printf("\n📦 %s\n", strings.ToUpper(main))
+		subs := groups[main]
+		sort.Strings(subs)
+		if len(subs) == 0 {
+			fmt.Printf("   ┗━━ (Root Domain)\n")
 		} else {
-			writeLog("ERR", "FS", fqdn, "Fehler beim Schreiben: "+errW.Error())
+			for i, sub := range subs {
+				char := "┣"; if i == len(subs)-1 { char = "┗" }
+				fmt.Printf("   %s━━ %s\n", char, sub)
+			}
 		}
 	}
+	fmt.Println("\n" + strings.Repeat("-", 40))
 }
 
-// ---------------- DASHBOARD ----------------
+func printInfrastructure(zones []Zone) {
+	fmt.Println("\n" + T.InfraHeading)
+	for _, z := range zones {
+		data, _ := ionosAPI("GET", apiBaseURL+"/"+z.ID, nil)
+		var detail struct{ Records []Record }
+		_ = json.Unmarshal(data, &detail)
 
-func createMux() *http.ServeMux {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		if lastOk.Load() { w.WriteHeader(200); w.Write([]byte("OK")) } else { w.WriteHeader(503) }
-	})
-
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		statusMutex.Lock()
-		domains := make(map[string]DomainHistory)
-		if fileData, err := os.ReadFile(updatePath); err == nil { _ = json.Unmarshal(fileData, &domains) }
-		statusMutex.Unlock()
-
-		statusClass, statusText := "status-ok", T.StatusOk
-		if !lastOk.Load() { 
-			statusClass, statusText = "status-error", T.StatusErr 
-		} else if cfg.DryRun { 
-			statusClass = "status-dry" 
+		fmt.Printf("\n🌍 %s: %s\n", T.ZoneLabel, z.Name)
+		var relevant []Record
+		for _, r := range detail.Records {
+			if r.Type == "A" || r.Type == "AAAA" || r.Type == "CNAME" { relevant = append(relevant, r) }
 		}
-
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		// Wir haben genau 7 Platzhalter (%s) im String unten
-		fmt.Fprintf(w, `<!DOCTYPE html><html><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>%s</title>
-<style>
-body{font-family:-apple-system,system-ui,sans-serif;background:#0f172a;color:#f8fafc;padding:15px;margin:0;line-height:1.4}
-.container{max-width:800px;margin:0 auto}
-h1{font-size:1.4rem;color:#38bdf8;margin:15px 0;display:flex;align-items:center;gap:10px}
-.status-banner{padding:8px 15px;border-radius:20px;display:inline-flex;align-items:center;gap:8px;margin-bottom:20px;font-weight:600;font-size:0.8rem;text-transform:uppercase}
-.status-ok{background:rgba(34,197,94,0.15);color:#4ade80;border:1px solid rgba(34,197,94,0.3)}
-.status-error{background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3)}
-.status-dry{background:rgba(251,191,24,0.15);color:#fbbf24;border:1px solid rgba(251,191,24,0.3)}
-.card{background:#1e293b;padding:15px;margin-bottom:15px;border-radius:12px;border:1px solid #334155}
-table{width:100%%;border-collapse:collapse;font-size:0.85rem}
-td{padding:8px 4px;border-bottom:1px solid #334155}
-.badge{padding:2px 6px;border-radius:4px;font-size:0.7rem;color:#fff;font-weight:bold;min-width:35px;text-align:center;display:inline-block;margin-right:5px}
-.v4{background:#0ea5e9} .v6{background:#8b5cf6}
-.dry{color:#fbbf24;font-size:0.8rem;font-weight:bold}
-</style>
-<script>
-function updateClock() {
-    const now = new Date();
-    document.getElementById('live-clock').textContent = now.toLocaleTimeString('de-DE');
-}
-setInterval(updateClock, 1000);
-window.onload = updateClock;
-</script>
-</head><body><div class="container">
-<h1>🌐 %s %s</h1>
-<div class="status-banner %s">
-    <span id="live-clock">--:--:--</span> &bull; 
-    %s &bull; 
-    %s: %s
-</div>`,
-			T.DashTitle, // 1. Title
-			T.DashTitle, // 2. H1 Text
-			func() string { if cfg.DryRun { return "<span class='dry'>(DRY-RUN)</span>" }; return "" }(), // 3. DryRun Info
-			statusClass, // 4. Banner CSS Klasse
-			statusText,  // 5. Banner Status Text (System Online)
-			T.LastUpdate, // 6. "Letzter Check" Label
-			time.Now().Format("2006-01-02 15:04:05"), // 7. Zeitstempel
-		)
-
-		keys := make([]string, 0, len(domains))
-		for k := range domains { keys = append(keys, k) }
-		sort.Strings(keys)
-		for _, name := range keys {
-			h := domains[name]
-			fmt.Fprintf(w, `<div class="card"><strong>%s</strong> <i>(%s)</i><table>`, 
-       html.EscapeString(name), 
-       html.EscapeString(h.Provider))
-			for i := len(h.IPs) - 1; i >= 0; i-- {
-				e := h.IPs[i]
-				fmt.Fprintf(w, `<tr><td style="white-space:nowrap;color:#94a3b8">%s</td><td>`, e.Time)
-				if e.IPv4 != "" { fmt.Fprintf(w, `<div><span class="badge v4">v4</span>%s</div>`, e.IPv4) }
-				if e.IPv6 != "" { fmt.Fprintf(w, `<div><span class="badge v6">v6</span>%s</div>`, e.IPv6) }
-				fmt.Fprintf(w, `</td></tr>`)
-			}
-			fmt.Fprintf(w, `</table></div>`)
+		sort.Slice(relevant, func(i, j int) bool { return relevant[i].Name < relevant[j].Name })
+		for _, r := range relevant {
+			fmt.Printf("   ┣━ %-35s [%-5s] -> %s\n", r.Name, r.Type, r.Content)
 		}
-		if len(keys) == 0 { fmt.Fprintf(w, `<div class="card">Keine Daten vorhanden. Warte auf ersten Check...</div>`) }
-		fmt.Fprintf(w, `</div></body></html>`)
-	})
-	return mux
+	}
+	fmt.Println("\n" + strings.Repeat("-", 40))
 }
 
 // ---------------- API & NETZWERK ----------------
 
-func getPublicIP(url string) string {
-	for i := 0; i < 3; i++ {
-		res, err := httpClient.Get(url)
-		if err == nil {
-			defer res.Body.Close()
-			body, _ := io.ReadAll(res.Body)
-			return strings.TrimSpace(string(body))
+func ionosAPI(method, url string, body interface{}) ([]byte, error) {
+	var lastErr error
+	
+	for attempt := 0; attempt < 3; attempt++ {
+		var bodyReader io.Reader
+		if body != nil {
+			b, _ := json.Marshal(body)
+			bodyReader = bytes.NewBuffer(b)
 		}
-		time.Sleep(time.Duration(1<<i) * time.Second)
+		
+		req, _ := http.NewRequest(method, url, bodyReader)
+		req.Header.Set("X-API-Key", cfg.APIPrefix+"."+cfg.APISecret)
+		req.Header.Set("Content-Type", "application/json")
+
+		res, err := httpClient.Do(req)
+		if err != nil {
+			// Netzwerkfehler sind retryable
+			lastErr = err
+			time.Sleep(time.Duration(attempt+1) * time.Second)
+			continue
+		}
+		defer res.Body.Close()
+
+		respBody, _ := io.ReadAll(res.Body)
+		
+		if res.StatusCode >= 300 {
+			lastErr = fmt.Errorf("Status %d: %s", res.StatusCode, string(respBody))
+			lastErrorMsg.Store(lastErr.Error())
+			
+			// Nur bei 429 (Rate Limit) oder 5xx (Server Fehler) warten und neu versuchen
+			if res.StatusCode == 429 || res.StatusCode >= 500 {
+				wait := time.Duration(math.Pow(2, float64(attempt+1))) * time.Second
+				wait += time.Duration(rand.Intn(1000)) * time.Millisecond
+				writeLog("WARN", ActionRetry, "", fmt.Sprintf("API Limit/Fehler, Retry %d in %v", attempt+1, wait))
+				time.Sleep(wait)
+				continue
+			}
+			return nil, lastErr // Permanenter Fehler (z.B. 401, 404)
+		}
+
+		lastErrorMsg.Store("") // Erfolg!
+		return respBody, nil
 	}
-	return ""
+	return nil, fmt.Errorf("API fehlgeschlagen nach 3 Versuchen: %v", lastErr)
+}
+
+func getPublicIP(url string) string {
+	resp, err := httpClient.Get(url)
+	if err != nil { return "" }
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	return strings.TrimSpace(string(body))
 }
 
 func getIPv6() string {
@@ -278,180 +301,286 @@ func getIPv6() string {
 			addrs, _ := iface.Addrs()
 			for _, a := range addrs {
 				ipnet, ok := a.(*net.IPNet)
-				if ok && !ipnet.IP.IsLoopback() && ipnet.IP.To4() == nil && ipnet.IP.IsGlobalUnicast() {
-					return ipnet.IP.String()
-				}
+                if ok && !ipnet.IP.IsLoopback() && ipnet.IP.To4() == nil && 
+                   ipnet.IP.IsGlobalUnicast() && !ipnet.IP.IsLinkLocalUnicast() {
+                    return ipnet.IP.String()
+                }
 			}
 		}
 	}
 	return getPublicIP("https://6.ident.me/")
 }
 
-// ---------------- API ----------------
+// ---------------- LOGIK ----------------
 
-func ionosAPI(method, url string, body interface{}) ([]byte, error) {
-	var bodyReader io.Reader
-	if body != nil {
-		b, _ := json.Marshal(body)
-		bodyReader = bytes.NewBuffer(b)
-	}
-	req, err := http.NewRequest(method, url, bodyReader)
-	if err != nil { return nil, err }
-	req.Header.Set("X-API-Key", cfg.APIPrefix+"."+cfg.APISecret)
-	req.Header.Set("Content-Type", "application/json")
-	res, err := httpClient.Do(req)
-	if err != nil { return nil, err }
-	defer res.Body.Close()
-	respBody, _ := io.ReadAll(res.Body)
-	if res.StatusCode >= 300 {
-		return nil, fmt.Errorf("Status %d: %s", res.StatusCode, string(respBody))
-	}
-	return respBody, nil
-}
-
-func syncDNS(zoneID, fqdn, rType, ip string, records []Record) (bool, error) {
+func updateDNS(fqdn, recordType, newIP string, records []Record, zoneID string) bool {
 	var existing *Record
-
-   if cfg.DryRun {
-        writeLog("INFO", "DRY-RUN", fqdn, fmt.Sprintf("Simuliere: %s -> %s", rType, ip))
-        return true, nil
-   }
-
 	for _, r := range records {
-		if r.Name == fqdn && r.Type == rType { existing = &r; break }
+		if r.Name == fqdn && r.Type == recordType { existing = &r; break }
 	}
-	if existing != nil && existing.Content == ip {
-		writeLog("INFO", T.Current, fqdn, fmt.Sprintf("🆗 %-4s %s", rType, T.Current))
-		return false, nil
+	if existing != nil && existing.Content == newIP {
+		writeLog("INFO", ActionUpdate, fqdn, fmt.Sprintf("%-4s %s %s", recordType, newIP, T.Current))
+		return false
 	}
-	
-	// KOMPATIBILITÄTS-ÄNDERUNG: Wir senden ein einzelnes Objekt statt eines Arrays
-	payload := map[string]interface{}{
-		"name": fqdn, 
-		"type": rType, 
-		"content": ip, 
-		"ttl": 60,
+	if cfg.DryRun {
+		writeLog("WARN", "DRY-RUN", fqdn, fmt.Sprintf("Würde %s auf %s setzen", recordType, newIP))
+		return true
 	}
-
 	method, url := "POST", apiBaseURL+"/"+zoneID+"/records"
-	if existing != nil {
-		method, url = "PUT", apiBaseURL+"/"+zoneID+"/records/"+existing.ID
-	}
+	if existing != nil { method, url = "PUT", apiBaseURL+"/"+zoneID+"/records/"+existing.ID }
 
+	payload := map[string]interface{}{"name": fqdn, "type": recordType, "content": newIP, "ttl": 60}
 	_, err := ionosAPI(method, url, payload)
 	if err == nil {
-		writeLog("INFO", T.Update, fqdn, fmt.Sprintf("✅ %-4s -> %s", rType, ip))
-		return true, nil
+		writeLog("INFO", ActionUpdate, fqdn, fmt.Sprintf("%s -> %s", recordType, newIP))
+		return true
 	}
-	return false, err
+	return false
 }
-
-// ---------------- UPDATE LOGIK ----------------
 
 func runUpdate(firstRun bool) {
-	if len(cfg.Domains) == 0 { return }
 	data, err := ionosAPI("GET", apiBaseURL, nil)
-	if err != nil { 
-		writeLog("ERR", "API", "SYSTEM", "Konnte Zonen nicht abrufen: "+err.Error())
-		lastOk.Store(false); return 
-	}
-	var zoneResponse []Zone
-	if errJ := json.Unmarshal(data, &zoneResponse); errJ != nil {
-		var wrapper struct{ Items []Zone `json:"items"` }
-		_ = json.Unmarshal(data, &wrapper)
-		zoneResponse = wrapper.Items
+	if err != nil {
+        lastOk.Store(false)
+		return
 	}
 
-	if firstRun { printInfraAnalysis(zoneResponse) }
+	var zones []Zone
+	_ = json.Unmarshal(data, &zones)
 
-	var wg sync.WaitGroup
-	var hasError atomic.Bool
-
-	for _, domain := range cfg.Domains {
-		wg.Add(1)
-		go func(fqdn string) {
-			defer wg.Done()
-			var zone Zone
-			for _, z := range zoneResponse {
-				if strings.HasSuffix(fqdn, z.Name) { zone = z; break }
-			}
-			if zone.ID == "" { 
-				writeLog("ERR", "ZONE", fqdn, "Gehört zu keiner IONOS Zone!")
-				hasError.Store(true); return 
-			}
-
-			detailData, errD := ionosAPI("GET", apiBaseURL+"/"+zone.ID, nil)
-			if errD != nil { 
-				writeLog("ERR", "API", fqdn, "Records konnten nicht geladen werden")
-				hasError.Store(true); return 
-			}
-			var detail struct{ Records []Record `json:"records"` }
-			_ = json.Unmarshal(detailData, &detail)
-
-			v4, v6 := "", ""
-			v4Chg, v6Chg := false, false
-
-			if cfg.IPMode != "IPV6" {
-				v4 = getPublicIP("https://4.ident.me/")
-				if v4 != "" {
-					chg, errS := syncDNS(zone.ID, fqdn, "A", v4, detail.Records)
-					v4Chg = chg
-					if errS != nil { hasError.Store(true) }
-				}
-			}
-			if cfg.IPMode != "IPV4" {
-				v6 = getIPv6()
-				if v6 != "" {
-					chg, errS := syncDNS(zone.ID, fqdn, "AAAA", v6, detail.Records)
-					v6Chg = chg
-					if errS != nil { hasError.Store(true) }
-				}
-			}
-			if (v4 != "" || v6 != "") && (v4Chg || v6Chg || firstRun) {
-				updateStatusFile(fqdn, v4, v6, "IONOS")
-			}
-		}(domain)
+	if firstRun {
+		printGroupedDomains()
+		printInfrastructure(zones)
 	}
-	wg.Wait()
-	lastOk.Store(!hasError.Load())
+
+	allOk := true
+	for _, fqdn := range cfg.Domains {
+		var zone Zone
+		for _, z := range zones {
+			if strings.HasSuffix(fqdn, z.Name) { zone = z; break }
+		}
+		if zone.ID == "" {
+			writeLog("ERR", "ZONE", fqdn, T.NoZones)
+			allOk = false; continue
+		}
+
+		detailData, err := ionosAPI("GET", apiBaseURL+"/"+zone.ID, nil)
+		if err != nil {
+            allOk = false; continue
+        }
+        var detail struct{ Records []Record }
+		_ = json.Unmarshal(detailData, &detail)
+
+		v4, v6 := "", ""
+		v4Chg, v6Chg := false, false
+
+		if cfg.IPMode != "IPV6" {
+			v4 = getPublicIP("https://4.ident.me/")
+			if v4 != "" { v4Chg = updateDNS(fqdn, "A", v4, detail.Records, zone.ID) }
+		}
+		if cfg.IPMode != "IPV4" {
+			v6 = getIPv6()
+			if v6 != "" { v6Chg = updateDNS(fqdn, "AAAA", v6, detail.Records, zone.ID) }
+		}
+
+		if (v4Chg || v6Chg) && !cfg.DryRun {
+			updateStatusFile(fqdn, v4, v6, "IONOS")
+		}
+	}
+	lastOk.Store(allOk)
 }
+
+func updateStatusFile(fqdn, ipv4, ipv6, provider string) {
+    statusMutex.Lock()
+    defer statusMutex.Unlock()
+
+    domains := make(map[string]DomainHistory)
+    if b, err := os.ReadFile(updatePath); err == nil {
+        _ = json.Unmarshal(b, &domains)
+    }
+
+    h := domains[fqdn]
+    h.Provider = provider
+    newEntry := IPEntry{Time: time.Now().Local().Format("02.01.2006 15:04:05"), IPv4: ipv4, IPv6: ipv6}
+    h.IPs = append(h.IPs, newEntry)
+    if len(h.IPs) > 20 { h.IPs = h.IPs[len(h.IPs)-20:] }
+    domains[fqdn] = h
+
+    if js, err := json.MarshalIndent(domains, "", "  "); err == nil {
+        tmp := updatePath + ".tmp"
+        if errW := os.WriteFile(tmp, js, 0644); errW == nil {
+            _ = os.Rename(tmp, updatePath)
+        }
+    }
+}
+
+// ---------------- DASHBOARD ----------------
+
+func createMux() *http.ServeMux {
+	mux := http.NewServeMux()
+
+	// Health-Endpoint
+	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+		if !lastOk.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	})
+
+	// Dashboard-Endpoint
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Status-Datei einlesen
+		statusMutex.Lock()
+		data := make(map[string]interface{})
+		if fileData, err := os.ReadFile(updatePath); err == nil {
+			_ = json.Unmarshal(fileData, &data)
+		}
+		statusMutex.Unlock()
+
+		statusClass, statusText := "status-ok", T.StatusOk
+		if !lastOk.Load() {
+			statusClass, statusText = "status-error", T.StatusErr
+		}
+
+		// Letzte Logs einlesen
+		var logs []LogEntry
+		if b, err := os.ReadFile(logPath); err == nil {
+			lines := strings.Split(string(b), "\n")
+			for i := len(lines) - 1; i >= 0 && len(logs) < 10; i-- {
+				if strings.TrimSpace(lines[i]) == "" {
+					continue
+				}
+				var e LogEntry
+				if json.Unmarshal([]byte(lines[i]), &e) == nil {
+					logs = append(logs, e)
+				}
+			}
+		}
+
+		// HTML-Ausgabe
+        w.Header().Set("Content-Type", "text/html; charset=utf-8")
+        fmt.Fprint(w, `<!DOCTYPE html><html><head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <meta http-equiv="refresh" content="60"> <title>`+html.EscapeString(T.DashTitle)+`</title>
+            <style>
+                :root { --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --border: #334155; }
+                body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 10px; margin: 0; }
+                .container { max-width: 800px; margin: 0 auto; }
+                .status-banner { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding: 10px; border-radius: 12px; margin-bottom: 20px; font-weight: 600; font-size: 0.8rem; text-transform: uppercase; border: 1px solid rgba(255,255,255,0.1); position: relative; }
+                .refresh-bar { position: absolute; bottom: 0; left: 0; height: 3px; background: rgba(255,255,255,0.3); width: 100%; animation: countdown 60s linear; }
+                @keyframes countdown { from { width: 100%; } to { width: 0%; } }
+                .status-ok { background: rgba(34,197,94,0.15); color: #4ade80; }
+                .status-error { background: rgba(239,68,68,0.15); color: #f87171; }
+                .card { background: var(--card); padding: 15px; margin-bottom: 12px; border-radius: 12px; border: 1px solid var(--border); }
+                table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+                td { padding: 10px 4px; border-bottom: 1px solid var(--border); vertical-align: top; }
+                .badge { padding: 3px 7px; border-radius: 4px; font-size: 0.7rem; color: #fff; font-weight: bold; min-width: 32px; text-align: center; display: inline-block; margin-right: 6px; }
+                .v4 { background: #0ea5e9; } .v6 { background: #8b5cf6; }
+                .ip-text { word-break: break-all; font-family: monospace; color: #cbd5e1; }
+                .timestamp { color: #94a3b8; font-size: 0.75rem; white-space: nowrap; }
+                @media (max-width: 480px) { td { display: block; width: 100%; padding: 5px 0; } .timestamp { display: block; margin-bottom: 4px; } }
+                .log-entry { font-size:0.75rem; margin-bottom:6px; }
+                .act-start  { color:#38bdf8; }
+                .act-stop   { color:#94a3b8; }
+                .act-update { color:#4ade80; }
+                .act-create { color:#22d3ee; }
+                .act-retry  { color:#facc15; }
+                .act-error  { color:#f87171; }
+                .act-dryrun { color:#c084fc; }
+                .act-default{ color:#cbd5e1; }
+		</style></head><body><div class="container">
+		<h1>🌐 `+html.EscapeString(T.DashTitle)+`</h1>
+        <div class="status-banner `+statusClass+`">
+            `+statusText+` &bull; `+T.LastUpdate+`: `+time.Now().Format("15:04:05")+`
+            <div class="refresh-bar"></div> </div>`)
+
+		// API-Fehlerkarte
+		if errVal := lastErrorMsg.Load(); errVal != nil {
+			if errStr := errVal.(string); errStr != "" {
+				fmt.Fprintf(w, `<div class="card" style="border-color:#f87171;background:rgba(239,68,68,0.05)">
+					<strong style="color:#f87171">⚠️ API Log:</strong><br>
+					<code style="font-size:0.75rem">%s</code></div>`, html.EscapeString(errStr))
+			}
+		}
+
+		// Event-Logs
+		if len(logs) > 0 {
+			fmt.Fprint(w, `<div class="card"><strong>🧾 Events</strong><div style="margin-top:8px">`)
+			for _, e := range logs {
+				fmt.Fprintf(w,
+					`<div class="log-entry %s">[%s] %s %s</div>`,
+					actionCSS(e.Action),
+					e.Timestamp[11:16],
+					html.EscapeString(e.Domain),
+					html.EscapeString(e.Message),
+				)
+			}
+			fmt.Fprint(w, `</div></div>`)
+		}
+
+		// Domain-Status
+		var keys []string
+		for k := range data {
+			if !strings.HasPrefix(k, "_") { keys = append(keys, k) }
+		}
+		sort.Strings(keys)
+
+		for _, k := range keys {
+			var h DomainHistory
+			b, _ := json.Marshal(data[k])
+			_ = json.Unmarshal(b, &h)
+			fmt.Fprintf(w, `<div class="card"><strong>%s</strong> <i>(%s)</i><table>`, k, h.Provider)
+			for i := len(h.IPs) - 1; i >= 0; i-- {
+				e := h.IPs[i]
+				fmt.Fprintf(w, `<tr><td><div class="timestamp">%s</div></td><td class="ip-text">
+					<div><span class="badge v4">v4</span>%s</div>
+					<div style="margin-top:4px"><span class="badge v6">v6</span>%s</div>
+				</td></tr>`, e.Time, e.IPv4, e.IPv6)
+			}
+			fmt.Fprint(w, `</table></div>`)
+		}
+
+		fmt.Fprint(w, `</div></body></html>`)
+	})
+
+	return mux
+}
+
 
 // ---------------- MAIN ----------------
 
-func loadConfig() Config {
-	lang := "DE"
-	if strings.HasPrefix(strings.ToUpper(os.Getenv("LANG")), "EN") { lang = "EN" }
+func main() {
+	rand.Seed(time.Now().UnixNano())
+	lang := "DE"; if strings.HasPrefix(strings.ToUpper(os.Getenv("LANG")), "EN") { lang = "EN" }
 	T = languagePack[lang]
-	var d []string
+	
+	d := []string{}
 	for _, s := range strings.Split(os.Getenv("DOMAINS"), ",") {
 		if t := strings.TrimSpace(strings.ToLower(s)); t != "" { d = append(d, t) }
 	}
-	iv := 300
-	if i, err := strconv.Atoi(os.Getenv("INTERVAL")); err == nil && i >= 30 { iv = i }
-	hp := os.Getenv("HEALTH_PORT"); if hp == "" { hp = "8080" }
+	iv := 300; if i, err := strconv.Atoi(os.Getenv("INTERVAL")); err == nil && i >= 30 { iv = i }
 	ld := os.Getenv("LOG_DIR"); if ld == "" { ld = "/logs" }
-	return Config{
+	
+	cfg = Config{
 		APIPrefix: os.Getenv("API_PREFIX"), APISecret: os.Getenv("API_SECRET"),
 		Domains: d, Interval: iv, IPMode: strings.ToUpper(os.Getenv("IP_MODE")),
-		IfaceName: os.Getenv("INTERFACE"), HealthPort: hp, DryRun: os.Getenv("DRY_RUN") == "true",
-		LogDir: ld, Lang: lang,
+		IfaceName: os.Getenv("INTERFACE"), HealthPort: os.Getenv("HEALTH_PORT"),
+		DryRun: os.Getenv("DRY_RUN") == "true", LogDir: ld, Lang: lang,
 	}
-}
+	if cfg.HealthPort == "" { cfg.HealthPort = "8080" }
 
-func main() {
-	cfg = loadConfig()
 	_ = os.MkdirAll(cfg.LogDir, 0755)
 	logPath = filepath.Join(cfg.LogDir, "dyndns.json")
 	updatePath = filepath.Join(cfg.LogDir, "update.json")
 
-	if cfg.APIPrefix == "" || cfg.APISecret == "" { log.Fatal(T.ConfigError) }
-	writeLog("INFO", T.Startup, "", "🚀 "+T.Startup)
+	if cfg.APIPrefix == "" || cfg.APISecret == "" { writeLog("ERR", ActionConfig, "", T.ConfigError) }
+	writeLog("INFO", ActionStart, "", "🚀 "+T.Startup)
 
 	srv := &http.Server{Addr: ":" + cfg.HealthPort, Handler: createMux()}
-	serverErrors := make(chan error, 1)
-	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed { serverErrors <- err }
-	}()
+	go func() { _ = srv.ListenAndServe() }()
 
 	runUpdate(true)
 	ticker := time.NewTicker(time.Duration(cfg.Interval) * time.Second)
@@ -460,16 +589,12 @@ func main() {
 
 	for {
 		select {
-		case err := <-serverErrors:
-			log.Fatalf("❌ Serverfehler: %v", err)
 		case <-ticker.C:
 			runUpdate(false)
 		case <-stop:
-			writeLog("INFO", T.Shutdown, "", "🛑 "+T.Shutdown)
-			ticker.Stop()
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			writeLog("INFO", ActionStop, "", "🛑 "+T.Shutdown)
+			ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 			_ = srv.Shutdown(ctx)
-			cancel() 
 			return
 		}
 	}
