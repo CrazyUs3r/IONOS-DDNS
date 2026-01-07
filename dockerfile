@@ -17,7 +17,7 @@ LABEL org.opencontainers.image.title="IONOS-DDNS-Go" \
       org.opencontainers.image.description="Leichtgewichtiger DynDNS-Client fuer IONOS mit Dual-Stack Support" \
       org.opencontainers.image.authors="CrazyUs3r" \
       org.opencontainers.image.source="https://github.com/CrazyUs3r/IONOS-DDNS" \
-      org.opencontainers.image.version="1.5.4"
+      org.opencontainers.image.version="1.5.7"
 
 WORKDIR /app
 
