@@ -300,6 +300,7 @@ func ionosAPI(method, url string, body interface{}) ([]byte, error) {
 		if res.StatusCode >= 300 {
 			lastErr = fmt.Errorf("Status %d: %s", res.StatusCode, string(respBody))
 			lastErrorMsg.Store(lastErr.Error())
+			writeLog("ERR", ActionError, "", fmt.Sprintf("IONOS API Fehler: %v", lastErr))
 
 			if res.StatusCode == 429 || res.StatusCode >= 500 {
 				wait := time.Duration(math.Pow(2, float64(attempt+1))) * time.Second
@@ -512,7 +513,7 @@ func createMux() *http.ServeMux {
 		var logs []LogEntry
 		if b, err := os.ReadFile(logPath); err == nil {
 			lines := strings.Split(string(b), "\n")
-			for i := len(lines) - 1; i >= 0 && len(logs) < 10; i-- {
+			for i := len(lines) - 1; i >= 0 && len(logs) < 500; i-- {
 				if strings.TrimSpace(lines[i]) == "" {
 					continue
 				}
@@ -666,7 +667,15 @@ func createMux() *http.ServeMux {
 				font-size: 0.75rem;
 				margin-bottom: 6px;
 			}
-			
+			.log-entry.update { background: rgba(0, 255, 0, 0.05); color: #8f8; }
+			.log-entry.error  { background: rgba(255, 0, 0, 0.1);  color: #f88; }
+			.log-entry.info   { background: rgba(255, 255, 255, 0.05); }
+			.log-container::-webkit-scrollbar {width: 6px;}
+			.log-container::-webkit-scrollbar-thumb {background-color: rgba(255, 255, 255, 0.2); 
+				border-radius: 10px;
+			}
+			.log-container::-webkit-scrollbar-track {background: transparent;
+			}
 			/* ---------- Code / API Errors ---------- */
 			code {
 				display: block;
@@ -734,13 +743,52 @@ func createMux() *http.ServeMux {
 
 		// Event-Logs
 		if len(logs) > 0 {
-			fmt.Fprint(w, `<div class="card"><strong>🧾 Events</strong><div style="margin-top:8px">`)
+			fmt.Fprint(w, `
+			<div class="card event-card">
+				<div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+					<strong style="font-size: 1.1em;">🧾 System Events</strong>
+					<span style="font-size: 0.85em; opacity: 0.5;">Verlauf</span>
+				</div>
+				<div class="log-container" style="max-height: 250px; overflow-y: auto; font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 13px; line-height: 1.4;">
+			`)
+			
 			for _, e := range logs {
-				ts := e.Timestamp
-				if len(ts) >= 16 {
-					ts = ts[11:16]
+				displayTime := e.Timestamp
+				if len(displayTime) >= 16 {
+					// Umwandlung von 2026-01-01 14:30:00 zu 01.01.2026 14:30
+					datePart := displayTime[8:10] + "." + displayTime[5:7] + "." + displayTime[0:4]
+					timePart := displayTime[11:16]
+					displayTime = datePart + " " + timePart
 				}
-				fmt.Fprintf(w, `<div class="log-entry %s">[%s] %s %s</div>`, actionCSS(e.Action), ts, html.EscapeString(e.Domain), html.EscapeString(e.Message))
+
+				icon := "🔹" // Standard Icon (Info/Update)
+				if e.Action == "error" || e.Action == "fail" {
+					icon = "⚠️"
+				} else if e.Action == "success" || e.Action == "added" {
+					icon = "✅"
+				}
+
+				fmt.Fprintf(w, `
+					<div class="log-entry %s" style="display: flex; flex-wrap: wrap; align-items: flex-start; padding: 8px 10px; border-radius: 6px; margin-bottom: 4px; gap: 4px 10px;">
+						<div style="display: flex; align-items: center; flex-shrink: 0;">
+							<span style="width: 25px; display: flex; justify-content: center; margin-right: 4px;">%s</span>
+							<span style="color: #888; font-family: monospace; font-size: 0.9em; white-space: nowrap;">%s</span>
+						</div>
+						
+						<div style="display: flex; flex-wrap: wrap; gap: 8px; flex: 1; min-width: 200px;">
+							%s
+							<span style="opacity: 0.95; word-break: break-word; font-size: 0.95em;">%s</span>
+						</div>
+					</div>`, 
+					actionCSS(e.Action), 
+					icon,
+					displayTime,
+					func() string { 
+						if e.Domain == "" { return "" } 
+						return `<span style="font-weight: 600; color: #64b5f6; white-space: nowrap;">` + html.EscapeString(e.Domain) + `</span>`
+					}(),
+					html.EscapeString(e.Message),
+				)
 			}
 			fmt.Fprint(w, `</div></div>`)
 		}
@@ -763,15 +811,19 @@ func createMux() *http.ServeMux {
 			}
 			fmt.Fprintf(w, `
 			<details class="card domain-card">
-			<summary>
-				<strong>%s</strong> <i>(%s)</i><br>
-				<span class="timestamp">%s</span>
-				<div class="ip-text">
-					<span class="badge v4">v4</span>%s
-					&nbsp;&nbsp;
-					<span class="badge v6">v6</span>%s
-				</div>
-			</summary>
+				<summary>
+					<div style="margin-bottom: 8px;">
+						<strong>%s</strong> <i style="opacity: 0.8; font-size: 0.9em;">(%s)</i>
+					</div>
+					
+					<div style="display: flex; justify-content: space-between; align-items: flex-start;">
+						<div class="timestamp" style="display: flex; align-items: center;">%s</div>
+						<div class="ip-text">
+							<div><span class="badge v4">v4</span>%s</div>
+							<div style="margin-top:4px"><span class="badge v6">v6</span>%s</div>
+						</div>
+					</div>
+				</summary>
 			<table>
 			`,
 				html.EscapeString(k),
