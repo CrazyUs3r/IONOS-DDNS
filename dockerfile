@@ -1,14 +1,9 @@
-FROM golang:1.22-alpine AS builder
+FROM golang:1.25-alpine AS builder
 WORKDIR /app
 COPY main.go .
 RUN go mod init dyndns && go mod tidy
-RUN CGO_ENABLED=0 GOOS=linux go build -o dyndns main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o dyndns main.go
 
-ENV DOMAINS="example.com" \
-    TZ=Europe/Berlin \
-    IP_MODE="BOTH" \
-    INTERFACE="eth0" \
-    INTERVAL=300
 
 FROM alpine:3.22
 RUN apk add --no-cache ca-certificates tzdata curl
@@ -17,7 +12,14 @@ LABEL org.opencontainers.image.title="IONOS-DDNS-Go" \
       org.opencontainers.image.description="Leichtgewichtiger DynDNS-Client fuer IONOS mit Dual-Stack Support" \
       org.opencontainers.image.authors="CrazyUs3r" \
       org.opencontainers.image.source="https://github.com/CrazyUs3r/IONOS-DDNS" \
-      org.opencontainers.image.version="1.5.7"
+      org.opencontainers.image.version="1.6.0"
+
+ENV DOMAINS="example.com" \
+    TZ=Europe/Berlin \
+    IP_MODE="BOTH" \
+    INTERFACE="eth0" \
+    INTERVAL=300 \
+    HEALTH_PORT=8080
 
 WORKDIR /app
 
