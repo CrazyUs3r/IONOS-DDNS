@@ -81,7 +81,7 @@ const (
 	WSPongTimeout  = 60 * time.Second
 	WSPingInterval = 30 * time.Second
 
-	// Retry
+	// Retry 
 	RetryBaseDelay        = 1 * time.Second
 	RetryMaxDelay         = 60 * time.Second
 	RetryJitterMaxMs      = 1000
