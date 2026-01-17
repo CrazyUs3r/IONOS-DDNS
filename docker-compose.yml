@@ -1,25 +1,98 @@
 version: '3.8'
 
 services:
-  ionos-ddns:
-    image: ionos-dyndns:latest  # Oder dein DockerHub-Image Name
-    container_name: ionos-ddns
-    build:
-      context: .
-      dockerfile: Dockerfile
-    restart: unless-stopped
+  ionos-dyndns:
+    image: ionos-ddns-go:latest
+    container_name: ionos-dyndns
+    
+    # Security
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE  # Falls Port < 1024 verwendet wird
+    
     environment:
-      - API_PREFIX=dein_prefix
-      - API_SECRET=dein_secret
-      - DOMAINS=zuhause.deinedomain.de,cloud.deinedomain.de
-      - INTERVAL=300
-      - IP_MODE=BOTH          # Optionen: IPV4, IPV6, BOTH
-      - TZ=Europe/Berlin
-      - DEBUG=false           # Auf true setzen für detaillierte API-Logs
+      # API Credentials (REQUIRED)
+      API_PREFIX: ${API_PREFIX}
+      API_SECRET: ${API_SECRET}
+      
+      # Domains (REQUIRED)
+      DOMAINS: "example.com,sub.example.com,*.wildcard.example.com"
+      
+      # Network Configuration
+      IP_MODE: "BOTH"           # IPV4, IPV6, BOTH
+      INTERFACE: "eth0"         # Für IPv6 Local Interface
+      DNS_SERVERS: "1.1.1.1:53,8.8.8.8:53"
+      
+      # Update Settings
+      INTERVAL: 300             # Sekunden zwischen Checks
+      DRY_RUN: "false"          # true = keine Änderungen
+      
+      # API Rate Limiting
+      HOURLY_RATE_LIMIT: 1200   # Max Requests/Stunde
+      MAX_CONCURRENT: 5         # Parallele Domain-Updates
+      
+      # Logging
+      DEBUG: "false"
+      DEBUG_HTTP_RAW: "false"   # Detailliertes HTTP Logging
+      LOG_MAX_LINES: 5000       # Max Log-Zeilen vor Rotation
+      
+      # Localization
+      LANG: "de"                # de, en, fr
+      TZ: "Europe/Berlin"
+      
+      # Health Check
+      HEALTH_PORT: 8080
+      
+      # Trigger Token (optional - für /api/trigger Security)
+      TRIGGER_TOKEN: ${TRIGGER_TOKEN:-}
+    
     volumes:
-      - ./logs:/logs          # Speichert dyndns.json und update.json lokal
+      - ./config:/config
+      # Optional: Read-only volumes
+      # - ./config/lang:/config/lang:ro
+    
+    tmpfs:
+      - /tmp
+    
+    ports:
+      - "8080:8080"  # Dashboard & API
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    
+    networks:
+      - dyndns-network
+    
+    # Resource Limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 32M
+    
+    # Logging
     logging:
       driver: "json-file"
       options:
-        max-size: "10m"       # Verhindert, dass Logs (vor allem im Debug) zu groß werden
+        max-size: "10m"
         max-file: "3"
+
+networks:
+  dyndns-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
