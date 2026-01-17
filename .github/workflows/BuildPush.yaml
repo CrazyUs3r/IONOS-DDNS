@@ -32,7 +32,7 @@ jobs:
       - name: Extract version from Dockerfile
         id: get_version
         run: |
-          DOCKERFILE=$(find . -maxdepth 1 -iname "dockerfile" | head -n 1)
+          DOCKERFILE="./dockerfile"
 
           if [ -z "$DOCKERFILE" ]; then
             echo "❌ KEIN Dockerfile gefunden!"
