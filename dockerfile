@@ -1,14 +1,17 @@
+# ---------- Build Stage ----------
 FROM golang:1.25-alpine AS builder
-WORKDIR /app
-COPY go.mod go.sum ./
 
+WORKDIR /app
+
+COPY go.mod go.sum ./
 RUN go mod tidy
 
 COPY . .
-
 RUN CGO_ENABLED=0 GOOS=linux go build -o dyndns main.go
 
+# ---------- Runtime Stage ----------
 FROM alpine:3.22
+
 RUN apk add --no-cache ca-certificates tzdata curl
 
 LABEL org.opencontainers.image.title="IONOS-DDNS-Go" \
@@ -18,13 +21,13 @@ LABEL org.opencontainers.image.title="IONOS-DDNS-Go" \
       org.opencontainers.image.version="2.1.0"
 
 ENV DOMAINS="example.com" \
-    TZ=Europe/Berlin \
+    TZ="Europe/Berlin" \
     IP_MODE="BOTH" \
     INTERFACE="eth0" \
     INTERVAL=300 \
     HEALTH_PORT=8080 \
-    LANG=de \
-    CONFIG_DIR=/config \
+    LANG="de" \
+    CONFIG_DIR="/config" \
     API_PREFIX="" \
     API_SECRET="" \
     DRY_RUN=false \
@@ -35,19 +38,20 @@ ENV DOMAINS="example.com" \
 
 WORKDIR /app
 
-RUN addgroup -S dyndns && adduser -S dyndns -G dyndns && \
-    mkdir -p /config/logs /config/lang && \
-    chown -R dyndns:dyndns /config
+RUN addgroup -S dyndns \
+ && adduser -S dyndns -G dyndns \
+ && mkdir -p /config/logs /config/lang \
+ && chown -R dyndns:dyndns /config
 
-COPY --from=builder --chown=dyndns:dyndns /app/dyndns .
+COPY --from=builder --chown=dyndns:dyndns /app/dyndns /app/dyndns
 COPY --chown=dyndns:dyndns lang/*.json /app/lang/
-COPY --chown=dyndns:dyndns docker-entrypoint.sh /app/
+COPY --chown=dyndns:dyndns docker-entrypoint.sh /app/docker-entrypoint.sh
+
 RUN chmod +x /app/docker-entrypoint.sh
 
 USER dyndns
 
 VOLUME ["/config"]
-
 
 HEALTHCHECK --interval=1m --timeout=5s --retries=3 \
   CMD curl -f http://localhost:${HEALTH_PORT}/health || exit 1
