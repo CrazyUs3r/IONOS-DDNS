@@ -16,34 +16,41 @@ jobs:
       packages: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4 # v4 ist aktuell stabil
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.23' # Nutze eine stabile Version
+          cache: true       # Aktiviert automatisches Caching von go.mod
+
+      # WICHTIG: Abhängigkeiten explizit laden
+      - name: Install dependencies
+        run: go mod download
 
       # 1. Version aus Dockerfile extrahieren
       - name: Extract version from Dockerfile
         id: get_version
         run: |
-          VERSION=$(grep 'org.opencontainers.image.version' dockerfile | cut -d '"' -f 2)
+          # Achte auf Groß/Kleinschreibung: Heißt die Datei 'Dockerfile' oder 'dockerfile'?
+          VERSION=$(grep 'org.opencontainers.image.version' Dockerfile | cut -d '"' -f 2)
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "TAG_NAME=v$VERSION" >> $GITHUB_ENV
 
-      # 2. Binaries bauen
+      # 2. Binaries bauen (Nutze ./... damit Go alle Module einbezieht)
       - name: Build Binaries
         run: |
-          GOOS=linux GOARCH=amd64 go build -o ionos-ddns-linux-amd64 main.go
-          GOOS=windows GOARCH=amd64 go build -o ionos-ddns-windows-amd64.exe main.go
-          GOOS=linux GOARCH=arm64 go build -o ionos-ddns-linux-arm64 main.go
+          GOOS=linux GOARCH=amd64 go build -o ionos-ddns-linux-amd64 .
+          GOOS=windows GOARCH=amd64 go build -o ionos-ddns-windows-amd64.exe .
+          GOOS=linux GOARCH=arm64 go build -o ionos-ddns-linux-arm64 .
 
-      # 3. GitHub Release erstellen (nutzt die extrahierte Version)
+      # 3. GitHub Release erstellen
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') # Nur bei echten Tags releasen
         with:
-          tag_name: ${{ env.TAG_NAME }}
-          name: Release ${{ env.TAG_NAME }}
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
           files: |
             ionos-ddns-linux-amd64
             ionos-ddns-windows-amd64.exe
@@ -70,6 +77,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: ./Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64 
           tags: |
