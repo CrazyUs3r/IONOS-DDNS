@@ -16,38 +16,40 @@ jobs:
       packages: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4 # v4 ist aktuell stabil
+        uses: actions/checkout@v4
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23' # Nutze eine stabile Version
-          cache: true       # Aktiviert automatisches Caching von go.mod
+          go-version: '1.23'
+          cache: true
 
-      # WICHTIG: Abhängigkeiten explizit laden
       - name: Install dependencies
         run: go mod download
 
-      # 1. Version aus Dockerfile extrahieren
       - name: Extract version from Dockerfile
         id: get_version
         run: |
-          # Achte auf Groß/Kleinschreibung: Heißt die Datei 'Dockerfile' oder 'dockerfile'?
-          VERSION=$(grep 'org.opencontainers.image.version' Dockerfile | cut -d '"' -f 2)
+          DOCKERFILE=$(find . -maxdepth 1 -iname "Dockerfile" | head -n 1)
+          VERSION=$(grep -i 'image.version' "$DOCKERFILE" | sed -E 's/.*version="([^"]+)".*/\1/')
+          
+          if [ -z "$VERSION" ]; then
+            echo "⚠️ Keine Version im Dockerfile gefunden, nutze Fallback 2.1.0"
+            VERSION="2.1.0"
+          fi
+          
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "TAG_NAME=v$VERSION" >> $GITHUB_ENV
 
-      # 2. Binaries bauen (Nutze ./... damit Go alle Module einbezieht)
       - name: Build Binaries
         run: |
           GOOS=linux GOARCH=amd64 go build -o ionos-ddns-linux-amd64 .
           GOOS=windows GOARCH=amd64 go build -o ionos-ddns-windows-amd64.exe .
           GOOS=linux GOARCH=arm64 go build -o ionos-ddns-linux-arm64 .
 
-      # 3. GitHub Release erstellen
       - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') # Nur bei echten Tags releasen
         with:
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
@@ -60,7 +62,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 4. Docker Setup & Build
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
