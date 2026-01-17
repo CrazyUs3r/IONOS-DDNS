@@ -30,7 +30,7 @@ jobs:
       - name: Extract version from Dockerfile
         id: get_version
         run: |
-          DOCKERFILE=$(find . -maxdepth 1 -iname "Dockerfile" | head -n 1)
+          DOCKERFILE=$(find . -maxdepth 1 -iname "dockerfile" | head -n 1)
           VERSION=$(grep -i 'image.version' "$DOCKERFILE" | sed -E 's/.*version="([^"]+)".*/\1/')
           
           if [ -z "$VERSION" ]; then
