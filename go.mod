@@ -1,4 +1,4 @@
-module dyndns
+module github.com/CrazyUs3r/IONOS-DDNS
 
 go 1.25.5
 
