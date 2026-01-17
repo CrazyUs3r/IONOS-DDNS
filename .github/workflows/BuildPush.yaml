@@ -3,17 +3,19 @@ name: Docker Build and Release
 on:
   push:
     branches: [ "main" ]
-    tags: [ 'v*.*.*' ]
+    tags: [ "v*.*.*" ]
     paths:
-      - 'main.go'
+      - "main.go"
   workflow_dispatch:
 
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
+
     permissions:
       contents: write
       packages: write
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -21,7 +23,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: "1.23"
           cache: true
 
       - name: Install dependencies
@@ -30,19 +32,18 @@ jobs:
       - name: Extract version from Dockerfile
         id: get_version
         run: |
-          # Sucht die Datei unabhängig von der Schreibweise (D oder d)
           DOCKERFILE=$(find . -maxdepth 1 -iname "dockerfile" | head -n 1)
-          
+
           if [ -z "$DOCKERFILE" ]; then
-            echo "❌ KEIN DOCKERFILE GEFUNDEN!"
+            echo "❌ KEIN Dockerfile gefunden!"
             VERSION="2.1.0"
           else
-            # Extrahiert die Version sicher aus der gefundenen Datei
-            VERSION=$(grep -i 'image.version' "$DOCKERFILE" | sed -E 's/.*version="([^"]+)".*/\1/')
+            VERSION=$(grep -i 'org.opencontainers.image.version' "$DOCKERFILE" \
+              | sed -E 's/.*version="([^"]+)".*/\1/')
           fi
 
-          # Sicherheits-Check: Falls VERSION immer noch leer ist
           if [ -z "$VERSION" ]; then
+            echo "⚠️ Keine Version gefunden – Fallback"
             VERSION="2.1.0"
           fi
 
@@ -52,9 +53,9 @@ jobs:
 
       - name: Build Binaries
         run: |
-          GOOS=linux GOARCH=amd64 go build -o ionos-ddns-linux-amd64 .
+          GOOS=linux   GOARCH=amd64 go build -o ionos-ddns-linux-amd64 .
           GOOS=windows GOARCH=amd64 go build -o ionos-ddns-windows-amd64.exe .
-          GOOS=linux GOARCH=arm64 go build -o ionos-ddns-linux-arm64 .
+          GOOS=linux   GOARCH=arm64 go build -o ionos-ddns-linux-arm64 .
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
@@ -89,7 +90,7 @@ jobs:
           context: .
           file: ./dockerfile
           push: true
-          platforms: linux/amd64,linux/arm64 
+          platforms: linux/amd64,linux/arm64
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/ionos-ddns:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/ionos-ddns:${{ env.VERSION }}
