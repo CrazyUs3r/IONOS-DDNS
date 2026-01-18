@@ -1,15 +1,17 @@
 # 🌐 IONOS DynDNS Dual-Stack (Go)
 
-Ein hochperformanter, in Go geschriebener Dynamic DNS Client für IONOS. Optimiert für moderne Dual-Stack Anschlüsse (IPv4 & IPv6).
+Ein hochperformanter, in Go geschriebener Dynamic DNS Client für IONOS. Optimiert für moderne Dual-Stack Anschlüsse (IPv4 & IPv6) mit integriertem Web-Dashboard.
 
 ## ✨ Highlights
-* **Web-Dashboard:** Behalte deine IP-Historie und den Systemstatus direkt im Browser im Blick.
+* **Web-Dashboard:** Behalte deine IP-Historie, API-Performance und System-Logs in Echtzeit via WebSockets im Blick.
 * **Dual-Stack Ready:** Gleichzeitige Aktualisierung von A (IPv4) und AAAA (IPv6) Records.
-* **Parallele Verarbeitung:** Schnelle Updates durch Go-Routines (ideal für viele Subdomains).
-* **Multi-Architektur:** Native Unterstützung für `amd64` und `arm64` (perfekt für Raspberry Pi & Server).
-* **Smart Logging:** Verhindert doppelte Einträge in der Historie bei Neustarts.
+* **Intelligente Erkennung:** Erkennt IPv6-Adressen direkt am Interface oder über externe DNS-Validierung.
+* **Parallele Verarbeitung:** Schnelle Updates durch Go-Routines mit einstellbarem Worker-Limit (ideal für viele Subdomains).
+* **Multi-Architektur:** Native Unterstützung für `amd64` und `arm64` (perfekt für Raspberry Pi, NAS & Server).
+* **Robust:** Automatisches Retrying bei API-Fehlern und ordnungsgemäßes Beenden (Graceful Shutdown).
 
 ## 🚀 Quick Start (Docker Compose)
+
 ```yaml
 services:
   ionos-ddns:
@@ -18,12 +20,12 @@ services:
     environment:
       - API_PREFIX=dein_ionos_prefix
       - API_SECRET=dein_ionos_secret
-      - DOMAINS=domain.de,sub.domain.de
+      - DOMAINS=meine-domain.de,sub.andere-domain.com
       - IP_MODE=BOTH # IPV4, IPV6 oder BOTH
     ports:
       - "8080:8080" # Dashboard & Healthcheck
     volumes:
-      - ./logs:/logs
+      - ./config:/config # Speichert Logs, Historie und Übersetzungen
     restart: unless-stopped
 
 ```
@@ -37,40 +39,52 @@ services:
 | `DOMAINS` | Kommagetrennte Liste der Domains | (erforderlich) |
 | `IP_MODE` | Modus: `IPV4`, `IPV6` oder `BOTH` | `BOTH` |
 | `INTERVAL` | Intervall zwischen den Prüfungen (Sekunden) | `300` |
-| `LANG` | Sprache der Logs (`DE` oder `EN`) | `DE` |
+| `INTERFACE` | Netzwerk-Interface für IPv6 (z.B. `eth0`) | `eth0` |
+| `DNS_SERVERS` | Externe DNS-Server zur Validierung | `1.1.1.1:53,8.8.8.8:53` |
+| `HEALTH_PORT` | Port für Dashboard und Health-Check | `8080` |
+| `LANG` | Sprache der Logs & UI (`DE` oder `EN`) | `DE` |
+| `LOG_MAX_LINES` | Maximale Zeilenanzahl pro Logdatei | `5000` |
+| `MAX_CONCURRENT` | Maximale parallele API-Updates | `5` |
+| `HOURLY_RATE_LIMIT` | Max. API-Anfragen pro Stunde | `1200` |
 | `DRY_RUN` | Wenn `true`, wird nichts bei IONOS geändert | `false` |
+| `DEBUG` | Aktiviert erweitertes Logging | `false` |
 
+'''
 
-## 📊 Dashboard
-​Erreichbar unter http://server-ip:8080. Zeigt den aktuellen API-Status und die letzten IP-Änderungen übersichtlich an.
+## 📊 Dashboard & Monitoring
+​Das Dashboard ist unter http://server-ip:8080 erreichbar. Es zeigt den aktuellen Status der API-Verbindung, die Performance-Metriken und ein Echtzeit-Log der Systemereignisse.
 
-## 📊 Monitoring & Logs
-​Das Tool erstellt im gemounteten /logs Verzeichnis zwei Dateien:
-​dyndns.json: Ein fortlaufendes Log aller Aktionen (Startup, Updates, Fehler).
-​update.json: Eine kompakte Historie der IP-Adressen pro Domain.
-​Beispiel der update.json:
+## ​Logs & Historie
+​Das Tool nutzt das Verzeichnis /config (im Docker-Container) zur Speicherung:
+​/config/logs/dyndns.json: Detailliertes Ereignis-Log im JSON-Format.
+​/config/logs/update.json: Kompakte Historie deiner IP-Wechsel pro Domain.
 
+​Beispiel update.json:
 ```json
 {
-  "domain.de": {
+  "meine-domain.de": {
     "ips": [
       {
-        "time": "03.01.2026 18:08:25",
-        "ipv4": "*.x.x.x",
-        "ipv6": "2001:*:..."
+        "time": "18.01.2026 13:22:00",
+        "ipv4": "x.x.x.x",
+        "ipv6": "x:x:x:x:248:1893:25c8:1946"
       }
     ]
   }
 }
+
 ```
 
 ## 🏗 Manuelle Installation (Binaries)
 ​Du kannst die vorkompilierten Binaries für Linux (AMD64/ARM64) und Windows direkt aus den GitHub Releases herunterladen.
-​Lade die passende Datei für dein System herunter.
-​Setze die Umgebungsvariablen (z. B. via .env Datei oder Export).
-​Starte das Programm: ./ionos-ddns-linux-amd64
+1. ​Lade die passende Datei für dein System herunter.
+2. ​Setze die Umgebungsvariablen (z. B. via .env Datei oder export).
+3. ​Starte das Programm: ./ionos-ddns
 
 ## ​🔐 API-Keys erstellen
-​Um die API-Zugangsdaten zu erhalten, besuche die IONOS Developer Konsole. Erstelle dort einen neuen Key und kopiere das Prefix und das Secret.
+​Logge dich in die IONOS Developer Konsole ein.
+​Erstelle einen neuen Key (Typ: Public).
+​Kopiere das Prefix und das Secret in deine Konfiguration.
+
 ## ​⚖️ Lizenz
 ​Dieses Projekt ist unter der MIT-Lizenz lizenziert.
