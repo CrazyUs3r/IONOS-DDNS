@@ -109,7 +109,7 @@ printf "Dry-Run:       ${DRY_RUN}\n"
 printf "Debug:         ${DEBUG}\n"
 
 # Validate numeric values
-if ! echo "${INTERVAL}" | grep -qE '^[0-9]+
+if ! echo "${INTERVAL}" | grep -qE '^[0-9][0-9]*$'
 
 # Execute main command
 exec "$@"; then
@@ -117,7 +117,7 @@ exec "$@"; then
     exit 1
 fi
 
-if ! echo "${HEALTH_PORT}" | grep -qE '^[0-9]+
+if ! echo "${HEALTH_PORT}" | grep -qE '^[0-9][0-9]*$'
 
 # Execute main command
 exec "$@"; then
