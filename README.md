@@ -49,8 +49,6 @@ services:
 | `DRY_RUN` | Wenn `true`, wird nichts bei IONOS geändert | `false` |
 | `DEBUG` | Aktiviert erweitertes Logging | `false` |
 
-'''
-
 ## 📊 Dashboard & Monitoring
 ​Das Dashboard ist unter http://server-ip:8080 erreichbar. Es zeigt den aktuellen Status der API-Verbindung, die Performance-Metriken und ein Echtzeit-Log der Systemereignisse.
 
