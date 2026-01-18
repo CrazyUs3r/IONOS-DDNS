@@ -1,12 +1,30 @@
-name: Docker Build and Release
+name: Docker Build and Release (Manual)
 
 on:
-  push:
-    branches: [ "main" ]
-    tags: [ "v*.*.*" ]
-    paths:
-      - "main.go"
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Release-Version (z.B. 2.1.0)"
+        required: true
+        default: "2.1.0"
+
+      prerelease:
+        description: "Als Prerelease veröffentlichen?"
+        required: true
+        type: choice
+        default: "true"
+        options:
+          - "true"
+          - "false"
+
+      docker_latest:
+        description: "Docker-Tag 'latest' setzen?"
+        required: true
+        type: choice
+        default: "true"
+        options:
+          - "true"
+          - "false"
 
 jobs:
   build-and-release:
@@ -20,6 +38,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set version from input
+        run: |
+          VERSION="${{ inputs.version }}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "TAG_NAME=v$VERSION" >> $GITHUB_ENV
+          echo "✅ Version gesetzt auf $VERSION"
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -29,28 +54,6 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
-      - name: Extract version from Dockerfile
-        id: get_version
-        run: |
-          DOCKERFILE="./dockerfile"
-
-          if [ -z "$DOCKERFILE" ]; then
-            echo "❌ KEIN Dockerfile gefunden!"
-            VERSION="2.1.0"
-          else
-            VERSION=$(grep -i 'org.opencontainers.image.version' "$DOCKERFILE" \
-              | sed -E 's/.*version="([^"]+)".*/\1/')
-          fi
-
-          if [ -z "$VERSION" ]; then
-            echo "⚠️ Keine Version gefunden – Fallback"
-            VERSION="2.1.0"
-          fi
-
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "TAG_NAME=v$VERSION" >> $GITHUB_ENV
-          echo "✅ Nutze Version: $VERSION"
-
       - name: Build Binaries
         run: |
           GOOS=linux   GOARCH=amd64 go build -o ionos-ddns-linux-amd64 .
@@ -58,17 +61,16 @@ jobs:
           GOOS=linux   GOARCH=arm64 go build -o ionos-ddns-linux-arm64 .
 
       - name: Create GitHub Release
-        if: success()
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VERSION }}
           name: Release v${{ env.VERSION }}
+          prerelease: ${{ inputs.prerelease }}
+          draft: false
           files: |
             ionos-ddns-linux-amd64
             ionos-ddns-windows-amd64.exe
             ionos-ddns-linux-arm64
-          draft: false
-          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -92,5 +94,5 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/ionos-ddns:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/ionos-ddns:${{ env.VERSION }}
+            ${{ inputs.docker_latest == 'true' && format('{0}/ionos-ddns:latest', secrets.DOCKERHUB_USERNAME) || '' }}
