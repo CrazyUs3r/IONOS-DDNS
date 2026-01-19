@@ -19,7 +19,7 @@ Ein hochperformanter, in Go geschriebener Dynamic DNS Client für IONOS. Optimie
 ```yaml
 services:
   ionos-ddns:
-    image: deinusername/ionos-ddns:latest
+    image: crazyus3r/ionos-ddns:latest
     container_name: ionos-ddns
     environment:
       - API_PREFIX=dein_ionos_prefix
