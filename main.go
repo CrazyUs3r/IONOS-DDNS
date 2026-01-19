@@ -81,7 +81,7 @@ const (
 	WSPongTimeout  = 60 * time.Second
 	WSPingInterval = 30 * time.Second
 
-	// Retry 
+	// Retry
 	RetryBaseDelay        = 1 * time.Second
 	RetryMaxDelay         = 60 * time.Second
 	RetryJitterMaxMs      = 1000
@@ -1600,7 +1600,6 @@ func processDomainUpdate(ctx context.Context, job domainUpdateJob) domainUpdateR
 func cleanupOldRecords(ctx context.Context, zones []Zone, recordCache *ZoneRecordCache) {
 	debugLog("MAINTENANCE", "", "🧹 Starte Bereinigung verwaister DNS-Records...")
 
-	// Wir erstellen ein Set aus den Domains der Konfiguration für schnellen Zugriff
 	configMap := make(map[string]bool)
 	for _, d := range cfg.Domains {
 		configMap[d] = true
@@ -1613,12 +1612,9 @@ func cleanupOldRecords(ctx context.Context, zones []Zone, recordCache *ZoneRecor
 		}
 
 		for _, rec := range records {
-			// Nur A und AAAA Records anfassen
 			if rec.Type != "A" && rec.Type != "AAAA" {
 				continue
 			}
-
-			// Wenn der Record nicht in unserer Config-Liste ist -> Löschen
 			if !configMap[rec.Name] {
 				debugLog("MAINTENANCE", rec.Name, fmt.Sprintf("🗑️ Unbekannter %s Record (ID: %s) wird entfernt...", rec.Type, rec.ID))
 
@@ -3305,13 +3301,33 @@ func createMux() *http.ServeMux {
 					<div><strong>`+T.AvgLatency+`:</strong> %v</div>
 					<div><strong>`+T.Errors+`:</strong> %v / %v</div>
 				</div>
-			</div>
+                <div style="margin-top: 20px;">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.7rem; color: #94a3b8; margin-bottom: 4px;">
+                        <span>   STÜNDLICHES LIMIT (EST.)</span>
+                        <span>%v / %v Requests</span> </div>
+                    <div style="width: 100%%; background: #334155; height: 8px; border-radius: 4px; overflow: hidden;">
+                        <div style="width: %s%%; height: 100%%; background: %s; transition: width 0.5s ease;"></div>
+                    </div>
+                    <div style="font-size: 0.65rem; color: #64748b; margin-top: 4px;">    Basierend auf Requests der letzten 60 Minuten</div>
+                </div>
+            </div>
 		</details>
 		
 		%s
 		
 		%s
-	`, stats["total_requests"], stats["success_rate"], stats["avg_latency"], stats["client_errors"], stats["server_errors"], chartSVG, latencySVG)
+	`,
+			stats["total_requests"],
+			stats["success_rate"],
+			stats["avg_latency"],
+			stats["client_errors"],
+			stats["server_errors"],
+			stats["usage_count"],
+			stats["hourly_limit"],  // Füllt den zweiten Platzhalter bei "Requests"
+			stats["usage_percent"], // Füllt width: %s%%
+			stats["usage_color"],   // Füllt background: %s
+			chartSVG,
+			latencySVG)
 
 		if len(logs) > 0 {
 			fmt.Fprintf(w, `
@@ -3344,8 +3360,12 @@ func createMux() *http.ServeMux {
 				switch actionUpper {
 				case "ERROR", "FAIL":
 					icon = "⚠️"
-				case "SUCCESS", "ADDED", "UPDATE", "CREATE":
+				case "SUCCESS", "ADDED":
 					icon = "✅"
+				case "UPDATE":
+					icon = "🔄"
+				case "CREATE":
+					icon = "🆕"
 				}
 
 				fmt.Fprintf(w, `
