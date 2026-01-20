@@ -1,7 +1,8 @@
 # 🌐 IONOS DynDNS Dual-Stack (Go)
 
 [![License](https://img.shields.io/github/license/crazyUs3r/ionos-ddns)](https://github.com/CrazyUs3r/IONOS-DDNS/blob/main/LICENSE)
-[![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/crazyUs3r/ionos-ddns/total)](https://github.com/crazyUs3r/ionos-ddnsn/releases)
+[![Docker Pulls](https://img.shields.io/docker/pulls/crazyus3r/ionos-ddns)](https://hub.docker.com/r/crazyus3r/ionos-ddns)
+[![GitHub Downloads](https://img.shields.io/github/downloads/crazyUs3r/ionos-ddns/total)](https://github.com/crazyUs3r/ionos-ddns/releases)
 [![GitHub Activity](https://img.shields.io/github/commit-activity/y/crazyUs3r/ionos-ddns?label=commits)](https://github.com/crazyUs3r/ionos-ddns/commits/main)
 
 Ein hochperformanter, in Go geschriebener Dynamic DNS Client für IONOS. Optimiert für moderne Dual-Stack Anschlüsse (IPv4 & IPv6) mit integriertem Web-Dashboard.
