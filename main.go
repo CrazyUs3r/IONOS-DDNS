@@ -46,6 +46,7 @@ const (
 	ActionConfig  = "CONFIG"
 	ActionZone    = "ZONE"
 	ActionDryRun  = "DRY-RUN"
+	ActionCleanup = "CLEANUP"
 
 	// Defaults
 	DefaultMaxLogLines     = 500
@@ -95,27 +96,37 @@ const (
 	TriggerTokenHeader    = "X-Trigger-Token"
 )
 
+type ProviderType string
+
+const (
+	ProviderIONOS      ProviderType = "IONOS"
+	ProviderCloudflare ProviderType = "CLOUDFLARE"
+	ProviderIPv64      ProviderType = "IPV64"
+)
+
 var actionClass = map[string]string{
-	ActionStart:  "act-start",
-	ActionStop:   "act-stop",
-	ActionUpdate: "act-update",
-	ActionCreate: "act-create",
-	ActionRetry:  "act-retry",
-	ActionError:  "act-error",
-	ActionZone:   "act-error",
-	ActionConfig: "act-error",
-	ActionDryRun: "act-dryrun",
+	ActionStart:   "act-start",
+	ActionStop:    "act-stop",
+	ActionUpdate:  "act-update",
+	ActionCreate:  "act-create",
+	ActionRetry:   "act-retry",
+	ActionError:   "act-error",
+	ActionZone:    "act-error",
+	ActionConfig:  "act-error",
+	ActionDryRun:  "act-dryrun",
+	ActionCleanup: "act-cleanup",
 }
 
 var persistentActions = map[string]bool{
-	"START":  true,
-	"STOP":   true,
-	"UPDATE": true,
-	"CREATE": true,
-	"ERROR":  true,
-	"RETRY":  true,
-	"CONFIG": true,
-	"ZONE":   true,
+	"START":   true,
+	"STOP":    true,
+	"UPDATE":  true,
+	"CREATE":  true,
+	"ERROR":   true,
+	"RETRY":   true,
+	"CONFIG":  true,
+	"ZONE":    true,
+	"CLEANUP": true,
 }
 
 // ============================================================================
@@ -208,8 +219,18 @@ type DomainHistory struct {
 }
 
 type Config struct {
-	APIPrefix       string
-	APISecret       string
+	// Provider
+	Provider         ProviderType
+	CloudflareToken  string
+	CloudflareEmail  string
+	CloudflareZoneID string
+	IPv64Token       string
+
+	// IONOS (existing)
+	APIPrefix string
+	APISecret string
+
+	// Common
 	IPMode          string
 	IfaceName       string
 	HealthPort      string
@@ -242,6 +263,45 @@ type DNSRecord struct {
 	Type    string `json:"type"`
 	Content string `json:"content"`
 	TTL     int    `json:"ttl"`
+}
+
+type CloudflareZone struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+}
+
+type CloudflareRecord struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	Content string `json:"content"`
+	TTL     int    `json:"ttl"`
+	Proxied bool   `json:"proxied"`
+}
+
+type CloudflareResponse struct {
+	Success  bool              `json:"success"`
+	Errors   []CloudflareError `json:"errors"`
+	Messages []string          `json:"messages"`
+	Result   interface{}       `json:"result"`
+}
+
+type CloudflareError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+type IPv64Domain struct {
+	Domain string `json:"domain"`
+	Type   string `json:"type"`
+	IPv4   string `json:"ipv4"`
+	IPv6   string `json:"ipv6"`
+}
+
+type IPv64Response struct {
+	Info    string                 `json:"info"`
+	Domains map[string]IPv64Domain `json:"domains,omitempty"`
 }
 
 type ZoneRecordCache struct {
@@ -341,13 +401,15 @@ type domainUpdateResult struct {
 // ============================================================================
 
 var (
-	cfg        Config
-	T          Phrases
-	configDir  string
-	langDir    string
-	logPath    string
-	updatePath string
-	apiBaseURL = "https://api.hosting.ionos.com/dns/v1/zones"
+	cfg               Config
+	T                 Phrases
+	configDir         string
+	langDir           string
+	logPath           string
+	updatePath        string
+	apiBaseURL        = "https://api.hosting.ionos.com/dns/v1/zones"
+	cloudflareAPIBase = "https://api.cloudflare.com/client/v4"
+	ipv64APIBase      = "https://ipv64.net/api"
 
 	lastOk       atomic.Bool
 	logMutex     sync.Mutex
@@ -389,6 +451,47 @@ var (
 		},
 	}
 )
+
+// ============================================================================
+// PROVIDER INITIALIZATION
+// ============================================================================
+
+func initProviderConfig() error {
+	providerEnv := strings.ToUpper(os.Getenv("PROVIDER"))
+
+	switch providerEnv {
+	case "CLOUDFLARE":
+		cfg.Provider = ProviderCloudflare
+		cfg.CloudflareToken = os.Getenv("CLOUDFLARE_TOKEN")
+		cfg.CloudflareEmail = os.Getenv("CLOUDFLARE_EMAIL")
+		cfg.CloudflareZoneID = os.Getenv("CLOUDFLARE_ZONE_ID")
+
+		if cfg.CloudflareToken == "" && (cfg.CloudflareEmail == "" || cfg.APISecret == "") {
+			return fmt.Errorf("cloudflare requires CLOUDFLARE_TOKEN or CLOUDFLARE_EMAIL + API_SECRET")
+		}
+
+		debugLog("CONFIG", "", "Provider: Cloudflare (API Token Auth)")
+
+	case "IPV64":
+		cfg.Provider = ProviderIPv64
+		cfg.IPv64Token = os.Getenv("IPV64_TOKEN")
+
+		if cfg.IPv64Token == "" {
+			return fmt.Errorf("ipv64 requires IPV64_TOKEN")
+		}
+
+		debugLog("CONFIG", "", "Provider: IPv64")
+
+	case "IONOS", "":
+		cfg.Provider = ProviderIONOS
+		debugLog("CONFIG", "", "Provider: IONOS")
+
+	default:
+		return fmt.Errorf("unknown provider: %s (supported: IONOS, CLOUDFLARE, IPV64)", providerEnv)
+	}
+
+	return nil
+}
 
 // ============================================================================
 // RATE LIMITER
@@ -558,13 +661,13 @@ func getCategoryIcon(category string) string {
 		"MAINTENANCE":  "🧹",
 		"SERVER":       "📊",
 		"HTTP":         "📊",
-		"HTTP-RAW":     "🔍",
+		"HTTP-RAW":     "📝",
 		"WS":           "🔌",
 		"WORKER":       "👷",
 		"DNS-LOGIC":    "🔧",
 		"CACHE":        "💾",
 		"DNS-FAILOVER": "🔀",
-		"STATUS":       "📝",
+		"STATUS":       "📄",
 	}
 
 	if icon, ok := icons[category]; ok {
@@ -579,7 +682,7 @@ func shouldPersistLevel(level LogLevel, action string) bool {
 	}
 
 	switch action {
-	case ActionStart, ActionStop, ActionUpdate, ActionCreate:
+	case ActionStart, ActionStop, ActionUpdate, ActionCreate, ActionCleanup:
 		return true
 	}
 	return false
@@ -730,13 +833,19 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 			}
 		}
 
+		if auth := logReq.Header.Get("Authorization"); auth != "" {
+			if strings.HasPrefix(auth, "Bearer ") {
+				logReq.Header.Set("Authorization", "Bearer ***MASKED***")
+			}
+		}
+
 		requestDump, _ := httputil.DumpRequestOut(logReq, true)
 		debugLog("HTTP-RAW", "", "\n>>> REQUEST >>>\n"+string(requestDump))
 	}
 
 	start := time.Now()
-	resp, err := t.base.RoundTrip(req) // <--- Hier werden 'resp' und 'err' erzeugt
-	duration := time.Since(start)      // <--- Hier wird 'duration' erzeugt
+	resp, err := t.base.RoundTrip(req)
+	duration := time.Since(start)
 
 	if err != nil {
 		return nil, err
@@ -747,7 +856,6 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		if resp.Body != nil {
 			bodyBytes, _ = io.ReadAll(resp.Body)
 			resp.Body.Close()
-			// Body für die weitere Verwendung im Programm wiederherstellen
 			resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 		}
 
@@ -773,19 +881,6 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 			bodyStr))
 	}
 	return resp, nil
-}
-
-func sanitizeResponseBody(body string) string {
-	if replacer := getSecretReplacer(); replacer != nil {
-		body = replacer.Replace(body)
-	}
-
-	maxLen := 1000
-	if len(body) > maxLen {
-		return body[:maxLen] + fmt.Sprintf("\n... (%d bytes truncated)", len(body)-maxLen)
-	}
-
-	return body
 }
 
 func getHTTPClient() *http.Client {
@@ -876,6 +971,14 @@ func getSecretReplacer() *strings.Replacer {
 			replacements = append(replacements, cfg.APIPrefix, "***PREFIX***")
 		}
 
+		if cfg.CloudflareToken != "" {
+			replacements = append(replacements, cfg.CloudflareToken, "***CF-TOKEN***")
+		}
+
+		if cfg.IPv64Token != "" {
+			replacements = append(replacements, cfg.IPv64Token, "***IPV64-TOKEN***")
+		}
+
 		if len(replacements) > 0 {
 			secretReplacer = strings.NewReplacer(replacements...)
 		}
@@ -931,11 +1034,22 @@ func validateDomain(domain string) error {
 func validateConfig() error {
 	var errs []string
 
-	if cfg.APIPrefix == "" {
-		errs = append(errs, "API_PREFIX fehlt")
-	}
-	if cfg.APISecret == "" {
-		errs = append(errs, "API_SECRET fehlt")
+	switch cfg.Provider {
+	case ProviderIONOS:
+		if cfg.APIPrefix == "" {
+			errs = append(errs, "API_PREFIX fehlt")
+		}
+		if cfg.APISecret == "" {
+			errs = append(errs, "API_SECRET fehlt")
+		}
+	case ProviderCloudflare:
+		if cfg.CloudflareToken == "" && (cfg.CloudflareEmail == "" || cfg.APISecret == "") {
+			errs = append(errs, "CLOUDFLARE_TOKEN oder CLOUDFLARE_EMAIL + API_SECRET fehlt")
+		}
+	case ProviderIPv64:
+		if cfg.IPv64Token == "" {
+			errs = append(errs, "IPV64_TOKEN fehlt")
+		}
 	}
 
 	if len(cfg.Domains) == 0 {
@@ -987,7 +1101,7 @@ func validateConfig() error {
 }
 
 // ============================================================================
-// API
+// API - IONOS
 // ============================================================================
 
 func calculateRetryDelay(attempt int, isServerError bool) time.Duration {
@@ -1010,7 +1124,6 @@ func calculateRetryDelay(attempt int, isServerError bool) time.Duration {
 	}
 
 	return wait
-
 }
 
 func ionosAPI(ctx context.Context, method, url string, body interface{}) ([]byte, error) {
@@ -1148,8 +1261,190 @@ func ionosAPI(ctx context.Context, method, url string, body interface{}) ([]byte
 	}
 
 	return nil, fmt.Errorf("API fehlgeschlagen nach %d Versuchen: %w", MaxAPIRetries, lastErr)
-
 }
+
+// ============================================================================
+// API - CLOUDFLARE
+// ============================================================================
+
+func cloudflareAPI(ctx context.Context, method, endpoint string, body interface{}) ([]byte, error) {
+	url := cloudflareAPIBase + endpoint
+
+	var lastErr error
+	for attempt := 0; attempt < MaxAPIRetries; attempt++ {
+		start := time.Now()
+		debugLog("HTTP", "", fmt.Sprintf("🔄 Cloudflare %s %d/%d: %s %s",
+			T.Attempt, attempt+1, MaxAPIRetries, method, url))
+
+		var bodyBytes []byte
+		var err error
+
+		if body != nil {
+			bodyBytes, err = json.Marshal(body)
+			if err != nil {
+				return nil, fmt.Errorf("json marshal failed: %w", err)
+			}
+		}
+
+		req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(bodyBytes))
+		if err != nil {
+			return nil, fmt.Errorf("request creation failed: %w", err)
+		}
+
+		if cfg.CloudflareToken != "" {
+			req.Header.Set("Authorization", "Bearer "+cfg.CloudflareToken)
+		} else if cfg.CloudflareEmail != "" && cfg.APISecret != "" {
+			req.Header.Set("X-Auth-Email", cfg.CloudflareEmail)
+			req.Header.Set("X-Auth-Key", cfg.APISecret)
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("User-Agent", "Go-DynDNS/2.0")
+
+		res, err := getHTTPClient().Do(req)
+		duration := time.Since(start)
+
+		if err != nil {
+			debugLog("HTTP", "", fmt.Sprintf("❌ %s: %v | %s: %v", T.NetworkError, err, T.AvgLatency, duration))
+			apiMetrics.RecordError(0, err, duration)
+			lastErr = fmt.Errorf("network error: %w", err)
+
+			wait := calculateRetryDelay(attempt, false)
+			select {
+			case <-time.After(wait):
+			case <-ctx.Done():
+				return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
+			}
+			continue
+		}
+		defer res.Body.Close()
+
+		respBody, err := io.ReadAll(res.Body)
+		if err != nil {
+			apiMetrics.RecordError(res.StatusCode, err, duration)
+			lastErr = fmt.Errorf("failed to read response: %w", err)
+			continue
+		}
+
+		var cfResp CloudflareResponse
+		if err := json.Unmarshal(respBody, &cfResp); err != nil {
+			return nil, fmt.Errorf("failed to parse cloudflare response: %w", err)
+		}
+
+		if !cfResp.Success {
+			errMsg := "unknown error"
+			if len(cfResp.Errors) > 0 {
+				errMsg = cfResp.Errors[0].Message
+			}
+
+			apiErr := classifyAPIError(res.StatusCode, method, url, errMsg)
+			apiMetrics.RecordError(res.StatusCode, fmt.Errorf("%v", apiErr), duration)
+			lastErr = apiErr
+
+			if apiErr == nil {
+				apiMetrics.RecordSuccess(duration)
+				return respBody, nil
+			}
+
+			if attempt >= MaxAPIRetries-1 {
+				return nil, fmt.Errorf("max attempts reached: %w", apiErr)
+			}
+
+			wait := calculateRetryDelay(attempt, res.StatusCode >= 500)
+			select {
+			case <-time.After(wait):
+			case <-ctx.Done():
+				return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
+			}
+			continue
+		}
+
+		apiMetrics.RecordSuccess(duration)
+		return respBody, nil
+	}
+
+	return nil, fmt.Errorf("cloudflare api failed after %d attempts: %w", MaxAPIRetries, lastErr)
+}
+
+// ============================================================================
+// API - IPV64
+// ============================================================================
+
+func ipv64API(ctx context.Context, endpoint string, params map[string]string) ([]byte, error) {
+	url := ipv64APIBase + endpoint
+
+	if len(params) > 0 {
+		query := make([]string, 0, len(params))
+		for k, v := range params {
+			query = append(query, k+"="+v)
+		}
+		url += "?" + strings.Join(query, "&")
+	}
+
+	var lastErr error
+	for attempt := 0; attempt < MaxAPIRetries; attempt++ {
+		start := time.Now()
+		debugLog("HTTP", "", fmt.Sprintf("🔄 IPv64 %s %d/%d: GET %s",
+			T.Attempt, attempt+1, MaxAPIRetries, endpoint))
+
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("request creation failed: %w", err)
+		}
+
+		res, err := getHTTPClient().Do(req)
+		duration := time.Since(start)
+
+		if err != nil {
+			debugLog("HTTP", "", fmt.Sprintf("❌ %s: %v", T.NetworkError, err))
+			apiMetrics.RecordError(0, err, duration)
+			lastErr = fmt.Errorf("network error: %w", err)
+
+			wait := calculateRetryDelay(attempt, false)
+			select {
+			case <-time.After(wait):
+			case <-ctx.Done():
+				return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
+			}
+			continue
+		}
+		defer res.Body.Close()
+
+		respBody, err := io.ReadAll(res.Body)
+		if err != nil {
+			apiMetrics.RecordError(res.StatusCode, err, duration)
+			lastErr = fmt.Errorf("failed to read response: %w", err)
+			continue
+		}
+
+		var ipv64Resp IPv64Response
+		if err := json.Unmarshal(respBody, &ipv64Resp); err != nil {
+			return nil, fmt.Errorf("failed to parse ipv64 response: %w", err)
+		}
+
+		if strings.Contains(strings.ToLower(ipv64Resp.Info), "error") ||
+			strings.Contains(strings.ToLower(ipv64Resp.Info), "invalid") {
+
+			apiErr := &APIError{
+				StatusCode: res.StatusCode,
+				Message:    ipv64Resp.Info,
+				Retryable:  false,
+			}
+
+			apiMetrics.RecordError(res.StatusCode, apiErr, duration)
+			return nil, apiErr
+		}
+
+		apiMetrics.RecordSuccess(duration)
+		return respBody, nil
+	}
+
+	return nil, fmt.Errorf("ipv64 api failed after %d attempts: %w", MaxAPIRetries, lastErr)
+}
+
+// ============================================================================
+// API ERROR HANDLING
+// ============================================================================
 
 func (e *APIError) Error() string {
 	return fmt.Sprintf("API Error [%s %s]: Status %d - %s", e.Method, e.URL, e.StatusCode, e.Message)
@@ -1169,62 +1464,40 @@ func classifyAPIError(statusCode int, method, url, responseBody string) *APIErro
 		RetryAfter: 0,
 	}
 
-	switch statusCode {
-	case 200, 201, 204:
-		return nil
+	if statusCode >= 200 && statusCode < 300 {
+		return apiErr
+	}
 
+	switch statusCode {
 	case 400:
 		apiErr.Message = T.BadRequest
-		apiErr.Retryable = false
-
 	case 401:
 		apiErr.Message = T.Unauthorized
-		apiErr.Retryable = false
-		log(LogContext{
-			Level:   LogError,
-			Action:  ActionConfig,
-			Message: T.Unauthorized,
-		})
-
+		log(LogContext{Level: LogError, Action: ActionConfig, Message: T.Unauthorized})
 	case 403:
 		apiErr.Message = T.Forbidden
-		apiErr.Retryable = false
-
 	case 404:
 		apiErr.Message = T.NotFound
-		apiErr.Retryable = false
-
 	case 422:
 		apiErr.Message = T.UnprocessableEntity
-		apiErr.Retryable = false
-
 	case 429:
 		apiErr.Message = T.RateLimitExceeded
 		apiErr.Retryable = true
 		apiErr.RetryAfter = RateLimitRetryDelay
-		log(LogContext{
-			Level:   LogWarn,
-			Action:  ActionRetry,
-			Message: "⚠️ " + T.RateLimitExceeded,
-		})
-
+		log(LogContext{Level: LogWarn, Action: ActionRetry, Message: "⚠️ " + T.RateLimitExceeded})
 	case 500:
 		apiErr.Message = T.InternalServerError
 		apiErr.Retryable = true
-
 	case 502:
 		apiErr.Message = T.BadGateway
 		apiErr.Retryable = true
-
 	case 503:
 		apiErr.Message = T.ServiceUnavailable
 		apiErr.Retryable = true
 		apiErr.RetryAfter = ServerErrorRetryDelay
-
 	case 504:
 		apiErr.Message = T.GatewayTimeout
 		apiErr.Retryable = true
-
 	default:
 		if statusCode >= 500 {
 			apiErr.Message = fmt.Sprintf("Server Error %d", statusCode)
@@ -1236,7 +1509,6 @@ func classifyAPIError(statusCode int, method, url, responseBody string) *APIErro
 	}
 
 	return apiErr
-
 }
 
 // ============================================================================
@@ -1282,7 +1554,6 @@ func getPublicIP(url string) (string, error) {
 
 	debugLog("IP-CHECK", "", fmt.Sprintf("✅ %s: %s", T.ReceivedIp, ip))
 	return ip, nil
-
 }
 
 func getIPv6() (string, error) {
@@ -1360,11 +1631,10 @@ func fetchCurrentIPs(ctx context.Context) (ipv4, ipv6 string, err error) {
 	}
 
 	return ipv4, ipv6, nil
-
 }
 
 // ============================================================================
-// DNS LOGIC
+// DNS LOGIC - IONOS
 // ============================================================================
 
 func updateDNS(
@@ -1381,7 +1651,7 @@ func updateDNS(
 		if (records[i].Name == fqdn || records[i].Name == recordName) && records[i].Type == recordType {
 			existing = &records[i]
 			debugLog("DNS-LOGIC", fqdn,
-				fmt.Sprintf("🔌 %s: %s (ID: %s)",
+				fmt.Sprintf("📌 %s: %s (ID: %s)",
 					T.RecordFound, existing.Content, existing.ID))
 			break
 		}
@@ -1538,6 +1808,155 @@ func updateDNS(
 	return true, nil
 }
 
+// ============================================================================
+// DNS LOGIC - CLOUDFLARE
+// ============================================================================
+
+func updateCloudflareDNS(ctx context.Context, fqdn, recordType, newIP string,
+	records []Record, zoneID string) (bool, error) {
+
+	var existing *Record
+	for i := range records {
+		if records[i].Name == fqdn && records[i].Type == recordType {
+			existing = &records[i]
+			break
+		}
+	}
+
+	if existing != nil && existing.Content == newIP {
+		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("✅ %s: %s = %s",
+			T.RecordCurrent, recordType, newIP))
+		writeLog("CURRENT", ActionCurrent, fqdn,
+			fmt.Sprintf("%-4s %s %s", recordType, newIP, T.Current))
+		return false, nil
+	}
+
+	if cfg.DryRun {
+		log(LogContext{
+			Level:   LogWarn,
+			Action:  ActionDryRun,
+			Domain:  fqdn,
+			Message: fmt.Sprintf("⚠️ %s %s %s", T.WouldSet, recordType, newIP),
+		})
+		return true, nil
+	}
+
+	payload := map[string]interface{}{
+		"type":    recordType,
+		"name":    fqdn,
+		"content": newIP,
+		"ttl":     60,
+		"proxied": false,
+	}
+
+	var endpoint string
+	var method string
+	var actionType string
+
+	if existing != nil {
+		method = "PUT"
+		endpoint = fmt.Sprintf("/zones/%s/dns_records/%s", zoneID, existing.ID)
+		actionType = ActionUpdate
+	} else {
+		method = "POST"
+		endpoint = fmt.Sprintf("/zones/%s/dns_records", zoneID)
+		actionType = ActionCreate
+	}
+
+	_, err := cloudflareAPI(ctx, method, endpoint, payload)
+	if err != nil {
+		return false, err
+	}
+
+	log(LogContext{
+		Level:   LogInfo,
+		Action:  actionType,
+		Domain:  fqdn,
+		Message: fmt.Sprintf("🔄 %s -> %s %s", recordType, newIP, T.Update),
+	})
+
+	return true, nil
+}
+
+// ============================================================================
+// DNS LOGIC - IPV64
+// ============================================================================
+
+func updateIPv64DNS(ctx context.Context, fqdn, recordType, newIP string) (bool, error) {
+	params := map[string]string{
+		"get_domains": cfg.IPv64Token,
+	}
+
+	data, err := ipv64API(ctx, "", params)
+	if err != nil {
+		return false, err
+	}
+
+	var resp IPv64Response
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return false, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	domain, exists := resp.Domains[fqdn]
+	if !exists {
+		return false, fmt.Errorf("domain %s not found in ipv64 account", fqdn)
+	}
+
+	needsUpdate := false
+	if recordType == "A" && domain.IPv4 != newIP {
+		needsUpdate = true
+	} else if recordType == "AAAA" && domain.IPv6 != newIP {
+		needsUpdate = true
+	}
+
+	if !needsUpdate {
+		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("✅ %s: %s = %s",
+			T.RecordCurrent, recordType, newIP))
+		writeLog("CURRENT", ActionCurrent, fqdn,
+			fmt.Sprintf("%-4s %s %s", recordType, newIP, T.Current))
+		return false, nil
+	}
+
+	if cfg.DryRun {
+		log(LogContext{
+			Level:   LogWarn,
+			Action:  ActionDryRun,
+			Domain:  fqdn,
+			Message: fmt.Sprintf("⚠️ %s %s %s", T.WouldSet, recordType, newIP),
+		})
+		return true, nil
+	}
+
+	updateParams := map[string]string{
+		"update_domain": cfg.IPv64Token,
+		"domain":        fqdn,
+	}
+
+	if recordType == "A" {
+		updateParams["ipv4"] = newIP
+	} else if recordType == "AAAA" {
+		updateParams["ipv6"] = newIP
+	}
+
+	_, err = ipv64API(ctx, "", updateParams)
+	if err != nil {
+		return false, err
+	}
+
+	log(LogContext{
+		Level:   LogInfo,
+		Action:  ActionUpdate,
+		Domain:  fqdn,
+		Message: fmt.Sprintf("🔄 %s -> %s %s", recordType, newIP, T.Update),
+	})
+
+	return true, nil
+}
+
+// ============================================================================
+// DNS HELPERS
+// ============================================================================
+
 func recordNameFromFQDN(fqdn, zone string) string {
 	if fqdn == zone {
 		return "@"
@@ -1568,7 +1987,19 @@ func processDomainUpdate(ctx context.Context, job domainUpdateJob) domainUpdateR
 
 	if cfg.IPMode != "IPV6" && job.IPv4 != "" {
 		debugLog("DNS-LOGIC", job.Domain, T.CheckingIpv4)
-		changed, err := updateDNS(ctx, job.Domain, "A", job.IPv4, job.Records, job.ZoneID, job.ZoneName)
+
+		var changed bool
+		var err error
+
+		switch cfg.Provider {
+		case ProviderCloudflare:
+			changed, err = updateCloudflareDNS(ctx, job.Domain, "A", job.IPv4, job.Records, job.ZoneID)
+		case ProviderIPv64:
+			changed, err = updateIPv64DNS(ctx, job.Domain, "A", job.IPv4)
+		default:
+			changed, err = updateDNS(ctx, job.Domain, "A", job.IPv4, job.Records, job.ZoneID, job.ZoneName)
+		}
+
 		if err != nil {
 			if isNonRecoverableError(err) {
 				result.Error = fmt.Errorf("non-recoverable IPv4 error: %w", err)
@@ -1581,7 +2012,19 @@ func processDomainUpdate(ctx context.Context, job domainUpdateJob) domainUpdateR
 
 	if cfg.IPMode != "IPV4" && job.IPv6 != "" {
 		debugLog("DNS-LOGIC", job.Domain, T.CheckingIpv6)
-		changed, err := updateDNS(ctx, job.Domain, "AAAA", job.IPv6, job.Records, job.ZoneID, job.ZoneName)
+
+		var changed bool
+		var err error
+
+		switch cfg.Provider {
+		case ProviderCloudflare:
+			changed, err = updateCloudflareDNS(ctx, job.Domain, "AAAA", job.IPv6, job.Records, job.ZoneID)
+		case ProviderIPv64:
+			changed, err = updateIPv64DNS(ctx, job.Domain, "AAAA", job.IPv6)
+		default:
+			changed, err = updateDNS(ctx, job.Domain, "AAAA", job.IPv6, job.Records, job.ZoneID, job.ZoneName)
+		}
+
 		if err != nil {
 			if isNonRecoverableError(err) {
 				result.Error = fmt.Errorf("non-recoverable IPv6 error: %w", err)
@@ -1594,15 +2037,18 @@ func processDomainUpdate(ctx context.Context, job domainUpdateJob) domainUpdateR
 
 	result.Changed = v4Changed || v6Changed
 	return result
-
 }
 
 func cleanupOldRecords(ctx context.Context, zones []Zone, recordCache *ZoneRecordCache) {
+	if cfg.Provider != ProviderIONOS {
+		return
+	}
+
 	debugLog("MAINTENANCE", "", "🧹 Starte Bereinigung verwaister DNS-Records...")
 
-	configMap := make(map[string]bool)
+	configDomains := make(map[string]struct{})
 	for _, d := range cfg.Domains {
-		configMap[d] = true
+		configDomains[strings.ToLower(strings.TrimSuffix(d, "."))] = struct{}{}
 	}
 
 	for _, zone := range zones {
@@ -1611,30 +2057,61 @@ func cleanupOldRecords(ctx context.Context, zones []Zone, recordCache *ZoneRecor
 			continue
 		}
 
+		zoneName := strings.ToLower(strings.TrimSuffix(zone.Name, "."))
+
 		for _, rec := range records {
 			if rec.Type != "A" && rec.Type != "AAAA" {
 				continue
 			}
-			if !configMap[rec.Name] {
-				debugLog("MAINTENANCE", rec.Name, fmt.Sprintf("🗑️ Unbekannter %s Record (ID: %s) wird entfernt...", rec.Type, rec.ID))
 
-				if cfg.DryRun {
-					debugLog("MAINTENANCE", rec.Name, "⚠️ Dry-Run: Löschen übersprungen")
-					continue
-				}
+			var fqdn string
 
-				url := fmt.Sprintf("%s/%s/records/%s", apiBaseURL, zone.ID, rec.ID)
-				_, err := ionosAPI(ctx, "DELETE", url, nil)
-				if err != nil {
-					debugLog("MAINTENANCE", rec.Name, fmt.Sprintf("❌ Fehler beim Löschen: %v", err))
-				} else {
-					log(LogContext{
-						Level:   LogInfo,
-						Action:  "CLEANUP",
-						Domain:  rec.Name,
-						Message: fmt.Sprintf("✅ %s Record wurde entfernt, da nicht mehr in Konfiguration", rec.Type),
-					})
-				}
+			switch {
+			case rec.Name == "@":
+				fqdn = zoneName
+
+			case rec.Name == zoneName:
+				fqdn = zoneName
+
+			case strings.HasSuffix(rec.Name, "."+zoneName):
+				fqdn = rec.Name
+
+			default:
+				fqdn = rec.Name + "." + zoneName
+			}
+
+			fqdn = strings.ToLower(strings.TrimSuffix(fqdn, "."))
+
+			if _, ok := configDomains[fqdn]; ok {
+				continue
+			}
+
+			debugLog(
+				"MAINTENANCE",
+				fqdn,
+				fmt.Sprintf("🗑️ Entferne verwaisten %s Record (ID: %s)", rec.Type, rec.ID),
+			)
+
+			if cfg.DryRun {
+				log(LogContext{
+					Level:   LogInfo,
+					Action:  ActionCleanup,
+					Domain:  fqdn,
+					Message: "⚠️ Dry-Run: Record wäre gelöscht worden",
+				})
+				continue
+			}
+
+			url := fmt.Sprintf("%s/%s/records/%s", apiBaseURL, zone.ID, rec.ID)
+			if _, err := ionosAPI(ctx, "DELETE", url, nil); err != nil {
+				debugLog("MAINTENANCE", fqdn, fmt.Sprintf("❌ Fehler beim Löschen: %v", err))
+			} else {
+				log(LogContext{
+					Level:   LogInfo,
+					Action:  ActionCleanup,
+					Domain:  fqdn,
+					Message: fmt.Sprintf("✅ %s Record entfernt (nicht mehr konfiguriert)", rec.Type),
+				})
 			}
 		}
 	}
@@ -1675,11 +2152,101 @@ func loadZones(ctx context.Context) ([]Zone, error) {
 	}
 
 	return zones, nil
+}
 
+func loadCloudflareZones(ctx context.Context) ([]Zone, error) {
+	data, err := cloudflareAPI(ctx, "GET", "/zones", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load cloudflare zones: %w", err)
+	}
+
+	var resp struct {
+		Result []CloudflareZone `json:"result"`
+	}
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return nil, fmt.Errorf("failed to parse zones: %w", err)
+	}
+
+	zones := make([]Zone, len(resp.Result))
+	for i, z := range resp.Result {
+		zones[i] = Zone{ID: z.ID, Name: z.Name}
+	}
+
+	return zones, nil
+}
+
+func loadIPv64Domains(ctx context.Context) ([]Zone, error) {
+	params := map[string]string{
+		"get_domains": cfg.IPv64Token,
+	}
+
+	data, err := ipv64API(ctx, "", params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load ipv64 domains: %w", err)
+	}
+
+	var resp IPv64Response
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return nil, fmt.Errorf("failed to parse domains: %w", err)
+	}
+
+	zones := make([]Zone, 0, len(resp.Domains))
+	for domain := range resp.Domains {
+		zones = append(zones, Zone{
+			ID:   domain,
+			Name: domain,
+		})
+	}
+
+	return zones, nil
+}
+
+func loadZonesForProvider(ctx context.Context) ([]Zone, error) {
+	switch cfg.Provider {
+	case ProviderCloudflare:
+		return loadCloudflareZones(ctx)
+	case ProviderIPv64:
+		return loadIPv64Domains(ctx)
+	case ProviderIONOS:
+		return loadZones(ctx)
+	default:
+		return nil, fmt.Errorf("unknown provider: %s", cfg.Provider)
+	}
+}
+
+func loadCloudflareRecords(ctx context.Context, zoneID string) ([]Record, error) {
+	endpoint := fmt.Sprintf("/zones/%s/dns_records", zoneID)
+	data, err := cloudflareAPI(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load records: %w", err)
+	}
+
+	var resp struct {
+		Result []CloudflareRecord `json:"result"`
+	}
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return nil, fmt.Errorf("failed to parse records: %w", err)
+	}
+
+	records := make([]Record, len(resp.Result))
+	for i, r := range resp.Result {
+		records[i] = Record{
+			ID:      r.ID,
+			Name:    r.Name,
+			Type:    r.Type,
+			Content: r.Content,
+		}
+	}
+
+	return records, nil
 }
 
 func loadZoneCache(ctx context.Context, zones []Zone) (*ZoneRecordCache, error) {
 	cache := NewZoneRecordCache()
+
+	if cfg.Provider == ProviderIPv64 {
+		return cache, nil
+	}
 
 	var cacheWg sync.WaitGroup
 	var cacheErrors []string
@@ -1688,7 +2255,9 @@ func loadZoneCache(ctx context.Context, zones []Zone) (*ZoneRecordCache, error) 
 	for _, z := range zones {
 		needed := false
 		for _, d := range cfg.Domains {
-			if strings.HasSuffix(d, z.Name) {
+			dn := strings.TrimSuffix(strings.ToLower(d), ".")
+			zn := strings.TrimSuffix(strings.ToLower(z.Name), ".")
+			if dn == zn || strings.HasSuffix(dn, "."+zn) {
 				needed = true
 				break
 			}
@@ -1702,7 +2271,23 @@ func loadZoneCache(ctx context.Context, zones []Zone) (*ZoneRecordCache, error) 
 		go func(zone Zone) {
 			defer cacheWg.Done()
 
-			detailData, err := ionosAPI(ctx, "GET", apiBaseURL+"/"+zone.ID, nil)
+			var records []Record
+			var err error
+
+			if cfg.Provider == ProviderCloudflare {
+				records, err = loadCloudflareRecords(ctx, zone.ID)
+			} else {
+				var detailData []byte
+				detailData, err = ionosAPI(ctx, "GET", apiBaseURL+"/"+zone.ID, nil)
+				if err == nil {
+					var detail struct{ Records []Record }
+					err = json.Unmarshal(detailData, &detail)
+					if err == nil {
+						records = detail.Records
+					}
+				}
+			}
+
 			if err != nil {
 				errMsg := fmt.Sprintf("Zone %s (%s): %v", zone.Name, zone.ID, err)
 				cacheErrorsMu.Lock()
@@ -1712,14 +2297,8 @@ func loadZoneCache(ctx context.Context, zones []Zone) (*ZoneRecordCache, error) 
 				return
 			}
 
-			var detail struct{ Records []Record }
-			if err := json.Unmarshal(detailData, &detail); err != nil {
-				debugLog("CACHE", zone.Name, fmt.Sprintf("❌ JSON Parse Fehler: %v", err))
-				return
-			}
-
-			cache.Set(zone.ID, detail.Records)
-			debugLog("CACHE", zone.Name, fmt.Sprintf("✅ %d Records geladen", len(detail.Records)))
+			cache.Set(zone.ID, records)
+			debugLog("CACHE", zone.Name, fmt.Sprintf("✅ %d Records geladen", len(records)))
 		}(z)
 	}
 
@@ -1734,13 +2313,23 @@ func loadZoneCache(ctx context.Context, zones []Zone) (*ZoneRecordCache, error) 
 	}
 
 	return cache, nil
-
 }
 
-func processDomains(ctx context.Context, zones []Zone, cache *ZoneRecordCache, ipv4, ipv6 string) int {
+func sortZonesBySpecificity(zones []Zone) {
+	sort.Slice(zones, func(i, j int) bool {
+		return len(zones[i].Name) > len(zones[j].Name)
+	})
+}
+
+func processDomains(
+	ctx context.Context,
+	zones []Zone,
+	cache *ZoneRecordCache,
+	ipv4, ipv6 string,
+) int {
+
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, cfg.MaxConcurrent)
-
 	results := make(chan domainUpdateResult, len(cfg.Domains))
 
 domainLoop:
@@ -1786,31 +2375,46 @@ domainLoop:
 			}
 
 			var matchedZone *Zone
-			var zoneID string
+			dn := strings.TrimSuffix(strings.ToLower(domain), ".")
 			for i := range zones {
-				if strings.HasSuffix(domain, zones[i].Name) {
+				zn := strings.TrimSuffix(strings.ToLower(zones[i].Name), ".")
+				if dn == zn || strings.HasSuffix(dn, "."+zn) {
 					matchedZone = &zones[i]
-					zoneID = zones[i].ID
 					break
 				}
 			}
 
-			if zoneID == "" || matchedZone == nil {
+			if matchedZone == nil {
 				debugLog("DNS-LOGIC", domain, T.NoZoneFoundForDomain)
-				results <- domainUpdateResult{Domain: domain, Error: fmt.Errorf("no zone found")}
+				results <- domainUpdateResult{
+					Domain: domain,
+					Error:  fmt.Errorf("no zone found"),
+				}
+				return
+			}
+
+			zoneID := matchedZone.ID
+			if zoneID == "" {
+				results <- domainUpdateResult{
+					Domain: domain,
+					Error:  fmt.Errorf("matched zone has empty ID"),
+				}
 				return
 			}
 
 			records, exists := cache.Get(zoneID)
-			if !exists {
+			if !exists && cfg.Provider != ProviderIPv64 {
 				debugLog("DNS-LOGIC", domain, T.NoRecordsInCache)
-				results <- domainUpdateResult{Domain: domain, Error: fmt.Errorf("no records in cache")}
+				results <- domainUpdateResult{
+					Domain: domain,
+					Error:  fmt.Errorf("no records in cache"),
+				}
 				return
 			}
 
 			job := domainUpdateJob{
 				Domain:   domain,
-				ZoneID:   matchedZone.ID,
+				ZoneID:   zoneID,
 				ZoneName: matchedZone.Name,
 				Records:  records,
 				IPv4:     ipv4,
@@ -1820,9 +2424,11 @@ domainLoop:
 			result := processDomainUpdate(ctx, job)
 			results <- result
 
+			providerName := string(cfg.Provider)
+
 			if result.Changed && !cfg.DryRun {
 				debugLog("STATUS", domain, T.ChangesDetected)
-				updateStatusFile(domain, ipv4, ipv6, "IONOS")
+				updateStatusFile(domain, ipv4, ipv6, providerName)
 			} else if result.Error == nil {
 				debugLog("STATUS", domain, T.NoChangesNeeded)
 			}
@@ -1877,7 +2483,7 @@ func runUpdate(firstRun bool) {
 		return
 	}
 
-	zones, err := loadZones(ctx)
+	zones, err := loadZonesForProvider(ctx)
 	if err != nil {
 		lastOk.Store(false)
 		log(LogContext{
@@ -1888,10 +2494,11 @@ func runUpdate(firstRun bool) {
 		})
 		return
 	}
+	sortZonesBySpecificity(zones)
 
 	if firstRun {
 		printGroupedDomains()
-		printInfrastructure(zones)
+		printInfrastructure(ctx, zones)
 	}
 
 	cache, err := loadZoneCache(ctx, zones)
@@ -1905,7 +2512,6 @@ func runUpdate(firstRun bool) {
 	successCount := processDomains(ctx, zones, cache, currentIPv4, currentIPv6)
 
 	debugLog("SCHEDULER", "", fmt.Sprintf(T.SchedulerCompleted, successCount))
-
 }
 
 // ============================================================================
@@ -1953,7 +2559,6 @@ func updateStatusFile(fqdn, ipv4, ipv6, provider string) {
 		"ipv6":   ipv6,
 		"time":   newEntry.Time,
 	})
-
 }
 
 // ============================================================================
@@ -1987,7 +2592,6 @@ func updateDomainsCache() error {
 	domainsCache.mu.Unlock()
 
 	return nil
-
 }
 
 func updateMetricsCache() {
@@ -2006,7 +2610,6 @@ func updateMetricsCache() {
 	metricsCache.ETag = etag
 	metricsCache.LastModified = time.Now()
 	metricsCache.mu.Unlock()
-
 }
 
 func serveCachedJSON(w http.ResponseWriter, r *http.Request, cache *CachedResponse) {
@@ -2036,7 +2639,6 @@ func serveCachedJSON(w http.ResponseWriter, r *http.Request, cache *CachedRespon
 	w.Header().Set("Cache-Control", "public, max-age=5")
 
 	w.Write(data)
-
 }
 
 func startCacheRefresher() {
@@ -2051,7 +2653,6 @@ func startCacheRefresher() {
 			updateMetricsCache()
 		}
 	}()
-
 }
 
 // ============================================================================
@@ -2079,7 +2680,6 @@ func (m *APIMetrics) RecordSuccess(duration time.Duration) {
 	m.Unlock()
 
 	go broadcastUpdate("metrics", statsCopy)
-
 }
 
 func (m *APIMetrics) RecordError(statusCode int, err error, duration time.Duration) {
@@ -2113,7 +2713,6 @@ func (m *APIMetrics) RecordError(statusCode int, err error, duration time.Durati
 	m.Unlock()
 
 	go broadcastUpdate("metrics", statsCopy)
-
 }
 
 func (m *APIMetrics) updateLatency(duration time.Duration) {
@@ -2150,7 +2749,6 @@ func (m *APIMetrics) cleanupOldTimestamps(now time.Time) {
 	if firstValid > 0 {
 		m.RequestTimestamps = m.RequestTimestamps[firstValid:]
 	}
-
 }
 
 func (m *APIMetrics) GetStats() map[string]interface{} {
@@ -2197,7 +2795,6 @@ func (m *APIMetrics) trackHistory() {
 			m.lastHour = currentHourUnix
 		}
 	}
-
 }
 
 func (m *APIMetrics) getStatsUnsafe() map[string]interface{} {
@@ -2228,7 +2825,6 @@ func (m *APIMetrics) getStatsUnsafe() map[string]interface{} {
 		"hourly_latency":    m.HourlyLatency,
 		"hourly_limit":      cfg.HourlyRateLimit,
 	}
-
 }
 
 // ============================================================================
@@ -2276,7 +2872,6 @@ func (h *WSHub) run() {
 			}
 		}
 	}
-
 }
 
 func (h *WSHub) keepAlive(conn *websocket.Conn) {
@@ -2300,7 +2895,6 @@ func (h *WSHub) keepAlive(conn *websocket.Conn) {
 			}
 		}
 	}
-
 }
 
 func broadcastUpdate(updateType string, data interface{}) {
@@ -2353,7 +2947,6 @@ func getClientIP(r *http.Request) string {
 	}
 
 	return ip
-
 }
 
 func validateTriggerToken(r *http.Request) bool {
@@ -2365,7 +2958,6 @@ func validateTriggerToken(r *http.Request) bool {
 	}
 
 	return token == expectedToken
-
 }
 
 // ============================================================================
@@ -2373,7 +2965,8 @@ func validateTriggerToken(r *http.Request) bool {
 // ============================================================================
 
 func printGroupedDomains() {
-	fmt.Printf("\n🚀  %s [%s] (%s: %s):\n", T.ServiceStarted, cfg.Lang, T.Mode, cfg.IPMode)
+	fmt.Printf("\n🚀  %s [%s] (%s: %s) [Provider: %s]:\n",
+		T.ServiceStarted, cfg.Lang, T.Mode, cfg.IPMode, cfg.Provider)
 
 	if len(cfg.Domains) == 0 {
 		fmt.Println("\n⚠️  " + T.NoDomains)
@@ -2428,31 +3021,43 @@ func printGroupedDomains() {
 		subs := groups[main]
 		sort.Strings(subs)
 		if len(subs) == 0 {
-			fmt.Printf("   ┗━━ 🏠  %s\n", T.RootDomain)
+			fmt.Printf("   ╚━━ 🏠   %s\n", T.RootDomain)
 		} else {
 			for i, sub := range subs {
 				char := "┣"
 				if i == len(subs)-1 {
-					char = "┗"
+					char = "╚"
 				}
 				fmt.Printf("   %s━━ 🌐 %s\n", char, sub)
 			}
 		}
 	}
 	fmt.Println("\n" + strings.Repeat("-", 40))
-
 }
 
-func printInfrastructure(zones []Zone) {
+func printInfrastructure(ctx context.Context, zones []Zone) {
 	fmt.Println("\n" + T.InfraHeading)
-	for _, z := range zones {
-		data, _ := ionosAPI(context.Background(), "GET", apiBaseURL+"/"+z.ID, nil)
-		var detail struct{ Records []Record }
-		_ = json.Unmarshal(data, &detail)
 
-		fmt.Printf("\n🌍 %s: %s\n", T.ZoneLabel, z.Name)
+	for _, z := range zones {
+		fmt.Printf("\n🌐 %s: %s\n", T.ZoneLabel, z.Name)
+
+		if cfg.Provider == ProviderIPv64 {
+			fmt.Println("   ┣━ IPv64 Domain (dynamische IP-Updates)")
+			continue
+		}
+
+		var records []Record
+		if cfg.Provider == ProviderCloudflare {
+			records, _ = loadCloudflareRecords(ctx, z.ID)
+		} else {
+			data, _ := ionosAPI(ctx, "GET", apiBaseURL+"/"+z.ID, nil)
+			var detail struct{ Records []Record }
+			_ = json.Unmarshal(data, &detail)
+			records = detail.Records
+		}
+
 		var relevant []Record
-		for _, r := range detail.Records {
+		for _, r := range records {
 			if r.Type == "A" || r.Type == "AAAA" || r.Type == "CNAME" {
 				relevant = append(relevant, r)
 			}
@@ -2463,7 +3068,6 @@ func printInfrastructure(zones []Zone) {
 		}
 	}
 	fmt.Println("\n" + strings.Repeat("-", 40))
-
 }
 
 func logHTTPClientStats() {
@@ -2477,6 +3081,7 @@ func logHTTPClientStats() {
 	}
 
 	debugLog("CONFIG", "", "========== "+T.ConfigHeading+" ==========")
+	debugLog("CONFIG", "", fmt.Sprintf("Provider: %s", cfg.Provider))
 	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", T.ConfigAPIPrefix, prefix))
 	debugLog("CONFIG", "", fmt.Sprintf("%s: %v", T.ConfigDomains, cfg.Domains))
 	debugLog("CONFIG", "", fmt.Sprintf("%s: %ds", T.ConfigInterval, cfg.Interval))
@@ -2487,7 +3092,6 @@ func logHTTPClientStats() {
 	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", T.ConfigLogDir, cfg.LogDir))
 	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", T.ConfigLanguage, cfg.Lang))
 	debugLog("CONFIG", "", "===================================")
-
 }
 
 // ============================================================================
@@ -2548,7 +3152,6 @@ func generateSVGChart(data [24]int) string {
 		</div>
 	</div>
 </details>`, T.RequestHistory, renderMax, renderMax/2, pathData, pathData, timeLabels)
-
 }
 
 func generateLatencyChart(data [24]time.Duration) string {
@@ -2608,7 +3211,6 @@ func generateLatencyChart(data [24]time.Duration) string {
 		</div>
 	</div>
 </details>`, T.LatencyHistory, renderMax, renderMax/2, pathData, pathData, timeLabels)
-
 }
 
 // ============================================================================
@@ -2673,7 +3275,6 @@ func loadLanguage(lang string) error {
 	}
 
 	return nil
-
 }
 
 func toSnakeCase(s string) string {
@@ -2968,7 +3569,7 @@ func createMux() *http.ServeMux {
 		w.Header().Set("Content-Disposition", "attachment; filename=dyndns-export.json")
 
 		encoder := json.NewEncoder(w)
-		encoder.SetIndent("", "  ") // "" = kein Präfix, "  " = zwei Leerzeichen Einrückung
+		encoder.SetIndent("", "  ")
 		encoder.Encode(exportData)
 	})
 
@@ -3303,12 +3904,12 @@ func createMux() *http.ServeMux {
 				</div>
                 <div style="margin-top: 20px;">
                     <div style="display: flex; justify-content: space-between; font-size: 0.7rem; color: #94a3b8; margin-bottom: 4px;">
-                        <span>   STÜNDLICHES LIMIT (EST.)</span>
+                        <span>STÜNDLICHES LIMIT (EST.)</span>
                         <span>%v / %v Requests</span> </div>
                     <div style="width: 100%%; background: #334155; height: 8px; border-radius: 4px; overflow: hidden;">
                         <div style="width: %s%%; height: 100%%; background: %s; transition: width 0.5s ease;"></div>
                     </div>
-                    <div style="font-size: 0.65rem; color: #64748b; margin-top: 4px;">    Basierend auf Requests der letzten 60 Minuten</div>
+                    <div style="font-size: 0.65rem; color: #64748b; margin-top: 4px;">Basierend auf Requests der letzten 60 Minuten</div>
                 </div>
             </div>
 		</details>
@@ -3323,9 +3924,9 @@ func createMux() *http.ServeMux {
 			stats["client_errors"],
 			stats["server_errors"],
 			stats["usage_count"],
-			stats["hourly_limit"],  // Füllt den zweiten Platzhalter bei "Requests"
-			stats["usage_percent"], // Füllt width: %s%%
-			stats["usage_color"],   // Füllt background: %s
+			stats["hourly_limit"],
+			stats["usage_percent"],
+			stats["usage_color"],
 			chartSVG,
 			latencySVG)
 
@@ -3341,7 +3942,7 @@ func createMux() *http.ServeMux {
 				<button class="filter-btn" data-filter="UPDATE" onclick="filterLogs('UPDATE')">Updates</button>
 				<button class="filter-btn" data-filter="START" onclick="filterLogs('START')">Starts</button>
 				<button class="filter-btn" data-filter="CREATE" onclick="filterLogs('CREATE')">Created</button>
-				<button class="filter-btn" data-filter="CURRENT" onclick="filterLogs('CURRENT')">Current</button>
+				<button class="filter-btn" data-filter="CLEANUP" onclick="filterLogs('CLEANUP')">Cleanup</button>
 			</div>
 		<div id="logContainer" style="max-height: 300px; overflow-y: auto; font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 13px; padding-right: 5px;">
 	    `, T.SystemEvents)
@@ -3358,7 +3959,7 @@ func createMux() *http.ServeMux {
 
 				icon := "🔹"
 				switch actionUpper {
-				case "ERROR", "FAIL":
+				case "ERROR", "FAIL", "CLEANUP":
 					icon = "⚠️"
 				case "SUCCESS", "ADDED":
 					icon = "✅"
@@ -3599,17 +4200,13 @@ func createMux() *http.ServeMux {
 	}
 
 	function filterDomains(query) {
-		const domains =
-
-
-
-document.querySelectorAll('.domain-item');
-query = query.toLowerCase();
-domains.forEach(domain => {
-const name = domain.getAttribute('data-domain').toLowerCase();
-domain.style.display = name.includes(query) ? 'block' : 'none';
-});
-}
+		const domains = document.querySelectorAll('.domain-item');
+		query = query.toLowerCase();
+		domains.forEach(domain => {
+			const name = domain.getAttribute('data-domain').toLowerCase();
+			domain.style.display = name.includes(query) ? 'block' : 'none';
+		});
+	}
 
 	function exportData() {
 		fetch('/api/export')
@@ -3659,7 +4256,6 @@ domain.style.display = name.includes(query) ? 'block' : 'none';
 	})
 
 	return mux
-
 }
 
 // ============================================================================
@@ -3673,6 +4269,8 @@ func main() {
 			os.Exit(1)
 		}
 	}()
+	
+	rand.Seed(time.Now().UnixNano())
 
 	configDir = os.Getenv("CONFIG_DIR")
 	if configDir == "" {
@@ -3795,6 +4393,15 @@ func main() {
 		cfg.IPMode = "BOTH"
 	}
 
+	if err := initProviderConfig(); err != nil {
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionConfig,
+			Message: fmt.Sprintf("Provider-Konfiguration fehlgeschlagen: %v", err),
+		})
+		os.Exit(1)
+	}
+
 	if cfg.DebugEnabled {
 		debugLog("CONFIG", "", fmt.Sprintf("Debug-Modus aktiv. Intervall: %ds, Mode: %s", cfg.Interval, cfg.IPMode))
 		debugLog("CONFIG", "", fmt.Sprintf("Geladene Domains: %v", cfg.Domains))
@@ -3812,15 +4419,6 @@ func main() {
 	logPath = filepath.Join(logsDir, "dyndns.json")
 	updatePath = filepath.Join(logsDir, "update.json")
 
-	if cfg.APIPrefix == "" || cfg.APISecret == "" {
-		log(LogContext{
-			Level:   LogError,
-			Action:  ActionConfig,
-			Message: T.ConfigError,
-		})
-		os.Exit(1)
-	}
-
 	if err := validateConfig(); err != nil {
 		log(LogContext{
 			Level:   LogError,
@@ -3833,7 +4431,7 @@ func main() {
 	log(LogContext{
 		Level:   LogInfo,
 		Action:  ActionStart,
-		Message: "🚀 " + T.Startup,
+		Message: fmt.Sprintf("🚀 %s (Provider: %s)", T.Startup, cfg.Provider),
 	})
 
 	shutdownCtx, shutdownCancel = context.WithCancel(context.Background())
