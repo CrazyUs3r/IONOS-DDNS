@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -220,11 +222,12 @@ type DomainHistory struct {
 
 type Config struct {
 	// Provider
-	Provider         ProviderType
-	CloudflareToken  string
-	CloudflareEmail  string
-	CloudflareZoneID string
-	IPv64Token       string
+	Provider            ProviderType
+	CloudflareToken     string
+	CloudflareEmail     string
+	CloudflareZoneID    string
+	CloudflareAPISecret string
+	IPv64Token          string
 
 	// IONOS (existing)
 	APIPrefix string
@@ -396,6 +399,11 @@ type domainUpdateResult struct {
 	Error   error
 }
 
+type rotationJob struct {
+	path     string
+	maxLines int
+}
+
 // ============================================================================
 // GLOBALE VARIABLEN
 // ============================================================================
@@ -436,7 +444,11 @@ var (
 	domainsCache = &CachedResponse{}
 	metricsCache = &CachedResponse{}
 
-	rotationQueue = make(chan struct{}, 1)
+	rotationQueue = make(chan rotationJob, 1)
+
+	activeUpdates atomic.Int32
+
+	workerSemaphore chan struct{}
 
 	wsHub = &WSHub{
 		clients:    make(map[*websocket.Conn]bool),
@@ -447,7 +459,14 @@ var (
 	upgrader = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
 			origin := r.Header.Get("Origin")
-			return origin == "" || strings.Contains(origin, r.Host)
+			if origin == "" {
+				return true
+			}
+			u, err := url.Parse(origin)
+			if err != nil {
+				return false
+			}
+			return strings.EqualFold(u.Host, r.Host)
 		},
 	}
 )
@@ -465,9 +484,10 @@ func initProviderConfig() error {
 		cfg.CloudflareToken = os.Getenv("CLOUDFLARE_TOKEN")
 		cfg.CloudflareEmail = os.Getenv("CLOUDFLARE_EMAIL")
 		cfg.CloudflareZoneID = os.Getenv("CLOUDFLARE_ZONE_ID")
+		cfg.CloudflareAPISecret = os.Getenv("CLOUDFLARE_API_SECRET")
 
-		if cfg.CloudflareToken == "" && (cfg.CloudflareEmail == "" || cfg.APISecret == "") {
-			return fmt.Errorf("cloudflare requires CLOUDFLARE_TOKEN or CLOUDFLARE_EMAIL + API_SECRET")
+		if cfg.CloudflareToken == "" && (cfg.CloudflareEmail == "" || cfg.CloudflareAPISecret == "") {
+			return fmt.Errorf("cloudflare requires CLOUDFLARE_TOKEN or CLOUDFLARE_EMAIL + CLOUDFLARE_API_SECRET")
 		}
 
 		debugLog("CONFIG", "", "Provider: Cloudflare (API Token Auth)")
@@ -693,6 +713,10 @@ func persistLog(ctx LogContext) {
 	defer logMutex.Unlock()
 
 	sanitizedMsg := ctx.Message
+
+	if ctx.Error != nil {
+		sanitizedMsg = fmt.Sprintf("%s: %v", ctx.Message, ctx.Error)
+	}
 	if replacer := getSecretReplacer(); replacer != nil {
 		sanitizedMsg = replacer.Replace(sanitizedMsg)
 	}
@@ -766,19 +790,19 @@ func debugLog(category, domain, msg string) {
 
 func rotateLogFile(path string, maxLines int) {
 	select {
-	case rotationQueue <- struct{}{}:
+	case rotationQueue <- rotationJob{path: path, maxLines: maxLines}:
 	default:
 		debugLog("MAINTENANCE", "", "Log-Rotation bereits aktiv, überspringe")
 	}
 }
 
 func rotationWorker(path string, maxLogLines int) {
-	for range rotationQueue {
+	for job := range rotationQueue {
 		func() {
 			logMutex.Lock()
 			defer logMutex.Unlock()
 
-			data, err := os.ReadFile(path)
+			data, err := os.ReadFile(job.path)
 			if err != nil {
 				if !os.IsNotExist(err) {
 					fmt.Printf("[WARN] %s: %v\n", T.LogRotationError, err)
@@ -787,11 +811,17 @@ func rotationWorker(path string, maxLogLines int) {
 			}
 
 			lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-			if len(lines) <= maxLogLines {
+
+			if len(lines) <= job.maxLines {
 				return
 			}
 
-			newLines := lines[len(lines)-maxLogLines:]
+			startIdx := len(lines) - job.maxLines
+			if startIdx < 0 {
+				startIdx = 0
+			}
+
+			newLines := lines[startIdx:]
 			output := strings.Join(newLines, "\n") + "\n"
 
 			tmpPath := path + ".tmp." + strconv.FormatInt(time.Now().UnixNano(), 10)
@@ -938,7 +968,7 @@ func getHTTPClient() *http.Client {
 		}
 
 		httpClient = &http.Client{
-			Timeout: 0,
+			Timeout: 30 * time.Second,
 			Transport: &loggingTransport{
 				base: baseTransport,
 			},
@@ -973,6 +1003,10 @@ func getSecretReplacer() *strings.Replacer {
 
 		if cfg.CloudflareToken != "" {
 			replacements = append(replacements, cfg.CloudflareToken, "***CF-TOKEN***")
+		}
+
+		if cfg.CloudflareAPISecret != "" {
+			replacements = append(replacements, cfg.CloudflareAPISecret, "***CF-SECRET***")
 		}
 
 		if cfg.IPv64Token != "" {
@@ -1043,8 +1077,8 @@ func validateConfig() error {
 			errs = append(errs, "API_SECRET fehlt")
 		}
 	case ProviderCloudflare:
-		if cfg.CloudflareToken == "" && (cfg.CloudflareEmail == "" || cfg.APISecret == "") {
-			errs = append(errs, "CLOUDFLARE_TOKEN oder CLOUDFLARE_EMAIL + API_SECRET fehlt")
+		if cfg.CloudflareToken == "" && (cfg.CloudflareEmail == "" || cfg.CloudflareAPISecret == "") {
+			errs = append(errs, "CLOUDFLARE_TOKEN oder CLOUDFLARE_EMAIL + CLOUDFLARE_API_SECRET fehlt")
 		}
 	case ProviderIPv64:
 		if cfg.IPv64Token == "" {
@@ -1188,11 +1222,10 @@ func ionosAPI(ctx context.Context, method, url string, body interface{}) ([]byte
 			}
 			continue
 		}
-		defer res.Body.Close()
-
 		debugLog("HTTP", "", fmt.Sprintf("✅ Status: %d | %s: %v", res.StatusCode, T.AvgLatency, duration))
 
 		respBody, err := io.ReadAll(res.Body)
+		res.Body.Close()
 
 		if err != nil {
 			apiMetrics.RecordError(res.StatusCode, err, duration)
@@ -1219,7 +1252,7 @@ func ionosAPI(ctx context.Context, method, url string, body interface{}) ([]byte
 		}
 
 		apiErr := classifyAPIError(res.StatusCode, method, url, string(respBody))
-		apiMetrics.RecordError(res.StatusCode, fmt.Errorf("%v", apiErr), duration)
+		apiMetrics.RecordError(res.StatusCode, apiErr, duration)
 
 		if res.StatusCode == 401 || res.StatusCode == 403 {
 			log(LogContext{
@@ -1293,9 +1326,9 @@ func cloudflareAPI(ctx context.Context, method, endpoint string, body interface{
 
 		if cfg.CloudflareToken != "" {
 			req.Header.Set("Authorization", "Bearer "+cfg.CloudflareToken)
-		} else if cfg.CloudflareEmail != "" && cfg.APISecret != "" {
+		} else if cfg.CloudflareEmail != "" && cfg.CloudflareAPISecret != "" {
 			req.Header.Set("X-Auth-Email", cfg.CloudflareEmail)
-			req.Header.Set("X-Auth-Key", cfg.APISecret)
+			req.Header.Set("X-Auth-Key", cfg.CloudflareAPISecret)
 		}
 
 		req.Header.Set("Content-Type", "application/json")
@@ -1317,9 +1350,9 @@ func cloudflareAPI(ctx context.Context, method, endpoint string, body interface{
 			}
 			continue
 		}
-		defer res.Body.Close()
-
 		respBody, err := io.ReadAll(res.Body)
+		res.Body.Close()
+
 		if err != nil {
 			apiMetrics.RecordError(res.StatusCode, err, duration)
 			lastErr = fmt.Errorf("failed to read response: %w", err)
@@ -1328,7 +1361,30 @@ func cloudflareAPI(ctx context.Context, method, endpoint string, body interface{
 
 		var cfResp CloudflareResponse
 		if err := json.Unmarshal(respBody, &cfResp); err != nil {
-			return nil, fmt.Errorf("failed to parse cloudflare response: %w", err)
+			apiErr := classifyAPIError(res.StatusCode, method, url, string(respBody))
+			if apiErr == nil {
+				apiErr = &APIError{
+					StatusCode: res.StatusCode,
+					Method:     method,
+					URL:        url,
+					Message:    "invalid json response",
+					Retryable:  res.StatusCode >= 500,
+				}
+			}
+			apiMetrics.RecordError(res.StatusCode, apiErr, duration)
+			lastErr = apiErr
+
+			if attempt >= MaxAPIRetries-1 || !apiErr.IsRetryable() {
+				return nil, apiErr
+			}
+
+			wait := calculateRetryDelay(attempt, res.StatusCode >= 500)
+			select {
+			case <-time.After(wait):
+			case <-ctx.Done():
+				return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
+			}
+			continue
 		}
 
 		if !cfResp.Success {
@@ -1338,13 +1394,19 @@ func cloudflareAPI(ctx context.Context, method, endpoint string, body interface{
 			}
 
 			apiErr := classifyAPIError(res.StatusCode, method, url, errMsg)
-			apiMetrics.RecordError(res.StatusCode, fmt.Errorf("%v", apiErr), duration)
-			lastErr = apiErr
-
 			if apiErr == nil {
-				apiMetrics.RecordSuccess(duration)
-				return respBody, nil
+				// HTTP 2xx aber Cloudflare success=false => behandel das als Fehler
+				apiErr = &APIError{
+					StatusCode: res.StatusCode,
+					Method:     method,
+					URL:        url,
+					Message:    errMsg,
+					Retryable:  false,
+				}
 			}
+
+			apiMetrics.RecordError(res.StatusCode, apiErr, duration)
+			lastErr = apiErr
 
 			if attempt >= MaxAPIRetries-1 {
 				return nil, fmt.Errorf("max attempts reached: %w", apiErr)
@@ -1358,7 +1420,6 @@ func cloudflareAPI(ctx context.Context, method, endpoint string, body interface{
 			}
 			continue
 		}
-
 		apiMetrics.RecordSuccess(duration)
 		return respBody, nil
 	}
@@ -1371,14 +1432,13 @@ func cloudflareAPI(ctx context.Context, method, endpoint string, body interface{
 // ============================================================================
 
 func ipv64API(ctx context.Context, endpoint string, params map[string]string) ([]byte, error) {
-	url := ipv64APIBase + endpoint
-
+	fullURL := ipv64APIBase + endpoint
 	if len(params) > 0 {
-		query := make([]string, 0, len(params))
+		q := url.Values{}
 		for k, v := range params {
-			query = append(query, k+"="+v)
+			q.Set(k, v)
 		}
-		url += "?" + strings.Join(query, "&")
+		fullURL += "?" + q.Encode()
 	}
 
 	var lastErr error
@@ -1387,7 +1447,7 @@ func ipv64API(ctx context.Context, endpoint string, params map[string]string) ([
 		debugLog("HTTP", "", fmt.Sprintf("🔄 IPv64 %s %d/%d: GET %s",
 			T.Attempt, attempt+1, MaxAPIRetries, endpoint))
 
-		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		req, err := http.NewRequestWithContext(ctx, "GET", fullURL, nil)
 		if err != nil {
 			return nil, fmt.Errorf("request creation failed: %w", err)
 		}
@@ -1408,9 +1468,9 @@ func ipv64API(ctx context.Context, endpoint string, params map[string]string) ([
 			}
 			continue
 		}
-		defer res.Body.Close()
-
 		respBody, err := io.ReadAll(res.Body)
+		res.Body.Close()
+
 		if err != nil {
 			apiMetrics.RecordError(res.StatusCode, err, duration)
 			lastErr = fmt.Errorf("failed to read response: %w", err)
@@ -1465,7 +1525,7 @@ func classifyAPIError(statusCode int, method, url, responseBody string) *APIErro
 	}
 
 	if statusCode >= 200 && statusCode < 300 {
-		return apiErr
+		return nil
 	}
 
 	switch statusCode {
@@ -1645,14 +1705,14 @@ func updateDNS(
 	zoneName string,
 ) (bool, error) {
 
+	recordName := recordNameFromFQDN(fqdn, zoneName)
+
 	var existing *Record
 	for i := range records {
-		recordName := recordNameFromFQDN(fqdn, zoneName)
 		if (records[i].Name == fqdn || records[i].Name == recordName) && records[i].Type == recordType {
 			existing = &records[i]
 			debugLog("DNS-LOGIC", fqdn,
-				fmt.Sprintf("📌 %s: %s (ID: %s)",
-					T.RecordFound, existing.Content, existing.ID))
+				fmt.Sprintf("📌 %s: %s (ID: %s)", T.RecordFound, existing.Content, existing.ID))
 			break
 		}
 	}
@@ -1693,10 +1753,6 @@ func updateDNS(
 		payload    interface{}
 	)
 
-	ttl := 60
-
-	recordName := recordNameFromFQDN(fqdn, zoneName)
-
 	if existing != nil {
 		method = "PUT"
 		url = fmt.Sprintf("%s/%s/records/%s", apiBaseURL, zoneID, existing.ID)
@@ -1706,7 +1762,7 @@ func updateDNS(
 			"name":    fqdn,
 			"type":    recordType,
 			"content": newIP,
-			"ttl":     ttl,
+			"ttl":     60,
 		}
 	} else {
 		method = "POST"
@@ -1718,7 +1774,7 @@ func updateDNS(
 				Name:    fqdn,
 				Type:    recordType,
 				Content: newIP,
-				TTL:     ttl,
+				TTL:     60,
 			},
 		}
 	}
@@ -1728,11 +1784,12 @@ func updateDNS(
 
 	debugLog("DNS-LOGIC", fqdn,
 		fmt.Sprintf("📦 Payload: zone=%s name=%s type=%s",
-			zoneName, recordName, recordType))
+			zoneName, fqdn, recordType))
 
 	_, err := ionosAPI(ctx, method, url, payload)
 	if err != nil {
-		if apiErr, ok := err.(*APIError); ok {
+		var apiErr *APIError
+		if errors.As(err, &apiErr) {
 			switch apiErr.StatusCode {
 			case 401, 403:
 				log(LogContext{
@@ -1971,7 +2028,8 @@ func recordNameFromFQDN(fqdn, zone string) string {
 }
 
 func isNonRecoverableError(err error) bool {
-	if apiErr, ok := err.(*APIError); ok {
+	var apiErr *APIError
+	if errors.As(err, &apiErr) {
 		switch apiErr.StatusCode {
 		case 401, 403, 404:
 			return true
@@ -2329,7 +2387,6 @@ func processDomains(
 ) int {
 
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, cfg.MaxConcurrent)
 	results := make(chan domainUpdateResult, len(cfg.Domains))
 
 domainLoop:
@@ -2357,7 +2414,7 @@ domainLoop:
 			}()
 
 			select {
-			case sem <- struct{}{}:
+			case workerSemaphore <- struct{}{}:
 				debugLog("WORKER", domain, T.WorkerSlotAcquired)
 			case <-ctx.Done():
 				debugLog("WORKER", domain, "Abgebrochen: Context cancelled")
@@ -2366,7 +2423,7 @@ domainLoop:
 
 			defer func() {
 				debugLog("WORKER", domain, T.WorkerSlotReleased)
-				<-sem
+				<-workerSemaphore
 			}()
 
 			if ctx.Err() != nil {
@@ -2458,6 +2515,8 @@ domainLoop:
 // ============================================================================
 
 func runUpdate(firstRun bool) {
+	activeUpdates.Add(1)
+	defer activeUpdates.Add(-1)
 	debugLog("SCHEDULER", "", fmt.Sprintf(T.SchedulerStarted, firstRun))
 
 	baseTimeout := BaseUpdateTimeout
@@ -2474,7 +2533,7 @@ func runUpdate(firstRun bool) {
 
 	debugLog("SCHEDULER", "", fmt.Sprintf("Context Timeout: %v (für %d Domains)", totalTimeout, len(cfg.Domains)))
 
-	ctx, cancel := context.WithTimeout(context.Background(), totalTimeout)
+	ctx, cancel := context.WithTimeout(shutdownCtx, totalTimeout)
 	defer cancel()
 
 	currentIPv4, currentIPv6, err := fetchCurrentIPs(ctx)
@@ -2619,6 +2678,16 @@ func serveCachedJSON(w http.ResponseWriter, r *http.Request, cache *CachedRespon
 	lastMod := cache.LastModified
 	cache.mu.RUnlock()
 
+	if len(data) == 0 {
+		data = []byte("{}")
+		if etag == "" {
+			etag = `"0"`
+		}
+		if lastMod.IsZero() {
+			lastMod = time.Now()
+		}
+	}
+
 	if r.Header.Get("If-None-Match") == etag {
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -2645,12 +2714,20 @@ func startCacheRefresher() {
 	ticker := time.NewTicker(5 * time.Second)
 
 	go func() {
-		for range ticker.C {
-			if err := updateDomainsCache(); err != nil {
-				debugLog("CACHE", "", fmt.Sprintf("Domain cache refresh failed: %v", err))
-			}
+		defer ticker.Stop()
 
-			updateMetricsCache()
+		for {
+			select {
+			case <-shutdownCtx.Done():
+				debugLog("CACHE", "", "Cache refresher stopped (shutdown)")
+				return
+
+			case <-ticker.C:
+				if err := updateDomainsCache(); err != nil {
+					debugLog("CACHE", "", fmt.Sprintf("Domain cache refresh failed: %v", err))
+				}
+				updateMetricsCache()
+			}
 		}
 	}()
 }
@@ -2661,7 +2738,6 @@ func startCacheRefresher() {
 
 func (m *APIMetrics) RecordSuccess(duration time.Duration) {
 	m.Lock()
-
 	m.trackHistory()
 
 	now := time.Now()
@@ -2670,6 +2746,10 @@ func (m *APIMetrics) RecordSuccess(duration time.Duration) {
 	m.LastSuccessTimestamp = now
 
 	m.cleanupOldTimestamps(now)
+	if len(m.RequestTimestamps) >= 5000 {
+		m.RequestTimestamps = m.RequestTimestamps[len(m.RequestTimestamps)-3600:]
+	}
+
 	m.RequestTimestamps = append(m.RequestTimestamps, now)
 
 	m.HourlyStats[23]++
@@ -2694,6 +2774,10 @@ func (m *APIMetrics) RecordError(statusCode int, err error, duration time.Durati
 	m.LastErrorTimestamp = now
 
 	m.cleanupOldTimestamps(now)
+	if len(m.RequestTimestamps) >= 5000 {
+		m.RequestTimestamps = m.RequestTimestamps[len(m.RequestTimestamps)-3600:]
+	}
+
 	m.RequestTimestamps = append(m.RequestTimestamps, now)
 
 	m.HourlyStats[23]++
@@ -2860,15 +2944,12 @@ func (h *WSHub) run() {
 			}
 			h.mu.RUnlock()
 
-			for _, conn := range clients {
-				go func(c *websocket.Conn) {
-					c.SetWriteDeadline(time.Now().Add(WSWriteTimeout))
-
-					if err := c.WriteJSON(message); err != nil {
-						debugLog("WS", "", fmt.Sprintf("Write failed: %v", err))
-						h.unregister <- c
-					}
-				}(conn)
+			for _, c := range clients {
+				c.SetWriteDeadline(time.Now().Add(WSWriteTimeout))
+				if err := c.WriteJSON(message); err != nil {
+					debugLog("WS", "", fmt.Sprintf("Write failed: %v", err))
+					h.unregister <- c
+				}
 			}
 		}
 	}
@@ -2886,6 +2967,11 @@ func (h *WSHub) keepAlive(conn *websocket.Conn) {
 
 	for {
 		select {
+		case <-shutdownCtx.Done():
+			debugLog("WS", "", "Shutdown - closing keepAlive")
+			h.unregister <- conn
+			return
+
 		case <-ticker.C:
 			conn.SetWriteDeadline(time.Now().Add(WSWriteTimeout))
 			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
@@ -2928,24 +3014,30 @@ func actionCSS(a string) string {
 	}
 	return "act-default"
 }
-
 func getClientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		ips := strings.Split(xff, ",")
-		if len(ips) > 0 {
-			return strings.TrimSpace(ips[0])
-		}
+	// Default: true
+	trustProxy := true
+
+	if v := strings.TrimSpace(os.Getenv("TRUST_PROXY")); v != "" {
+		trustProxy = strings.ToLower(v) != "false"
 	}
 
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		return xri
+	if trustProxy {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			ips := strings.Split(xff, ",")
+			if len(ips) > 0 {
+				return strings.TrimSpace(ips[0])
+			}
+		}
+		if xri := r.Header.Get("X-Real-IP"); xri != "" {
+			return xri
+		}
 	}
 
 	ip, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr
 	}
-
 	return ip
 }
 
@@ -4112,7 +4204,8 @@ func createMux() *http.ServeMux {
 	const savedTheme = localStorage.getItem('theme') || 'dark';
 	document.documentElement.setAttribute('data-theme', savedTheme);
 
-	let ws = new WebSocket('ws://' + location.host + '/ws');
+	const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+	let ws = new WebSocket(proto + location.host + '/ws');
 	ws.onmessage = (e) => {
 		const data = JSON.parse(e.data);
 		if (data.type === 'metrics') {
@@ -4223,11 +4316,19 @@ func createMux() *http.ServeMux {
 	}
 
 	function triggerUpdate() {
-		fetch('/api/trigger', {method: 'POST'})
-			.then(r => r.json())
-			.then(() => showToast('✓ Update triggered'))
-			.catch(() => showToast('Trigger failed', 'error'));
+		const token = localStorage.getItem('triggerToken') || '';
+		fetch('/api/trigger', {
+			method: 'POST',
+			headers: token ? {'X-Trigger-Token': token} : {}
+		})
+		.then(r => r.json())
+		.then(j => {
+			if (j && j.error) showToast(j.error, 'error');
+			else showToast('✓ Update triggered');
+		})
+		.catch(() => showToast('Trigger failed', 'error'));
 	}
+
 
 	document.querySelectorAll('details.card').forEach(details => {
 	  const id = details.id;
@@ -4269,7 +4370,7 @@ func main() {
 			os.Exit(1)
 		}
 	}()
-	
+
 	rand.Seed(time.Now().UnixNano())
 
 	configDir = os.Getenv("CONFIG_DIR")
@@ -4393,6 +4494,8 @@ func main() {
 		cfg.IPMode = "BOTH"
 	}
 
+	workerSemaphore = make(chan struct{}, cfg.MaxConcurrent)
+
 	if err := initProviderConfig(); err != nil {
 		log(LogContext{
 			Level:   LogError,
@@ -4477,21 +4580,20 @@ func main() {
 
 	for {
 		select {
+		case <-shutdownCtx.Done():
+			debugLog("SCHEDULER", "", "Shutdown aktiv, beende Scheduler")
+			return
+
 		case <-ticker.C:
-			select {
-			case <-shutdownCtx.Done():
-				debugLog("SCHEDULER", "", "Shutdown aktiv, überspringe Update")
-				return
-			default:
-				debugLog("SCHEDULER", "", "Intervall erreicht, starte runUpdate(false)")
-				runUpdate(false)
-				limit := maxLogLines
-				if cfg.Interval > 300 {
-					limit = 1000
-				}
-				debugLog("MAINTENANCE", "", T.MaintenanceStarting)
-				rotateLogFile(logPath, limit)
+			debugLog("SCHEDULER", "", "Intervall erreicht, starte runUpdate(false)")
+			runUpdate(false)
+
+			limit := maxLogLines
+			if cfg.Interval > 300 {
+				limit = 1000
 			}
+			debugLog("MAINTENANCE", "", T.MaintenanceStarting)
+			rotateLogFile(logPath, limit)
 
 		case sig := <-stop:
 			debugLog("SYSTEM", "", fmt.Sprintf("Shutdown Signal empfangen: %v", sig))
@@ -4502,7 +4604,6 @@ func main() {
 			})
 
 			shutdownCancel()
-
 			ticker.Stop()
 
 			if httpClient != nil {
@@ -4510,17 +4611,27 @@ func main() {
 				debugLog("SYSTEM", "", T.HTTPConnectionsClosed)
 			}
 
-			updateDone := make(chan struct{})
+			debugLog("SYSTEM", "", "⏳ Warte auf laufende Updates...")
+
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), ShutdownWaitTimeout)
+			defer waitCancel()
+
+			done := make(chan bool)
 			go func() {
-				time.Sleep(2 * time.Second)
-				close(updateDone)
+				for {
+					if activeUpdates.Load() == 0 {
+						done <- true
+						return
+					}
+					time.Sleep(100 * time.Millisecond)
+				}
 			}()
 
 			select {
-			case <-updateDone:
-				debugLog("SYSTEM", "", "Alle Updates abgeschlossen")
-			case <-time.After(ShutdownWaitTimeout):
-				debugLog("SYSTEM", "", "⚠️ Timeout beim Warten auf Updates")
+			case <-done:
+				debugLog("SYSTEM", "", "✅ Alle Updates abgeschlossen")
+			case <-waitCtx.Done():
+				debugLog("SYSTEM", "", "⚠️ Timeout beim Warten auf Updates - Force Shutdown")
 			}
 
 			ctx, cancel := context.WithTimeout(context.Background(), ShutdownGraceTimeout)
@@ -4536,6 +4647,7 @@ func main() {
 			} else {
 				debugLog("SYSTEM", "", T.ServerShutdownComplete)
 			}
+
 			return
 		}
 	}
