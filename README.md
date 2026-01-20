@@ -52,6 +52,11 @@ services:
 | `HOURLY_RATE_LIMIT` | Max. API-Anfragen pro Stunde | `1200` |
 | `DRY_RUN` | Wenn `true`, wird nichts bei IONOS geändert | `false` |
 | `DEBUG` | Aktiviert erweitertes Logging | `false` |
+| `PROVIDER` | ionos, cloudflare, ipv64 | `ionos` |
+| `CLOUDFLARE_TOKEN` | Dein Cloudflare Token | (erforderlich für CF) |
+| `CLOUDFLARE_ZONE_ID` |Dein Cloudflare Zone Id für CF) | (erforderlich für CF) |
+| `IPV64_TOKEN` |Dein IPV64 Token für IPV64) | (erforderlich für IPV64) |
+| `IPV64_DOMAIN_TOKEN` |Dein IPV64 Domain Token | (erforderlich für IPV64) | (erforderlich) |
 
 ## 📊 Dashboard & Monitoring
 ​Das Dashboard ist unter http://server-ip:8080 erreichbar. Es zeigt den aktuellen Status der API-Verbindung, die Performance-Metriken und ein Echtzeit-Log der Systemereignisse.
