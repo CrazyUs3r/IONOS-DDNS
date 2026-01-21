@@ -8,7 +8,7 @@
 <br />
 
 [![Docker Image Version](https://img.shields.io/docker/v/crazyus3r/ionos-ddns?label=docker%20image&logo=docker&style=flat-square)](https://hub.docker.com/r/crazyus3r/ionos-ddns/tags)
-[![Docker Pulls](https://img.shields.io/docker/pulls/crazyus3r/ionos-ddns?style=flat-square)](https://hub.docker.com/r/crazyUs3r/ionos-ddns)
+[![Docker Pulls](https://img.shields.io/docker/pulls/crazyus3r/ionos-ddns?style=flat-square)](https://hub.docker.com/r/crazyus3r/ionos-ddns)
 [![Docker Stars](https://img.shields.io/docker/stars/crazyus3r/ionos-ddns?style=flat-square&logo=docker)](https://hub.docker.com/r/crazyus3r/ionos-ddns)
 [![Docker Last Updated](https://img.shields.io/docker/last-updated/crazyus3r/ionos-ddns?style=flat-square)](https://hub.docker.com/r/crazyus3r/ionos-ddns/tags)
 
