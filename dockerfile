@@ -20,14 +20,14 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 # Quellcode kopieren (Stelle sicher, dass maintest2.go bereits in main.go umbenannt wurde)
-COPY main.go .
+COPY *.go .
 
 # Build ausführen
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build \
     -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildDate=${BUILD_DATE}" \
     -trimpath \
-    -o dyndns main.go
+    -o dyndns .
 
 # =============================================================================
 # Runtime Stage
