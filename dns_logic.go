@@ -122,7 +122,7 @@ domainLoop:
 				IPv6:     ipv6,
 			}
 
-			result := processDomainUpdate(ctx, domainConfig, job)
+			result := processDomainUpdate(ctx, domainConfig, job, cache)
 			results <- result
 
 			providerName := string(domainConfig.Provider)
@@ -154,7 +154,7 @@ domainLoop:
 	return successCount
 }
 
-func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdateJob) domainUpdateResult {
+func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdateJob, cache *ZoneRecordCache) domainUpdateResult {
 	result := domainUpdateResult{Domain: job.Domain}
 
 	v4Changed, v6Changed := false, false
@@ -171,7 +171,7 @@ func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdate
 		case ProviderIPv64:
 			changed, err = updateIPv64DNS(ctx, dc, job.Domain, "A", job.IPv4)
 		default:
-			changed, err = updateDNS(ctx, dc, job.Domain, "A", job.IPv4, job.Records, job.ZoneID, job.ZoneName)
+			changed, err = updateDNS(ctx, dc, job.Domain, "A", job.IPv4, job.Records, job.ZoneID, job.ZoneName, cache)
 		}
 
 		if err != nil {
@@ -196,7 +196,7 @@ func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdate
 		case ProviderIPv64:
 			changed, err = updateIPv64DNS(ctx, dc, job.Domain, "AAAA", job.IPv6)
 		default:
-			changed, err = updateDNS(ctx, dc, job.Domain, "AAAA", job.IPv6, job.Records, job.ZoneID, job.ZoneName)
+			changed, err = updateDNS(ctx, dc, job.Domain, "AAAA", job.IPv6, job.Records, job.ZoneID, job.ZoneName, cache)
 		}
 
 		if err != nil {
