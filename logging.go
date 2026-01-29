@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -184,6 +185,45 @@ func debugLog(category, domain, msg string) {
 // LOG ROTATION
 // ============================================================================
 
+
+func startLogWriter() {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Fprintf(os.Stderr, "[FATAL] Log writer panic: %v\n", r)
+			}
+		}()
+
+		for entry := range logWriteQueue {
+			logMutex.Lock()
+			
+			file, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "[ERROR] Failed to open log file: %v\n", err)
+				logMutex.Unlock()
+				continue
+			}
+
+			data, err := json.Marshal(entry)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "[ERROR] Failed to marshal log entry: %v\n", err)
+				file.Close()
+				logMutex.Unlock()
+				continue
+			}
+
+			_, err = file.Write(append(data, '\n'))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "[ERROR] Failed to write log entry: %v\n", err)
+			}
+
+			file.Close()
+			logMutex.Unlock()
+		}
+		
+		debugLog("SYSTEM", "", "📝 Log-Writer beendet")
+	}()
+}
 func startLogRotationWorker() {
 	go func() {
 		defer func() {
@@ -247,4 +287,22 @@ func rotateLogFile(path string, maxLines int) {
 	default:
 		debugLog("MAINTENANCE", "", "⚠️ Rotation-Queue voll, überspringe")
 	}
+}
+
+// ============================================================================
+// LOG QUEUE FLUSH
+// ============================================================================
+
+func flushLogQueue(timeout time.Duration) {
+	deadline := time.Now().Add(timeout)
+	
+	for time.Now().Before(deadline) {
+		if len(logWriteQueue) == 0 {
+			time.Sleep(10 * time.Millisecond) // Extra wait to ensure worker processes last item
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	
+	debugLog("SYSTEM", "", fmt.Sprintf("⚠️ Log-Queue nicht vollständig geleert (%d verbleibend)", len(logWriteQueue)))
 }

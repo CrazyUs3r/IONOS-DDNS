@@ -187,6 +187,7 @@ func updateDNS(
 	records []Record,
 	zoneID string,
 	zoneName string,
+	cache *ZoneRecordCache,
 ) (bool, error) {
 
 	recordName := recordNameFromFQDN(fqdn, zoneName)
@@ -346,5 +347,53 @@ func updateDNS(
 		return false, fmt.Errorf("zoneName is empty for fqdn %s", fqdn)
 	}
 
+	// Update IONOS cache after successful update
+	updateIONOSCache(cache, zoneID, recordName, fqdn, recordType, newIP, existing)
+
 	return true, nil
+}
+
+// ============================================================================
+// CACHE UPDATE - IONOS
+// ============================================================================
+
+func updateIONOSCache(cache *ZoneRecordCache, zoneID, recordName, fqdn, recordType, newIP string, existing *Record) {
+	if cache == nil {
+		return
+	}
+
+	records, exists := cache.Get(zoneID)
+	if !exists {
+		debugLog("CACHE", fqdn, "⚠️ Zone nicht im Cache gefunden")
+		return
+	}
+
+	updated := false
+
+	if existing != nil {
+		// Update existing record in cache
+		for i := range records {
+			if records[i].ID == existing.ID {
+				records[i].Content = newIP
+				updated = true
+				debugLog("CACHE", fqdn, fmt.Sprintf("✅ Cache aktualisiert: %s -> %s", recordType, newIP))
+				break
+			}
+		}
+	} else {
+		// Add new record to cache
+		newRecord := Record{
+			ID:      fmt.Sprintf("new-%d", len(records)),
+			Name:    recordName,
+			Type:    recordType,
+			Content: newIP,
+		}
+		records = append(records, newRecord)
+		updated = true
+		debugLog("CACHE", fqdn, fmt.Sprintf("✅ Cache: Neuer %s Record hinzugefügt: %s", recordType, newIP))
+	}
+
+	if updated {
+		cache.Set(zoneID, records)
+	}
 }
