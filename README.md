@@ -12,6 +12,9 @@
 [![Docker Stars](https://img.shields.io/docker/stars/crazyus3r/ionos-ddns?style=flat-square&logo=docker)](https://hub.docker.com/r/crazyus3r/ionos-ddns)
 [![Docker Last Updated](https://img.shields.io/docker/last-updated/crazyus3r/ionos-ddns?style=flat-square)](https://hub.docker.com/r/crazyus3r/ionos-ddns/tags)
 
+<br />
+
+[![Go Report Card](https://goreportcard.com/badge/github.com/crazyus3r/ionos-ddns)](https://goreportcard.com/report/github.com/crazyus3r/ionos-ddns)
 
 Ein hochperformanter, in Go geschriebener Dynamic DNS Client für IONOS. Optimiert für moderne Dual-Stack Anschlüsse (IPv4 & IPv6) mit integriertem Web-Dashboard.
 
