@@ -125,7 +125,7 @@ func main() {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionConfig,
-			Message: fmt.Sprintf("Provider-Konfiguration fehlgeschlagen: %v", err),
+			Message: fmt.Sprintf("Provider-%s fehlgeschlagen: %v", T.ConfigHeading, err),
 		})
 		os.Exit(1)
 	}
