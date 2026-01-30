@@ -1,4 +1,4 @@
-module github.com/CrazyUs3r/IONOS-DDNS/v2
+module github.com/CrazyUs3r/IONOS-DDNS
 
 go 1.24.12
 

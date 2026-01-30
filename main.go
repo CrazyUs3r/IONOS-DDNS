@@ -150,7 +150,6 @@ func main() {
 	logPath = filepath.Join(logsDir, "dyndns.json")
 	updatePath = filepath.Join(logsDir, "update.json")
 
-	// Start log writer BEFORE any logs are written
 	startLogWriter()
 
 	if err := validateConfig(); err != nil {
@@ -275,7 +274,6 @@ func main() {
 				debugLog("SYSTEM", "", "⚠️ Timeout beim Warten auf Updates - Force Shutdown")
 			}
 
-			// Flush log queue before closing it
 			debugLog("SYSTEM", "", "📝 Warte auf Log-Queue...")
 			flushLogQueue(2 * time.Second)
 

@@ -185,7 +185,6 @@ func debugLog(category, domain, msg string) {
 // LOG ROTATION
 // ============================================================================
 
-
 func startLogWriter() {
 	go func() {
 		defer func() {
@@ -196,7 +195,7 @@ func startLogWriter() {
 
 		for entry := range logWriteQueue {
 			logMutex.Lock()
-			
+
 			file, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "[ERROR] Failed to open log file: %v\n", err)
@@ -220,7 +219,7 @@ func startLogWriter() {
 			file.Close()
 			logMutex.Unlock()
 		}
-		
+
 		debugLog("SYSTEM", "", "📝 Log-Writer beendet")
 	}()
 }
@@ -295,7 +294,7 @@ func rotateLogFile(path string, maxLines int) {
 
 func flushLogQueue(timeout time.Duration) {
 	deadline := time.Now().Add(timeout)
-	
+
 	for time.Now().Before(deadline) {
 		if len(logWriteQueue) == 0 {
 			time.Sleep(10 * time.Millisecond) // Extra wait to ensure worker processes last item
@@ -303,6 +302,6 @@ func flushLogQueue(timeout time.Duration) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	
+
 	debugLog("SYSTEM", "", fmt.Sprintf("⚠️ Log-Queue nicht vollständig geleert (%d verbleibend)", len(logWriteQueue)))
 }

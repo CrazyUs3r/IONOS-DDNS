@@ -40,11 +40,8 @@ var (
 	domainRegex = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$`)
 	labelRegex  = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
-	secretReplacer      *strings.Replacer
-	secretReplacerMutex sync.RWMutex
-	secretReplacerOnce  sync.Once
-
-	lastConfigHash string
+	secretReplacer     *strings.Replacer
+	secretReplacerOnce sync.Once
 
 	shutdownCtx    context.Context
 	shutdownCancel context.CancelFunc
@@ -56,9 +53,8 @@ var (
 	domainsCache = &CachedResponse{}
 	metricsCache = &CachedResponse{}
 
-	rotationQueue      = make(chan rotationJob, 1)
-	rotationInProgress atomic.Bool
-	logWriteQueue      = make(chan LogEntry, 100)
+	rotationQueue = make(chan rotationJob, 1)
+	logWriteQueue = make(chan LogEntry, 100)
 
 	activeUpdates atomic.Int32
 
@@ -111,19 +107,6 @@ const (
 	ActionDryRun  = "DRY-RUN"
 	ActionCleanup = "CLEANUP"
 )
-
-var actionClass = map[string]string{
-	ActionStart:   "act-start",
-	ActionStop:    "act-stop",
-	ActionUpdate:  "act-update",
-	ActionCreate:  "act-create",
-	ActionRetry:   "act-retry",
-	ActionError:   "act-error",
-	ActionZone:    "act-error",
-	ActionConfig:  "act-error",
-	ActionDryRun:  "act-dryrun",
-	ActionCleanup: "act-cleanup",
-}
 
 var persistentActions = map[string]bool{
 	ActionStart:   true,
@@ -260,7 +243,7 @@ type Phrases struct {
 	UpdateFailed, CriticalError, ChangesDetected, WritingStatusFile    string
 	NoChangesNeeded, SchedulerStarted, SchedulerCompleted              string
 
-	// Konfiguration
+	// Configuration
 	ConfigHeading, ConfigAPIPrefix, ConfigDomains, ConfigInterval string
 	ConfigIpMode, ConfigInterface, ConfigHealthPort, ConfigDryRun string
 	ConfigLogDir, ConfigLanguage                                  string

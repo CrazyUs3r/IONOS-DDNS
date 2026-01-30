@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 	"sync"
 )
@@ -124,10 +123,4 @@ func loadZoneCache(ctx context.Context, zonesByProvider map[string][]Zone) (*Zon
 	}
 
 	return cache, nil
-}
-
-func sortZonesBySpecificity(zones []Zone) {
-	sort.Slice(zones, func(i, j int) bool {
-		return len(zones[i].Name) > len(zones[j].Name)
-	})
 }

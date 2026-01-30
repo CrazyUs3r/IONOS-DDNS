@@ -27,15 +27,7 @@ func (s *SafeErrorMsg) Get() string {
 	return s.msg
 }
 
-func actionCSS(a string) string {
-	if c, ok := actionClass[a]; ok {
-		return c
-	}
-	return "act-default"
-}
-
 func getClientIP(r *http.Request) string {
-	// Default: true
 	trustProxy := true
 
 	if v := strings.TrimSpace(os.Getenv("TRUST_PROXY")); v != "" {
