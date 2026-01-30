@@ -263,7 +263,7 @@ func (m *APIMetrics) RecordSuccess(duration time.Duration) {
 	hour := now.Hour()
 	if hour >= 0 && hour < 24 {
 		m.HourlyStats[hour]++
-		m.updateLatency(duration)
+		m.updateLatency(duration, hour)
 	}
 
 	statsCopy := m.getStatsUnsafe()
@@ -290,8 +290,11 @@ func (m *APIMetrics) RecordError(statusCode int, err error, duration time.Durati
 
 	m.RequestTimestamps = append(m.RequestTimestamps, now)
 
-	m.HourlyStats[23]++
-	m.updateLatency(duration)
+	hour := now.Hour()
+	if hour >= 0 && hour < 24 {
+		m.HourlyStats[hour]++
+		m.updateLatency(duration, hour)
+	}
 
 	switch {
 	case statusCode == 429:
@@ -309,7 +312,7 @@ func (m *APIMetrics) RecordError(statusCode int, err error, duration time.Durati
 	go broadcastUpdate("metrics", statsCopy)
 }
 
-func (m *APIMetrics) updateLatency(duration time.Duration) {
+func (m *APIMetrics) updateLatency(duration time.Duration, hour int) {
 	if m.AverageLatency == 0 {
 		m.AverageLatency = duration
 	} else {
@@ -317,10 +320,10 @@ func (m *APIMetrics) updateLatency(duration time.Duration) {
 	}
 	m.AverageLatency = m.AverageLatency.Round(time.Millisecond)
 
-	if m.HourlyLatency[23] == 0 {
-		m.HourlyLatency[23] = duration
+	if m.HourlyLatency[hour] == 0 {
+		m.HourlyLatency[hour] = duration
 	} else {
-		m.HourlyLatency[23] = (m.HourlyLatency[23] + duration) / 2
+		m.HourlyLatency[hour] = (m.HourlyLatency[hour] + duration) / 2
 	}
 }
 
@@ -395,6 +398,35 @@ func (m *APIMetrics) trackHistory() {
 	}
 }
 
+// reorderHourlyStatsToChronological converts hour-indexed array [0-23] to chronological array
+// where index 0 = 24 hours ago and index 23 = current hour
+func reorderHourlyStatsToChronological(hourlyData [24]int) [24]int {
+	now := time.Now()
+	currentHour := now.Hour()
+
+	var chronological [24]int
+	for i := 0; i < 24; i++ {
+		// Calculate which hour this position represents
+		// i=0 should be 24 hours ago, i=23 should be current hour
+		hourIndex := (currentHour - 23 + i + 24) % 24
+		chronological[i] = hourlyData[hourIndex]
+	}
+	return chronological
+}
+
+// reorderHourlyLatencyToChronological converts hour-indexed array [0-23] to chronological array
+func reorderHourlyLatencyToChronological(hourlyData [24]time.Duration) [24]time.Duration {
+	now := time.Now()
+	currentHour := now.Hour()
+
+	var chronological [24]time.Duration
+	for i := 0; i < 24; i++ {
+		hourIndex := (currentHour - 23 + i + 24) % 24
+		chronological[i] = hourlyData[hourIndex]
+	}
+	return chronological
+}
+
 func (m *APIMetrics) getStatsUnsafe() map[string]interface{} {
 	currentCount := len(m.RequestTimestamps)
 
@@ -409,6 +441,10 @@ func (m *APIMetrics) getStatsUnsafe() map[string]interface{} {
 		successRate = float64(m.SuccessRequests) / float64(m.TotalRequests) * 100
 	}
 
+	// Convert hour-indexed arrays to chronological order for charts
+	chronologicalStats := reorderHourlyStatsToChronological(m.HourlyStats)
+	chronologicalLatency := reorderHourlyLatencyToChronological(m.HourlyLatency)
+
 	return map[string]interface{}{
 		"total_requests":    m.TotalRequests,
 		"success_rate":      fmt.Sprintf("%.2f%%", successRate),
@@ -419,8 +455,8 @@ func (m *APIMetrics) getStatsUnsafe() map[string]interface{} {
 		"usage_count":       currentCount,
 		"usage_percent":     fmt.Sprintf("%.1f", percent),
 		"usage_color":       m.getUsageColor(percent),
-		"hourly_stats":      m.HourlyStats,
-		"hourly_latency":    m.HourlyLatency,
+		"hourly_stats":      chronologicalStats,
+		"hourly_latency":    chronologicalLatency,
 		"hourly_limit":      cfg.HourlyRateLimit,
 	}
 }
@@ -439,8 +475,7 @@ func ensureMetricsFile(path string) error {
 		return err
 	}
 
-	// Datei initial anlegen
-	empty := apiMetricsSnapshot{SavedAtUnix: time.Now().Unix()}
+	empty := apiMetricsSnapshot{SavedAt: time.Now()}
 	b, _ := json.MarshalIndent(empty, "", "  ")
 	return os.WriteFile(path, b, 0644)
 }
@@ -452,31 +487,27 @@ func (m *APIMetrics) SaveToFile(path string) error {
 
 	m.Lock()
 	snap := apiMetricsSnapshot{
-		TotalRequests:       m.TotalRequests,
-		SuccessRequests:     m.SuccessRequests,
-		FailedRequests:      m.FailedRequests,
-		RateLimitHits:       m.RateLimitHits,
-		ServerErrors:        m.ServerErrors,
-		ClientErrors:        m.ClientErrors,
-		AverageLatencyNanos: int64(m.AverageLatency),
-
-		HourlyStats: m.HourlyStats,
-
-		LastError:       m.LastError,
-		LastSuccessUnix: m.LastSuccessTimestamp.Unix(),
-		LastErrorUnix:   m.LastErrorTimestamp.Unix(),
-		SavedAtUnix:     time.Now().Unix(),
+		TotalRequests:     m.TotalRequests,
+		SuccessRequests:   m.SuccessRequests,
+		FailedRequests:    m.FailedRequests,
+		RateLimitHits:     m.RateLimitHits,
+		ServerErrors:      m.ServerErrors,
+		ClientErrors:      m.ClientErrors,
+		AverageLatencyMs:  m.AverageLatency.Milliseconds(),
+		HourlyStats:       m.HourlyStats,
+		LastError:         m.LastError,
+		LastSuccessTime:   m.LastSuccessTimestamp,
+		LastErrorTime:     m.LastErrorTimestamp,
+		SavedAt:           time.Now(),
+		RequestTimestamps: make([]time.Time, len(m.RequestTimestamps)),
 	}
 
+	// Copy RequestTimestamps
+	copy(snap.RequestTimestamps, m.RequestTimestamps)
+
+	// Convert HourlyLatency to milliseconds
 	for i := 0; i < 24; i++ {
-		snap.HourlyLatencyNanos[i] = int64(m.HourlyLatency[i])
-	}
-
-	if len(m.RequestTimestamps) > 0 {
-		snap.RequestTimestamps = make([]int64, 0, len(m.RequestTimestamps))
-		for _, t := range m.RequestTimestamps {
-			snap.RequestTimestamps = append(snap.RequestTimestamps, t.Unix())
-		}
+		snap.HourlyLatencyMs[i] = m.HourlyLatency[i].Milliseconds()
 	}
 
 	m.Unlock()
@@ -518,28 +549,25 @@ func (m *APIMetrics) LoadFromFile(path string) error {
 	m.RateLimitHits = snap.RateLimitHits
 	m.ServerErrors = snap.ServerErrors
 	m.ClientErrors = snap.ClientErrors
-	m.AverageLatency = time.Duration(snap.AverageLatencyNanos)
+	m.AverageLatency = time.Duration(snap.AverageLatencyMs) * time.Millisecond
 	m.HourlyStats = snap.HourlyStats
 
 	for i := 0; i < 24; i++ {
-		m.HourlyLatency[i] = time.Duration(snap.HourlyLatencyNanos[i])
+		m.HourlyLatency[i] = time.Duration(snap.HourlyLatencyMs[i]) * time.Millisecond
 	}
 
-	if snap.LastSuccessUnix > 0 {
-		m.LastSuccessTimestamp = time.Unix(snap.LastSuccessUnix, 0)
-	}
+	// Load timestamps directly as time.Time
+	m.LastSuccessTimestamp = snap.LastSuccessTime
 	m.LastError = snap.LastError
-	if snap.LastErrorUnix > 0 {
-		m.LastErrorTimestamp = time.Unix(snap.LastErrorUnix, 0)
-	}
+	m.LastErrorTimestamp = snap.LastErrorTime
 
+	// Load RequestTimestamps and filter old ones
 	m.RequestTimestamps = nil
 	if len(snap.RequestTimestamps) > 0 {
 		now := time.Now()
 		threshold := now.Add(-1 * time.Hour)
 
-		for _, ts := range snap.RequestTimestamps {
-			t := time.Unix(ts, 0)
+		for _, t := range snap.RequestTimestamps {
 			if t.After(threshold) && t.Before(now.Add(5*time.Minute)) {
 				m.RequestTimestamps = append(m.RequestTimestamps, t)
 			}

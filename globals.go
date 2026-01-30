@@ -520,18 +520,19 @@ type rotationJob struct {
 }
 
 type apiMetricsSnapshot struct {
-	TotalRequests       int64     `json:"total_requests"`
-	SuccessRequests     int64     `json:"success_requests"`
-	FailedRequests      int64     `json:"failed_requests"`
-	RateLimitHits       int64     `json:"rate_limit_hits"`
-	ServerErrors        int64     `json:"server_errors"`
-	ClientErrors        int64     `json:"client_errors"`
-	AverageLatencyNanos int64     `json:"avg_latency_nanos"`
-	HourlyStats         [24]int   `json:"hourly_stats"`
-	HourlyLatencyNanos  [24]int64 `json:"hourly_latency_nanos"`
-	RequestTimestamps   []int64   `json:"request_timestamps_unix"` // nur für usage_count (letzte Stunde)
-	LastSuccessUnix     int64     `json:"last_success_unix"`
-	LastError           string    `json:"last_error"`
-	LastErrorUnix       int64     `json:"last_error_unix"`
-	SavedAtUnix         int64     `json:"saved_at_unix"`
+	TotalRequests     int64       `json:"total_requests"`
+	SuccessRequests   int64       `json:"success_requests"`
+	FailedRequests    int64       `json:"failed_requests"`
+	RateLimitHits     int64       `json:"rate_limit_hits"`
+	ServerErrors      int64       `json:"server_errors"`
+	ClientErrors      int64       `json:"client_errors"`
+	AverageLatencyMs  int64       `json:"avg_latency_ms"`
+	HourlyStats       [24]int     `json:"hourly_stats"`
+	HourlyLatencyMs   [24]int64   `json:"hourly_latency_ms"`
+	RequestTimestamps []time.Time `json:"request_timestamps"`
+	LastSuccessTime   time.Time   `json:"last_success_at"`
+	LastError         string      `json:"last_error"`
+	LastErrorTime     time.Time   `json:"last_error_at"`
+	SavedAt           time.Time   `json:"saved_at"`
 }
+
