@@ -36,6 +36,7 @@ func main() {
 
 	langDir = filepath.Join(configDir, "lang")
 	logsDir := filepath.Join(configDir, "logs")
+	metricsPersistPath = filepath.Join(logsDir, "metrics.json")
 
 	fmt.Printf("[INFO] Config-Verzeichnis: %s\n", configDir)
 	fmt.Printf("[INFO] → Sprachen: %s\n", langDir)
@@ -55,6 +56,8 @@ func main() {
 		fmt.Printf("[FATAL] Sprachdatei konnte nicht geladen werden: %v\n", err)
 		os.Exit(1)
 	}
+
+	_ = apiMetrics.LoadFromFile(metricsPersistPath)
 
 	iv := 300
 	if i, err := strconv.Atoi(os.Getenv("INTERVAL")); err == nil && i >= 30 {
@@ -149,7 +152,7 @@ func main() {
 
 	logPath = filepath.Join(logsDir, "dyndns.json")
 	updatePath = filepath.Join(logsDir, "update.json")
-
+	startMetricsAutosave(60 * time.Second)
 	startLogWriter()
 
 	if err := validateConfig(); err != nil {
@@ -276,7 +279,7 @@ func main() {
 
 			debugLog("SYSTEM", "", "📝 Warte auf Log-Queue...")
 			flushLogQueue(2 * time.Second)
-
+			_ = apiMetrics.SaveToFile(metricsPersistPath)
 			close(logWriteQueue)
 
 			ctx, cancel := context.WithTimeout(context.Background(), ShutdownGraceTimeout)

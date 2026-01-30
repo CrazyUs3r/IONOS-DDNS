@@ -53,6 +53,8 @@ var (
 	domainsCache = &CachedResponse{}
 	metricsCache = &CachedResponse{}
 
+	metricsPersistPath = "config/logs/metrics.json"
+
 	rotationQueue = make(chan rotationJob, 1)
 	logWriteQueue = make(chan LogEntry, 100)
 
@@ -515,4 +517,21 @@ type domainUpdateResult struct {
 type rotationJob struct {
 	path     string
 	maxLines int
+}
+
+type apiMetricsSnapshot struct {
+	TotalRequests       int64     `json:"total_requests"`
+	SuccessRequests     int64     `json:"success_requests"`
+	FailedRequests      int64     `json:"failed_requests"`
+	RateLimitHits       int64     `json:"rate_limit_hits"`
+	ServerErrors        int64     `json:"server_errors"`
+	ClientErrors        int64     `json:"client_errors"`
+	AverageLatencyNanos int64     `json:"avg_latency_nanos"`
+	HourlyStats         [24]int   `json:"hourly_stats"`
+	HourlyLatencyNanos  [24]int64 `json:"hourly_latency_nanos"`
+	RequestTimestamps   []int64   `json:"request_timestamps_unix"` // nur für usage_count (letzte Stunde)
+	LastSuccessUnix     int64     `json:"last_success_unix"`
+	LastError           string    `json:"last_error"`
+	LastErrorUnix       int64     `json:"last_error_unix"`
+	SavedAtUnix         int64     `json:"saved_at_unix"`
 }

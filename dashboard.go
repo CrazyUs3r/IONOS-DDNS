@@ -2,10 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -139,9 +141,17 @@ func generateSVGChart(data [24]int) string {
 
 	var labelsBuilder strings.Builder
 	now := time.Now()
-	for i := 0; i < 5; i++ {
-		h := now.Add(time.Duration(-24+(i*6)) * time.Hour).Hour()
-		labelsBuilder.WriteString(fmt.Sprintf("<span>%02dh</span>", h))
+
+	// links -> rechts: -24, -18, -12, -6, 0 (jetzt)
+	offsets := []int{24, 18, 12, 6, 0}
+
+	for _, off := range offsets {
+		h := now.Add(-time.Duration(off) * time.Hour).Hour()
+		if off == 0 {
+			labelsBuilder.WriteString(fmt.Sprintf(`<span style="color:#e5e7eb;">%02dh</span>`, h))
+		} else {
+			labelsBuilder.WriteString(fmt.Sprintf("<span>%02dh</span>", h))
+		}
 	}
 	timeLabels := labelsBuilder.String()
 
@@ -197,12 +207,20 @@ func generateLatencyChart(data [24]time.Duration) string {
 		pathData += fmt.Sprintf(" C %.1f,%.1f %.1f,%.1f %.1f,%.1f", cp1x, p0[1], cp1x, p1[1], p1[0], p1[1])
 	}
 
+	var labelsBuilder strings.Builder
 	now := time.Now()
-	timeLabels := ""
-	for i := 0; i < 5; i++ {
-		h := now.Add(time.Duration(-24+(i*6)) * time.Hour).Hour()
-		timeLabels += fmt.Sprintf("<span>%02dh</span>", h)
+
+	offsets := []int{24, 18, 12, 6, 0}
+
+	for _, off := range offsets {
+		h := now.Add(-time.Duration(off) * time.Hour).Hour()
+		if off == 0 {
+			labelsBuilder.WriteString(fmt.Sprintf(`<span style="color:#e5e7eb;">%02dh</span>`, h))
+		} else {
+			labelsBuilder.WriteString(fmt.Sprintf("<span>%02dh</span>", h))
+		}
 	}
+	timeLabels := labelsBuilder.String()
 
 	return fmt.Sprintf(`
 <details class="card">
@@ -405,6 +423,144 @@ func (m *APIMetrics) getStatsUnsafe() map[string]interface{} {
 		"hourly_latency":    m.HourlyLatency,
 		"hourly_limit":      cfg.HourlyRateLimit,
 	}
+}
+
+func ensureMetricsFile(path string) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	_, err := os.Stat(path)
+	if err == nil {
+		return nil
+	}
+	if !os.IsNotExist(err) {
+		return err
+	}
+
+	// Datei initial anlegen
+	empty := apiMetricsSnapshot{SavedAtUnix: time.Now().Unix()}
+	b, _ := json.MarshalIndent(empty, "", "  ")
+	return os.WriteFile(path, b, 0644)
+}
+
+func (m *APIMetrics) SaveToFile(path string) error {
+	if err := ensureMetricsFile(path); err != nil {
+		return err
+	}
+
+	m.Lock()
+	snap := apiMetricsSnapshot{
+		TotalRequests:       m.TotalRequests,
+		SuccessRequests:     m.SuccessRequests,
+		FailedRequests:      m.FailedRequests,
+		RateLimitHits:       m.RateLimitHits,
+		ServerErrors:        m.ServerErrors,
+		ClientErrors:        m.ClientErrors,
+		AverageLatencyNanos: int64(m.AverageLatency),
+
+		HourlyStats: m.HourlyStats,
+
+		LastError:       m.LastError,
+		LastSuccessUnix: m.LastSuccessTimestamp.Unix(),
+		LastErrorUnix:   m.LastErrorTimestamp.Unix(),
+		SavedAtUnix:     time.Now().Unix(),
+	}
+
+	for i := 0; i < 24; i++ {
+		snap.HourlyLatencyNanos[i] = int64(m.HourlyLatency[i])
+	}
+
+	if len(m.RequestTimestamps) > 0 {
+		snap.RequestTimestamps = make([]int64, 0, len(m.RequestTimestamps))
+		for _, t := range m.RequestTimestamps {
+			snap.RequestTimestamps = append(snap.RequestTimestamps, t.Unix())
+		}
+	}
+
+	m.Unlock()
+
+	b, err := json.MarshalIndent(snap, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+func (m *APIMetrics) LoadFromFile(path string) error {
+	if err := ensureMetricsFile(path); err != nil {
+		return err
+	}
+
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	if len(b) == 0 {
+		return nil
+	}
+
+	var snap apiMetricsSnapshot
+	if err := json.Unmarshal(b, &snap); err != nil {
+		return errors.New("metrics.json konnte nicht gelesen werden (invalid JSON)")
+	}
+
+	m.Lock()
+	m.TotalRequests = snap.TotalRequests
+	m.SuccessRequests = snap.SuccessRequests
+	m.FailedRequests = snap.FailedRequests
+	m.RateLimitHits = snap.RateLimitHits
+	m.ServerErrors = snap.ServerErrors
+	m.ClientErrors = snap.ClientErrors
+	m.AverageLatency = time.Duration(snap.AverageLatencyNanos)
+	m.HourlyStats = snap.HourlyStats
+
+	for i := 0; i < 24; i++ {
+		m.HourlyLatency[i] = time.Duration(snap.HourlyLatencyNanos[i])
+	}
+
+	if snap.LastSuccessUnix > 0 {
+		m.LastSuccessTimestamp = time.Unix(snap.LastSuccessUnix, 0)
+	}
+	m.LastError = snap.LastError
+	if snap.LastErrorUnix > 0 {
+		m.LastErrorTimestamp = time.Unix(snap.LastErrorUnix, 0)
+	}
+
+	m.RequestTimestamps = nil
+	if len(snap.RequestTimestamps) > 0 {
+		now := time.Now()
+		threshold := now.Add(-1 * time.Hour)
+
+		for _, ts := range snap.RequestTimestamps {
+			t := time.Unix(ts, 0)
+			if t.After(threshold) && t.Before(now.Add(5*time.Minute)) {
+				m.RequestTimestamps = append(m.RequestTimestamps, t)
+			}
+		}
+	}
+
+	m.lastHour = time.Now().Unix() / 3600
+
+	m.Unlock()
+
+	return nil
+}
+
+func startMetricsAutosave(interval time.Duration) {
+	go func() {
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for range t.C {
+			_ = apiMetrics.SaveToFile(metricsPersistPath)
+		}
+	}()
 }
 
 // ============================================================================
