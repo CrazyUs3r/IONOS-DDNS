@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -70,10 +71,30 @@ func runUpdate(firstRun bool) {
 		}
 	}
 
+	// Records bereinigen (IONOS & IPv64)
 	for providerStr, zones := range zonesByProvider {
-		if ProviderType(providerStr) == ProviderIONOS {
+		pType := ProviderType(providerStr)
+
+		if pType == ProviderIONOS {
 			cleanupOldRecords(ctx, zones, cache)
-			break
+		} else if pType == ProviderIPv64 {
+			// Für IPv64 sammeln wir die aktuell konfigurierten FQDNs
+			ipv64Configured := make(map[string]bool)
+			var ipv64Config *DomainConfig
+
+			for i := range cfg.DomainConfigs {
+				if cfg.DomainConfigs[i].Provider == ProviderIPv64 {
+					name := strings.ToLower(strings.TrimSuffix(cfg.DomainConfigs[i].FQDN, "."))
+					ipv64Configured[name] = true
+					ipv64Config = &cfg.DomainConfigs[i]
+				}
+			}
+
+			// Cleanup nur starten, wenn wir eine gültige Config (API-Key) gefunden haben
+			if ipv64Config != nil {
+				debugLog("MAINTENANCE", "", "Prüfe IPv64 auf verwaiste Records...")
+				cleanupIPv64Records(ctx)
+			}
 		}
 	}
 

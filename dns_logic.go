@@ -298,3 +298,78 @@ func cleanupOldRecords(ctx context.Context, zones []Zone, recordCache *ZoneRecor
 		}
 	}
 }
+
+func cleanupIPv64Records(ctx context.Context) {
+	var ipv64DC *DomainConfig
+	for i := range cfg.DomainConfigs {
+		if cfg.DomainConfigs[i].Provider == ProviderIPv64 {
+			ipv64DC = &cfg.DomainConfigs[i]
+			break
+		}
+	}
+
+	if ipv64DC == nil {
+		return
+	}
+
+	debugLog("MAINTENANCE", "", "🧹 Starte Bereinigung verwaister IPv64-Records...")
+
+	// Sammle alle konfigurierten IPv64 Domains
+	configDomains := make(map[string]struct{})
+	for _, dc := range cfg.DomainConfigs {
+		if dc.Provider == ProviderIPv64 {
+			configDomains[strings.ToLower(strings.TrimSuffix(dc.FQDN, "."))] = struct{}{}
+		}
+	}
+
+	providerCache.RLock()
+	defer providerCache.RUnlock()
+
+	for baseDomain, domain := range providerCache.ipv64Records {
+		for _, rec := range domain.Records {
+			// Nur A und AAAA Records bereinigen
+			if rec.Type != "A" && rec.Type != "AAAA" {
+				continue
+			}
+
+			// Konstruiere FQDN
+			fqdn := baseDomain
+			if rec.Praefix != "" {
+				fqdn = rec.Praefix + "." + baseDomain
+			}
+			fqdn = strings.ToLower(strings.TrimSuffix(fqdn, "."))
+
+			// Prüfe ob konfiguriert
+			if _, ok := configDomains[fqdn]; ok {
+				continue
+			}
+
+			debugLog(
+				"MAINTENANCE",
+				fqdn,
+				fmt.Sprintf("🗑️ Entferne verwaisten %s Record (ID: %d)", rec.Type, rec.RecordID),
+			)
+
+			if cfg.DryRun {
+				log(LogContext{
+					Level:   LogInfo,
+					Action:  ActionCleanup,
+					Domain:  fqdn,
+					Message: "⚠️ Dry-Run: Record wäre gelöscht worden",
+				})
+				continue
+			}
+
+			if err := deleteIPv64Record(ctx, ipv64DC, baseDomain, rec); err != nil {
+				debugLog("MAINTENANCE", fqdn, fmt.Sprintf("❌ Fehler beim Löschen: %v", err))
+			} else {
+				log(LogContext{
+					Level:   LogInfo,
+					Action:  ActionCleanup,
+					Domain:  fqdn,
+					Message: fmt.Sprintf("✅ %s Record entfernt (nicht mehr konfiguriert)", rec.Type),
+				})
+			}
+		}
+	}
+}

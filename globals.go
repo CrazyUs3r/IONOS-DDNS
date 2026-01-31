@@ -407,13 +407,14 @@ type IPv64Record struct {
 }
 
 type IPv64Domain struct {
-	Domain           string `json:"domain"`
-	IPv4             string `json:"ipv4"`
-	IPv6             string `json:"ipv6"`
-	DomainUpdateHash string `json:"domain_update_hash"`
-	Updates          int    `json:"updates"`
-	Wildcard         int    `json:"wildcard"`
-	Deactivated      int    `json:"deactivated"`
+	Domain           string        `json:"domain"`
+	IPv4             string        `json:"ipv4"`
+	IPv6             string        `json:"ipv6"`
+	DomainUpdateHash string        `json:"domain_update_hash"`
+	Updates          int           `json:"updates"`
+	Wildcard         int           `json:"wildcard"`
+	Deactivated      int           `json:"deactivated"`
+	Records          []IPv64Record `json:"records"`
 }
 
 type ZoneRecordCache struct {
@@ -535,4 +536,3 @@ type apiMetricsSnapshot struct {
 	LastErrorTime     time.Time   `json:"last_error_at"`
 	SavedAt           time.Time   `json:"saved_at"`
 }
-

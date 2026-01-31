@@ -14,25 +14,88 @@ import (
 // ============================================================================
 // API - IPV64
 // ============================================================================
+func splitIPv64FQDN(fqdn string) (baseDomain, praefix string) {
+	parts := strings.Split(fqdn, ".")
+	if len(parts) < 4 {
+		return fqdn, ""
+	}
+	return strings.Join(parts[1:], "."), parts[0]
+}
 
 func ipv64API(ctx context.Context, dc *DomainConfig, endpoint string, params map[string]string) ([]byte, error) {
-	fullURL := ipv64APIBase + endpoint
+	// IPv64 API verwendet api.php als Basis-Endpoint
+	fullURL := "https://ipv64.net/api.php"
+
+	// Bestimme HTTP-Methode basierend auf dem ersten Parameter
+	method := "GET"
+	var bodyData string
 
 	if len(params) > 0 {
-		q := url.Values{}
-		for k, v := range params {
-			q.Set(k, v)
+		// Für get_domains: GET mit Query-Parameter
+		if _, hasGetDomains := params["get_domains"]; hasGetDomains {
+			method = "GET"
+			q := url.Values{}
+			for k, v := range params {
+				q.Set(k, v)
+			}
+			fullURL += "?" + q.Encode()
+		} else if hasAddDomain := params["add_domain"]; hasAddDomain != "" {
+			// add_domain → POST
+			method = "POST"
+			bodyData = fmt.Sprintf(
+				"add_domain=%s",
+				url.QueryEscape(hasAddDomain),
+			)
+		} else if delRecord := params["del_record"]; delRecord != "" {
+			// del_record → DELETE mit Body-Data
+			method = "DELETE"
+			bodyData = fmt.Sprintf(
+				"del_record=%s",
+				url.QueryEscape(delRecord),
+			)
+		} else if delDomain := params["del_domain"]; delDomain != "" {
+			// del_domain → DELETE mit Body-Data
+			method = "DELETE"
+			bodyData = fmt.Sprintf(
+				"del_domain=%s",
+				url.QueryEscape(delDomain),
+			)
+		} else if _, hasAddRecord := params["add_record"]; hasAddRecord {
+			// add_record → POST
+			method = "POST"
+			values := url.Values{}
+			for k, v := range params {
+				values.Set(k, v)
+			}
+			bodyData = values.Encode()
+		} else {
+			// Fallback: GET mit Query-Parametern
+			q := url.Values{}
+			for k, v := range params {
+				q.Set(k, v)
+			}
+			fullURL += "?" + q.Encode()
 		}
-		fullURL += "?" + q.Encode()
 	}
 
 	var lastErr error
 	for attempt := 0; attempt < MaxAPIRetries; attempt++ {
 		start := time.Now()
-		debugLog("HTTP", "", fmt.Sprintf("🔄 IPv64 %s %d/%d: GET %s",
-			T.Attempt, attempt+1, MaxAPIRetries, endpoint))
+		debugLog("HTTP", "", fmt.Sprintf("🔄 IPv64 %s %d/%d: %s %s",
+			T.Attempt, attempt+1, MaxAPIRetries, method, fullURL))
 
-		req, err := http.NewRequestWithContext(ctx, "GET", fullURL, nil)
+		var req *http.Request
+		var err error
+
+		if bodyData != "" {
+			req, err = http.NewRequestWithContext(ctx, method, fullURL, strings.NewReader(bodyData))
+			if err == nil {
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			}
+		} else {
+			req, err = http.NewRequestWithContext(ctx, method, fullURL, nil)
+		}
+
 		if err != nil {
 			return nil, fmt.Errorf("request creation failed: %w", err)
 		}
@@ -129,7 +192,10 @@ func loadIPv64Domains(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
 }
 
 func loadAllIPv64Domains(ctx context.Context, dc *DomainConfig) error {
-	params := map[string]string{"get_domains": dc.IPv64Token}
+	params := map[string]string{
+		"get_domains": dc.IPv64Token,
+	}
+
 	data, err := ipv64API(ctx, dc, "", params)
 	if err != nil {
 		return err
@@ -147,28 +213,27 @@ func loadAllIPv64Domains(ctx context.Context, dc *DomainConfig) error {
 		domain := IPv64Domain{
 			Domain:           domainName,
 			DomainUpdateHash: subdomain.DomainUpdateHash,
-			Updates:          subdomain.Updates,
-			Wildcard:         subdomain.Wildcard,
-			Deactivated:      subdomain.Deactivated,
+			Records:          make([]IPv64Record, 0),
 		}
 
 		for _, rec := range subdomain.Records {
 			if rec.Deactivated == 1 {
 				continue
 			}
-
-			switch rec.Type {
-			case "A":
-				domain.IPv4 = rec.Content
-			case "AAAA":
-				domain.IPv6 = rec.Content
-			}
+			domain.Records = append(domain.Records, rec)
 		}
 
 		providerCache.ipv64Records[domainName] = domain
 
-		debugLog("CACHE", domainName, fmt.Sprintf("✅ Cached - IPv4: %s, IPv6: %s, Hash: %s***",
-			domain.IPv4, domain.IPv6, subdomain.DomainUpdateHash[:8]))
+		debugLog(
+			"CACHE",
+			domainName,
+			fmt.Sprintf(
+				"✅ Cached IPv64 domain (%d records, hash %s***)",
+				len(domain.Records),
+				subdomain.DomainUpdateHash[:8],
+			),
+		)
 	}
 
 	return nil
@@ -177,49 +242,46 @@ func loadAllIPv64Domains(ctx context.Context, dc *DomainConfig) error {
 // ============================================================================
 // DNS LOGIC - IPV64
 // ============================================================================
+func updateIPv64DNS(
+	ctx context.Context,
+	dc *DomainConfig,
+	fqdn, recordType, newIP string,
+) (bool, error) {
 
-func updateIPv64DNS(ctx context.Context, _ *DomainConfig, fqdn, recordType, newIP string) (bool, error) {
-	// Domain aus Cache holen
+	baseDomain, praefix := splitIPv64FQDN(fqdn)
+
 	providerCache.RLock()
-	domain, exists := providerCache.ipv64Records[fqdn]
+	domain, exists := providerCache.ipv64Records[baseDomain]
 	providerCache.RUnlock()
 
 	if !exists {
-		return false, fmt.Errorf("domain %s not found in ipv64 cache", fqdn)
+		return false, fmt.Errorf("ipv64 base domain not found: %s", baseDomain)
 	}
 
-	if domain.DomainUpdateHash == "" {
-		return false, fmt.Errorf("no domain_update_hash found for %s", fqdn)
-	}
-
+	// Aktuelle IP aus Records ermitteln
 	currentIP := ""
-	switch recordType {
-	case "A":
-		currentIP = domain.IPv4
-	case "AAAA":
-		currentIP = domain.IPv6
+	for _, rec := range domain.Records {
+		if rec.Praefix == praefix && rec.Type == recordType {
+			currentIP = rec.Content
+			break
+		}
 	}
 
 	if currentIP == newIP {
-		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("✅ %s: %s = %s", T.RecordCurrent, recordType, newIP))
-		writeLog("CURRENT", ActionCurrent, fqdn, fmt.Sprintf("%-4s %s %s", recordType, newIP, T.Current))
+		writeLog("CURRENT", ActionCurrent, fqdn,
+			fmt.Sprintf("%-4s %s %s", recordType, newIP, T.Current))
 		return false, nil
 	}
 
-	debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("🔄 %s: %s -> %s", T.RecordUpdateNeeded, currentIP, newIP))
-
+	// IPv64 Cooldown
 	ipv64Mutex.Lock()
 	if time.Since(lastIPv64Update) < 12*time.Second {
-		waitTime := 12*time.Second - time.Since(lastIPv64Update)
-		debugLog("HTTP", fqdn, fmt.Sprintf("⏳ IPv64 Cooldown: Warte %v...", waitTime.Round(time.Second)))
-
-		timer := time.NewTimer(waitTime)
+		wait := 12*time.Second - time.Since(lastIPv64Update)
 		ipv64Mutex.Unlock()
 
 		select {
-		case <-timer.C:
+		case <-time.After(wait):
 		case <-ctx.Done():
-			timer.Stop()
 			return false, ctx.Err()
 		}
 
@@ -238,8 +300,7 @@ func updateIPv64DNS(ctx context.Context, _ *DomainConfig, fqdn, recordType, newI
 		return true, nil
 	}
 
-	updateURL := "https://ipv64.net/nic/update"
-
+	// Update-Request
 	q := url.Values{}
 	q.Set("key", domain.DomainUpdateHash)
 	q.Set("domain", fqdn)
@@ -251,12 +312,9 @@ func updateIPv64DNS(ctx context.Context, _ *DomainConfig, fqdn, recordType, newI
 		q.Set("ipv6", newIP)
 	}
 
-	fullUpdateURL := updateURL + "?" + q.Encode()
+	updateURL := "https://ipv64.net/nic/update?" + q.Encode()
 
-	debugLog("HTTP", fqdn, fmt.Sprintf("📡 IPv64 Update URL: %s",
-		strings.Replace(fullUpdateURL, domain.DomainUpdateHash, "***TOKEN***", 1)))
-
-	req, err := http.NewRequestWithContext(ctx, "GET", fullUpdateURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", updateURL, nil)
 	if err != nil {
 		return false, err
 	}
@@ -272,57 +330,55 @@ func updateIPv64DNS(ctx context.Context, _ *DomainConfig, fqdn, recordType, newI
 	}
 	defer res.Body.Close()
 
-	respBody, _ := io.ReadAll(res.Body)
-	responseText := strings.TrimSpace(string(respBody))
-
-	debugLog("HTTP", fqdn, fmt.Sprintf("📥 IPv64 Response [%d]: %s (Latency: %v)",
-		res.StatusCode, responseText, duration))
-
-	if res.StatusCode == 401 {
-		apiMetrics.RecordError(401, fmt.Errorf("unauthorized"), duration)
-		return false, fmt.Errorf("ipv64 authentication failed - domain_update_hash incorrect")
-	}
+	body, _ := io.ReadAll(res.Body)
+	resp := strings.ToLower(strings.TrimSpace(string(body)))
 
 	if res.StatusCode != 200 {
-		apiMetrics.RecordError(res.StatusCode, fmt.Errorf("http %d", res.StatusCode), duration)
-		return false, fmt.Errorf("ipv64 returned status %d: %s", res.StatusCode, responseText)
+		return false, fmt.Errorf("ipv64 http %d: %s", res.StatusCode, resp)
 	}
 
-	responseLower := strings.ToLower(responseText)
-
-	if strings.Contains(responseLower, "good") || strings.Contains(responseLower, "nochg") {
+	if strings.Contains(resp, "good") || strings.Contains(resp, "nochg") {
 		apiMetrics.RecordSuccess(duration)
-
 		log(LogContext{
 			Level:   LogInfo,
 			Action:  ActionUpdate,
 			Domain:  fqdn,
 			Message: fmt.Sprintf("🔄 %s -> %s %s", recordType, newIP, T.Update),
 		})
-
-		providerCache.Lock()
-		if cachedDomain, ok := providerCache.ipv64Records[fqdn]; ok {
-			switch recordType {
-			case "A":
-				cachedDomain.IPv4 = newIP
-			case "AAAA":
-				cachedDomain.IPv6 = newIP
-			}
-			providerCache.ipv64Records[fqdn] = cachedDomain
-		}
-		providerCache.Unlock()
-
 		return true, nil
 	}
 
-	apiMetrics.RecordError(res.StatusCode, fmt.Errorf("ipv64: %s", responseText), duration)
+	return false, fmt.Errorf("ipv64 update failed: %s", resp)
+}
 
-	if strings.Contains(responseLower, "badauth") {
-		return false, fmt.Errorf("ipv64 authentication failed: invalid update hash")
-	}
-	if strings.Contains(responseLower, "abuse") {
-		return false, fmt.Errorf("ipv64 abuse: too many requests")
+// ============================================================================
+// CLEANUP - IPV64
+// ============================================================================
+
+func deleteIPv64Record(
+	ctx context.Context,
+	dc *DomainConfig,
+	baseDomain string,
+	record IPv64Record,
+) error {
+
+	// Nach IPv64 API: DELETE Request mit del_record
+	params := map[string]string{
+		"del_record": fmt.Sprintf("%d", record.RecordID),
 	}
 
-	return false, fmt.Errorf("ipv64 update failed: %s", responseText)
+	data, err := ipv64API(ctx, dc, "", params)
+	if err != nil {
+		return fmt.Errorf(
+			"failed to delete ipv64 record %d (%s.%s): %w",
+			record.RecordID,
+			record.Praefix,
+			baseDomain,
+			err,
+		)
+	}
+
+	debugLog("HTTP", baseDomain, fmt.Sprintf("📥 IPv64 delete response: %s", string(data)))
+
+	return nil
 }
