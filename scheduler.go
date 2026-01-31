@@ -71,14 +71,12 @@ func runUpdate(firstRun bool) {
 		}
 	}
 
-	// Records bereinigen (IONOS & IPv64)
 	for providerStr, zones := range zonesByProvider {
 		pType := ProviderType(providerStr)
 
 		if pType == ProviderIONOS {
-			cleanupOldRecords(ctx, zones, cache)
+			cleanupIONOSRecords(ctx, zones, cache)
 		} else if pType == ProviderIPv64 {
-			// Für IPv64 sammeln wir die aktuell konfigurierten FQDNs
 			ipv64Configured := make(map[string]bool)
 			var ipv64Config *DomainConfig
 
@@ -89,8 +87,6 @@ func runUpdate(firstRun bool) {
 					ipv64Config = &cfg.DomainConfigs[i]
 				}
 			}
-
-			// Cleanup nur starten, wenn wir eine gültige Config (API-Key) gefunden haben
 			if ipv64Config != nil {
 				debugLog("MAINTENANCE", "", "Prüfe IPv64 auf verwaiste Records...")
 				cleanupIPv64Records(ctx)
