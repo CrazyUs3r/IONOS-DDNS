@@ -213,7 +213,7 @@ func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdate
 	return result
 }
 
-func cleanupOldRecords(ctx context.Context, zones []Zone, recordCache *ZoneRecordCache) {
+func cleanupIONOSRecords(ctx context.Context, zones []Zone, recordCache *ZoneRecordCache) {
 	var ionosDC *DomainConfig
 	for i := range cfg.DomainConfigs {
 		if cfg.DomainConfigs[i].Provider == ProviderIONOS {
