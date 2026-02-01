@@ -11,7 +11,6 @@ import (
 // ============================================================================
 // ZONE & CACHE
 // ============================================================================
-
 func NewZoneRecordCache() *ZoneRecordCache {
 	return &ZoneRecordCache{
 		data: make(map[string][]Record),
@@ -42,6 +41,31 @@ func loadZoneCache(ctx context.Context, zonesByProvider map[string][]Zone) (*Zon
 		provider := ProviderType(providerStr)
 
 		if provider == ProviderIPv64 {
+			providerCache.RLock()
+			for _, z := range zones {
+				domain, ok := providerCache.ipv64Records[z.Name]
+				if !ok {
+					debugLog("CACHE", z.Name, "⚠️ Keine IPv64-Daten im Cache")
+					continue
+				}
+
+				records := make([]Record, 0, len(domain.Records))
+				for _, rec := range domain.Records {
+					records = append(records, Record{
+						ID:      fmt.Sprintf("%d", rec.RecordID),
+						Type:    rec.Type,
+						Content: rec.Content,
+					})
+				}
+
+				cache.Set(z.ID, records)
+				debugLog(
+					"CACHE",
+					z.Name,
+					fmt.Sprintf("✅ %d IPv64 Records aus Cache geladen", len(records)),
+				)
+			}
+			providerCache.RUnlock()
 			continue
 		}
 

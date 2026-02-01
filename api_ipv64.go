@@ -436,7 +436,6 @@ func deleteIPv64Record(
 	record IPv64Record,
 ) error {
 
-	// Nach IPv64 API: DELETE Request mit del_record
 	params := map[string]string{
 		"del_record": fmt.Sprintf("%d", record.RecordID),
 	}

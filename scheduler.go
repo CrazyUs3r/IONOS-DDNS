@@ -51,11 +51,6 @@ func runUpdate(firstRun bool) {
 		return
 	}
 
-	if firstRun {
-		printGroupedDomains()
-		printInfrastructure(ctx, zonesByProvider)
-	}
-
 	cache, err := loadZoneCache(ctx, zonesByProvider)
 	if err != nil {
 		lastOk.Store(false)
@@ -92,6 +87,11 @@ func runUpdate(firstRun bool) {
 				cleanupIPv64Records(ctx)
 			}
 		}
+	}
+
+	if firstRun {
+		printGroupedDomains()
+		printInfrastructure(ctx, zonesByProvider)
 	}
 
 	successCount := processDomains(ctx, zonesByProvider, cache, currentIPv4, currentIPv6)

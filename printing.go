@@ -21,13 +21,11 @@ func printGroupedDomains() {
 		return
 	}
 
-	// Gruppiere nach Provider
 	byProvider := make(map[ProviderType][]string)
 	for _, dc := range cfg.DomainConfigs {
 		byProvider[dc.Provider] = append(byProvider[dc.Provider], dc.FQDN)
 	}
 
-	// Sortiere Provider-Namen
 	providers := make([]ProviderType, 0, len(byProvider))
 	for p := range byProvider {
 		providers = append(providers, p)
@@ -36,7 +34,6 @@ func printGroupedDomains() {
 		return string(providers[i]) < string(providers[j])
 	})
 
-	// Ausgabe
 	for _, provider := range providers {
 		domains := byProvider[provider]
 		sort.Strings(domains)
@@ -62,53 +59,85 @@ func printGroupedDomains() {
 }
 
 func printInfrastructure(ctx context.Context, zonesByProvider map[string][]Zone) {
-	fmt.Println("\n" + T.InfraHeading)
+  fmt.Println("\n" + T.InfraHeading)
 
-	for providerStr, zones := range zonesByProvider {
-		provider := ProviderType(providerStr)
+	pTypes := make([]string, 0, len(zonesByProvider))
+	for p := range zonesByProvider {
+		pTypes = append(pTypes, p)
+	}
+	sort.Strings(pTypes)
 
-		fmt.Printf("\n📦 Provider: %s (%d zones)\n", provider, len(zones))
+	for _, pt := range pTypes {
+		zones := zonesByProvider[pt]
+		fmt.Printf("\n📦 Provider: %s (%d zones)\n", pt, len(zones))
+
+		// Wir suchen uns eine passende Config für diesen Provider aus dem cfg-Array
+		var dc *DomainConfig
+		for i := range cfg.DomainConfigs {
+			if string(cfg.DomainConfigs[i].Provider) == pt {
+				dc = &cfg.DomainConfigs[i]
+				break
+			}
+		}
 
 		for _, z := range zones {
-			fmt.Printf("\n🌐 %s: %s\n", T.ZoneLabel, z.Name)
+			fmt.Printf("\n🌐 Zone: %s\n", z.Name)
+			var records []Record
 
-			if provider == ProviderIPv64 {
-				fmt.Println("   ├─ IPv64 Domain (dynamische IP-Updates)")
-				continue
-			}
-
-			// Finde passende DomainConfig
-			var dc *DomainConfig
-			for i := range cfg.DomainConfigs {
-				if cfg.DomainConfigs[i].Provider == provider {
-					dc = &cfg.DomainConfigs[i]
-					break
+			// --- PROVIDER LOGIK START ---
+			if ProviderType(pt) == ProviderIPv64 {
+				// Spezielle Logik für IPv64 (aus dem providerCache)
+				providerCache.RLock()
+				if data, ok := providerCache.ipv64Records[z.Name]; ok {
+					for _, ir := range data.Records {
+						name := z.Name
+						if ir.Praefix != "" {
+							name = ir.Praefix + "." + z.Name
+						}
+						records = append(records, Record{
+							Name:    name,
+							Type:    ir.Type,
+							Content: ir.Content,
+						})
+					}
+				}
+				providerCache.RUnlock()
+			} else if ProviderType(pt) == ProviderCloudflare {
+				if dc != nil {
+					records, _ = loadCloudflareRecords(ctx, dc, z.ID)
+				}
+			} else {
+				// Deine IONOS Logik (direkt via API)
+				if dc != nil {
+					data, _ := ionosAPI(ctx, dc, "GET", ionosBaseURL+"/"+z.ID, nil)
+					var detail struct{ Records []Record }
+					_ = json.Unmarshal(data, &detail)
+					records = detail.Records
 				}
 			}
+			// --- PROVIDER LOGIK ENDE ---
 
-			if dc == nil {
-				continue
-			}
-
-			var records []Record
-			if provider == ProviderCloudflare {
-				records, _ = loadCloudflareRecords(ctx, dc, z.ID)
-			} else {
-				data, _ := ionosAPI(ctx, dc, "GET", ionosBaseURL+"/"+z.ID, nil)
-				var detail struct{ Records []Record }
-				_ = json.Unmarshal(data, &detail)
-				records = detail.Records
-			}
-
+			// Anzeige der Records
 			var relevant []Record
 			for _, r := range records {
 				if r.Type == "A" || r.Type == "AAAA" || r.Type == "CNAME" {
 					relevant = append(relevant, r)
 				}
 			}
+
 			sort.Slice(relevant, func(i, j int) bool { return relevant[i].Name < relevant[j].Name })
-			for _, r := range relevant {
-				fmt.Printf("   ├─ %-35s [%-5s] -> %s\n", r.Name, r.Type, r.Content)
+
+			if len(relevant) == 0 {
+				fmt.Printf("   └─ ⚠️ Keine relevanten Records gefunden\n")
+				continue
+			}
+
+			for i, r := range relevant {
+				char := "├"
+				if i == len(relevant)-1 {
+					char = "└"
+				}
+				fmt.Printf("   %s─ %-35s [%-5s] -> %s\n", char, r.Name, r.Type, r.Content)
 			}
 		}
 	}
@@ -122,7 +151,6 @@ func logHTTPClientStats() {
 
 	debugLog("CONFIG", "", "========== "+T.ConfigHeading+" ==========")
 
-	// Provider-Übersicht
 	providerCounts := make(map[ProviderType]int)
 	for _, dc := range cfg.DomainConfigs {
 		providerCounts[dc.Provider]++

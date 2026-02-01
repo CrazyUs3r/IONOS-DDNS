@@ -399,7 +399,7 @@ func updateIONOSCache(cache *ZoneRecordCache, zoneID, recordName, fqdn, recordTy
 }
 
 // ============================================================================
-// CLEANUP IONOS
+// CLEANUP - IONOS
 // ===========================================================================
 
 func cleanupIONOSRecords(ctx context.Context, zones []Zone, recordCache *ZoneRecordCache) {
