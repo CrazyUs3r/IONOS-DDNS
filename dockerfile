@@ -34,7 +34,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
 # =============================================================================
 FROM alpine:3.22
 
-ARG VERSION=2.1.0
+ARG VERSION=2.2.0
 ARG BUILD_DATE
 ARG VCS_REF
 
@@ -92,7 +92,7 @@ USER dyndns
 VOLUME ["/config"]
 EXPOSE ${HEALTH_PORT}
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=300s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f -s http://localhost:${HEALTH_PORT}/health || exit 1
 
 ENTRYPOINT ["/sbin/tini", "--", "/app/docker-entrypoint.sh"]
