@@ -398,6 +398,10 @@ func updateIONOSCache(cache *ZoneRecordCache, zoneID, recordName, fqdn, recordTy
 	}
 }
 
+// ============================================================================
+// CLEANUP IONOS
+// ===========================================================================
+
 func cleanupIONOSRecords(ctx context.Context, zones []Zone, recordCache *ZoneRecordCache) {
 	var ionosDC *DomainConfig
 	for i := range cfg.DomainConfigs {
