@@ -329,19 +329,11 @@ func updateDNS(
 			}
 		}
 
-		debugLog("DNS-LOGIC", fqdn,
-			fmt.Sprintf("❌ %s: %v", T.UpdateFailed, err))
+		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("❌ %s: %v", T.UpdateFailed, err))
 		return false, err
 	}
 
-		debugLog("DNS-LOGIC", fqdn,
-			fmt.Sprintf("❌ %s: %v", T.UpdateFailed, err))
-		return false, err
-	}
-
-	debugLog("DNS-LOGIC", fqdn,
-		fmt.Sprintf("🔄 %s: %s -> %s",
-			T.Success, recordType, newIP))
+	debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("🔄 %s: %s -> %s", T.Success, recordType, newIP))
 
 	log(LogContext{
 		Level:  LogInfo,
