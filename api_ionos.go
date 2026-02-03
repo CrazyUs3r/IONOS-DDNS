@@ -273,9 +273,9 @@ func updateDNS(
 
 	_, err := ionosAPI(ctx, dc, method, url, payload)
 	if err != nil {
-		var apiErr *APIError
-		if errors.As(err, &apiErr) {
-			switch apiErr.StatusCode {
+		var apiErrPtr *APIError
+		if errors.As(err, &apiErrPtr) && apiErrPtr != nil {
+			switch apiErrPtr.StatusCode {
 			case 401, 403:
 				log(LogContext{
 					Level:   LogError,
@@ -320,11 +320,19 @@ func updateDNS(
 					Action: ActionError,
 					Domain: fqdn,
 					Message: fmt.Sprintf("%s: API-Fehler %d",
-						recordType, apiErr.StatusCode),
+						recordType, apiErrPtr.StatusCode),
 				})
+
+				debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("❌ err=%T %v", err, err))
+
 				return false, err
 			}
 		}
+
+		debugLog("DNS-LOGIC", fqdn,
+			fmt.Sprintf("❌ %s: %v", T.UpdateFailed, err))
+		return false, err
+	}
 
 		debugLog("DNS-LOGIC", fqdn,
 			fmt.Sprintf("❌ %s: %v", T.UpdateFailed, err))
