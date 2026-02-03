@@ -19,7 +19,6 @@ import (
 // ============================================================================
 // WEBSOCKET
 // ============================================================================
-
 func (h *WSHub) run() {
 	for {
 		select {
@@ -107,7 +106,6 @@ func broadcastUpdate(updateType string, data interface{}) {
 // ============================================================================
 // SVG CHARTS
 // ============================================================================
-
 func generateSVGChart(data [24]int) string {
 	maxVal := 0
 	for _, v := range data {
@@ -246,11 +244,8 @@ func generateLatencyChart(data [24]time.Duration) string {
 // ============================================================================
 // METRICS
 // ============================================================================
-
 func (m *APIMetrics) RecordSuccess(duration time.Duration) {
 	m.Lock()
-	m.trackHistory()
-
 	now := time.Now()
 	m.TotalRequests++
 	m.SuccessRequests++
@@ -273,9 +268,6 @@ func (m *APIMetrics) RecordSuccess(duration time.Duration) {
 
 func (m *APIMetrics) RecordError(statusCode int, err error, duration time.Duration) {
 	m.Lock()
-
-	m.trackHistory()
-
 	now := time.Now()
 	m.TotalRequests++
 	m.FailedRequests++
@@ -305,7 +297,6 @@ func (m *APIMetrics) RecordError(statusCode int, err error, duration time.Durati
 	}
 
 	statsCopy := m.getStatsUnsafe()
-
 	m.Unlock()
 
 	go broadcastUpdate("metrics", statsCopy)
@@ -369,31 +360,19 @@ func (m *APIMetrics) getUsageColor(p float64) string {
 
 func (m *APIMetrics) trackHistory() {
 	now := time.Now()
-	currentHourUnix := now.Unix() / 3600
 
 	if m.lastHour == 0 {
-		m.lastHour = currentHourUnix
+		m.lastHour = now.Unix() / 3600
 		return
 	}
 
-	if currentHourUnix != m.lastHour {
-		diff := int(currentHourUnix - m.lastHour)
-		if diff > 0 {
-			if diff >= 24 {
-				m.HourlyStats = [24]int{}
-				m.HourlyLatency = [24]time.Duration{}
-			} else {
-				for i := 0; i < 24-diff; i++ {
-					m.HourlyStats[i] = m.HourlyStats[i+diff]
-					m.HourlyLatency[i] = m.HourlyLatency[i+diff]
-				}
-				for i := 24 - diff; i < 24; i++ {
-					m.HourlyStats[i] = 0
-					m.HourlyLatency[i] = 0
-				}
-			}
-			m.lastHour = currentHourUnix
-		}
+	lastCheckTime := time.Unix(m.lastHour*3600, 0)
+	hoursSince := now.Sub(lastCheckTime).Hours()
+
+	if hoursSince >= 24 {
+		m.HourlyStats = [24]int{}
+		m.HourlyLatency = [24]time.Duration{}
+		m.lastHour = now.Unix() / 3600
 	}
 }
 
@@ -550,8 +529,8 @@ func (m *APIMetrics) LoadFromFile(path string) error {
 	m.LastSuccessTimestamp = snap.LastSuccessTime
 	m.LastError = snap.LastError
 	m.LastErrorTimestamp = snap.LastErrorTime
-	m.RequestTimestamps = nil
 
+	m.RequestTimestamps = nil
 	if len(snap.RequestTimestamps) > 0 {
 		now := time.Now()
 		threshold := now.Add(-1 * time.Hour)
@@ -749,6 +728,7 @@ func createMux() *http.ServeMux {
 
 		if total, ok := stats["total_requests"].(int64); ok && total > 10 {
 			successRateStr := stats["success_rate"].(string)
+			// Parse "95.5%" -> 95.5
 			var rate float64
 			fmt.Sscanf(successRateStr, "%f%%", &rate)
 
