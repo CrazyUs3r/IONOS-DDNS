@@ -297,7 +297,7 @@ func flushLogQueue(timeout time.Duration) {
 
 	for time.Now().Before(deadline) {
 		if len(logWriteQueue) == 0 {
-			time.Sleep(10 * time.Millisecond) // Extra wait to ensure worker processes last item
+			time.Sleep(10 * time.Millisecond)
 			return
 		}
 		time.Sleep(50 * time.Millisecond)

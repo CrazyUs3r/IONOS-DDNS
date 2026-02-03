@@ -15,14 +15,11 @@ WORKDIR /app
 
 RUN apk add --no-cache git ca-certificates
 
-# Mod-Dateien zuerst für effizientes Caching
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Quellcode kopieren (Stelle sicher, dass maintest2.go bereits in main.go umbenannt wurde)
 COPY *.go .
 
-# Build ausführen
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build \
     -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildDate=${BUILD_DATE}" \
@@ -50,7 +47,6 @@ LABEL org.opencontainers.image.title="Go-DynDNS" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.created="${BUILD_DATE}"
 
-# --- Alle ENV Variablen aus der main.go ---
 ENV PROVIDER="IONOS" \
     DOMAINS="example.com" \
     API_PREFIX="" \
@@ -75,13 +71,11 @@ ENV PROVIDER="IONOS" \
 
 WORKDIR /app
 
-# User und Verzeichnisse
 RUN addgroup -S -g 1000 dyndns && \
     adduser -S -u 1000 -G dyndns -h /home/dyndns dyndns && \
     mkdir -p /config/logs /config/lang && \
     chown -R dyndns:dyndns /config /app
 
-# Artefakte kopieren
 COPY --from=builder --chown=dyndns:dyndns /app/dyndns /app/
 COPY --chown=dyndns:dyndns lang/*.json /app/lang/
 COPY --chown=dyndns:dyndns docker-entrypoint.sh /app/

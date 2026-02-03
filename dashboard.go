@@ -142,7 +142,6 @@ func generateSVGChart(data [24]int) string {
 	var labelsBuilder strings.Builder
 	now := time.Now()
 
-	// links -> rechts: -24, -18, -12, -6, 0 (jetzt)
 	offsets := []int{24, 18, 12, 6, 0}
 
 	for _, off := range offsets {
@@ -398,23 +397,18 @@ func (m *APIMetrics) trackHistory() {
 	}
 }
 
-// reorderHourlyStatsToChronological converts hour-indexed array [0-23] to chronological array
-// where index 0 = 24 hours ago and index 23 = current hour
 func reorderHourlyStatsToChronological(hourlyData [24]int) [24]int {
 	now := time.Now()
 	currentHour := now.Hour()
 
 	var chronological [24]int
 	for i := 0; i < 24; i++ {
-		// Calculate which hour this position represents
-		// i=0 should be 24 hours ago, i=23 should be current hour
 		hourIndex := (currentHour - 23 + i + 24) % 24
 		chronological[i] = hourlyData[hourIndex]
 	}
 	return chronological
 }
 
-// reorderHourlyLatencyToChronological converts hour-indexed array [0-23] to chronological array
 func reorderHourlyLatencyToChronological(hourlyData [24]time.Duration) [24]time.Duration {
 	now := time.Now()
 	currentHour := now.Hour()
@@ -441,7 +435,6 @@ func (m *APIMetrics) getStatsUnsafe() map[string]interface{} {
 		successRate = float64(m.SuccessRequests) / float64(m.TotalRequests) * 100
 	}
 
-	// Convert hour-indexed arrays to chronological order for charts
 	chronologicalStats := reorderHourlyStatsToChronological(m.HourlyStats)
 	chronologicalLatency := reorderHourlyLatencyToChronological(m.HourlyLatency)
 
@@ -502,10 +495,8 @@ func (m *APIMetrics) SaveToFile(path string) error {
 		RequestTimestamps: make([]time.Time, len(m.RequestTimestamps)),
 	}
 
-	// Copy RequestTimestamps
 	copy(snap.RequestTimestamps, m.RequestTimestamps)
 
-	// Convert HourlyLatency to milliseconds
 	for i := 0; i < 24; i++ {
 		snap.HourlyLatencyMs[i] = m.HourlyLatency[i].Milliseconds()
 	}
@@ -556,13 +547,11 @@ func (m *APIMetrics) LoadFromFile(path string) error {
 		m.HourlyLatency[i] = time.Duration(snap.HourlyLatencyMs[i]) * time.Millisecond
 	}
 
-	// Load timestamps directly as time.Time
 	m.LastSuccessTimestamp = snap.LastSuccessTime
 	m.LastError = snap.LastError
 	m.LastErrorTimestamp = snap.LastErrorTime
-
-	// Load RequestTimestamps and filter old ones
 	m.RequestTimestamps = nil
+
 	if len(snap.RequestTimestamps) > 0 {
 		now := time.Now()
 		threshold := now.Add(-1 * time.Hour)
@@ -760,7 +749,6 @@ func createMux() *http.ServeMux {
 
 		if total, ok := stats["total_requests"].(int64); ok && total > 10 {
 			successRateStr := stats["success_rate"].(string)
-			// Parse "95.5%" -> 95.5
 			var rate float64
 			fmt.Sscanf(successRateStr, "%f%%", &rate)
 

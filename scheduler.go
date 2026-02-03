@@ -69,9 +69,10 @@ func runUpdate(firstRun bool) {
 	for providerStr, zones := range zonesByProvider {
 		pType := ProviderType(providerStr)
 
-		if pType == ProviderIONOS {
+		switch pType {
+		case ProviderIONOS:
 			cleanupIONOSRecords(ctx, zones, cache)
-		} else if pType == ProviderIPv64 {
+		case ProviderIPv64:
 			ipv64Configured := make(map[string]bool)
 			var ipv64Config *DomainConfig
 

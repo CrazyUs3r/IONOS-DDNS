@@ -26,7 +26,7 @@ var (
 	updatePath        string
 	ionosBaseURL      = "https://api.hosting.ionos.com/dns/v1/zones"
 	cloudflareAPIBase = "https://api.cloudflare.com/client/v4"
-	ipv64APIBase      = "https://ipv64.net/api"
+	ipv64APIBase      = "https://ipv64.net/api.php"
 
 	lastOk       atomic.Bool
 	logMutex     sync.Mutex

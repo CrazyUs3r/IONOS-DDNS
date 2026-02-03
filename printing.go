@@ -59,7 +59,7 @@ func printGroupedDomains() {
 }
 
 func printInfrastructure(ctx context.Context, zonesByProvider map[string][]Zone) {
-  fmt.Println("\n" + T.InfraHeading)
+	fmt.Println("\n" + T.InfraHeading)
 
 	pTypes := make([]string, 0, len(zonesByProvider))
 	for p := range zonesByProvider {
@@ -71,7 +71,6 @@ func printInfrastructure(ctx context.Context, zonesByProvider map[string][]Zone)
 		zones := zonesByProvider[pt]
 		fmt.Printf("\n📦 Provider: %s (%d zones)\n", pt, len(zones))
 
-		// Wir suchen uns eine passende Config für diesen Provider aus dem cfg-Array
 		var dc *DomainConfig
 		for i := range cfg.DomainConfigs {
 			if string(cfg.DomainConfigs[i].Provider) == pt {
@@ -84,9 +83,7 @@ func printInfrastructure(ctx context.Context, zonesByProvider map[string][]Zone)
 			fmt.Printf("\n🌐 Zone: %s\n", z.Name)
 			var records []Record
 
-			// --- PROVIDER LOGIK START ---
 			if ProviderType(pt) == ProviderIPv64 {
-				// Spezielle Logik für IPv64 (aus dem providerCache)
 				providerCache.RLock()
 				if data, ok := providerCache.ipv64Records[z.Name]; ok {
 					for _, ir := range data.Records {
@@ -107,7 +104,6 @@ func printInfrastructure(ctx context.Context, zonesByProvider map[string][]Zone)
 					records, _ = loadCloudflareRecords(ctx, dc, z.ID)
 				}
 			} else {
-				// Deine IONOS Logik (direkt via API)
 				if dc != nil {
 					data, _ := ionosAPI(ctx, dc, "GET", ionosBaseURL+"/"+z.ID, nil)
 					var detail struct{ Records []Record }
@@ -115,9 +111,7 @@ func printInfrastructure(ctx context.Context, zonesByProvider map[string][]Zone)
 					records = detail.Records
 				}
 			}
-			// --- PROVIDER LOGIK ENDE ---
 
-			// Anzeige der Records
 			var relevant []Record
 			for _, r := range records {
 				if r.Type == "A" || r.Type == "AAAA" || r.Type == "CNAME" {

@@ -98,7 +98,6 @@ func getHTTPClient() *http.Client {
 		maxIdleConnsPerHost := HTTPMaxIdleConnsHost
 		maxConnsPerHost := HTTPMaxConnsHost
 
-		// Bei vielen Domains: Pool vergrößern
 		if domainCount > 20 {
 			multiplier := (domainCount / 20) + 1
 			maxIdleConns *= multiplier

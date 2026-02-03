@@ -347,7 +347,6 @@ func updateDNS(
 		return false, fmt.Errorf("zoneName is empty for fqdn %s", fqdn)
 	}
 
-	// Update IONOS cache after successful update
 	updateIONOSCache(cache, zoneID, recordName, fqdn, recordType, newIP, existing)
 
 	return true, nil
@@ -371,7 +370,6 @@ func updateIONOSCache(cache *ZoneRecordCache, zoneID, recordName, fqdn, recordTy
 	updated := false
 
 	if existing != nil {
-		// Update existing record in cache
 		for i := range records {
 			if records[i].ID == existing.ID {
 				records[i].Content = newIP
@@ -381,7 +379,6 @@ func updateIONOSCache(cache *ZoneRecordCache, zoneID, recordName, fqdn, recordTy
 			}
 		}
 	} else {
-		// Add new record to cache
 		newRecord := Record{
 			ID:      fmt.Sprintf("new-%d", len(records)),
 			Name:    recordName,

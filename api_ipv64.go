@@ -23,45 +23,36 @@ func splitIPv64FQDN(fqdn string) (baseDomain, praefix string) {
 }
 
 func ipv64API(ctx context.Context, dc *DomainConfig, endpoint string, params map[string]string) ([]byte, error) {
-	// IPv64 API verwendet api.php als Basis-Endpoint
-	fullURL := "https://ipv64.net/api.php"
-
-	// Bestimme HTTP-Methode basierend auf dem ersten Parameter
 	method := "GET"
 	var bodyData string
 
 	if len(params) > 0 {
-		// Für get_domains: GET mit Query-Parameter
 		if _, hasGetDomains := params["get_domains"]; hasGetDomains {
 			method = "GET"
 			q := url.Values{}
 			for k, v := range params {
 				q.Set(k, v)
 			}
-			fullURL += "?" + q.Encode()
+			ipv64APIBase += "?" + q.Encode()
 		} else if hasAddDomain := params["add_domain"]; hasAddDomain != "" {
-			// add_domain → POST
 			method = "POST"
 			bodyData = fmt.Sprintf(
 				"add_domain=%s",
 				url.QueryEscape(hasAddDomain),
 			)
 		} else if delRecord := params["del_record"]; delRecord != "" {
-			// del_record → DELETE mit Body-Data
 			method = "DELETE"
 			bodyData = fmt.Sprintf(
 				"del_record=%s",
 				url.QueryEscape(delRecord),
 			)
 		} else if delDomain := params["del_domain"]; delDomain != "" {
-			// del_domain → DELETE mit Body-Data
 			method = "DELETE"
 			bodyData = fmt.Sprintf(
 				"del_domain=%s",
 				url.QueryEscape(delDomain),
 			)
 		} else if _, hasAddRecord := params["add_record"]; hasAddRecord {
-			// add_record → POST
 			method = "POST"
 			values := url.Values{}
 			for k, v := range params {
@@ -69,12 +60,11 @@ func ipv64API(ctx context.Context, dc *DomainConfig, endpoint string, params map
 			}
 			bodyData = values.Encode()
 		} else {
-			// Fallback: GET mit Query-Parametern
 			q := url.Values{}
 			for k, v := range params {
 				q.Set(k, v)
 			}
-			fullURL += "?" + q.Encode()
+			ipv64APIBase += "?" + q.Encode()
 		}
 	}
 
@@ -82,18 +72,18 @@ func ipv64API(ctx context.Context, dc *DomainConfig, endpoint string, params map
 	for attempt := 0; attempt < MaxAPIRetries; attempt++ {
 		start := time.Now()
 		debugLog("HTTP", "", fmt.Sprintf("🔄 IPv64 %s %d/%d: %s %s",
-			T.Attempt, attempt+1, MaxAPIRetries, method, fullURL))
+			T.Attempt, attempt+1, MaxAPIRetries, method, ipv64APIBase))
 
 		var req *http.Request
 		var err error
 
 		if bodyData != "" {
-			req, err = http.NewRequestWithContext(ctx, method, fullURL, strings.NewReader(bodyData))
+			req, err = http.NewRequestWithContext(ctx, method, ipv64APIBase, strings.NewReader(bodyData))
 			if err == nil {
 				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			}
 		} else {
-			req, err = http.NewRequestWithContext(ctx, method, fullURL, nil)
+			req, err = http.NewRequestWithContext(ctx, method, ipv64APIBase, nil)
 		}
 
 		if err != nil {
@@ -258,7 +248,6 @@ func updateIPv64DNS(
 		return false, fmt.Errorf("ipv64 base domain not found: %s", baseDomain)
 	}
 
-	// Aktuelle IP aus Records ermitteln
 	currentIP := ""
 	for _, rec := range domain.Records {
 		if rec.Praefix == praefix && rec.Type == recordType {
@@ -273,7 +262,6 @@ func updateIPv64DNS(
 		return false, nil
 	}
 
-	// IPv64 Cooldown
 	ipv64Mutex.Lock()
 	if time.Since(lastIPv64Update) < 12*time.Second {
 		wait := 12*time.Second - time.Since(lastIPv64Update)
@@ -300,7 +288,6 @@ func updateIPv64DNS(
 		return true, nil
 	}
 
-	// Update-Request
 	q := url.Values{}
 	q.Set("key", domain.DomainUpdateHash)
 	q.Set("domain", fqdn)
@@ -369,7 +356,6 @@ func cleanupIPv64Records(ctx context.Context) {
 
 	debugLog("MAINTENANCE", "", "🧹 Starte Bereinigung verwaister IPv64-Records...")
 
-	// Sammle alle konfigurierten IPv64 Domains
 	configDomains := make(map[string]struct{})
 	for _, dc := range cfg.DomainConfigs {
 		if dc.Provider == ProviderIPv64 {
@@ -382,19 +368,16 @@ func cleanupIPv64Records(ctx context.Context) {
 
 	for baseDomain, domain := range providerCache.ipv64Records {
 		for _, rec := range domain.Records {
-			// Nur A und AAAA Records bereinigen
 			if rec.Type != "A" && rec.Type != "AAAA" {
 				continue
 			}
 
-			// Konstruiere FQDN
 			fqdn := baseDomain
 			if rec.Praefix != "" {
 				fqdn = rec.Praefix + "." + baseDomain
 			}
 			fqdn = strings.ToLower(strings.TrimSuffix(fqdn, "."))
 
-			// Prüfe ob konfiguriert
 			if _, ok := configDomains[fqdn]; ok {
 				continue
 			}
