@@ -57,7 +57,7 @@ var (
 	domainsCache = &CachedResponse{}
 	metricsCache = &CachedResponse{}
 
-	metricsPersistPath = "config/logs/metrics.json"
+	metricsPersistPath = ""
 
 	rotationQueue = make(chan rotationJob, 1)
 	logWriteQueue = make(chan LogEntry, 100)
