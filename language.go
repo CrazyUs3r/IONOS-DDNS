@@ -102,7 +102,7 @@ func setDefaultPhrases() {
 		ZoneLabel:                "Zone",
 		ServiceStarted:           "Service Started",
 		ServiceStopped:           "Service Stopped",
-		DashboardStarted:         "Dashboard started on port",
+		DashboardStarted:         "Dashboard started on Port %v",
 		ServerError:              "Server error",
 		HealthCheckOK:            "Health check OK",
 		HealthCheckFailed:        "Health check failed",

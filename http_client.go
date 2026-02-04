@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -30,7 +32,20 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		if apiKey := logReq.Header.Get("X-API-Key"); apiKey != "" {
 			parts := strings.Split(apiKey, ".")
 			if len(parts) == 2 {
-				logReq.Header.Set("X-API-Key", parts[0][:5]+"***."+"***"+parts[1][len(parts[1])-5:])
+				p0 := parts[0]
+				p1 := parts[1]
+
+				head := p0
+				if len(head) > 5 {
+					head = head[:5]
+				}
+
+				tail := p1
+				if len(tail) > 5 {
+					tail = tail[len(tail)-5:]
+				}
+
+				logReq.Header.Set("X-API-Key", head+"***."+"***"+tail)
 			} else {
 				logReq.Header.Set("X-API-Key", "***MASKED***")
 			}
@@ -230,4 +245,43 @@ func sanitizeError(err error) string {
 	}
 
 	return msg
+}
+
+func sanitizeID(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if s == "" {
+		return "x"
+	}
+
+	var b strings.Builder
+	b.Grow(len(s))
+
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == '-' || r == '_':
+			b.WriteRune(r)
+		case r == '.':
+			b.WriteByte('-')
+		default:
+		}
+	}
+	out := b.String()
+	if out == "" {
+		return "x"
+	}
+	return out
+}
+
+func sanitizeIDWithHash(s string) string {
+	base := sanitizeID(s)
+	sum := sha1.Sum([]byte(s))
+	sfx := hex.EncodeToString(sum[:])[:8]
+	if base == "" || base == "x" {
+		return "d-" + sfx
+	}
+	return base + "-" + sfx
 }

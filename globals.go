@@ -33,9 +33,13 @@ var (
 	statusMutex  sync.Mutex
 	lastErrorMsg = &SafeErrorMsg{}
 
-	httpClient *http.Client
-	clientOnce sync.Once
-	apiMetrics = &APIMetrics{}
+	httpClient      *http.Client
+	clientOnce      sync.Once
+	apiMetrics      = &APIMetrics{}
+	latestMetricsMu sync.RWMutex
+	latestMetrics   map[string]interface{}
+
+	metricsSignal = make(chan struct{}, 1)
 
 	domainRegex = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$`)
 	labelRegex  = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
@@ -72,10 +76,10 @@ var (
 	ipv64Mutex      sync.Mutex
 
 	wsHub = &WSHub{
-		clients:    make(map[*websocket.Conn]bool),
+		clients:    make(map[*WSClient]bool),
 		broadcast:  make(chan WSMessage, 256),
-		register:   make(chan *websocket.Conn),
-		unregister: make(chan *websocket.Conn),
+		register:   make(chan *WSClient, 64),
+		unregister: make(chan *WSClient, 64),
 	}
 	upgrader = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
@@ -439,14 +443,18 @@ type APIMetrics struct {
 	RateLimitHits        int64
 	ServerErrors         int64
 	ClientErrors         int64
+	LatencySum           time.Duration
+	LatencyCount         int64
 	AverageLatency       time.Duration
+	HourlyLatencySum     [24]time.Duration
+	HourlyLatencyCount   [24]int64
+	HourlyLatency        [24]time.Duration
 	LastError            string
 	LastErrorTimestamp   time.Time
 	LastSuccessTimestamp time.Time
 	RequestTimestamps    []time.Time
 	HourlyStats          [24]int
 	lastHour             int64
-	HourlyLatency        [24]time.Duration
 }
 
 type SafeErrorMsg struct {
@@ -459,11 +467,17 @@ type WSMessage struct {
 	Data interface{} `json:"data"`
 }
 
+type WSClient struct {
+	conn      *websocket.Conn
+	send      chan WSMessage
+	closeOnce sync.Once
+}
+
 type WSHub struct {
-	clients    map[*websocket.Conn]bool
+	clients    map[*WSClient]bool
+	register   chan *WSClient
+	unregister chan *WSClient
 	broadcast  chan WSMessage
-	register   chan *websocket.Conn
-	unregister chan *websocket.Conn
 	mu         sync.RWMutex
 }
 

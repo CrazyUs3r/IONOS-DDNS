@@ -142,7 +142,7 @@ func main() {
 	}
 
 	logHTTPClientStats()
-
+	metricsBroadcasterLoop()
 	if cfg.HealthPort == "" {
 		cfg.HealthPort = "8080"
 	}

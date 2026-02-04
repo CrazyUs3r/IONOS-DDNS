@@ -22,76 +22,116 @@ import (
 func (h *WSHub) run() {
 	for {
 		select {
-		case conn := <-h.register:
+		case c := <-h.register:
 			h.mu.Lock()
-			h.clients[conn] = true
+			h.clients[c] = true
+			n := len(h.clients)
 			h.mu.Unlock()
 
-			go h.keepAlive(conn)
+			go c.writePump()
+			go c.readPump(h)
 
-			debugLog("WS", "", fmt.Sprintf("Client connected (total: %d)", len(h.clients)))
+			debugLog("WS", "", fmt.Sprintf("Client connected (total: %d)", n))
 
-		case conn := <-h.unregister:
+		case c := <-h.unregister:
+			removed := false
+			n := 0
+
 			h.mu.Lock()
-			if _, ok := h.clients[conn]; ok {
-				delete(h.clients, conn)
-				conn.Close()
+			if _, ok := h.clients[c]; ok {
+				delete(h.clients, c)
+				removed = true
+				n = len(h.clients)
+
+				func() {
+					defer func() { _ = recover() }()
+					c.closeSend()
+				}()
 			}
 			h.mu.Unlock()
-			debugLog("WS", "", fmt.Sprintf("Client disconnected (total: %d)", len(h.clients)))
 
-		case message := <-h.broadcast:
+			if removed {
+				debugLog("WS", "", fmt.Sprintf("Client disconnected (total: %d)", n))
+				_ = c.conn.Close()
+			}
+
+		case msg := <-h.broadcast:
 			h.mu.RLock()
-			clients := make([]*websocket.Conn, 0, len(h.clients))
-			for conn := range h.clients {
-				clients = append(clients, conn)
+			clients := make([]*WSClient, 0, len(h.clients))
+			for c := range h.clients {
+				clients = append(clients, c)
 			}
 			h.mu.RUnlock()
 
 			for _, c := range clients {
-				c.SetWriteDeadline(time.Now().Add(WSWriteTimeout))
-				if err := c.WriteJSON(message); err != nil {
-					debugLog("WS", "", fmt.Sprintf("Write failed: %v", err))
-					h.unregister <- c
+				select {
+				case c.send <- msg:
+				default:
+					debugLog("WS", "", "client send queue full - disconnecting")
+					select {
+					case h.unregister <- c:
+					default:
+						h.forceRemoveClient(c)
+					}
 				}
 			}
 		}
 	}
 }
 
-func (h *WSHub) keepAlive(conn *websocket.Conn) {
+func (c *WSClient) writePump() {
 	ticker := time.NewTicker(WSPingInterval)
 	defer ticker.Stop()
-
-	defer func() {
-		if r := recover(); r != nil {
-			debugLog("WS", "", fmt.Sprintf("Panic in keepAlive: %v", r))
-		}
-		h.unregister <- conn
-	}()
-
-	conn.SetReadDeadline(time.Now().Add(WSPongTimeout))
-	conn.SetPongHandler(func(string) error {
-		conn.SetReadDeadline(time.Now().Add(WSPongTimeout))
-		return nil
-	})
 
 	for {
 		select {
 		case <-shutdownCtx.Done():
-			debugLog("WS", "", "Shutdown - closing keepAlive")
-			h.unregister <- conn
 			return
 
+		case msg, ok := <-c.send:
+			if !ok {
+				return
+			}
+			_ = c.conn.SetWriteDeadline(time.Now().Add(WSWriteTimeout))
+			if err := c.conn.WriteJSON(msg); err != nil {
+				return
+			}
+
 		case <-ticker.C:
-			conn.SetWriteDeadline(time.Now().Add(WSWriteTimeout))
-			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				debugLog("WS", "", "Ping failed, closing connection")
-				h.unregister <- conn
+			_ = c.conn.SetWriteDeadline(time.Now().Add(WSWriteTimeout))
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
 		}
 	}
+}
+
+func (c *WSClient) readPump(h *WSHub) {
+	defer func() {
+		select {
+		case h.unregister <- c:
+		default:
+			h.forceRemoveClient(c)
+		}
+	}()
+
+	_ = c.conn.SetReadDeadline(time.Now().Add(WSPongTimeout))
+	c.conn.SetPongHandler(func(string) error {
+		_ = c.conn.SetReadDeadline(time.Now().Add(WSPongTimeout))
+		return nil
+	})
+
+	for {
+		if _, _, err := c.conn.ReadMessage(); err != nil {
+			return
+		}
+	}
+}
+
+func (c *WSClient) closeSend() {
+	c.closeOnce.Do(func() {
+		close(c.send)
+	})
 }
 
 func broadcastUpdate(updateType string, data interface{}) {
@@ -101,6 +141,19 @@ func broadcastUpdate(updateType string, data interface{}) {
 	default:
 		debugLog("WS", "", "broadcast queue full - dropping message")
 	}
+}
+
+func (h *WSHub) forceRemoveClient(c *WSClient) {
+	h.mu.Lock()
+	if _, ok := h.clients[c]; ok {
+		delete(h.clients, c)
+		func() {
+			defer func() { _ = recover() }()
+			c.closeSend()
+		}()
+	}
+	h.mu.Unlock()
+	_ = c.conn.Close()
 }
 
 // ============================================================================
@@ -161,7 +214,6 @@ func generateSVGChart(data [24]int) string {
 			<div style="position:absolute; top:30px; right:5px; transform: translateY(-50%%);">%.0f</div>
 			<div style="position:absolute; top:60px; right:5px; transform: translateY(-50%%);">0</div>
 		</div>
-		
 		<svg viewBox="0 0 300 60" preserveAspectRatio="none" style="width:100%%; height:60px; display:block; border-bottom: 1px solid rgba(255,255,255,0.1);">
 			<path d="%s L 300,60 L 0,60 Z" fill="rgba(56,189,248,0.1)"/>
 			<path d="%s" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/>
@@ -228,7 +280,6 @@ func generateLatencyChart(data [24]time.Duration) string {
 			<div style="position:absolute; top:30px; right:5px; transform:translateY(-50%%);">%.0fms</div>
 			<div style="position:absolute; top:60px; right:5px; transform:translateY(-50%%);">0</div>
 		</div>
-		
 		<svg viewBox="0 0 300 60" preserveAspectRatio="none" style="width:100%%; height:60px; display:block; border-bottom: 1px solid rgba(255,255,255,0.1); overflow:visible;">
 			<path d="%s L 300,60 L 0,60 Z" fill="rgba(139,92,246,0.15)"/>
 			<path d="%s" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -239,6 +290,92 @@ func generateLatencyChart(data [24]time.Duration) string {
 		</div>
 	</div>
 </details>`, T.LatencyHistory, renderMax, renderMax/2, pathData, pathData, timeLabels)
+}
+
+func toInt24(v any) ([24]int, bool) {
+	var out [24]int
+
+	switch x := v.(type) {
+	case [24]int:
+		return x, true
+	case []int:
+		if len(x) != 24 {
+			return out, false
+		}
+		for i := 0; i < 24; i++ {
+			out[i] = x[i]
+		}
+		return out, true
+	case []any:
+		if len(x) != 24 {
+			return out, false
+		}
+		for i := 0; i < 24; i++ {
+			switch n := x[i].(type) {
+			case int:
+				out[i] = n
+			case int64:
+				out[i] = int(n)
+			case float64:
+				out[i] = int(n)
+			case json.Number:
+				iv, err := n.Int64()
+				if err != nil {
+					return out, false
+				}
+				out[i] = int(iv)
+			default:
+				return out, false
+			}
+		}
+		return out, true
+	default:
+		return out, false
+	}
+}
+
+func toDur24(v any) ([24]time.Duration, bool) {
+	var out [24]time.Duration
+
+	switch x := v.(type) {
+	case [24]time.Duration:
+		return x, true
+	case []time.Duration:
+		if len(x) != 24 {
+			return out, false
+		}
+		for i := 0; i < 24; i++ {
+			out[i] = x[i]
+		}
+		return out, true
+	case []any:
+		if len(x) != 24 {
+			return out, false
+		}
+		for i := 0; i < 24; i++ {
+			switch n := x[i].(type) {
+			case time.Duration:
+				out[i] = n
+			case int64:
+				out[i] = time.Duration(n) * time.Millisecond
+			case int:
+				out[i] = time.Duration(n) * time.Millisecond
+			case float64:
+				out[i] = time.Duration(int64(n)) * time.Millisecond
+			case string:
+				d, err := time.ParseDuration(n)
+				if err != nil {
+					return out, false
+				}
+				out[i] = d
+			default:
+				return out, false
+			}
+		}
+		return out, true
+	default:
+		return out, false
+	}
 }
 
 // ============================================================================
@@ -263,7 +400,7 @@ func (m *APIMetrics) RecordSuccess(duration time.Duration) {
 	statsCopy := m.getStatsUnsafe()
 	m.Unlock()
 
-	go broadcastUpdate("metrics", statsCopy)
+	setLatestMetrics(statsCopy)
 }
 
 func (m *APIMetrics) RecordError(statusCode int, err error, duration time.Duration) {
@@ -299,28 +436,26 @@ func (m *APIMetrics) RecordError(statusCode int, err error, duration time.Durati
 	statsCopy := m.getStatsUnsafe()
 	m.Unlock()
 
-	go broadcastUpdate("metrics", statsCopy)
+	setLatestMetrics(statsCopy)
 }
 
 func (m *APIMetrics) updateLatency(duration time.Duration, hour int) {
-	if m.AverageLatency == 0 {
-		m.AverageLatency = duration
-	} else {
-		m.AverageLatency = (m.AverageLatency + duration) / 2
+	m.LatencySum += duration
+	m.LatencyCount++
+	if m.LatencyCount > 0 {
+		m.AverageLatency = (m.LatencySum / time.Duration(m.LatencyCount)).Round(time.Millisecond)
 	}
-	m.AverageLatency = m.AverageLatency.Round(time.Millisecond)
 
-	if m.HourlyLatency[hour] == 0 {
-		m.HourlyLatency[hour] = duration
-	} else {
-		m.HourlyLatency[hour] = (m.HourlyLatency[hour] + duration) / 2
+	m.HourlyLatencySum[hour] += duration
+	m.HourlyLatencyCount[hour]++
+	if m.HourlyLatencyCount[hour] > 0 {
+		m.HourlyLatency[hour] = (m.HourlyLatencySum[hour] / time.Duration(m.HourlyLatencyCount[hour])).Round(time.Millisecond)
 	}
 }
 
 func (m *APIMetrics) cleanupOldTimestamps(now time.Time) {
 	threshold := now.Add(-1 * time.Hour)
-
-	validIdx := 0
+	validIdx := len(m.RequestTimestamps)
 	for i, t := range m.RequestTimestamps {
 		if t.After(threshold) {
 			validIdx = i
@@ -328,17 +463,13 @@ func (m *APIMetrics) cleanupOldTimestamps(now time.Time) {
 		}
 	}
 
-	if validIdx > 0 {
-		newSlice := make([]time.Time, len(m.RequestTimestamps)-validIdx)
-		copy(newSlice, m.RequestTimestamps[validIdx:])
-		m.RequestTimestamps = newSlice
+	if validIdx > 0 && validIdx <= len(m.RequestTimestamps) {
+		m.RequestTimestamps = append([]time.Time(nil), m.RequestTimestamps[validIdx:]...)
 	}
+
 	const maxTimestamps = 3600
 	if len(m.RequestTimestamps) > maxTimestamps {
-		excess := len(m.RequestTimestamps) - maxTimestamps
-		newSlice := make([]time.Time, maxTimestamps)
-		copy(newSlice, m.RequestTimestamps[excess:])
-		m.RequestTimestamps = newSlice
+		m.RequestTimestamps = append([]time.Time(nil), m.RequestTimestamps[len(m.RequestTimestamps)-maxTimestamps:]...)
 	}
 }
 
@@ -356,24 +487,6 @@ func (m *APIMetrics) getUsageColor(p float64) string {
 		return "#facc15"
 	}
 	return "#4ade80"
-}
-
-func (m *APIMetrics) trackHistory() {
-	now := time.Now()
-
-	if m.lastHour == 0 {
-		m.lastHour = now.Unix() / 3600
-		return
-	}
-
-	lastCheckTime := time.Unix(m.lastHour*3600, 0)
-	hoursSince := now.Sub(lastCheckTime).Hours()
-
-	if hoursSince >= 24 {
-		m.HourlyStats = [24]int{}
-		m.HourlyLatency = [24]time.Duration{}
-		m.lastHour = now.Unix() / 3600
-	}
 }
 
 func reorderHourlyStatsToChronological(hourlyData [24]int) [24]int {
@@ -473,13 +586,11 @@ func (m *APIMetrics) SaveToFile(path string) error {
 		SavedAt:           time.Now(),
 		RequestTimestamps: make([]time.Time, len(m.RequestTimestamps)),
 	}
-
 	copy(snap.RequestTimestamps, m.RequestTimestamps)
 
 	for i := 0; i < 24; i++ {
 		snap.HourlyLatencyMs[i] = m.HourlyLatency[i].Milliseconds()
 	}
-
 	m.Unlock()
 
 	b, err := json.MarshalIndent(snap, "", "  ")
@@ -543,7 +654,6 @@ func (m *APIMetrics) LoadFromFile(path string) error {
 	}
 
 	m.lastHour = time.Now().Unix() / 3600
-
 	m.Unlock()
 
 	return nil
@@ -555,6 +665,29 @@ func startMetricsAutosave(interval time.Duration) {
 		defer t.Stop()
 		for range t.C {
 			_ = apiMetrics.SaveToFile(metricsPersistPath)
+		}
+	}()
+}
+
+func setLatestMetrics(stats map[string]interface{}) {
+	latestMetricsMu.Lock()
+	latestMetrics = stats
+	latestMetricsMu.Unlock()
+	select {
+	case metricsSignal <- struct{}{}:
+	default:
+	}
+}
+
+func metricsBroadcasterLoop() {
+	go func() {
+		for range metricsSignal {
+			latestMetricsMu.RLock()
+			stats := latestMetrics
+			latestMetricsMu.RUnlock()
+			if stats != nil {
+				broadcastUpdate("metrics", stats)
+			}
 		}
 	}()
 }
@@ -573,26 +706,15 @@ func createMux() *http.ServeMux {
 			return
 		}
 
-		conn.SetReadDeadline(time.Now().Add(WSPongTimeout))
-		conn.SetPongHandler(func(string) error {
-			conn.SetReadDeadline(time.Now().Add(WSPongTimeout))
-			return nil
-		})
-
-		wsHub.register <- conn
+		client := &WSClient{
+			conn: conn,
+			send: make(chan WSMessage, 64),
+		}
 
 		stats := apiMetrics.GetStats()
-		conn.SetWriteDeadline(time.Now().Add(WSWriteTimeout))
-		conn.WriteJSON(WSMessage{Type: "initial", Data: stats})
+		client.send <- WSMessage{Type: "initial", Data: stats}
 
-		go func() {
-			defer func() { wsHub.unregister <- conn }()
-			for {
-				if _, _, err := conn.ReadMessage(); err != nil {
-					break
-				}
-			}
-		}()
+		wsHub.register <- client
 	})
 
 	mux.HandleFunc("/api/domains", func(w http.ResponseWriter, r *http.Request) {
@@ -726,9 +848,17 @@ func createMux() *http.ServeMux {
 			}
 		}
 
-		if total, ok := stats["total_requests"].(int64); ok && total > 10 {
-			successRateStr := stats["success_rate"].(string)
-			// Parse "95.5%" -> 95.5
+		var total int64
+		switch v := stats["total_requests"].(type) {
+		case int64:
+			total = v
+		case int:
+			total = int64(v)
+		case float64:
+			total = int64(v)
+		}
+		if total > 10 {
+			successRateStr, _ := stats["success_rate"].(string)
 			var rate float64
 			fmt.Sscanf(successRateStr, "%f%%", &rate)
 
@@ -1051,8 +1181,18 @@ func createMux() *http.ServeMux {
 	`)
 
 		stats := apiMetrics.GetStats()
-		chartSVG := generateSVGChart(stats["hourly_stats"].([24]int))
-		latencySVG := generateLatencyChart(stats["hourly_latency"].([24]time.Duration))
+		hourlyStats, ok1 := toInt24(stats["hourly_stats"])
+		hourlyLat, ok2 := toDur24(stats["hourly_latency"])
+
+		if !ok1 {
+			hourlyStats = [24]int{}
+		}
+		if !ok2 {
+			hourlyLat = [24]time.Duration{}
+		}
+
+		chartSVG := generateSVGChart(hourlyStats)
+		latencySVG := generateLatencyChart(hourlyLat)
 
 		fmt.Fprintf(w, `
 		<details class="card" open id="metrics-card">
@@ -1187,7 +1327,7 @@ func createMux() *http.ServeMux {
 				latest = h.IPs[len(h.IPs)-1]
 			}
 
-			safeID := strings.ReplaceAll(k, ".", "-")
+			safeID := sanitizeIDWithHash(k)
 
 			fmt.Fprintf(w, `
 		<details class="card domain-item" data-domain="%s">
@@ -1198,12 +1338,12 @@ func createMux() *http.ServeMux {
 						<div class="ip-display">
 							<span class="badge v4">IPv4</span>
 							<span id="ip4-%s">%s</span>
-							<button class="copy-btn" onclick="copyIP('%s', 'ip4-%s')" title="Copy">📋</button>
+							<button class="copy-btn" onclick="copyIP(%q, %q)" title="Copy">📋</button>
 						</div>
 						<div class="ip-display" style="margin-top: 8px;">
 							<span class="badge v6">IPv6</span>
 							<span id="ip6-%s">%s</span>
-							<button class="copy-btn" onclick="copyIP('%s', 'ip6-%s')" title="Copy">📋</button>
+							<button class="copy-btn" onclick="copyIP(%q, %q)" title="Copy">📋</button>
 						</div>
 					</div>
 					<div style="text-align: right; opacity: 0.7;">
@@ -1220,10 +1360,19 @@ func createMux() *http.ServeMux {
 							</tr>
 						</thead>
 						<tbody>`,
-				html.EscapeString(k), html.EscapeString(k), html.EscapeString(h.Provider),
-				safeID, html.EscapeString(latest.IPv4), html.EscapeString(latest.IPv4), safeID,
-				safeID, html.EscapeString(latest.IPv6), html.EscapeString(latest.IPv6), safeID,
-				html.EscapeString(latest.Time))
+				html.EscapeString(k),
+				html.EscapeString(k),
+				html.EscapeString(h.Provider),
+				safeID,
+				html.EscapeString(latest.IPv4),
+				latest.IPv4,
+				"ip4-"+safeID,
+				safeID,
+				html.EscapeString(latest.IPv6),
+				latest.IPv6,
+				"ip6-"+safeID,
+				html.EscapeString(latest.Time),
+			)
 
 			for i := len(h.IPs) - 2; i >= 0; i-- {
 				e := h.IPs[i]
@@ -1298,17 +1447,50 @@ func createMux() *http.ServeMux {
 		}, 5000);
 	};
 
-	function updateDomainDisplay(data) {
-		const safeID = data.domain.replace(/\./g, '-');
-		const ip4El = document.getElementById('ip4-' + safeID);
-	 const ip6El = document.getElementById('ip6-' + safeID);
-
-	 if (ip4El && data.ipv4) ip4El.textContent = data.ipv4;
-	  if (ip6El && data.ipv6) ip6El.textContent = data.ipv6;
-
-		showToast('✓ ' + data.domain + ' updated');
+	function sanitizeBase(s) {
+	s = (s || '').toLowerCase();
+	let out = '';
+	for (const ch of s) {
+		const code = ch.charCodeAt(0);
+		const isAZ = code >= 97 && code <= 122;
+		const is09 = code >= 48 && code <= 57;
+		if (isAZ || is09 || ch === '-' || ch === '_') out += ch;
+		else if (ch === '.') out += '-';
 	}
-	
+	return out || 'x';
+	}
+
+	async function shortHash8(str) {
+	const s = str || '';
+	if (!(window.crypto && crypto.subtle && window.TextEncoder)) {
+		return '00000000';
+	}
+	const data = new TextEncoder().encode(s);
+	const buf = await crypto.subtle.digest('SHA-1', data);
+	const bytes = new Uint8Array(buf);
+	let hex = '';
+	for (const b of bytes) hex += b.toString(16).padStart(2, '0');
+	return hex.slice(0, 8);
+	}
+
+	async function makeSafeID(domain) {
+	const base = sanitizeBase(domain);
+	const sfx = await shortHash8(domain);
+	if (!base || base === 'x') return 'd-' + sfx;
+	return base + '-' + sfx;
+	}
+
+	async function updateDomainDisplay(data) {
+	const safeID = await makeSafeID(data.domain);
+	const ip4El = document.getElementById('ip4-' + safeID);
+	const ip6El = document.getElementById('ip6-' + safeID);
+
+	if (ip4El && data.ipv4) ip4El.textContent = data.ipv4;
+	if (ip6El && data.ipv6) ip6El.textContent = data.ipv6;
+
+	showToast('✓ ' + data.domain + ' updated');
+	}
+
 	function updateMetrics(data) {
 		document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
 	}
