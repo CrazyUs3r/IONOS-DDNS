@@ -120,6 +120,6 @@
   "using_default_port": "Używam domyślnego portu",
   "interval_too_small": "Interwał zbyt krótki",
   "short_interval_warning": "Ostrzeżenie: Krótki interwał",
-  "invalid_ip_mode": "Nieprawidłowy tryb IP",
+  "invalid_ip_mode": "Nieprawidłowy tryb IP: %s",
   "using_default_mode": "Używam domyślnego trybu"
 }

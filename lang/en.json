@@ -115,11 +115,11 @@
   "mode": "Mode",
   "no_dns_server": "No DNS servers configured",
   "dns_failover": "DNS failover active",
-  "http_client_initialized": "HTTP client ready (DNS servers: %d)",
+  "http_client_initialized": "HTTP client initialized with %d DNS servers",
   "invalid_port": "Invalid port %v, using default",
   "using_default_port": "Using default port",
   "interval_too_small": "Interval too small",
   "short_interval_warning": "Warning: Short interval",
-  "invalid_ip_mode": "Invalid IP mode",
+  "invalid_ip_mode": "Invalid IP mode: %s",
   "using_default_mode": "Using default mode"
 }

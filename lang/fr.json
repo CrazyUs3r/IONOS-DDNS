@@ -120,6 +120,6 @@
   "using_default_port": "Utilisation du port par défaut",
   "interval_too_small": "Intervalle trop court",
   "short_interval_warning": "Avertissement : Intervalle court",
-  "invalid_ip_mode": "Mode IP invalide",
+  "invalid_ip_mode": "Mode IP invalide: %s",
   "using_default_mode": "Utilisation du mode par défaut"
 }
