@@ -1235,7 +1235,7 @@ func createMux() *http.ServeMux {
 		if len(logs) > 0 {
 			fmt.Fprintf(w, `
 	<details class="card" id="logs-card">
-	    <summary>🧾 %s</summary>
+	    <summary>🧾 %s <span style="opacity:0.6; font-size:0.9em;">(%d entries)</span></summary>
 	    <div class="card-content">
 	        <div class="log-filters">
 				<button class="filter-btn active" data-filter="all" onclick="filterLogs('all')">All</button>
@@ -1247,7 +1247,7 @@ func createMux() *http.ServeMux {
 				<button class="filter-btn" data-filter="CLEANUP" onclick="filterLogs('CLEANUP')">Cleanup</button>
 			</div>
 		<div id="logContainer" style="max-height: 300px; overflow-y: auto; font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 13px; padding-right: 5px;">
-	    `, T.SystemEvents)
+	    `, T.SystemEvents, len(logs))
 
 			for _, e := range logs {
 				displayTime := e.Timestamp
