@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -43,6 +44,7 @@ var (
 
 	domainRegex = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$`)
 	labelRegex  = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+	rng         = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	secretReplacer     *strings.Replacer
 	secretReplacerOnce sync.Once
