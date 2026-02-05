@@ -83,7 +83,7 @@ func updateDomainsCache() error {
 	domainsCache.mu.Lock()
 	domainsCache.Data = data
 	domainsCache.ETag = etag
-	domainsCache.LastModified = time.Now()
+	domainsCache.LastModified = time.Now().Local()
 	domainsCache.mu.Unlock()
 
 	return nil
@@ -103,7 +103,7 @@ func updateMetricsCache() {
 	metricsCache.mu.Lock()
 	metricsCache.Data = data
 	metricsCache.ETag = etag
-	metricsCache.LastModified = time.Now()
+	metricsCache.LastModified = time.Now().Local()
 	metricsCache.mu.Unlock()
 }
 
@@ -120,7 +120,7 @@ func serveCachedJSON(w http.ResponseWriter, r *http.Request, cache *CachedRespon
 			etag = `"0"`
 		}
 		if lastMod.IsZero() {
-			lastMod = time.Now()
+			lastMod = time.Now().Local()
 		}
 	}
 

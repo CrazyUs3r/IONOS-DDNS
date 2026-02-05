@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"math/rand"
 	"net/http"
 	"strings"
 	"time"
@@ -27,7 +26,7 @@ func calculateRetryDelay(attempt int, isServerError bool) time.Duration {
 		baseWait = RetryMaxDelay
 	}
 
-	jitter := time.Duration(rand.Intn(RetryJitterMaxMs)) * time.Millisecond
+	jitter := time.Duration(rng.Intn(RetryJitterMaxMs)) * time.Millisecond
 	wait := baseWait + jitter
 
 	if isServerError {
@@ -44,7 +43,7 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 	var lastErr error
 
 	for attempt := 0; attempt < MaxAPIRetries; attempt++ {
-		start := time.Now()
+		start := time.Now().Local()
 		debugLog("HTTP", "", fmt.Sprintf(
 			"🔄 %s %d/%d: %s %s",
 			T.Attempt, attempt+1, MaxAPIRetries, method, url,
@@ -230,7 +229,6 @@ func updateDNS(
 		})
 		return true, nil
 	}
-
 	var (
 		method     string
 		url        string
@@ -329,11 +327,14 @@ func updateDNS(
 			}
 		}
 
-		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("❌ %s: %v", T.UpdateFailed, err))
+		debugLog("DNS-LOGIC", fqdn,
+			fmt.Sprintf("❌ %s: %v", T.UpdateFailed, err))
 		return false, err
 	}
 
-	debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("🔄 %s: %s -> %s", T.Success, recordType, newIP))
+	debugLog("DNS-LOGIC", fqdn,
+		fmt.Sprintf("🔄 %s: %s -> %s",
+			T.Success, recordType, newIP))
 
 	log(LogContext{
 		Level:  LogInfo,

@@ -120,7 +120,7 @@ func persistLog(ctx LogContext) {
 	}
 
 	entry := LogEntry{
-		Timestamp: time.Now().Format("2006-01-02T15:04:05"),
+		Timestamp: time.Now().Local().Format("2006-01-02T15:04:05"),
 		Level:     levelToString(ctx.Level),
 		Action:    ctx.Action,
 		Domain:    ctx.Domain,
@@ -264,7 +264,7 @@ func doLogRotation(path string, maxLines int) {
 	newLines := lines[startIdx:]
 	output := strings.Join(newLines, "\n") + "\n"
 
-	tmpPath := path + ".tmp." + strconv.FormatInt(time.Now().UnixNano(), 10)
+	tmpPath := path + ".tmp." + strconv.FormatInt(time.Now().Local().UnixNano(), 10)
 	if err := os.WriteFile(tmpPath, []byte(output), 0644); err != nil {
 		fmt.Printf("[WARN] %s: %v\n", T.LogRotationError, err)
 		return
@@ -293,9 +293,9 @@ func rotateLogFile(path string, maxLines int) {
 // ============================================================================
 
 func flushLogQueue(timeout time.Duration) {
-	deadline := time.Now().Add(timeout)
+	deadline := time.Now().Local().Add(timeout)
 
-	for time.Now().Before(deadline) {
+	for time.Now().Local().Before(deadline) {
 		if len(logWriteQueue) == 0 {
 			time.Sleep(10 * time.Millisecond)
 			return

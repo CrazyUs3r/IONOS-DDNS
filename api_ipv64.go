@@ -22,7 +22,7 @@ func splitIPv64FQDN(fqdn string) (baseDomain, praefix string) {
 	return strings.Join(parts[1:], "."), parts[0]
 }
 
-func ipv64API(ctx context.Context, dc *DomainConfig, endpoint string, params map[string]string) ([]byte, error) {
+func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) ([]byte, error) {
 	method := "GET"
 	var bodyData string
 
@@ -70,7 +70,7 @@ func ipv64API(ctx context.Context, dc *DomainConfig, endpoint string, params map
 
 	var lastErr error
 	for attempt := 0; attempt < MaxAPIRetries; attempt++ {
-		start := time.Now()
+		start := time.Now().Local()
 		debugLog("HTTP", "", fmt.Sprintf("🔄 IPv64 %s %d/%d: %s %s",
 			T.Attempt, attempt+1, MaxAPIRetries, method, ipv64APIBase))
 
@@ -149,7 +149,7 @@ func loadIPv64Domains(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
 		"get_domains": dc.IPv64Token,
 	}
 
-	data, err := ipv64API(ctx, dc, "", params)
+	data, err := ipv64API(ctx, dc, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load ipv64 domains: %w", err)
 	}
@@ -186,7 +186,7 @@ func loadAllIPv64Domains(ctx context.Context, dc *DomainConfig) error {
 		"get_domains": dc.IPv64Token,
 	}
 
-	data, err := ipv64API(ctx, dc, "", params)
+	data, err := ipv64API(ctx, dc, params)
 	if err != nil {
 		return err
 	}
@@ -234,7 +234,6 @@ func loadAllIPv64Domains(ctx context.Context, dc *DomainConfig) error {
 // ============================================================================
 func updateIPv64DNS(
 	ctx context.Context,
-	dc *DomainConfig,
 	fqdn, recordType, newIP string,
 ) (bool, error) {
 
@@ -275,7 +274,7 @@ func updateIPv64DNS(
 
 		ipv64Mutex.Lock()
 	}
-	lastIPv64Update = time.Now()
+	lastIPv64Update = time.Now().Local()
 	ipv64Mutex.Unlock()
 
 	if cfg.DryRun {
@@ -307,7 +306,7 @@ func updateIPv64DNS(
 	}
 	req.Header.Set("User-Agent", "Go-DynDNS/2.0")
 
-	start := time.Now()
+	start := time.Now().Local()
 	res, err := getHTTPClient().Do(req)
 	duration := time.Since(start)
 
@@ -423,7 +422,7 @@ func deleteIPv64Record(
 		"del_record": fmt.Sprintf("%d", record.RecordID),
 	}
 
-	data, err := ipv64API(ctx, dc, "", params)
+	data, err := ipv64API(ctx, dc, params)
 	if err != nil {
 		return fmt.Errorf(
 			"failed to delete ipv64 record %d (%s.%s): %w",

@@ -92,13 +92,13 @@ func (c *WSClient) writePump() {
 			if !ok {
 				return
 			}
-			_ = c.conn.SetWriteDeadline(time.Now().Add(WSWriteTimeout))
+			_ = c.conn.SetWriteDeadline(time.Now().Local().Add(WSWriteTimeout))
 			if err := c.conn.WriteJSON(msg); err != nil {
 				return
 			}
 
 		case <-ticker.C:
-			_ = c.conn.SetWriteDeadline(time.Now().Add(WSWriteTimeout))
+			_ = c.conn.SetWriteDeadline(time.Now().Local().Add(WSWriteTimeout))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
@@ -115,9 +115,9 @@ func (c *WSClient) readPump(h *WSHub) {
 		}
 	}()
 
-	_ = c.conn.SetReadDeadline(time.Now().Add(WSPongTimeout))
+	_ = c.conn.SetReadDeadline(time.Now().Local().Add(WSPongTimeout))
 	c.conn.SetPongHandler(func(string) error {
-		_ = c.conn.SetReadDeadline(time.Now().Add(WSPongTimeout))
+		_ = c.conn.SetReadDeadline(time.Now().Local().Add(WSPongTimeout))
 		return nil
 	})
 
@@ -191,7 +191,7 @@ func generateSVGChart(data [24]int) string {
 	pathData := pathBuilder.String()
 
 	var labelsBuilder strings.Builder
-	now := time.Now()
+	now := time.Now().Local()
 
 	offsets := []int{24, 18, 12, 6, 0}
 
@@ -257,7 +257,7 @@ func generateLatencyChart(data [24]time.Duration) string {
 	}
 
 	var labelsBuilder strings.Builder
-	now := time.Now()
+	now := time.Now().Local()
 
 	offsets := []int{24, 18, 12, 6, 0}
 
@@ -383,7 +383,7 @@ func toDur24(v any) ([24]time.Duration, bool) {
 // ============================================================================
 func (m *APIMetrics) RecordSuccess(duration time.Duration) {
 	m.Lock()
-	now := time.Now()
+	now := time.Now().Local()
 	m.TotalRequests++
 	m.SuccessRequests++
 	m.LastSuccessTimestamp = now
@@ -405,7 +405,7 @@ func (m *APIMetrics) RecordSuccess(duration time.Duration) {
 
 func (m *APIMetrics) RecordError(statusCode int, err error, duration time.Duration) {
 	m.Lock()
-	now := time.Now()
+	now := time.Now().Local()
 	m.TotalRequests++
 	m.FailedRequests++
 	m.LastError = err.Error()
@@ -490,7 +490,7 @@ func (m *APIMetrics) getUsageColor(p float64) string {
 }
 
 func reorderHourlyStatsToChronological(hourlyData [24]int) [24]int {
-	now := time.Now()
+	now := time.Now().Local()
 	currentHour := now.Hour()
 
 	var chronological [24]int
@@ -502,7 +502,7 @@ func reorderHourlyStatsToChronological(hourlyData [24]int) [24]int {
 }
 
 func reorderHourlyLatencyToChronological(hourlyData [24]time.Duration) [24]time.Duration {
-	now := time.Now()
+	now := time.Now().Local()
 	currentHour := now.Hour()
 
 	var chronological [24]time.Duration
@@ -560,7 +560,7 @@ func ensureMetricsFile(path string) error {
 		return err
 	}
 
-	empty := apiMetricsSnapshot{SavedAt: time.Now()}
+	empty := apiMetricsSnapshot{SavedAt: time.Now().Local()}
 	b, _ := json.MarshalIndent(empty, "", "  ")
 	return os.WriteFile(path, b, 0644)
 }
@@ -583,7 +583,7 @@ func (m *APIMetrics) SaveToFile(path string) error {
 		LastError:         m.LastError,
 		LastSuccessTime:   m.LastSuccessTimestamp,
 		LastErrorTime:     m.LastErrorTimestamp,
-		SavedAt:           time.Now(),
+		SavedAt:           time.Now().Local(),
 		RequestTimestamps: make([]time.Time, len(m.RequestTimestamps)),
 	}
 	copy(snap.RequestTimestamps, m.RequestTimestamps)
@@ -643,7 +643,7 @@ func (m *APIMetrics) LoadFromFile(path string) error {
 
 	m.RequestTimestamps = nil
 	if len(snap.RequestTimestamps) > 0 {
-		now := time.Now()
+		now := time.Now().Local()
 		threshold := now.Add(-1 * time.Hour)
 
 		for _, t := range snap.RequestTimestamps {
@@ -653,7 +653,7 @@ func (m *APIMetrics) LoadFromFile(path string) error {
 		}
 	}
 
-	m.lastHour = time.Now().Unix() / 3600
+	m.lastHour = time.Now().Local().Unix() / 3600
 	m.Unlock()
 
 	return nil
@@ -821,7 +821,7 @@ func createMux() *http.ServeMux {
 		defer statusMutex.Unlock()
 
 		exportData := map[string]interface{}{
-			"timestamp": time.Now().Format(time.RFC3339),
+			"timestamp": time.Now().Local().Format(time.RFC3339),
 			"metrics":   apiMetrics.GetStats(),
 		}
 
@@ -1172,7 +1172,7 @@ func createMux() *http.ServeMux {
 		
 		<div class="status-banner `+statusClass+`">
 			<span>`+statusText+`</span>
-			<span>`+T.LastUpdate+`: <span id="lastUpdate">`+time.Now().Format("15:04:05")+`</span></span>
+			<span>`+T.LastUpdate+`: <span id="lastUpdate">`+time.Now().Local().Format("15:04:05")+`</span></span>
 		</div>
 		
 		<div id="toast" class="toast"></div>

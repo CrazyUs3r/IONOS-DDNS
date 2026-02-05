@@ -61,7 +61,7 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		debugLog("HTTP-RAW", "", "\n>>> REQUEST >>>\n"+string(requestDump))
 	}
 
-	start := time.Now()
+	start := time.Now().Local()
 	resp, err := t.base.RoundTrip(req)
 	duration := time.Since(start)
 

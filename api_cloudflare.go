@@ -19,7 +19,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 
 	var lastErr error
 	for attempt := 0; attempt < MaxAPIRetries; attempt++ {
-		start := time.Now()
+		start := time.Now().Local()
 		debugLog("HTTP", "", fmt.Sprintf("🔄 Cloudflare %s %d/%d: %s %s",
 			T.Attempt, attempt+1, MaxAPIRetries, method, url))
 
