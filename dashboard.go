@@ -1196,7 +1196,7 @@ func createMux() *http.ServeMux {
 
 		fmt.Fprintf(w, `
 		<details class="card" open id="metrics-card">
-			<summary>📊 `+T.ApiPerformance+`</summary>
+			<summary>📊 %s </summary>
 			<div class="card-content">
 				<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-top: 10px;">
 					<div><strong>`+T.TotalRequests+`:</strong> %v</div>
@@ -1219,7 +1219,8 @@ func createMux() *http.ServeMux {
 		%s
 		
 		%s
-	`,
+		`,
+			T.ApiPerformance,
 			stats["total_requests"],
 			stats["success_rate"],
 			stats["avg_latency"],
@@ -1234,20 +1235,21 @@ func createMux() *http.ServeMux {
 
 		if len(logs) > 0 {
 			fmt.Fprintf(w, `
-	<details class="card" id="logs-card">
-	    <summary>🧾 %s <span style="opacity:0.6; font-size:0.9em;">(%d entries)</span></summary>
-	    <div class="card-content">
-	        <div class="log-filters">
-				<button class="filter-btn active" data-filter="all" onclick="filterLogs('all')">All</button>
-				<button class="filter-btn" data-filter="ERR" onclick="filterLogs('ERR')">Errors</button>
-				<button class="filter-btn" data-filter="WARN" onclick="filterLogs('WARN')">Warnings</button>
-				<button class="filter-btn" data-filter="UPDATE" onclick="filterLogs('UPDATE')">Updates</button>
-				<button class="filter-btn" data-filter="START" onclick="filterLogs('START')">Starts</button>
-				<button class="filter-btn" data-filter="CREATE" onclick="filterLogs('CREATE')">Created</button>
-				<button class="filter-btn" data-filter="CLEANUP" onclick="filterLogs('CLEANUP')">Cleanup</button>
-			</div>
-		<div id="logContainer" style="max-height: 300px; overflow-y: auto; font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 13px; padding-right: 5px;">
-	    `, T.SystemEvents, len(logs))
+		<details class="card" id="logs-card">
+			<summary>🧾 %s <span style="opacity:0.6; font-size:0.9em;">(%d entries)</span></summary>
+			<div class="card-content">
+				<div class="log-filters">
+					<button class="filter-btn active" data-filter="all" onclick="filterLogs('all')">All</button>
+					<button class="filter-btn" data-filter="ERR" onclick="filterLogs('ERR')">Errors</button>
+					<button class="filter-btn" data-filter="WARN" onclick="filterLogs('WARN')">Warnings</button>
+					<button class="filter-btn" data-filter="UPDATE" onclick="filterLogs('UPDATE')">Updates</button>
+					<button class="filter-btn" data-filter="START" onclick="filterLogs('START')">Starts</button>
+					<button class="filter-btn" data-filter="STOP" onclick="filterLogs('STOP')">Stop</button>
+					<button class="filter-btn" data-filter="CREATE" onclick="filterLogs('CREATE')">Created</button>
+					<button class="filter-btn" data-filter="CLEANUP" onclick="filterLogs('CLEANUP')">Cleanup</button>
+				</div>
+			<div id="logContainer" style="max-height: 300px; overflow-y: auto; font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 13px; padding-right: 5px;">
+			`, T.SystemEvents, len(logs))
 
 			for _, e := range logs {
 				displayTime := e.Timestamp
@@ -1261,8 +1263,10 @@ func createMux() *http.ServeMux {
 
 				icon := "🔹"
 				switch actionUpper {
-				case "ERROR", "FAIL", "CLEANUP":
+				case "ERROR", "FAIL":
 					icon = "⚠️"
+				case "CLEANUP":
+					icon = "🧹♻️"
 				case "SUCCESS", "ADDED":
 					icon = "✅"
 				case "UPDATE":
@@ -1272,20 +1276,20 @@ func createMux() *http.ServeMux {
 				}
 
 				fmt.Fprintf(w, `
-	        <div class="log-entry"
-	             data-action="%s"
-	             data-level="%s"
-	             style="display: flex; align-items: flex-start; padding: 6px 8px;
-	                    border-radius: 4px; margin-bottom: 4px; gap: 10px;
-	                    background: rgba(255,255,255,0.03);">
-	            <span style="flex-shrink: 0; width: 20px; text-align: center;">%s</span>
-	            <span style="color: #888; white-space: nowrap; font-size: 0.85em;">%s</span>
-	            <div style="flex: 1; word-break: break-word;">
-	                %s
-	                <span style="opacity: 0.9;">%s</span>
-	            </div>
-	        </div>
-	        `,
+				<div class="log-entry"
+					data-action="%s"
+					data-level="%s"
+					style="display: flex; align-items: flex-start; padding: 6px 8px;
+							border-radius: 4px; margin-bottom: 4px; gap: 10px;
+							background: rgba(255,255,255,0.03);">
+					<span style="flex-shrink: 0; width: 20px; text-align: center;">%s</span>
+					<span style="color: #888; white-space: nowrap; font-size: 0.85em;">%s</span>
+					<div style="flex: 1; word-break: break-word;">
+						%s
+						<span style="opacity: 0.9;">%s</span>
+					</div>
+				</div>
+				`,
 					actionUpper,
 					e.Level,
 					icon,
@@ -1302,9 +1306,9 @@ func createMux() *http.ServeMux {
 			}
 
 			fmt.Fprint(w, `
-	        </div>
-	    </div>
-	</details>
+				</div>
+			</div>
+		</details>
 	    `)
 		}
 
