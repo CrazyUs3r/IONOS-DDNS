@@ -123,12 +123,13 @@
   "invalid_ip_mode": "Ungültiger IP Modus: %s",
   "using_default_mode": "Nutze Standard Modus",
   "critical_api_error": "KRITISCHER API-FEHLER",
-  "panic_loading_language":     "Panic beim Laden der Sprache: %v",
-	"trying_load_language":       "Versuche Sprachdatei zu laden: %s",
-	"language_file_not_Found":     "Sprachdatei nicht gefunden: %v",
-	"trying_fallback_en":         "Versuche Fallback zu EN...",
-	"using_builtin_defaults":     "Nutze eingebaute Default-Übersetzungen",
-	"json_parse_error":           "Fehler beim Parsen der JSON: %v",
-	"language_loaded":           "Sprachdatei geladen: %s (%d Übersetzungen)",
-	"missing_translation_key":    "Fehlender Übersetzungsschlüssel: %s"
+  "panic_loading_language": "Panic beim Laden der Sprache: %v",
+	"trying_load_language": "Versuche Sprachdatei zu laden: %s",
+	"language_file_not_Found": "Sprachdatei nicht gefunden: %v",
+	"trying_fallback_en": "Versuche Fallback zu EN...",
+	"using_builtin_defaults": "Nutze eingebaute Default-Übersetzungen",
+	"json_parse_error": "Fehler beim Parsen der JSON: %v",
+	"language_loaded": "Sprachdatei geladen: %s (%d Übersetzungen)",
+	"missing_translation_key": "Fehlender Übersetzungsschlüssel: %s",
+  "http_pool": "HTTP Pool erweitert:"
 }

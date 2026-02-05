@@ -122,5 +122,6 @@
   "short_interval_warning": "Advertencia: Intervalo corto",
   "invalid_ip_mode": "Modo IP inválido: %s",
   "using_default_mode": "Usando modo predeterminado",
-  "critical_api_error": "ERROR CRÍTICO DE API"
+  "critical_api_error": "ERROR CRÍTICO DE API",
+  "http_pool": "Grupo HTTP ampliado:"
 }

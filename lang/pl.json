@@ -122,5 +122,6 @@
   "short_interval_warning": "Ostrzeżenie: Krótki interwał",
   "invalid_ip_mode": "Nieprawidłowy tryb IP: %s",
   "using_default_mode": "Używam domyślnego trybu",
-  "critical_api_error": "KRYTYCZNY BŁĄD API"
+  "critical_api_error": "KRYTYCZNY BŁĄD API",
+  "http_pool": "Rozszerzono pulę HTTP:"
 }
