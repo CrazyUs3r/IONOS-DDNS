@@ -227,7 +227,10 @@ type Phrases struct {
 	DashTitle, StatusOk, StatusErr, LastUpdate, InfraHeading, ZoneLabel           string
 	ServiceStarted, ServiceStopped, DashboardStarted, ServerError                 string
 	HealthCheckOK, HealthCheckFailed, SystemEvents, History, EventLog             string
-	DomainStatus, Provider, LastChanged, Ipv4Label, Ipv6Label                     string
+	DomainStatus, Provider, LastChanged, Ipv4Label, Ipv6Label, CriticalApiError   string
+	PanicLoadingLanguage, TryingLoadLanguage, LanguageFileNotFound                string
+	TryingFallbackEn, UsingBuiltinDefaults, JsonParseError, LanguageLoaded        string
+	MissingTranslationKey                                                         string
 
 	// Statistiken & Metriken
 	Requests, SuccessRate, LastSuccess, AvgLatency, Errors, HourlyLimit       string

@@ -12,34 +12,33 @@ import (
 // ============================================================================
 // LANGUAGE
 // ============================================================================
-
 func loadLanguage(lang string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Printf("[ERROR] Panic beim Laden der Sprache: %v\n", r)
+			fmt.Printf("[ERROR] %s: %v\n", T.PanicLoadingLanguage, r)
 		}
 	}()
 
 	langFile := filepath.Join(langDir, lang+".json")
-	fmt.Printf("[INFO] Versuche Sprachdatei zu laden: %s\n", langFile)
+	fmt.Printf("[INFO] %s: %s\n", T.TryingLoadLanguage, langFile)
 
 	data, err := os.ReadFile(langFile)
 	if err != nil {
-		fmt.Printf("[WARN] Sprachdatei nicht gefunden: %v\n", err)
+		fmt.Printf("[WARN] %s: %v\n", T.LanguageFileNotFound, err)
 
 		if lang != "en" {
-			fmt.Printf("[INFO] Versuche Fallback zu EN...\n")
+			fmt.Printf("[INFO] %s\n", T.TryingFallbackEn)
 			return loadLanguage("en")
 		}
 
-		fmt.Printf("[WARN] Nutze eingebaute Default-Übersetzungen\n")
+		fmt.Printf("[WARN] %s\n", T.UsingBuiltinDefaults)
 		setDefaultPhrases()
 		return nil
 	}
 
 	var translations map[string]string
 	if err := json.Unmarshal(data, &translations); err != nil {
-		fmt.Printf("[ERROR] Fehler beim Parsen der JSON: %v\n", err)
+		fmt.Printf("[ERROR] %s: %v\n", T.JsonParseError, err)
 
 		if lang != "en" {
 			return loadLanguage("en")
@@ -48,21 +47,20 @@ func loadLanguage(lang string) error {
 		return nil
 	}
 
-	fmt.Printf("[INFO] ✓ Sprachdatei geladen: %s (%d Übersetzungen)\n",
-		lang, len(translations))
+	fmt.Printf("[INFO] ✓ %s: %s (%d)\n", T.LanguageLoaded, lang, len(translations))
 
 	requiredKeys := []string{"startup", "shutdown", "no_zones", "update"}
 	for _, key := range requiredKeys {
 		if _, ok := translations[key]; !ok {
-			fmt.Printf("[WARN] Fehlender Übersetzungsschlüssel: %s\n", key)
+			fmt.Printf("[WARN] %s: %s\n", T.MissingTranslationKey, key)
 		}
 	}
 
 	v := reflect.ValueOf(&T).Elem()
-	t := v.Type()
+	typ := v.Type()
 
 	for i := 0; i < v.NumField(); i++ {
-		field := t.Field(i)
+		field := typ.Field(i)
 		jsonKey := toSnakeCase(field.Name)
 
 		if val, ok := translations[jsonKey]; ok {
@@ -209,5 +207,14 @@ func setDefaultPhrases() {
 		ShortIntervalWarning:     "Short interval warning with many domains",
 		InvalidIPMode:            "Invalid IP mode: %s",
 		UsingDefaultMode:         "Using default mode",
+		CriticalApiError:         "CRITICAL API ERROR",
+		PanicLoadingLanguage:     "Panic while loading language: %v",
+		TryingLoadLanguage:       "Trying to load language file: %s",
+		LanguageFileNotFound:     "Language file not found: %v",
+		TryingFallbackEn:         "Trying fallback to EN...",
+		UsingBuiltinDefaults:     "Using built-in default translations",
+		JsonParseError:           "Error parsing JSON: %v",
+		LanguageLoaded:           "Language file loaded: %s (%d translations)",
+		MissingTranslationKey:    "Missing translation key: %s",
 	}
 }

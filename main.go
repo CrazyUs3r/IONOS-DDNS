@@ -39,6 +39,8 @@ func main() {
 	fmt.Printf("[INFO] → Sprachen: %s\n", langDir)
 	fmt.Printf("[INFO] → Logs: %s\n", logsDir)
 
+	setDefaultPhrases()
+
 	lang := "de"
 	envLang := strings.ToLower(os.Getenv("LANG"))
 	if envLang != "" {
