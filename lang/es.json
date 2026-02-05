@@ -121,5 +121,6 @@
   "interval_too_small": "Intervalo demasiado pequeño",
   "short_interval_warning": "Advertencia: Intervalo corto",
   "invalid_ip_mode": "Modo IP inválido: %s",
-  "using_default_mode": "Usando modo predeterminado"
+  "using_default_mode": "Usando modo predeterminado",
+  "critical_api_error": "ERROR CRÍTICO DE API"
 }

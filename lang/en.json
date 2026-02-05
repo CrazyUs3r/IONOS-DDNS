@@ -121,5 +121,14 @@
   "interval_too_small": "Interval too small",
   "short_interval_warning": "Warning: Short interval",
   "invalid_ip_mode": "Invalid IP mode: %s",
-  "using_default_mode": "Using default mode"
+  "using_default_mode": "Using default mode",
+  "critical_api_error": "CRITICAL API ERROR",
+  "panic_loading_language":     "Panic while loading language: %v",
+	"trying_load_language":       "Trying to load language file: %s",
+	"language_file_not_Found":     "Language file not found: %v",
+	"trying_fallback_en":         "Trying fallback to EN...",
+	"using_builtin_defaults":     "Using built-in default translations",
+	"json_parse_error":           "Error parsing JSON: %v",
+	"language_loaded":           "Language file loaded: %s (%d translations)",
+	"missing_translation_key":    "Missing translation key: %s"
 }
