@@ -169,7 +169,7 @@ func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdate
 		case ProviderCloudflare:
 			changed, err = updateCloudflareDNS(ctx, dc, job.Domain, "A", job.IPv4, job.Records, job.ZoneID)
 		case ProviderIPv64:
-			changed, err = updateIPv64DNS(ctx, dc, job.Domain, "A", job.IPv4)
+			changed, err = updateIPv64DNS(ctx, job.Domain, "A", job.IPv4)
 		default:
 			changed, err = updateDNS(ctx, dc, job.Domain, "A", job.IPv4, job.Records, job.ZoneID, job.ZoneName, cache)
 		}
@@ -194,7 +194,7 @@ func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdate
 		case ProviderCloudflare:
 			changed, err = updateCloudflareDNS(ctx, dc, job.Domain, "AAAA", job.IPv6, job.Records, job.ZoneID)
 		case ProviderIPv64:
-			changed, err = updateIPv64DNS(ctx, dc, job.Domain, "AAAA", job.IPv6)
+			changed, err = updateIPv64DNS(ctx, job.Domain, "AAAA", job.IPv6)
 		default:
 			changed, err = updateDNS(ctx, dc, job.Domain, "AAAA", job.IPv6, job.Records, job.ZoneID, job.ZoneName, cache)
 		}
