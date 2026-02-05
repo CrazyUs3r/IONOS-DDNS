@@ -14,7 +14,7 @@
 
 <br />
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/crazyus3r/ionos-ddns/v2)](https://goreportcard.com/report/github.com/crazyus3r/ionos-ddns/v2)
+[![Go Report Card](https://goreportcard.com/badge/github.com/CrazyUs3r/IONOS-DDNS/v2)](https://goreportcard.com/report/github.com/CrazyUs3r/IONOS-DDNS/v2)
 
 Ein hochperformanter, in Go geschriebener Dynamic DNS Client für IONOS. Optimiert für moderne Dual-Stack Anschlüsse (IPv4 & IPv6) mit integriertem Web-Dashboard.
 
