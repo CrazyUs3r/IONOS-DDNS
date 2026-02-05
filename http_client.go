@@ -120,8 +120,8 @@ func getHTTPClient() *http.Client {
 			maxConnsPerHost *= multiplier
 
 			debugLog("HTTP", "", fmt.Sprintf(
-				"🔧 HTTP Pool erweitert: %d Domains → MaxConns=%d, IdlePerHost=%d",
-				domainCount, maxConnsPerHost, maxIdleConnsPerHost,
+				"🔧 %s %d Domains → MaxConns=%d, IdlePerHost=%d",
+				T.HttpPool, domainCount, maxConnsPerHost, maxIdleConnsPerHost,
 			))
 		}
 

@@ -216,5 +216,6 @@ func setDefaultPhrases() {
 		JsonParseError:           "Error parsing JSON: %v",
 		LanguageLoaded:           "Language file loaded: %s (%d translations)",
 		MissingTranslationKey:    "Missing translation key: %s",
+		HttpPool:                 "HTTP Pool expanded:",
 	}
 }

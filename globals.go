@@ -230,7 +230,7 @@ type Phrases struct {
 	DomainStatus, Provider, LastChanged, Ipv4Label, Ipv6Label, CriticalApiError   string
 	PanicLoadingLanguage, TryingLoadLanguage, LanguageFileNotFound                string
 	TryingFallbackEn, UsingBuiltinDefaults, JsonParseError, LanguageLoaded        string
-	MissingTranslationKey                                                         string
+	MissingTranslationKey, HttpPool                                               string
 
 	// Statistiken & Metriken
 	Requests, SuccessRate, LastSuccess, AvgLatency, Errors, HourlyLimit       string
