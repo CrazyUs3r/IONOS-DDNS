@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -26,8 +25,6 @@ func main() {
 			os.Exit(1)
 		}
 	}()
-
-	rand.Seed(time.Now().UnixNano())
 
 	configDir = os.Getenv("CONFIG_DIR")
 	if configDir == "" {
