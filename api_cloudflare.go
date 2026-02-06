@@ -14,7 +14,6 @@ import (
 // ============================================================================
 // API - CLOUDFLARE
 // ============================================================================
-
 func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint string, body interface{}) ([]byte, error) {
 	url := cloudflareAPIBase + endpoint
 
