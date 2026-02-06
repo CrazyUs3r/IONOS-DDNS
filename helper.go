@@ -82,7 +82,7 @@ func recordNameFromFQDN(fqdn, zone string) string {
 }
 
 func isNonRecoverableError(err error) bool {
-
+    var apiErr *APIError
 	if errors.As(err, &apiErr) {
 		switch apiErr.StatusCode {
 		case 401, 403, 404:
@@ -110,7 +110,8 @@ func loadIONOSZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to load ionos zones: %w", err)
 	}
-
+	
+    var zones []Zone
 	if err := json.Unmarshal(data, &zones); err != nil {
 		return nil, fmt.Errorf("failed to parse ionos zones: %w", err)
 	}
