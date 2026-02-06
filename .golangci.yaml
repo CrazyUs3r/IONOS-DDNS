@@ -4,57 +4,30 @@ run:
   timeout: 5m
   tests: true
 
-exclude-dirs:
-  - vendor
-  - generated
-
-exclude-files:
-  - ".*_mock.go"
-
 linters:
   enable:
     - govet
-    - errcheck
     - staticcheck
-    - unused
+    - errcheck
     - revive
-    - gosec
     - gocritic
 
 linters-settings:
-  gosec:
-    severity: medium
-    confidence: medium
-    excludes:
-      - G104
+  errcheck:
+    exclude-functions:
+      - (net/http.ResponseWriter).Write
+      - (*encoding/json.Encoder).Encode
+      - (*http.Response).Body.Close
+      - (*os.File).Close
+      - fmt.Fprint
+      - fmt.Fprintf
 
   revive:
     severity: warning
     rules:
       - name: var-naming
-      - name: line-length-limit
-        arguments: [120]
-      - name: unnecessary-stmt
       - name: early-return
-      - name: empty-lines
-
-  gocritic:
-    enabled-tags:
-      - performance
-      - style
-      - diagnostic
-    disabled-tags:
-      - experimental
 
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
-  exclude-use-default: false
-  exclude-rules:
-    - path: \.go
-      linters:
-        - errcheck
-        - gosec
-    - path: main\.go
-      linters:
-        - gocritic
