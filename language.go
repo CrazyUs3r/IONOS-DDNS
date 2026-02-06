@@ -217,5 +217,8 @@ func setDefaultPhrases() {
 		LanguageLoaded:           "Language file loaded: %s (%d translations)",
 		MissingTranslationKey:    "Missing translation key: %s",
 		HttpPool:                 "HTTP Pool expanded:",
+		HourlyLimitEst:           "HOURLY LIMIT (EST.)",
+		RequestsLabel:            "Requests",
+		UsageLast60Min:           "Based on requests from the last 60 minutes",
 	}
 }
