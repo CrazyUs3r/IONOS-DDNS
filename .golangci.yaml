@@ -1,26 +1,31 @@
 run:
   timeout: 5m
   tests: true
-  skip-dirs:
-    - vendor
-    - generated
-  skip-files:
-    - ".*_mock.go"
+
+exclude-dirs:
+  - vendor
+  - generated
+
+exclude-files:
+  - ".*_mock.go"
+
 linters:
   enable:
     - govet
     - errcheck
     - staticcheck
     - unused
-    - deadcode
-    - structcheck
-    - varcheck
+    - revive
+    - gosec
+    - gocritic
+
 linters-settings:
   gosec:
     severity: medium
     confidence: medium
     excludes:
       - G104
+
   revive:
     severity: warning
     rules:
@@ -30,6 +35,7 @@ linters-settings:
       - name: unnecessary-stmt
       - name: early-return
       - name: empty-lines
+
   gocritic:
     enabled-tags:
       - performance
@@ -37,6 +43,7 @@ linters-settings:
       - diagnostic
     disabled-tags:
       - experimental
+
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
