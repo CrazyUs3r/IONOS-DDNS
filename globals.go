@@ -65,7 +65,6 @@ var (
 	logWriteQueue = make(chan LogEntry, 100)
 
 	translations map[string]string
-	result       []rune
 
 	activeUpdates atomic.Int32
 
