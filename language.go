@@ -36,6 +36,7 @@ func loadLanguage(lang string) error {
 		return nil
 	}
 
+	var translations map[string]string
 	if err := json.Unmarshal(data, &translations); err != nil {
 		fmt.Printf("[ERROR] %s: %v\n", T.JsonParseError, err)
 
