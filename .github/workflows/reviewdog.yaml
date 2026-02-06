@@ -19,7 +19,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
 
       - run: go mod download
 
@@ -31,5 +31,5 @@ jobs:
           filter_mode: nofilter
           level: error
           fail_level: error
-          golangci_lint_version: latest
+          golangci_lint_version: v2.8.0
           golangci_lint_flags: "--timeout=5m ./..."
