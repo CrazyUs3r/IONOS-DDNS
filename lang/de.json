@@ -132,7 +132,7 @@
   "language_loaded": "Sprachdatei geladen: %s (%d Übersetzungen)",
   "missing_translation_key": "Fehlender Übersetzungsschlüssel: %s",
   "http_pool": "HTTP Pool erweitert:",
-  "hourly_limitEst": "STÜNDLICHES LIMIT (EST.)",
+  "hourly_limit_est": "STÜNDLICHES LIMIT (EST.)",
   "requests_label": "Anfragen",
   "usage_last60_min": "Basierend auf Requests der letzten 60 Minuten"
 }
