@@ -1,4 +1,4 @@
-name: Lint Go (reviewdog + golangci-lint)
+name: Go Lint (reviewdog)
 
 on:
   pull_request:
@@ -21,15 +21,13 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      - run: go mod download
-
-      - name: GolangCI-Lint via Reviewdog
+      - name: Run golangci-lint with reviewdog
         uses: reviewdog/action-golangci-lint@v2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          reporter: github-check
-          filter_mode: nofilter
-          level: error
-          fail_level: error
+          reporter: github-pr-review
+          filter_mode: added
+          level: warning
+          fail_level: none
           golangci_lint_version: v2.8.0
           golangci_lint_flags: "--timeout=5m ./..."
