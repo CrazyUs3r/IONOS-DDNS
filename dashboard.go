@@ -1318,6 +1318,7 @@ func createMux() *http.ServeMux {
 					<button class="filter-btn" data-filter="STOP" onclick="filterLogs('STOP')">Stop</button>
 					<button class="filter-btn" data-filter="CREATE" onclick="filterLogs('CREATE')">Created</button>
 					<button class="filter-btn" data-filter="CLEANUP" onclick="filterLogs('CLEANUP')">Cleanup</button>
+					<button class="filter-btn" data-filter="SKIP" onclick="filterLogs('SKIP')">Skip</button>
 				</div>
 			<div id="logContainer" style="max-height: 300px; overflow-y: auto; font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 13px; padding-right: 5px;">
 			`, T.SystemEvents, len(logs))

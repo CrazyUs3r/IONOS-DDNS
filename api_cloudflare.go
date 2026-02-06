@@ -208,6 +208,7 @@ func loadCloudflareRecords(ctx context.Context, dc *DomainConfig, zoneID string)
 			Name:    r.Name,
 			Type:    r.Type,
 			Content: r.Content,
+			Comment: r.Comment,
 		}
 	}
 
@@ -217,13 +218,13 @@ func loadCloudflareRecords(ctx context.Context, dc *DomainConfig, zoneID string)
 // ============================================================================
 // DNS LOGIC - CLOUDFLARE
 // ============================================================================
-
 func updateCloudflareDNS(ctx context.Context, dc *DomainConfig, fqdn, recordType, newIP string,
 	records []Record, zoneID string) (bool, error) {
 
 	var existing *Record
 	for i := range records {
-		if records[i].Name == fqdn && records[i].Type == recordType {
+		if strings.EqualFold(strings.TrimSuffix(records[i].Name, "."), strings.TrimSuffix(fqdn, ".")) &&
+			records[i].Type == recordType {
 			existing = &records[i]
 			break
 		}
@@ -234,6 +235,20 @@ func updateCloudflareDNS(ctx context.Context, dc *DomainConfig, fqdn, recordType
 			T.RecordCurrent, recordType, newIP))
 		writeLog("CURRENT", ActionCurrent, fqdn,
 			fmt.Sprintf("%-4s %s %s", recordType, newIP, T.Current))
+		return false, nil
+	}
+
+	if existing != nil && strings.TrimSpace(existing.Comment) != cfManagedComment {
+		msg := fmt.Sprintf("⚠️ Cloudflare %s-Record existiert, aber ist nicht 'managed' (comment=%q). Überspringe Update.",
+			recordType, strings.TrimSpace(existing.Comment))
+
+		debugLog("DNS-LOGIC", fqdn, msg)
+		log(LogContext{
+			Level:   LogWarn,
+			Action:  ActionSkip,
+			Domain:  fqdn,
+			Message: msg,
+		})
 		return false, nil
 	}
 
@@ -253,6 +268,7 @@ func updateCloudflareDNS(ctx context.Context, dc *DomainConfig, fqdn, recordType
 		"content": newIP,
 		"ttl":     60,
 		"proxied": false,
+		"comment": cfManagedComment,
 	}
 
 	var endpoint string
@@ -282,4 +298,94 @@ func updateCloudflareDNS(ctx context.Context, dc *DomainConfig, fqdn, recordType
 	})
 
 	return true, nil
+}
+
+// ============================================================================
+// CLEANUP - CLOUDFLARE
+// ============================================================================
+
+func cleanupCloudflareRecords(ctx context.Context, zones []Zone, recordCache *ZoneRecordCache) {
+	var cfDC *DomainConfig
+	for i := range cfg.DomainConfigs {
+		if cfg.DomainConfigs[i].Provider == ProviderCloudflare {
+			cfDC = &cfg.DomainConfigs[i]
+			break
+		}
+	}
+	if cfDC == nil {
+		return
+	}
+
+	debugLog("MAINTENANCE", "", "🧹 Starte Bereinigung verwaister Cloudflare DNS-Records...")
+
+	configDomains := make(map[string]struct{})
+	for _, dc := range cfg.DomainConfigs {
+		if dc.Provider != ProviderCloudflare {
+			continue
+		}
+		fqdn := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(dc.FQDN), "."))
+		if fqdn != "" {
+			configDomains[fqdn] = struct{}{}
+		}
+	}
+
+	for _, zone := range zones {
+		records, exists := recordCache.Get(zone.ID)
+		if !exists {
+			continue
+		}
+
+		zoneName := strings.ToLower(strings.TrimSuffix(zone.Name, "."))
+
+		for _, rec := range records {
+			if rec.Type != "A" && rec.Type != "AAAA" {
+				continue
+			}
+
+			if strings.TrimSpace(rec.Comment) != cfManagedComment {
+				continue
+			}
+
+			fqdn := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(rec.Name), "."))
+			if fqdn == "" {
+				continue
+			}
+
+			if fqdn != zoneName && !strings.HasSuffix(fqdn, "."+zoneName) {
+				continue
+			}
+
+			if _, ok := configDomains[fqdn]; ok {
+				continue
+			}
+
+			debugLog(
+				"MAINTENANCE",
+				fqdn,
+				fmt.Sprintf("🗑️ Entferne verwaisten %s Record (ID: %s) in Zone %s", rec.Type, rec.ID, zone.Name),
+			)
+
+			if cfg.DryRun {
+				log(LogContext{
+					Level:   LogInfo,
+					Action:  ActionCleanup,
+					Domain:  fqdn,
+					Message: "⚠️ Dry-Run: Record wäre gelöscht worden",
+				})
+				continue
+			}
+
+			endpoint := fmt.Sprintf("/zones/%s/dns_records/%s", zone.ID, rec.ID)
+			if _, err := cloudflareAPI(ctx, cfDC, "DELETE", endpoint, nil); err != nil {
+				debugLog("MAINTENANCE", fqdn, fmt.Sprintf("❌ Fehler beim Löschen: %v", err))
+			} else {
+				log(LogContext{
+					Level:   LogInfo,
+					Action:  ActionCleanup,
+					Domain:  fqdn,
+					Message: fmt.Sprintf("✅ %s Record entfernt (nicht mehr konfiguriert)", rec.Type),
+				})
+			}
+		}
+	}
 }

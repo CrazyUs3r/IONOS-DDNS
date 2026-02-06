@@ -114,6 +114,7 @@ const (
 	ActionZone    = "ZONE"
 	ActionDryRun  = "DRY-RUN"
 	ActionCleanup = "CLEANUP"
+	ActionSkip    = "SKIP"
 )
 
 var persistentActions = map[string]bool{
@@ -126,6 +127,7 @@ var persistentActions = map[string]bool{
 	ActionConfig:  true,
 	ActionZone:    true,
 	ActionCleanup: true,
+	ActionSkip:    true,
 }
 
 // ============================================================================
@@ -203,6 +205,7 @@ const (
 	IPCheckBodyMaxBytes   = 1024
 	MaxStatusHistoryItems = 20
 	TriggerTokenHeader    = "X-Trigger-Token"
+	cfManagedComment      = "Go-DynDNS/2.0"
 )
 
 // ============================================================================
@@ -351,6 +354,7 @@ type Record struct {
 	Name    string `json:"name"`
 	Type    string `json:"type"`
 	Content string `json:"content"`
+	Comment string `json:"comment"`
 }
 
 type DNSRecord struct {
@@ -373,6 +377,7 @@ type CloudflareRecord struct {
 	Content string `json:"content"`
 	TTL     int    `json:"ttl"`
 	Proxied bool   `json:"proxied"`
+	Comment string `json:"comment"`
 }
 
 type CloudflareResponse struct {

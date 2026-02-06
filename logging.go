@@ -104,7 +104,7 @@ func shouldPersistLevel(level LogLevel, action string) bool {
 	}
 
 	switch action {
-	case ActionStart, ActionStop, ActionUpdate, ActionCreate, ActionCleanup:
+	case ActionStart, ActionStop, ActionUpdate, ActionCreate, ActionCleanup, ActionSkip:
 		return true
 	}
 	return false
@@ -184,7 +184,6 @@ func debugLog(category, domain, msg string) {
 // ============================================================================
 // LOG ROTATION
 // ============================================================================
-
 func startLogWriter() {
 	go func() {
 		defer func() {

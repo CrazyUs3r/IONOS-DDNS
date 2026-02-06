@@ -10,7 +10,6 @@ import (
 // ============================================================================
 // UPDATE ORCHESTRATION
 // ============================================================================
-
 func runUpdate(firstRun bool) {
 	activeUpdates.Add(1)
 	defer activeUpdates.Add(-1)
@@ -72,6 +71,10 @@ func runUpdate(firstRun bool) {
 		switch pType {
 		case ProviderIONOS:
 			cleanupIONOSRecords(ctx, zones, cache)
+
+		case ProviderCloudflare:
+			cleanupCloudflareRecords(ctx, zones, cache)
+
 		case ProviderIPv64:
 			ipv64Configured := make(map[string]bool)
 			var ipv64Config *DomainConfig
