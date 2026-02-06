@@ -124,7 +124,7 @@
   "using_default_mode": "Używam domyślnego trybu",
   "critical_api_error": "KRYTYCZNY BŁĄD API",
   "http_pool": "Rozszerzono pulę HTTP:",
-  "hourly_limitEst": "LIMIT GODZINOWY (SZAC.)",
+  "hourly_limit_est": "LIMIT GODZINOWY (SZAC.)",
   "requests_label": "Upraszanie",
   "usage_last60_min": "Na podstawie próśb z ostatnich 60 minut"
 }
