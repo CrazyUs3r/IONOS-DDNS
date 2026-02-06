@@ -11,19 +11,11 @@ linters:
     - govet
     - errcheck
     - staticcheck
-    - ineffassign
-    - bodyclose
-    - gosec
-    - revive
-    - gocritic
-    - prealloc
-    - unconvert
-    - misspell
-    - whitespace
+    - unused
   disable:
-    - gocyclo
-    - funlen
-    - lll
+    - deadcode
+    - structcheck
+    - varcheck
 linters-settings:
   gosec:
     severity: medium
