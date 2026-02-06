@@ -123,5 +123,8 @@
   "invalid_ip_mode": "Mode IP invalide: %s",
   "using_default_mode": "Utilisation du mode par défaut",
   "critical_api_error": "ERREUR CRITIQUE DE L'API",
-  "http_pool": "Pool HTTP étendu:"
+  "http_pool": "Pool HTTP étendu:",
+  "hourly_limitEst": "LIMITE HORAIRE (EST.)",
+  "requests_label": "Demandes",
+  "usage_last60_min": "Basierend auf Requests der letzten 60 Minuten"
 }

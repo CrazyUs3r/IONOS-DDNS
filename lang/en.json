@@ -131,5 +131,8 @@
 	"json_parse_error": "Error parsing JSON: %v",
 	"language_loaded": "Language file loaded: %s (%d translations)",
 	"missing_translation_key": "Missing translation key: %s",
-  "http_pool": "HTTP Pool expanded:"
+  "http_pool": "HTTP Pool expanded:",
+  "hourly_limitEst": "HOURLY LIMIT (EST.)",
+  "requests_label": "Requests",
+  "usage_last60_min": "Based on requests from the last 60 minutes"
 }

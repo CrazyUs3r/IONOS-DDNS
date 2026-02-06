@@ -123,5 +123,8 @@
   "invalid_ip_mode": "Modo IP inválido: %s",
   "using_default_mode": "Usando modo predeterminado",
   "critical_api_error": "ERROR CRÍTICO DE API",
-  "http_pool": "Grupo HTTP ampliado:"
+  "http_pool": "Grupo HTTP ampliado:",
+  "hourly_limitEst": "LÍMITE HORARIO (EST.)",
+  "requests_label": "Solicitudes",
+  "usage_last60_min": "D'après les demandes des 60 dernières minutes"
 }
