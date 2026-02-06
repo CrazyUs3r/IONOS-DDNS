@@ -64,9 +64,17 @@ var (
 	rotationQueue = make(chan rotationJob, 1)
 	logWriteQueue = make(chan LogEntry, 100)
 
+	translations map[string]string
+	result       []rune
+
 	activeUpdates atomic.Int32
 
 	lastSuccessfulDNS int32 = 0
+
+	apiErr  *APIError
+	zones   []Zone
+	lastErr error
+	b       strings.Builder
 
 	providerCache = &ProviderDataCache{
 		ionosRecords: make(map[string][]Record),

@@ -20,11 +20,11 @@ func loadLanguage(lang string) error {
 	}()
 
 	langFile := filepath.Join(langDir, lang+".json")
-	fmt.Printf("[INFO] %s: %s\n", T.TryingLoadLanguage, langFile)
+	fmt.Printf("[INFO] %s %s\n", T.TryingLoadLanguage, langFile)
 
 	data, err := os.ReadFile(langFile)
 	if err != nil {
-		fmt.Printf("[WARN] %s: %v\n", T.LanguageFileNotFound, err)
+		fmt.Printf("[WARN] %s %v\n", T.LanguageFileNotFound, err)
 
 		if lang != "en" {
 			fmt.Printf("[INFO] %s\n", T.TryingFallbackEn)
@@ -36,7 +36,6 @@ func loadLanguage(lang string) error {
 		return nil
 	}
 
-	var translations map[string]string
 	if err := json.Unmarshal(data, &translations); err != nil {
 		fmt.Printf("[ERROR] %s: %v\n", T.JsonParseError, err)
 
@@ -47,7 +46,7 @@ func loadLanguage(lang string) error {
 		return nil
 	}
 
-	fmt.Printf("[INFO] ✓ %s: %s (%d)\n", T.LanguageLoaded, lang, len(translations))
+	fmt.Printf("[INFO] ✓ "+T.LanguageLoaded+"\n", lang, len(translations))
 
 	requiredKeys := []string{"startup", "shutdown", "no_zones", "update"}
 	for _, key := range requiredKeys {
@@ -72,7 +71,6 @@ func loadLanguage(lang string) error {
 }
 
 func toSnakeCase(s string) string {
-	var result []rune
 	for i, r := range s {
 		if i > 0 && unicode.IsUpper(r) {
 			result = append(result, '_')
@@ -209,8 +207,8 @@ func setDefaultPhrases() {
 		UsingDefaultMode:         "Using default mode",
 		CriticalApiError:         "CRITICAL API ERROR",
 		PanicLoadingLanguage:     "Panic while loading language: %v",
-		TryingLoadLanguage:       "Trying to load language file: %s",
-		LanguageFileNotFound:     "Language file not found: %v",
+		TryingLoadLanguage:       "Trying to load language file:",
+		LanguageFileNotFound:     "Language file not found:",
 		TryingFallbackEn:         "Trying fallback to EN...",
 		UsingBuiltinDefaults:     "Using built-in default translations",
 		JsonParseError:           "Error parsing JSON: %v",

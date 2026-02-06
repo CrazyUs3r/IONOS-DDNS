@@ -131,7 +131,6 @@ func getHTTPClient() *http.Client {
 			Resolver: &net.Resolver{
 				PreferGo: true,
 				Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-					var lastErr error
 					startIndex := int(atomic.LoadInt32(&lastSuccessfulDNS))
 
 					for i := 0; i < len(dnsList); i++ {
@@ -253,7 +252,6 @@ func sanitizeID(s string) string {
 		return "x"
 	}
 
-	var b strings.Builder
 	b.Grow(len(s))
 
 	for _, r := range s {
