@@ -1,0 +1,60 @@
+run:
+  timeout: 5m
+  tests: true
+  skip-dirs:
+    - vendor
+    - generated
+  skip-files:
+    - ".*_mock.go"
+linters:
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - ineffassign
+    - bodyclose
+    - gosec
+    - revive
+    - gocritic
+    - prealloc
+    - unconvert
+    - misspell
+    - whitespace
+  disable:
+    - gocyclo
+    - funlen
+    - lll
+linters-settings:
+  gosec:
+    severity: medium
+    confidence: medium
+    excludes:
+      - G104
+  revive:
+    severity: warning
+    rules:
+      - name: var-naming
+      - name: line-length-limit
+        arguments: [120]
+      - name: unnecessary-stmt
+      - name: early-return
+      - name: empty-lines
+  gocritic:
+    enabled-tags:
+      - performance
+      - style
+      - diagnostic
+    disabled-tags:
+      - experimental
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-use-default: false
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosec
+    - path: main\.go
+      linters:
+        - gocritic
