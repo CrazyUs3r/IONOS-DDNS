@@ -781,7 +781,8 @@ func createMux() *http.ServeMux {
 
 	mux.HandleFunc("/api/trigger", func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, 1024)
-		if r.Method != "POST" {
+
+		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
@@ -791,10 +792,12 @@ func createMux() *http.ServeMux {
 		if !validateTriggerToken(r) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
-			json.NewEncoder(w).Encode(map[string]string{
+			if err := json.NewEncoder(w).Encode(map[string]string{
 				"error": "invalid or missing trigger token",
-			})
-
+			}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 			debugLog("API", clientIP, "Trigger blocked: Invalid token")
 			return
 		}
@@ -803,11 +806,13 @@ func createMux() *http.ServeMux {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Retry-After", "10")
 			w.WriteHeader(http.StatusTooManyRequests)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			if err := json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":               "global rate limit exceeded",
 				"retry_after_seconds": 10,
-			})
-
+			}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 			debugLog("API", clientIP, "Trigger blocked: Global rate limit")
 			return
 		}
@@ -815,17 +820,18 @@ func createMux() *http.ServeMux {
 		ipLimiter := ipTriggerLimiter.GetLimiter(clientIP)
 		if !ipLimiter.Allow() {
 			remaining := ipLimiter.Remaining()
-
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Retry-After", "10")
 			w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
 			w.WriteHeader(http.StatusTooManyRequests)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			if err := json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":               "IP rate limit exceeded",
 				"retry_after_seconds": 10,
 				"remaining":           remaining,
-			})
-
+			}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 			debugLog("API", clientIP, "Trigger blocked: IP rate limit")
 			return
 		}
@@ -833,32 +839,35 @@ func createMux() *http.ServeMux {
 		if !updateInProgress.CompareAndSwap(false, true) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusConflict)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			if err := json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":  "update already in progress",
 				"status": "busy",
-			})
-
+			}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 			debugLog("API", clientIP, "Trigger blocked: Update already running")
 			return
 		}
 
 		go func() {
 			defer updateInProgress.Store(false)
-
 			debugLog("API", clientIP, "Manual update triggered")
 			runUpdate(false)
 		}()
 
 		remaining := ipLimiter.Remaining()
-
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
 		w.WriteHeader(http.StatusAccepted)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
 			"status":               "triggered",
 			"message":              "update started",
 			"rate_limit_remaining": remaining,
-		})
+		}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	})
 
 	mux.HandleFunc("/api/trigger/status", func(w http.ResponseWriter, r *http.Request) {
@@ -866,12 +875,15 @@ func createMux() *http.ServeMux {
 		ipLimiter := ipTriggerLimiter.GetLimiter(clientIP)
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
 			"ip":                 clientIP,
 			"remaining_requests": ipLimiter.Remaining(),
 			"update_in_progress": updateInProgress.Load(),
 			"global_limit":       globalTriggerLimiter.Remaining(),
-		})
+		}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	})
 
 	mux.HandleFunc("/api/export", func(w http.ResponseWriter, r *http.Request) {
