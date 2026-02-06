@@ -897,8 +897,9 @@ func createMux() *http.ServeMux {
 
 		if b, err := os.ReadFile(updatePath); err == nil {
 			var domains map[string]DomainHistory
-			json.Unmarshal(b, &domains)
-			exportData["domains"] = domains
+			if err := json.Unmarshal(b, &domains); err == nil {
+				exportData["domains"] = domains
+			}
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -906,17 +907,15 @@ func createMux() *http.ServeMux {
 
 		encoder := json.NewEncoder(w)
 		encoder.SetIndent("", "  ")
-		encoder.Encode(exportData)
+		if err := encoder.Encode(exportData); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	})
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		isHealthy := lastOk.Load()
 		stats := apiMetrics.GetStats()
-
-		if successTime, ok := stats["last_success_time"].(string); ok {
-			if successTime != "" {
-			}
-		}
 
 		var total int64
 		switch v := stats["total_requests"].(type) {
@@ -927,39 +926,48 @@ func createMux() *http.ServeMux {
 		case float64:
 			total = int64(v)
 		}
-		if total > 10 {
-			successRateStr, _ := stats["success_rate"].(string)
-			var rate float64
-			fmt.Sscanf(successRateStr, "%f%%", &rate)
 
-			if rate < 50.0 {
-				isHealthy = false
+		if total > 10 {
+			if successRateStr, ok := stats["success_rate"].(string); ok {
+				var rate float64
+				if _, err := fmt.Sscanf(successRateStr, "%f%%", &rate); err == nil {
+					if rate < 50.0 {
+						isHealthy = false
+					}
+				}
 			}
 		}
 
 		if !isHealthy {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusServiceUnavailable)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			if err := json.NewEncoder(w).Encode(map[string]interface{}{
 				"status":      "unhealthy",
 				"reason":      "high error rate or no recent success",
 				"api_metrics": stats,
-			})
+			}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
 			return
 		}
 
 		if r.URL.Query().Get("detailed") == "true" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			if err := json.NewEncoder(w).Encode(map[string]interface{}{
 				"status":      "healthy",
 				"api_metrics": stats,
-			})
+			}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
 			return
 		}
 
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		if _, err := w.Write([]byte("OK")); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	})
 
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
