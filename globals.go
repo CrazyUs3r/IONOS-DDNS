@@ -68,11 +68,6 @@ var (
 
 	lastSuccessfulDNS int32 = 0
 
-	apiErr  *APIError
-	zones   []Zone
-	lastErr error
-	b       strings.Builder
-
 	providerCache = &ProviderDataCache{
 		ionosRecords: make(map[string][]Record),
 		ipv64Records: make(map[string]IPv64Domain),
