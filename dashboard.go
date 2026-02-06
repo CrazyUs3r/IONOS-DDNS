@@ -699,6 +699,64 @@ func metricsBroadcasterLoop() {
 func createMux() *http.ServeMux {
 	mux := http.NewServeMux()
 
+	mux.HandleFunc("/favicon.svg", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+
+		theme := q.Get("theme")
+		level := q.Get("level") // ok|warn|err
+		blink := q.Get("blink") == "1"
+
+		bg := "#1e293b" // dark
+		textColor := "white"
+		if theme == "light" {
+			bg = "#f8fafc"
+			textColor = "#0f172a"
+		}
+
+		// Ampel-Farben
+		statusColor := "#22c55e" // ok grün
+		symbol := "✓"
+		switch level {
+		case "warn":
+			statusColor = "#facc15" // gelb
+			symbol = "!"
+		case "err":
+			statusColor = "#ef4444" // rot
+			symbol = "✕"
+		}
+
+		// Blink: wir machen den Badge bei blink=1 transparent -> Frame-Wechsel wirkt wie Blinken
+		badgeOpacity := "1"
+		if blink && level == "err" {
+			badgeOpacity = "0"
+		}
+
+		svg := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+	<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+	<rect width="64" height="64" rx="14" fill="%s"/>
+
+	<!-- Main icon -->
+	<text x="32" y="40" text-anchor="middle" font-size="32"
+			font-family="Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji">🌐</text>
+
+	<!-- Status badge (Ampel) -->
+	<g opacity="%s">
+		<circle cx="48" cy="48" r="10" fill="%s"/>
+		<text x="48" y="52" text-anchor="middle" font-size="14" font-weight="800"
+			fill="white" font-family="system-ui">%s</text>
+	</g>
+
+	<!-- Optional tiny label for theme readability -->
+	<circle cx="14" cy="14" r="4" fill="%s" opacity="0.35"/>
+	</svg>`, bg, badgeOpacity, statusColor, symbol, textColor)
+
+		w.Header().Set("Content-Type", "image/svg+xml; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
+		_, _ = w.Write([]byte(svg))
+	})
+
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -928,6 +986,7 @@ func createMux() *http.ServeMux {
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<title>`+html.EscapeString(T.DashTitle)+`</title>
+		<link id="favicon" rel="icon" type="image/svg+xml" href="/favicon.svg?theme=dark">
 		<style>
 		* {box-sizing: border-box; margin: 0; padding: 0;}
 
@@ -1199,20 +1258,32 @@ func createMux() *http.ServeMux {
 			<summary>📊 %s </summary>
 			<div class="card-content">
 				<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-top: 10px;">
-					<div><strong>`+T.TotalRequests+`:</strong> %v</div>
-					<div><strong>`+T.SuccessRate+`:</strong> <span style="color:var(--success)">%v</span></div>
-					<div><strong>`+T.AvgLatency+`:</strong> %v</div>
-					<div><strong>`+T.Errors+`:</strong> %v / %v</div>
+					<div><strong>`+T.TotalRequests+`:</strong> <span id="mTotal">%v</span></div>
+					<div><strong>`+T.SuccessRate+`:</strong> <span id="mSuccess" style="color:var(--success)">%v</span></div>
+					<div><strong>`+T.AvgLatency+`:</strong> <span id="mLatency">%v</span></div>
+					<div><strong>`+T.Errors+`:</strong> <span id="mErrors">%v / %v</span></div>
 				</div>
-                <div style="margin-top: 20px;">
-                    <div style="display: flex; justify-content: space-between; font-size: 0.7rem; color: #94a3b8; margin-bottom: 4px;">
-                        <span>STÜNDLICHES LIMIT (EST.)</span>
-                        <span>%v / %v Requests</span> </div>
-                    <div style="width: 100%%; background: #334155; height: 8px; border-radius: 4px; overflow: hidden;">
-                        <div style="width: %s%%; height: 100%%; background: %s; transition: width 0.5s ease;"></div>
-                    </div>
-                    <div style="font-size: 0.65rem; color: #64748b; margin-top: 4px;">Basierend auf Requests der letzten 60 Minuten</div>
-                </div>
+				<div style="margin-top: 20px;">
+					<div style="display: flex; justify-content: space-between; align-items: baseline;
+								font-size: 0.7rem; color: #94a3b8; margin-bottom: 6px;">
+						<span style="letter-spacing: 0.04em;">`+T.HourlyLimitEst+`</span>
+						<span id="mUsage" style="font-weight: 600; color: var(--text);">
+							%v / %v `+T.RequestsLabel+`
+						</span>
+					</div>
+
+					<div style="width: 100%%; background: #334155; height: 8px;
+								border-radius: 999px; overflow: hidden;">
+						<div id="mUsageBar"
+							style="width: %s%%; height: 100%%; background: %s;
+									transition: width 0.5s ease;">
+						</div>
+					</div>
+
+					<div style="font-size: 0.65rem; color: #64748b; margin-top: 6px;">
+						`+T.UsageLast60Min+`
+					</div>
+				</div>
             </div>
 		</details>
 		
@@ -1415,27 +1486,132 @@ func createMux() *http.ServeMux {
 
 		fmt.Fprint(w, `
 	<script>
+	let blinkTimer = null;
+	let currentLevel = 'ok';
+
+	function faviconHref(theme, level, blink) {
+	return '/favicon.svg?theme=' + encodeURIComponent(theme) +
+			'&level=' + encodeURIComponent(level) +
+			'&blink=' + (blink ? '1' : '0') +
+			'&v=' + Date.now();
+	}
+
+	function applyFavicon(theme, level, blink) {
+	const fav = document.getElementById('favicon');
+	if (!fav) return;
+	fav.href = faviconHref(theme, level, blink);
+	}
+
+	function setBlinking(theme, level) {
+	if (blinkTimer) {
+		clearInterval(blinkTimer);
+		blinkTimer = null;
+	}
+	if (level !== 'err') return;
+
+	let on = false;
+	blinkTimer = setInterval(() => {
+		on = !on;
+		applyFavicon(theme, 'err', on);
+	}, 700);
+	}
+
+	function parseDurationToMs(s) {
+	s = (s || '').trim().toLowerCase();
+	s = s.replace('µs', 'us');
+
+	const m = s.match(/^([0-9]+(?:\.[0-9]+)?)(ms|s|us)$/);
+	if (!m) return NaN;
+
+	const val = parseFloat(m[1]);
+	const unit = m[2];
+
+	if (unit === 'ms') return val;
+	if (unit === 's') return val * 1000;
+	if (unit === 'us') return val / 1000;
+	return NaN;
+	}
+
+	function toNum(v, fallback = 0) {
+		if (v == null) return fallback;
+		if (typeof v === "number") return v;
+		const s = String(v).replace(",", ".").replace("%", "").trim();
+		const n = Number(s);
+		return Number.isFinite(n) ? n : fallback;
+	}
+
+	function calcLevelFromMetrics(m) {
+		const total = toNum(m.total_requests, 0);
+		const successRate = toNum(m.success_rate, 100);
+
+		const clientErr = toNum(m.client_errors, 0);
+		const serverErr = toNum(m.server_errors, 0);
+		const totalErr = clientErr + serverErr;
+
+		// harte Fehlerbedingungen
+		if (totalErr > 0) return 'err';
+		if (total >= 5 && successRate <= 0) return 'err';
+		if (total >= 10 && successRate < 50) return 'err';
+
+		// Latenzbedingungen
+		const ms = parseDurationToMs(m.avg_latency);
+		if (Number.isFinite(ms)) {
+			if (ms >= 1000) return 'err';
+			if (ms >= 300) return 'warn';
+		}
+
+		// Warn bei schlechter Erfolgsrate
+		if (total >= 10 && successRate < 90) return 'warn';
+
+		return 'ok';
+	}	
+
+
+
 	function toggleTheme() {
-		const html = document.documentElement;
-		const current = html.getAttribute('data-theme') || 'dark';
-		const next = current === 'dark' ? 'light' : 'dark';
-		html.setAttribute('data-theme', next);
-		localStorage.setItem('theme', next);
-		showToast('Theme: ' + next);
+	const html = document.documentElement;
+	const current = html.getAttribute('data-theme') || 'dark';
+	const next = current === 'dark' ? 'light' : 'dark';
+	html.setAttribute('data-theme', next);
+	localStorage.setItem('theme', next);
+
+	applyFavicon(next, currentLevel, false);
+	setBlinking(next, currentLevel);
+
+	showToast('Theme: ' + next);
 	}
 
 	const savedTheme = localStorage.getItem('theme') || 'dark';
 	document.documentElement.setAttribute('data-theme', savedTheme);
 
+	let ws = null;
+	let reconnectTimer = null;
+	let reconnectDelay = 1000; // startet mit 1s, steigert sich bis max
+	const reconnectDelayMax = 10000;
+
+	function connectWS() {
 	const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
-	let ws = new WebSocket(proto + location.host + '/ws');
+	ws = new WebSocket(proto + location.host + '/ws');
+
 	ws.onmessage = (e) => {
-		const data = JSON.parse(e.data);
-		if (data.type === 'metrics') {
-				updateMetrics(data.data);
-		} else if (data.type === 'domain_update') {
-    		updateDomainDisplay(data.data);
-	 }
+		const msg = JSON.parse(e.data);
+
+		if (msg.type === 'initial' || msg.type === 'metrics') {
+		updateMetrics(msg.data);
+
+		const theme = localStorage.getItem('theme') || 'dark';
+		const level = calcLevelFromMetrics(msg.data);
+
+		currentLevel = level;
+		applyFavicon(theme, currentLevel, false);
+		setBlinking(theme, currentLevel);
+		return;
+		}
+
+		if (msg.type === 'domain_update') {
+		updateDomainDisplay(msg.data);
+		return;
+		}
 	};
 
 	ws.onerror = (err) => {
@@ -1443,13 +1619,31 @@ func createMux() *http.ServeMux {
 		showToast('WebSocket connection lost', 'error');
 	};
 
-	
 	ws.onclose = () => {
-		console.log('WebSocket closed, reconnecting in 5s...');
-		setTimeout(() => {
- 		   location.reload();
-		}, 5000);
+		console.log('WebSocket closed, reconnecting...');
+		scheduleReconnect();
 	};
+
+	// wenn verbunden -> delay zurücksetzen
+	ws.onopen = () => {
+		reconnectDelay = 1000;
+		if (reconnectTimer) {
+		clearTimeout(reconnectTimer);
+		reconnectTimer = null;
+		}
+	};
+	}
+
+	function scheduleReconnect() {
+	if (reconnectTimer) return;
+
+	reconnectTimer = setTimeout(() => {
+		reconnectTimer = null;
+		connectWS();
+	}, reconnectDelay);
+
+	reconnectDelay = Math.min(reconnectDelay * 2, reconnectDelayMax);
+	}
 
 	function sanitizeBase(s) {
 	s = (s || '').toLowerCase();
@@ -1495,8 +1689,42 @@ func createMux() *http.ServeMux {
 	showToast('✓ ' + data.domain + ' updated');
 	}
 
-	function updateMetrics(data) {
-		document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+	function updateMetrics(m) {
+		// last update time
+		const last = document.getElementById('lastUpdate');
+		if (last) last.textContent = new Date().toLocaleTimeString();
+
+		// basic metrics
+		const elTotal = document.getElementById('mTotal');
+		if (elTotal && m.total_requests != null) elTotal.textContent = m.total_requests;
+
+		const elSuccess = document.getElementById('mSuccess');
+		if (elSuccess && m.success_rate != null) elSuccess.textContent = m.success_rate;
+
+		const elLatency = document.getElementById('mLatency');
+		if (elLatency && m.avg_latency != null) elLatency.textContent = m.avg_latency;
+
+		const elErrors = document.getElementById('mErrors');
+		if (elErrors) {
+			const c = m.client_errors != null ? m.client_errors : "?";
+			const s = m.server_errors != null ? m.server_errors : "?";
+			elErrors.textContent = String(c) + " / " + String(s);
+		}
+
+		// usage / limit
+		const elUsage = document.getElementById('mUsage');
+		if (elUsage) {
+			const used = m.usage_count != null ? m.usage_count : "?";
+			const lim = m.hourly_limit != null ? m.hourly_limit : "?";
+			elUsage.textContent = String(used) + " / " + String(lim) + " Requests";
+		}
+
+		const bar = document.getElementById('mUsageBar');
+		if (bar) {
+			const p = (m.usage_percent != null) ? Number(m.usage_percent) : 0;
+			bar.style.width = String(isFinite(p) ? p : 0) + "%";
+			if (m.usage_color) bar.style.background = m.usage_color;
+		}
 	}
 
 	function filterLogs(filter) {
@@ -1605,6 +1833,17 @@ func createMux() *http.ServeMux {
 		});
 	  }
 	});
+	const theme = localStorage.getItem('theme') || 'dark';
+	const initialMetrics = {
+	avg_latency: (document.getElementById('mLatency')?.textContent || '').trim(),
+	success_rate: (document.getElementById('mSuccess')?.textContent || '').trim(),
+	client_errors: (document.getElementById('mErrors')?.textContent || '0 / 0').split('/')[0],
+	server_errors: (document.getElementById('mErrors')?.textContent || '0 / 0').split('/')[1],
+	total_requests: (document.getElementById('mTotal')?.textContent || '0').trim(),
+	};
+	currentLevel = calcLevelFromMetrics(initialMetrics);
+	applyFavicon(theme, currentLevel, false);
+	setBlinking(theme, currentLevel);
 	</script>
 	</div>
 	</body>

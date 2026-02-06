@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -33,20 +34,45 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 			}
 		}
 
-		req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(bodyBytes))
+		var bodyReader io.Reader
+		if body != nil {
+			bodyReader = bytes.NewReader(bodyBytes)
+		}
+
+		req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 		if err != nil {
 			return nil, fmt.Errorf("request creation failed: %w", err)
 		}
 
-		if dc.CFToken != "" {
-			req.Header.Set("Authorization", "Bearer "+dc.CFToken)
-		} else if dc.CFEmail != "" && dc.CFSecret != "" {
-			req.Header.Set("X-Auth-Email", dc.CFEmail)
-			req.Header.Set("X-Auth-Key", dc.CFSecret)
+		req.Header.Set("User-Agent", "Go-DynDNS/2.0")
+		req.Header.Set("Accept", "application/json")
+		if body != nil {
+			req.Header.Set("Content-Type", "application/json")
 		}
 
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("User-Agent", "Go-DynDNS/2.0")
+		if dc.CFToken != "" {
+			token := strings.TrimSpace(dc.CFToken)
+			token = strings.Trim(token, `"'`)
+			token = strings.TrimPrefix(token, "Bearer ")
+			token = strings.TrimSpace(token)
+			token = strings.Map(func(r rune) rune {
+				if r < 32 || r == 127 {
+					return -1
+				}
+				return r
+			}, token)
+
+			if token == "" {
+				return nil, fmt.Errorf("CFToken is set but empty after sanitizing")
+			}
+
+			req.Header.Set("Authorization", "Bearer "+token)
+		} else if dc.CFEmail != "" && dc.CFSecret != "" {
+			req.Header.Set("X-Auth-Email", strings.TrimSpace(dc.CFEmail))
+			req.Header.Set("X-Auth-Key", strings.TrimSpace(dc.CFSecret))
+		} else {
+			return nil, fmt.Errorf("no Cloudflare credentials configured")
+		}
 
 		res, err := getHTTPClient().Do(req)
 		duration := time.Since(start)
