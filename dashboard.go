@@ -1002,7 +1002,7 @@ func createMux() *http.ServeMux {
 		}
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprint(w, `<!DOCTYPE html><html><head>
+		_, _ = fmt.Fprint(w, `<!DOCTYPE html><html><head>
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<title>`+html.EscapeString(T.DashTitle)+`</title>
@@ -1273,7 +1273,7 @@ func createMux() *http.ServeMux {
 		chartSVG := generateSVGChart(hourlyStats)
 		latencySVG := generateLatencyChart(hourlyLat)
 
-		fmt.Fprintf(w, `
+		_, _ = fmt.Fprintf(w, `
 		<details class="card" open id="metrics-card">
 			<summary>📊 %s </summary>
 			<div class="card-content">
@@ -1325,7 +1325,7 @@ func createMux() *http.ServeMux {
 			latencySVG)
 
 		if len(logs) > 0 {
-			fmt.Fprintf(w, `
+			_, _ = fmt.Fprintf(w, `
 		<details class="card" id="logs-card">
 			<summary>🧾 %s <span style="opacity:0.6; font-size:0.9em;">(%d entries)</span></summary>
 			<div class="card-content">
@@ -1367,7 +1367,7 @@ func createMux() *http.ServeMux {
 					icon = "🆕"
 				}
 
-				fmt.Fprintf(w, `
+				_, _ = fmt.Fprintf(w, `
 				<div class="log-entry"
 					data-action="%s"
 					data-level="%s"
@@ -1397,7 +1397,7 @@ func createMux() *http.ServeMux {
 				)
 			}
 
-			fmt.Fprint(w, `
+			_, _ = fmt.Fprint(w, `
 				</div>
 			</div>
 		</details>
@@ -1412,7 +1412,7 @@ func createMux() *http.ServeMux {
 		}
 		sort.Strings(keys)
 
-		fmt.Fprint(w, `<div id="domainContainer">`)
+		_, _ = fmt.Fprint(w, `<div id="domainContainer">`)
 		for _, k := range keys {
 			var h DomainHistory
 			b, _ := json.Marshal(data[k])
@@ -1425,7 +1425,7 @@ func createMux() *http.ServeMux {
 
 			safeID := sanitizeIDWithHash(k)
 
-			fmt.Fprintf(w, `
+			_, _ = fmt.Fprintf(w, `
 		<details class="card domain-item" data-domain="%s">
 			<summary>🌐 %s <span style="opacity:0.6; font-size:0.9em;">(%s)</span></summary>
 			<div class="card-content">
@@ -1472,7 +1472,7 @@ func createMux() *http.ServeMux {
 
 			for i := len(h.IPs) - 2; i >= 0; i-- {
 				e := h.IPs[i]
-				fmt.Fprintf(w, `
+				_, _ = fmt.Fprintf(w, `
 			<tr style="border-top: 1px solid rgba(255,255,255,0.05);">
 				<td style="padding: 8px 0; vertical-align: top; opacity: 0.7; font-family: monospace;">%s</td>
 				<td style="padding: 8px 0;">
@@ -1493,19 +1493,19 @@ func createMux() *http.ServeMux {
 			}
 
 			if len(h.IPs) < 2 {
-				fmt.Fprint(w, `<tr><td colspan="2" style="text-align:center; opacity:0.5; padding: 10px;">Keine weiteren Einträge</td></tr>`)
+				_, _ = fmt.Fprint(w, `<tr><td colspan="2" style="text-align:center; opacity:0.5; padding: 10px;">Keine weiteren Einträge</td></tr>`)
 			}
 
-			fmt.Fprint(w, `
+			_, _ = fmt.Fprint(w, `
 						</tbody>
 					</table>
 				</div>
 			</div>
 		</details>`)
 		}
-		fmt.Fprint(w, `</div>`)
+		_, _ = fmt.Fprint(w, `</div>`)
 
-		fmt.Fprint(w, `
+		_, _ = fmt.Fprint(w, `
 	<script>
 	let blinkTimer = null;
 	let currentLevel = 'ok';
@@ -1865,6 +1865,7 @@ func createMux() *http.ServeMux {
 	currentLevel = calcLevelFromMetrics(initialMetrics);
 	applyFavicon(theme, currentLevel, false);
 	setBlinking(theme, currentLevel);
+	connectWS();
 	</script>
 	</div>
 	</body>
