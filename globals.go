@@ -64,8 +64,6 @@ var (
 	rotationQueue = make(chan rotationJob, 1)
 	logWriteQueue = make(chan LogEntry, 100)
 
-	translations map[string]string
-
 	activeUpdates atomic.Int32
 
 	lastSuccessfulDNS int32 = 0
