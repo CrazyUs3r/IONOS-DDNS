@@ -7,9 +7,86 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
+
+// ============================================================================
+// CACHE PERSISTENCE - CLOUDFLARE
+// ============================================================================
+
+func getCloudflareCachePath() string {
+	return filepath.Join(cfg.LogDir, "cloudflare_cache.json")
+}
+
+func saveCloudflareCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error {
+	if recordCache == nil {
+		return fmt.Errorf("recordCache is nil")
+	}
+
+	cachePath := getCloudflareCachePath()
+	
+	cache := CloudflareCache{
+		Zones:      zones,
+		Records:    make(map[string][]Record),
+		LastUpdate: time.Now(),
+	}
+
+	for _, zone := range zones {
+		if records, exists := recordCache.Get(zone.ID); exists {
+			cache.Records[zone.ID] = records
+		}
+	}
+
+	jsonData, err := json.MarshalIndent(cache, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal cache: %w", err)
+	}
+
+	tmpPath := cachePath + ".tmp"
+	if err := os.WriteFile(tmpPath, jsonData, 0644); err != nil {
+		return fmt.Errorf("failed to write cache: %w", err)
+	}
+
+	if err := os.Rename(tmpPath, cachePath); err != nil {
+		return fmt.Errorf("failed to rename cache: %w", err)
+	}
+
+	debugLog("CACHE", "", fmt.Sprintf("💾 Cloudflare Cache gespeichert (%d zones, %d records)", 
+		len(zones), len(cache.Records)))
+	return nil
+}
+
+func loadCloudflareCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
+	cachePath := getCloudflareCachePath()
+	
+	data, err := os.ReadFile(cachePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			debugLog("CACHE", "", "ℹ️ Keine Cloudflare Cache-Datei gefunden (erster Start)")
+			return nil, nil, nil
+		}
+		return nil, nil, fmt.Errorf("failed to read cache: %w", err)
+	}
+
+	var cache CloudflareCache
+	if err := json.Unmarshal(data, &cache); err != nil {
+		return nil, nil, fmt.Errorf("failed to unmarshal cache: %w", err)
+	}
+
+	recordCache := NewZoneRecordCache()
+	for zoneID, records := range cache.Records {
+		recordCache.Set(zoneID, records)
+	}
+
+	age := time.Since(cache.LastUpdate)
+	debugLog("CACHE", "", fmt.Sprintf("📂 Cloudflare Cache von Disk geladen (%d zones, Alter: %v)", 
+		len(cache.Zones), age.Round(time.Second)))
+	
+	return cache.Zones, recordCache, nil
+}
 
 // ============================================================================
 // API - CLOUDFLARE
@@ -100,6 +177,15 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 
 		var cfResp CloudflareResponse
 		if err := json.Unmarshal(respBody, &cfResp); err != nil {
+			// HTML-Antwort erkennen und loggen
+			if len(respBody) > 0 && respBody[0] == '<' {
+				preview := string(respBody)
+				if len(preview) > 200 {
+					preview = preview[:200] + "..."
+				}
+				debugLog("CACHE", "", fmt.Sprintf("Cloudflare API returned HTML: %s", preview))
+			}
+			
 			apiErr := classifyAPIError(res.StatusCode, method, url, string(respBody))
 			if apiErr == nil {
 				apiErr = &APIError{
@@ -168,6 +254,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 func loadCloudflareZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
 	data, err := cloudflareAPI(ctx, dc, "GET", "/zones", nil)
 	if err != nil {
+		debugLog("CACHE", "", fmt.Sprintf("⚠️ Cloudflare API-Fehler beim Laden von Zones: %v", err))
 		return nil, fmt.Errorf("failed to load cloudflare zones: %w", err)
 	}
 
@@ -175,6 +262,7 @@ func loadCloudflareZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) 
 		Result []CloudflareZone `json:"result"`
 	}
 	if err := json.Unmarshal(data, &resp); err != nil {
+		debugLog("CACHE", "", fmt.Sprintf("⚠️ Cloudflare Parse-Fehler: %v", err))
 		return nil, fmt.Errorf("failed to parse zones: %w", err)
 	}
 

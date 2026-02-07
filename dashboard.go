@@ -143,6 +143,17 @@ func broadcastUpdate(updateType string, data interface{}) {
 	}
 }
 
+// broadcastNotification sendet eine Toast-Notification an alle WebSocket-Clients
+func broadcastNotification(message string, level string) {
+	if level == "" {
+		level = "info"
+	}
+	broadcastUpdate("notification", map[string]string{
+		"message": message,
+		"level":   level, // success, info, warning, error
+	})
+}
+
 func (h *WSHub) forceRemoveClient(c *WSClient) {
 	h.mu.Lock()
 	if _, ok := h.clients[c]; ok {
@@ -430,6 +441,9 @@ func (m *APIMetrics) RecordError(statusCode int, err error, duration time.Durati
 	case statusCode >= 500:
 		m.ServerErrors++
 	case statusCode >= 400:
+		m.ClientErrors++
+	case statusCode == 0:
+		// Netzwerkfehler (Timeout, DNS, Connection refused, etc.)
 		m.ClientErrors++
 	}
 
@@ -814,6 +828,7 @@ func createMux() *http.ServeMux {
 				return
 			}
 			debugLog("API", clientIP, "Trigger blocked: Global rate limit")
+			broadcastNotification("⚠️ Update Rate Limit erreicht - bitte warten", "warning")
 			return
 		}
 
@@ -833,6 +848,7 @@ func createMux() *http.ServeMux {
 				return
 			}
 			debugLog("API", clientIP, "Trigger blocked: IP rate limit")
+			broadcastNotification("⚠️ Zu viele Update-Requests - bitte 10s warten", "warning")
 			return
 		}
 
@@ -847,12 +863,14 @@ func createMux() *http.ServeMux {
 				return
 			}
 			debugLog("API", clientIP, "Trigger blocked: Update already running")
+			broadcastNotification("ℹ️ Update läuft bereits", "info")
 			return
 		}
 
 		go func() {
 			defer updateInProgress.Store(false)
 			debugLog("API", clientIP, "Manual update triggered")
+			broadcastNotification("🔄 Manuelles Update gestartet", "info")
 			runUpdate(false)
 		}()
 
@@ -927,15 +945,40 @@ func createMux() *http.ServeMux {
 			total = int64(v)
 		}
 
+		// Health-Status-Berechnung mit mehr Nuance
+		healthReason := ""
+		degradedMode := false
+
 		if total > 10 {
 			if successRateStr, ok := stats["success_rate"].(string); ok {
 				var rate float64
 				if _, err := fmt.Sscanf(successRateStr, "%f%%", &rate); err == nil {
-					if rate < 50.0 {
+					if rate < 20.0 {
+						// Sehr niedrige Success Rate - kritisch
 						isHealthy = false
+						healthReason = "critical: success rate below 20%"
+					} else if rate < 50.0 {
+						// Moderate Success Rate - degraded aber nicht unhealthy
+						// Service könnte mit Cache funktionieren
+						degradedMode = true
+						healthReason = "degraded: success rate below 50%, operating on cache"
 					}
 				}
 			}
+		}
+
+		// Wenn Service mit Cache läuft, ist er "degraded" aber nicht "unhealthy"
+		if degradedMode && isHealthy {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			if err := json.NewEncoder(w).Encode(map[string]interface{}{
+				"status":      "degraded",
+				"reason":      healthReason,
+				"api_metrics": stats,
+			}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
 		}
 
 		if !isHealthy {
@@ -943,7 +986,7 @@ func createMux() *http.ServeMux {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			if err := json.NewEncoder(w).Encode(map[string]interface{}{
 				"status":      "unhealthy",
-				"reason":      "high error rate or no recent success",
+				"reason":      healthReason,
 				"api_metrics": stats,
 			}); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1281,7 +1324,7 @@ func createMux() *http.ServeMux {
 					<div><strong>`+T.TotalRequests+`:</strong> <span id="mTotal">%v</span></div>
 					<div><strong>`+T.SuccessRate+`:</strong> <span id="mSuccess" style="color:var(--success)">%v</span></div>
 					<div><strong>`+T.AvgLatency+`:</strong> <span id="mLatency">%v</span></div>
-					<div><strong>`+T.Errors+`:</strong> <span id="mErrors">%v / %v</span></div>
+					<div title="Client Errors (inkl. Netzwerk) / Server Errors"><strong>`+T.Errors+`:</strong> <span id="mErrors">%v / %v</span></div>
 				</div>
 				<div style="margin-top: 20px;">
 					<div style="display: flex; justify-content: space-between; align-items: baseline;
@@ -1633,6 +1676,15 @@ func createMux() *http.ServeMux {
 		updateDomainDisplay(msg.data);
 		return;
 		}
+		
+		// Neue Funktion: Notifications über WebSocket
+		if (msg.type === 'notification') {
+		const notif = msg.data;
+		if (notif && notif.message) {
+			showToast(notif.message, notif.level || 'info');
+		}
+		return;
+		}
 	};
 
 	ws.onerror = (err) => {
@@ -1711,11 +1763,9 @@ func createMux() *http.ServeMux {
 	}
 
 	function updateMetrics(m) {
-		// last update time
 		const last = document.getElementById('lastUpdate');
 		if (last) last.textContent = new Date().toLocaleTimeString();
 
-		// basic metrics
 		const elTotal = document.getElementById('mTotal');
 		if (elTotal && m.total_requests != null) elTotal.textContent = m.total_requests;
 
@@ -1732,12 +1782,11 @@ func createMux() *http.ServeMux {
 			elErrors.textContent = String(c) + " / " + String(s);
 		}
 
-		// usage / limit
 		const elUsage = document.getElementById('mUsage');
 		if (elUsage) {
 			const used = m.usage_count != null ? m.usage_count : "?";
 			const lim = m.hourly_limit != null ? m.hourly_limit : "?";
-			elUsage.textContent = String(used) + " / " + String(lim) + " Requests";
+      elUsage.textContent = String(used) + " / " + String(lim) + " `+T.RequestsLabel+`";
 		}
 
 		const bar = document.getElementById('mUsageBar');
@@ -1792,9 +1841,33 @@ func createMux() *http.ServeMux {
 	function showToast(message, type = 'success') {
 		const toast = document.getElementById('toast');
 		toast.textContent = message;
-		toast.style.borderLeft = type === 'error' ? '4px solid var(--error)' : '4px solid var(--success)';
+		
+		// Verschiedene Farben für verschiedene Toast-Typen
+		let borderColor = 'var(--success)'; // grün
+		let duration = 3000;
+		
+		switch(type) {
+			case 'error':
+				borderColor = 'var(--error)'; // rot
+				duration = 5000; // Fehler länger anzeigen
+				break;
+			case 'warning':
+				borderColor = '#facc15'; // gelb
+				duration = 4000;
+				break;
+			case 'info':
+				borderColor = '#3b82f6'; // blau
+				duration = 2500;
+				break;
+			case 'success':
+			default:
+				borderColor = 'var(--success)'; // grün
+				duration = 3000;
+		}
+		
+		toast.style.borderLeft = '4px solid ' + borderColor;
 		toast.classList.add('show');
-		setTimeout(() => toast.classList.remove('show'), 3000);
+		setTimeout(() => toast.classList.remove('show'), duration);
 	}
 
 	function filterDomains(query) {
@@ -1822,16 +1895,44 @@ func createMux() *http.ServeMux {
 
 	function triggerUpdate() {
 		const token = localStorage.getItem('triggerToken') || '';
+		
+		// Zeige "wird verarbeitet" Toast
+		showToast('⏳ Update wird gestartet...', 'info');
+		
 		fetch('/api/trigger', {
 			method: 'POST',
 			headers: token ? {'X-Trigger-Token': token} : {}
 		})
-		.then(r => r.json())
-		.then(j => {
-			if (j && j.error) showToast(j.error, 'error');
-			else showToast('✓ Update triggered');
+		.then(r => {
+			// Speichere HTTP Status für bessere Fehlerbehandlung
+			const status = r.status;
+			return r.json().then(j => ({status, json: j}));
 		})
-		.catch(() => showToast('Trigger failed', 'error'));
+		.then(({status, json: j}) => {
+			if (j && j.error) {
+				// Spezifische Fehlermeldungen
+				if (j.error === 'global rate limit exceeded') {
+					showToast('⚠️ Rate Limit erreicht - bitte ' + (j.retry_after_seconds || 10) + 's warten', 'warning');
+				} else if (j.error === 'IP rate limit exceeded') {
+					showToast('⚠️ Zu viele Requests - bitte ' + (j.retry_after_seconds || 10) + 's warten', 'warning');
+				} else if (j.error === 'update already in progress') {
+					showToast('ℹ️ Update läuft bereits', 'info');
+				} else if (j.error === 'invalid or missing trigger token') {
+					showToast('🔒 Ungültiger oder fehlender Token', 'error');
+				} else {
+					showToast('❌ ' + j.error, 'error');
+				}
+			} else if (j && j.status === 'triggered') {
+				const remaining = j.rate_limit_remaining || '?';
+				showToast('✅ Update gestartet (Verbleibend: ' + remaining + ')', 'success');
+			} else {
+				showToast('✓ Update triggered', 'success');
+			}
+		})
+		.catch(err => {
+			console.error('Trigger error:', err);
+			showToast('❌ Verbindungsfehler', 'error');
+		});
 	}
 
 

@@ -49,7 +49,7 @@ func loadLanguage(lang string) error {
 
 	fmt.Printf("[INFO] ✓ "+T.LanguageLoaded+"\n", lang, len(translations))
 
-	requiredKeys := []string{"startup", "shutdown", "no_zones", "update"}
+	requiredKeys := []string{"startup", "shutdown", "no_zones", "update", "requests", "success_rate", "avg_latency"}
 	for _, key := range requiredKeys {
 		if _, ok := translations[key]; !ok {
 			fmt.Printf("[WARN] %s: %s\n", T.MissingTranslationKey, key)

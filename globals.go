@@ -392,6 +392,12 @@ type CloudflareError struct {
 	Message string `json:"message"`
 }
 
+type CloudflareCache struct {
+	Zones      []Zone              `json:"zones"`
+	Records    map[string][]Record `json:"records"`
+	LastUpdate time.Time           `json:"last_update"`
+}
+
 type IPv64Response struct {
 	Subdomains map[string]IPv64Subdomain `json:"subdomains"`
 	Info       string                    `json:"info"`
@@ -429,6 +435,12 @@ type IPv64Domain struct {
 	Wildcard         int           `json:"wildcard"`
 	Deactivated      int           `json:"deactivated"`
 	Records          []IPv64Record `json:"records"`
+}
+
+type IONOSCache struct {
+	Zones      []Zone              `json:"zones"`
+	Records    map[string][]Record `json:"records"`
+	LastUpdate time.Time           `json:"last_update"`
 }
 
 type ZoneRecordCache struct {

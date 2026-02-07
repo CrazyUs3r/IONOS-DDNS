@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -25,6 +27,7 @@ func splitIPv64FQDN(fqdn string) (baseDomain, praefix string) {
 func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) ([]byte, error) {
 	method := "GET"
 	var bodyData string
+	apiURL := ipv64APIBase  // Lokale Kopie verwenden!
 
 	if len(params) > 0 {
 		if _, hasGetDomains := params["get_domains"]; hasGetDomains {
@@ -33,7 +36,7 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 			for k, v := range params {
 				q.Set(k, v)
 			}
-			ipv64APIBase += "?" + q.Encode()
+			apiURL += "?" + q.Encode()  // Lokale Variable modifizieren
 		} else if hasAddDomain := params["add_domain"]; hasAddDomain != "" {
 			method = "POST"
 			bodyData = fmt.Sprintf(
@@ -64,7 +67,7 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 			for k, v := range params {
 				q.Set(k, v)
 			}
-			ipv64APIBase += "?" + q.Encode()
+			apiURL += "?" + q.Encode()  // Lokale Variable modifizieren
 		}
 	}
 
@@ -72,18 +75,18 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 	for attempt := 0; attempt < MaxAPIRetries; attempt++ {
 		start := time.Now().Local()
 		debugLog("HTTP", "", fmt.Sprintf("🔄 IPv64 %s %d/%d: %s %s",
-			T.Attempt, attempt+1, MaxAPIRetries, method, ipv64APIBase))
+			T.Attempt, attempt+1, MaxAPIRetries, method, apiURL))
 
 		var req *http.Request
 		var err error
 
 		if bodyData != "" {
-			req, err = http.NewRequestWithContext(ctx, method, ipv64APIBase, strings.NewReader(bodyData))
+			req, err = http.NewRequestWithContext(ctx, method, apiURL, strings.NewReader(bodyData))
 			if err == nil {
 				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			}
 		} else {
-			req, err = http.NewRequestWithContext(ctx, method, ipv64APIBase, nil)
+			req, err = http.NewRequestWithContext(ctx, method, apiURL, nil)
 		}
 
 		if err != nil {
@@ -123,6 +126,18 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 
 		var ipv64Resp IPv64Response
 		if err := json.Unmarshal(respBody, &ipv64Resp); err != nil {
+			// HTML statt JSON - als Client-Error tracken
+			apiMetrics.RecordError(res.StatusCode, err, duration)
+			
+			// Bei HTML-Antwort Preview loggen
+			if len(respBody) > 0 && respBody[0] == '<' {
+				preview := string(respBody)
+				if len(preview) > 200 {
+					preview = preview[:200] + "..."
+				}
+				debugLog("HTTP", "", fmt.Sprintf("IPv64 API returned HTML instead of JSON: %s", preview))
+			}
+			
 			return nil, fmt.Errorf("failed to parse ipv64 response: %w", err)
 		}
 
@@ -181,6 +196,68 @@ func loadIPv64Domains(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
 	return zones, nil
 }
 
+// ============================================================================
+// CACHE PERSISTENCE - NEU
+// ============================================================================
+
+func getIPv64CachePath() string {
+	return filepath.Join(cfg.LogDir, "ipv64_cache.json")
+}
+
+func saveIPv64Cache() error {
+	cachePath := getIPv64CachePath()
+	
+	providerCache.RLock()
+	data := providerCache.ipv64Records
+	providerCache.RUnlock()
+
+	jsonData, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal cache: %w", err)
+	}
+
+	tmpPath := cachePath + ".tmp"
+	if err := os.WriteFile(tmpPath, jsonData, 0644); err != nil {
+		return fmt.Errorf("failed to write cache: %w", err)
+	}
+
+	if err := os.Rename(tmpPath, cachePath); err != nil {
+		return fmt.Errorf("failed to rename cache: %w", err)
+	}
+
+	debugLog("CACHE", "", fmt.Sprintf("💾 IPv64 Cache gespeichert (%d domains)", len(data)))
+	return nil
+}
+
+func loadIPv64CacheFromDisk() error {
+	cachePath := getIPv64CachePath()
+	
+	data, err := os.ReadFile(cachePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			debugLog("CACHE", "", "ℹ️ Keine IPv64 Cache-Datei gefunden (erster Start)")
+			return nil
+		}
+		return fmt.Errorf("failed to read cache: %w", err)
+	}
+
+	var cached map[string]IPv64Domain
+	if err := json.Unmarshal(data, &cached); err != nil {
+		return fmt.Errorf("failed to unmarshal cache: %w", err)
+	}
+
+	providerCache.Lock()
+	providerCache.ipv64Records = cached
+	providerCache.Unlock()
+
+	debugLog("CACHE", "", fmt.Sprintf("📂 IPv64 Cache von Disk geladen (%d domains)", len(cached)))
+	return nil
+}
+
+// ============================================================================
+// LOAD ALL IPV64 DOMAINS - VERBESSERT
+// ============================================================================
+
 func loadAllIPv64Domains(ctx context.Context, dc *DomainConfig) error {
 	params := map[string]string{
 		"get_domains": dc.IPv64Token,
@@ -188,17 +265,46 @@ func loadAllIPv64Domains(ctx context.Context, dc *DomainConfig) error {
 
 	data, err := ipv64API(ctx, dc, params)
 	if err != nil {
+		// WICHTIG: Cache NICHT löschen bei API-Fehler
+		debugLog("CACHE", "", fmt.Sprintf("⚠️ IPv64 API-Fehler, behalte alten Cache: %v", err))
+		
+		// Prüfen ob wir überhaupt einen Cache haben
+		providerCache.RLock()
+		hasCachedData := len(providerCache.ipv64Records) > 0
+		providerCache.RUnlock()
+		
+		if !hasCachedData {
+			// Versuche Cache von Disk zu laden
+			if loadErr := loadIPv64CacheFromDisk(); loadErr != nil {
+				debugLog("CACHE", "", fmt.Sprintf("⚠️ Konnte auch keinen Cache von Disk laden: %v", loadErr))
+			} else {
+				debugLog("CACHE", "", "✅ Fallback auf persistierten Cache erfolgreich")
+			}
+		}
+		
 		return err
 	}
 
 	var resp IPv64Response
 	if err := json.Unmarshal(data, &resp); err != nil {
+		// WICHTIG: Cache NICHT löschen bei Parse-Fehler (z.B. HTML statt JSON)
+		debugLog("CACHE", "", fmt.Sprintf("⚠️ IPv64 Parse-Fehler (vermutlich HTML statt JSON), behalte alten Cache: %v", err))
+		
+		// Bei Parse-Fehler (HTML-Antwort) den Fehlertext loggen für Debugging
+		if len(data) > 0 && data[0] == '<' {
+			preview := string(data)
+			if len(preview) > 200 {
+				preview = preview[:200] + "..."
+			}
+			debugLog("CACHE", "", fmt.Sprintf("API returned HTML: %s", preview))
+		}
+		
 		return fmt.Errorf("failed to parse ipv64 response: %w", err)
 	}
 
+	// NUR bei erfolgreicher API-Antwort Cache aktualisieren
 	providerCache.Lock()
-	defer providerCache.Unlock()
-
+	
 	for domainName, subdomain := range resp.Subdomains {
 		domain := IPv64Domain{
 			Domain:           domainName,
@@ -224,6 +330,13 @@ func loadAllIPv64Domains(ctx context.Context, dc *DomainConfig) error {
 				subdomain.DomainUpdateHash[:8],
 			),
 		)
+	}
+	
+	providerCache.Unlock()
+
+	// Cache auf Disk speichern
+	if err := saveIPv64Cache(); err != nil {
+		debugLog("CACHE", "", fmt.Sprintf("⚠️ Konnte Cache nicht speichern: %v", err))
 	}
 
 	return nil
@@ -433,7 +546,7 @@ func deleteIPv64Record(
 		)
 	}
 
-	debugLog("HTTP", baseDomain, fmt.Sprintf("📥 IPv64 delete response: %s", string(data)))
+	debugLog("HTTP", baseDomain, fmt.Sprintf("🔥 IPv64 delete response: %s", string(data)))
 
 	return nil
 }

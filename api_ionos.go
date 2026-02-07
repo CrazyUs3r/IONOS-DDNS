@@ -9,9 +9,86 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
+
+// ============================================================================
+// CACHE PERSISTENCE - IONOS
+// ============================================================================
+
+func getIONOSCachePath() string {
+	return filepath.Join(cfg.LogDir, "ionos_cache.json")
+}
+
+func saveIONOSCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error {
+	if recordCache == nil {
+		return fmt.Errorf("recordCache is nil")
+	}
+
+	cachePath := getIONOSCachePath()
+	
+	cache := IONOSCache{
+		Zones:      zones,
+		Records:    make(map[string][]Record),
+		LastUpdate: time.Now(),
+	}
+
+	for _, zone := range zones {
+		if records, exists := recordCache.Get(zone.ID); exists {
+			cache.Records[zone.ID] = records
+		}
+	}
+
+	jsonData, err := json.MarshalIndent(cache, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal cache: %w", err)
+	}
+
+	tmpPath := cachePath + ".tmp"
+	if err := os.WriteFile(tmpPath, jsonData, 0644); err != nil {
+		return fmt.Errorf("failed to write cache: %w", err)
+	}
+
+	if err := os.Rename(tmpPath, cachePath); err != nil {
+		return fmt.Errorf("failed to rename cache: %w", err)
+	}
+
+	debugLog("CACHE", "", fmt.Sprintf("💾 IONOS Cache gespeichert (%d zones, %d records)", 
+		len(zones), len(cache.Records)))
+	return nil
+}
+
+func loadIONOSCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
+	cachePath := getIONOSCachePath()
+	
+	data, err := os.ReadFile(cachePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			debugLog("CACHE", "", "ℹ️ Keine IONOS Cache-Datei gefunden (erster Start)")
+			return nil, nil, nil
+		}
+		return nil, nil, fmt.Errorf("failed to read cache: %w", err)
+	}
+
+	var cache IONOSCache
+	if err := json.Unmarshal(data, &cache); err != nil {
+		return nil, nil, fmt.Errorf("failed to unmarshal cache: %w", err)
+	}
+
+	recordCache := NewZoneRecordCache()
+	for zoneID, records := range cache.Records {
+		recordCache.Set(zoneID, records)
+	}
+
+	age := time.Since(cache.LastUpdate)
+	debugLog("CACHE", "", fmt.Sprintf("📂 IONOS Cache von Disk geladen (%d zones, Alter: %v)", 
+		len(cache.Zones), age.Round(time.Second)))
+	
+	return cache.Zones, recordCache, nil
+}
 
 // ============================================================================
 // API - IONOS

@@ -42,6 +42,17 @@ func loadZoneCache(ctx context.Context, zonesByProvider map[string][]Zone) (*Zon
 
 		if provider == ProviderIPv64 {
 			providerCache.RLock()
+			hasData := len(providerCache.ipv64Records) > 0
+			providerCache.RUnlock()
+
+			if !hasData {
+				debugLog("CACHE", "", "⚠️ Kein IPv64 Cache - versuche von Disk zu laden")
+				if err := loadIPv64CacheFromDisk(); err != nil {
+					debugLog("CACHE", "", fmt.Sprintf("❌ Konnte IPv64 Cache nicht von Disk laden: %v", err))
+				}
+			}
+
+			providerCache.RLock()
 			for _, z := range zones {
 				domain, ok := providerCache.ipv64Records[z.Name]
 				if !ok {
