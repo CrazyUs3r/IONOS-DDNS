@@ -143,14 +143,13 @@ func broadcastUpdate(updateType string, data interface{}) {
 	}
 }
 
-// broadcastNotification sendet eine Toast-Notification an alle WebSocket-Clients
 func broadcastNotification(message string, level string) {
 	if level == "" {
 		level = "info"
 	}
 	broadcastUpdate("notification", map[string]string{
 		"message": message,
-		"level":   level, // success, info, warning, error
+		"level":   level,
 	})
 }
 
@@ -443,7 +442,6 @@ func (m *APIMetrics) RecordError(statusCode int, err error, duration time.Durati
 	case statusCode >= 400:
 		m.ClientErrors++
 	case statusCode == 0:
-		// Netzwerkfehler (Timeout, DNS, Connection refused, etc.)
 		m.ClientErrors++
 	}
 
@@ -717,29 +715,27 @@ func createMux() *http.ServeMux {
 		q := r.URL.Query()
 
 		theme := q.Get("theme")
-		level := q.Get("level") // ok|warn|err
+		level := q.Get("level")
 		blink := q.Get("blink") == "1"
 
-		bg := "#1e293b" // dark
+		bg := "#1e293b"
 		textColor := "white"
 		if theme == "light" {
 			bg = "#f8fafc"
 			textColor = "#0f172a"
 		}
 
-		// Ampel-Farben
-		statusColor := "#22c55e" // ok grün
+		statusColor := "#22c55e"
 		symbol := "✓"
 		switch level {
 		case "warn":
-			statusColor = "#facc15" // gelb
+			statusColor = "#facc15"
 			symbol = "!"
 		case "err":
-			statusColor = "#ef4444" // rot
+			statusColor = "#ef4444"
 			symbol = "✕"
 		}
 
-		// Blink: wir machen den Badge bei blink=1 transparent -> Frame-Wechsel wirkt wie Blinken
 		badgeOpacity := "1"
 		if blink && level == "err" {
 			badgeOpacity = "0"
@@ -945,7 +941,6 @@ func createMux() *http.ServeMux {
 			total = int64(v)
 		}
 
-		// Health-Status-Berechnung mit mehr Nuance
 		healthReason := ""
 		degradedMode := false
 
@@ -954,12 +949,9 @@ func createMux() *http.ServeMux {
 				var rate float64
 				if _, err := fmt.Sscanf(successRateStr, "%f%%", &rate); err == nil {
 					if rate < 20.0 {
-						// Sehr niedrige Success Rate - kritisch
 						isHealthy = false
 						healthReason = "critical: success rate below 20%"
 					} else if rate < 50.0 {
-						// Moderate Success Rate - degraded aber nicht unhealthy
-						// Service könnte mit Cache funktionieren
 						degradedMode = true
 						healthReason = "degraded: success rate below 50%, operating on cache"
 					}
@@ -967,7 +959,6 @@ func createMux() *http.ServeMux {
 			}
 		}
 
-		// Wenn Service mit Cache läuft, ist er "degraded" aber nicht "unhealthy"
 		if degradedMode && isHealthy {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -1477,12 +1468,12 @@ func createMux() *http.ServeMux {
 						<div class="ip-display">
 							<span class="badge v4">IPv4</span>
 							<span id="ip4-%s">%s</span>
-							<button class="copy-btn" onclick="copyIP(%q, %q)" title="Copy">📋</button>
+							<button class="copy-btn" onclick="copyIP('%s')" title="Copy">📋</button>
 						</div>
 						<div class="ip-display" style="margin-top: 8px;">
 							<span class="badge v6">IPv6</span>
 							<span id="ip6-%s">%s</span>
-							<button class="copy-btn" onclick="copyIP(%q, %q)" title="Copy">📋</button>
+							<button class="copy-btn" onclick="copyIP('%s')" title="Copy">📋</button>
 						</div>
 					</div>
 					<div style="text-align: right; opacity: 0.7;">
@@ -1504,12 +1495,10 @@ func createMux() *http.ServeMux {
 				html.EscapeString(h.Provider),
 				safeID,
 				html.EscapeString(latest.IPv4),
-				latest.IPv4,
-				"ip4-"+safeID,
+				html.EscapeString(latest.IPv4),
 				safeID,
 				html.EscapeString(latest.IPv6),
-				latest.IPv6,
-				"ip6-"+safeID,
+				html.EscapeString(latest.IPv6),
 				html.EscapeString(latest.Time),
 			)
 
@@ -1612,25 +1601,20 @@ func createMux() *http.ServeMux {
 		const serverErr = toNum(m.server_errors, 0);
 		const totalErr = clientErr + serverErr;
 
-		// harte Fehlerbedingungen
 		if (totalErr > 0) return 'err';
 		if (total >= 5 && successRate <= 0) return 'err';
 		if (total >= 10 && successRate < 50) return 'err';
 
-		// Latenzbedingungen
 		const ms = parseDurationToMs(m.avg_latency);
 		if (Number.isFinite(ms)) {
 			if (ms >= 1000) return 'err';
 			if (ms >= 300) return 'warn';
 		}
 
-		// Warn bei schlechter Erfolgsrate
 		if (total >= 10 && successRate < 90) return 'warn';
 
 		return 'ok';
 	}	
-
-
 
 	function toggleTheme() {
 	const html = document.documentElement;
@@ -1650,7 +1634,7 @@ func createMux() *http.ServeMux {
 
 	let ws = null;
 	let reconnectTimer = null;
-	let reconnectDelay = 1000; // startet mit 1s, steigert sich bis max
+	let reconnectDelay = 1000;
 	const reconnectDelayMax = 10000;
 
 	function connectWS() {
@@ -1676,8 +1660,7 @@ func createMux() *http.ServeMux {
 		updateDomainDisplay(msg.data);
 		return;
 		}
-		
-		// Neue Funktion: Notifications über WebSocket
+
 		if (msg.type === 'notification') {
 		const notif = msg.data;
 		if (notif && notif.message) {
@@ -1696,8 +1679,7 @@ func createMux() *http.ServeMux {
 		console.log('WebSocket closed, reconnecting...');
 		scheduleReconnect();
 	};
-
-	// wenn verbunden -> delay zurücksetzen
+	
 	ws.onopen = () => {
 		reconnectDelay = 1000;
 		if (reconnectTimer) {
@@ -1828,40 +1810,65 @@ func createMux() *http.ServeMux {
 
         entry.style.display = shouldShow ? '' : 'none';
     });
-}
+  }
 
-	function copyIP(ip, elementId) {
-		navigator.clipboard.writeText(ip).then(() => {
-			showToast('✓ Copied: ' + ip);
-		}).catch(() => {
-			showToast('Copy failed', 'error');
-		});
+	function copyIP(text) {
+		if (!text || text === 'N/A' || text === '-') {
+			showToast('❌ Keine IP zum Kopieren', 'error');
+			return;
+		}
+		
+		if (navigator.clipboard && window.isSecureContext) {
+			navigator.clipboard.writeText(text)
+				.then(() => showToast('✓ Kopiert: ' + text, 'success'))
+				.catch(() => fallbackCopy(text));
+		} else {
+			fallbackCopy(text);
+		}
+	}
+
+	function fallbackCopy(text) {
+		const textArea = document.createElement("textarea");
+		textArea.value = text;
+		textArea.style.position = "fixed";
+		textArea.style.left = "-9999px";
+		textArea.style.top = "0";
+		document.body.appendChild(textArea);
+		textArea.focus();
+		textArea.select();
+		
+		try {
+			document.execCommand('copy');
+			showToast('✓ Kopiert: ' + text, 'success');
+		} catch (err) {
+			showToast('❌ Kopieren fehlgeschlagen', 'error');
+		}
+		document.body.removeChild(textArea);
 	}
 
 	function showToast(message, type = 'success') {
 		const toast = document.getElementById('toast');
 		toast.textContent = message;
-		
-		// Verschiedene Farben für verschiedene Toast-Typen
-		let borderColor = 'var(--success)'; // grün
+
+		let borderColor = 'var(--success)';
 		let duration = 3000;
 		
 		switch(type) {
 			case 'error':
-				borderColor = 'var(--error)'; // rot
-				duration = 5000; // Fehler länger anzeigen
+				borderColor = 'var(--error)';
+				duration = 5000;
 				break;
 			case 'warning':
-				borderColor = '#facc15'; // gelb
+				borderColor = '#facc15';
 				duration = 4000;
 				break;
 			case 'info':
-				borderColor = '#3b82f6'; // blau
+				borderColor = '#3b82f6';
 				duration = 2500;
 				break;
 			case 'success':
 			default:
-				borderColor = 'var(--success)'; // grün
+				borderColor = 'var(--success)';
 				duration = 3000;
 		}
 		
@@ -1895,8 +1902,6 @@ func createMux() *http.ServeMux {
 
 	function triggerUpdate() {
 		const token = localStorage.getItem('triggerToken') || '';
-		
-		// Zeige "wird verarbeitet" Toast
 		showToast('⏳ Update wird gestartet...', 'info');
 		
 		fetch('/api/trigger', {
@@ -1904,13 +1909,11 @@ func createMux() *http.ServeMux {
 			headers: token ? {'X-Trigger-Token': token} : {}
 		})
 		.then(r => {
-			// Speichere HTTP Status für bessere Fehlerbehandlung
 			const status = r.status;
 			return r.json().then(j => ({status, json: j}));
 		})
 		.then(({status, json: j}) => {
 			if (j && j.error) {
-				// Spezifische Fehlermeldungen
 				if (j.error === 'global rate limit exceeded') {
 					showToast('⚠️ Rate Limit erreicht - bitte ' + (j.retry_after_seconds || 10) + 's warten', 'warning');
 				} else if (j.error === 'IP rate limit exceeded') {
