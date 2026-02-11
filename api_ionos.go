@@ -18,7 +18,6 @@ import (
 // ============================================================================
 // CACHE PERSISTENCE - IONOS
 // ============================================================================
-
 func getIONOSCachePath() string {
 	return filepath.Join(cfg.LogDir, "ionos_cache.json")
 }
@@ -255,7 +254,6 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 // ============================================================================
 // DNS LOGIC - IONOS
 // ============================================================================
-
 func updateDNS(
 	ctx context.Context,
 	dc *DomainConfig,
@@ -433,7 +431,6 @@ func updateDNS(
 // ============================================================================
 // CACHE UPDATE - IONOS
 // ============================================================================
-
 func updateIONOSCache(cache *ZoneRecordCache, zoneID, recordName, fqdn, recordType, newIP string, existing *Record) {
 	if cache == nil {
 		return
@@ -476,7 +473,6 @@ func updateIONOSCache(cache *ZoneRecordCache, zoneID, recordName, fqdn, recordTy
 // ============================================================================
 // CLEANUP - IONOS
 // ===========================================================================
-
 func cleanupIONOSRecords(ctx context.Context, zones []Zone, recordCache *ZoneRecordCache) {
 	var ionosDC *DomainConfig
 	for i := range cfg.DomainConfigs {

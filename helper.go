@@ -14,7 +14,6 @@ import (
 // ============================================================================
 // HELPERS
 // ============================================================================
-
 func (s *SafeErrorMsg) Set(msg string) {
 	s.Lock()
 	defer s.Unlock()
@@ -67,7 +66,6 @@ func validateTriggerToken(r *http.Request) bool {
 // ============================================================================
 // DNS HELPERS
 // ============================================================================
-
 func recordNameFromFQDN(fqdn, zone string) string {
 	if fqdn == zone {
 		return "@"

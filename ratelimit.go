@@ -8,7 +8,6 @@ import (
 // ============================================================================
 // RATE LIMITER
 // ============================================================================
-
 func NewRateLimiter(maxTokens float64, refillPerSecond float64) *RateLimiter {
 	return &RateLimiter{
 		tokens:     maxTokens,

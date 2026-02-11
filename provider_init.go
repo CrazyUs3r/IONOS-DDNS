@@ -10,7 +10,6 @@ import (
 // ============================================================================
 // PROVIDER INITIALIZATION
 // ============================================================================
-
 func initProviderConfig() error {
 	configJSON := os.Getenv("DOMAINS_CONFIG")
 	if configJSON != "" {

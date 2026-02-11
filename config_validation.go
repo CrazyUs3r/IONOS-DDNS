@@ -9,7 +9,6 @@ import (
 // ============================================================================
 // VALIDATION
 // ============================================================================
-
 func validateDomainConfigs() error {
 	if len(cfg.DomainConfigs) == 0 {
 		return fmt.Errorf("no domains configured")

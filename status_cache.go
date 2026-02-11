@@ -12,7 +12,6 @@ import (
 // ============================================================================
 // STATUS FILE
 // ============================================================================
-
 func updateStatusFile(fqdn, ipv4, ipv6, provider string) {
 	statusMutex.Lock()
 	defer statusMutex.Unlock()
@@ -59,7 +58,6 @@ func updateStatusFile(fqdn, ipv4, ipv6, provider string) {
 // ============================================================================
 // CACHING
 // ============================================================================
-
 func updateDomainsCache() error {
 	statusMutex.Lock()
 	defer statusMutex.Unlock()

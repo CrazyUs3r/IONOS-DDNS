@@ -22,42 +22,70 @@ LANG_DIR="${CONFIG_DIR}/lang"
 LOGS_DIR="${CONFIG_DIR}/logs"
 PROVIDER="${PROVIDER:-IONOS}" # Standardmäßig IONOS
 
-# Validate environment
-printf "${GREEN}→ Validiere Umgebung für Provider: ${PROVIDER}...${NC}\n"
-
-if [ ! -d "${CONFIG_DIR}" ]; then
-    printf "${RED}✗ CONFIG_DIR existiert nicht: ${CONFIG_DIR}${NC}\n"
-    exit 1
+# Detect if multi-provider mode
+MULTI_PROVIDER_MODE="false"
+if [ -n "${DOMAINS_CONFIG}" ]; then
+    MULTI_PROVIDER_MODE="true"
+    printf "${GREEN}→ Multi-Provider Modus erkannt${NC}\n"
 fi
 
-# Provider-spezifische Validierung
-case "$(echo "$PROVIDER" | tr '[:lower:]' '[:upper:]')" in
-    IONOS)
-        if [ -z "${API_PREFIX}" ] || [ -z "${API_SECRET}" ]; then
-            printf "${RED}✗ Fehler: Für IONOS müssen API_PREFIX und API_SECRET gesetzt sein!${NC}\n"
-            exit 1
-        fi
-        ;;
-    CLOUDFLARE)
-        if [ -z "${CLOUDFLARE_TOKEN}" ]; then
-            printf "${RED}✗ Fehler: Für CLOUDFLARE muss CLOUDFLARE_TOKEN gesetzt sein!${NC}\n"
-            exit 1
-        fi
-        ;;
-    IPV64)
-        if [ -z "${IPV64_TOKEN}" ]; then
-            printf "${RED}✗ Fehler: Für IPV64 muss IPV64_TOKEN gesetzt sein!${NC}\n"
-            exit 1
-        fi
-        ;;
-    *)
-        printf "${RED}✗ Fehler: Unbekannter Provider '${PROVIDER}'. Erlaubt sind: IONOS, CLOUDFLARE, IPV64${NC}\n"
+# Validate environment
+if [ "${MULTI_PROVIDER_MODE}" = "true" ]; then
+    printf "${GREEN}→ Validiere Multi-Provider Konfiguration...${NC}\n"
+    
+    # Check if DOMAINS_CONFIG is valid JSON
+    if ! echo "${DOMAINS_CONFIG}" | grep -q '^\s*\['; then
+        printf "${RED}✗ DOMAINS_CONFIG muss ein JSON-Array sein: [...]\n"
         exit 1
-        ;;
-esac
-
-if [ -z "${DOMAINS}" ] || [ "${DOMAINS}" = "example.com" ]; then
-    printf "${YELLOW}⚠ Warnung: Keine Domains konfiguriert oder Beispiel-Domain aktiv${NC}\n"
+    fi
+    
+    # Count domains
+    DOMAIN_COUNT=$(echo "${DOMAINS_CONFIG}" | grep -o '"fqdn"' | wc -l)
+    printf "${GREEN}  ✓ ${DOMAIN_COUNT} Domain(s) konfiguriert${NC}\n"
+    
+    # Detect providers in config
+    if echo "${DOMAINS_CONFIG}" | grep -qi '"provider".*:.*"IONOS"'; then
+        printf "${GREEN}  ✓ IONOS Provider gefunden${NC}\n"
+    fi
+    if echo "${DOMAINS_CONFIG}" | grep -qi '"provider".*:.*"CLOUDFLARE"'; then
+        printf "${GREEN}  ✓ Cloudflare Provider gefunden${NC}\n"
+    fi
+    if echo "${DOMAINS_CONFIG}" | grep -qi '"provider".*:.*"IPV64"'; then
+        printf "${GREEN}  ✓ IPv64 Provider gefunden${NC}\n"
+    fi
+    
+else
+    printf "${GREEN}→ Validiere Umgebung für Provider: ${PROVIDER}...${NC}\n"
+    
+    # Provider-spezifische Validierung
+    case "$(echo "$PROVIDER" | tr '[:lower:]' '[:upper:]')" in
+        IONOS)
+            if [ -z "${API_PREFIX}" ] || [ -z "${API_SECRET}" ]; then
+                printf "${RED}✗ Fehler: Für IONOS müssen API_PREFIX und API_SECRET gesetzt sein!${NC}\n"
+                exit 1
+            fi
+            ;;
+        CLOUDFLARE)
+            if [ -z "${CLOUDFLARE_TOKEN}" ]; then
+                printf "${RED}✗ Fehler: Für CLOUDFLARE muss CLOUDFLARE_TOKEN gesetzt sein!${NC}\n"
+                exit 1
+            fi
+            ;;
+        IPV64)
+            if [ -z "${IPV64_TOKEN}" ]; then
+                printf "${RED}✗ Fehler: Für IPV64 muss IPV64_TOKEN gesetzt sein!${NC}\n"
+                exit 1
+            fi
+            ;;
+        *)
+            printf "${RED}✗ Fehler: Unbekannter Provider '${PROVIDER}'. Erlaubt sind: IONOS, CLOUDFLARE, IPV64${NC}\n"
+            exit 1
+            ;;
+    esac
+    
+    if [ -z "${DOMAINS}" ] || [ "${DOMAINS}" = "example.com" ]; then
+        printf "${YELLOW}⚠ Warnung: Keine Domains konfiguriert oder Beispiel-Domain aktiv${NC}\n"
+    fi
 fi
 
 # Create directories
@@ -108,9 +136,15 @@ esac
 
 printf "\n"
 printf "${GREEN}=== Konfiguration ===${NC}\n"
-printf "Provider:      ${PROVIDER}\n"
+if [ "${MULTI_PROVIDER_MODE}" = "true" ]; then
+    printf "Mode:          ${YELLOW}Multi-Provider${NC}\n"
+    printf "Domains:       ${DOMAIN_COUNT} (siehe DOMAINS_CONFIG)\n"
+else
+    printf "Mode:          Single-Provider\n"
+    printf "Provider:      ${PROVIDER}\n"
+    printf "Domains:       ${DOMAINS}\n"
+fi
 printf "Config Dir:    ${CONFIG_DIR}\n"
-printf "Domains:       ${DOMAINS}\n"
 printf "IP Mode:       ${IP_MODE}\n"
 printf "Interval:      ${INTERVAL}s\n"
 printf "Health Port:   ${HEALTH_PORT}\n"

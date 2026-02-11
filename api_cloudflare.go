@@ -16,7 +16,6 @@ import (
 // ============================================================================
 // CACHE PERSISTENCE - CLOUDFLARE
 // ============================================================================
-
 func getCloudflareCachePath() string {
 	return filepath.Join(cfg.LogDir, "cloudflare_cache.json")
 }
@@ -177,7 +176,6 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 
 		var cfResp CloudflareResponse
 		if err := json.Unmarshal(respBody, &cfResp); err != nil {
-			// HTML-Antwort erkennen und loggen
 			if len(respBody) > 0 && respBody[0] == '<' {
 				preview := string(respBody)
 				if len(preview) > 200 {
@@ -390,7 +388,6 @@ func updateCloudflareDNS(ctx context.Context, dc *DomainConfig, fqdn, recordType
 // ============================================================================
 // CLEANUP - CLOUDFLARE
 // ============================================================================
-
 func cleanupCloudflareRecords(ctx context.Context, zones []Zone, recordCache *ZoneRecordCache) {
 	var cfDC *DomainConfig
 	for i := range cfg.DomainConfigs {

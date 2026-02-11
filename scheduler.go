@@ -40,7 +40,6 @@ func runUpdate(firstRun bool) {
 
 	zonesByProvider, err := loadAllProviderZones(ctx)
 	if err != nil {
-		// Bei Fehler: Versuche Caches von Disk zu laden (Fallback)
 		debugLog("SCHEDULER", "", fmt.Sprintf("⚠️ API-Fehler beim Laden der Zones: %v", err))
 		debugLog("SCHEDULER", "", "🔄 Versuche Fallback auf Disk-Caches...")
 		
@@ -60,7 +59,6 @@ func runUpdate(firstRun bool) {
 
 	cache, err := loadZoneCache(ctx, zonesByProvider)
 	if err != nil {
-		// Bei Cache-Fehler: Versuche von Disk zu laden
 		debugLog("CACHE", "", fmt.Sprintf("⚠️ Cache-Fehler: %v", err))
 		debugLog("CACHE", "", "🔄 Versuche Record-Cache von Disk zu laden...")
 		
@@ -73,24 +71,20 @@ func runUpdate(firstRun bool) {
 		debugLog("CACHE", "", "✅ Record-Cache erfolgreich von Disk geladen")
 	}
 
-	// IPv64 Cache laden/aktualisieren
 	for i := range cfg.DomainConfigs {
 		if cfg.DomainConfigs[i].Provider == ProviderIPv64 {
 			if err := loadAllIPv64Domains(ctx, &cfg.DomainConfigs[i]); err != nil {
 				debugLog("CACHE", "", fmt.Sprintf("IPv64 Cache-Fehler: %v", err))
 			}
-			// IPv64 Cache wird bereits in loadAllIPv64Domains() gespeichert
 			break
 		}
 	}
 
-	// Cloudflare & IONOS Caches speichern nach erfolgreichem Laden
 	for providerStr, zones := range zonesByProvider {
 		pType := ProviderType(providerStr)
 
 		switch pType {
 		case ProviderCloudflare:
-			// Cache nur speichern wenn Zones erfolgreich geladen wurden
 			if len(zones) > 0 && cache != nil {
 				if err := saveCloudflareCacheToFile(zones, cache); err != nil {
 					debugLog("CACHE", "", fmt.Sprintf("⚠️ Konnte Cloudflare Cache nicht speichern: %v", err))
@@ -98,7 +92,6 @@ func runUpdate(firstRun bool) {
 			}
 
 		case ProviderIONOS:
-			// Cache nur speichern wenn Zones erfolgreich geladen wurden
 			if len(zones) > 0 && cache != nil {
 				if err := saveIONOSCacheToFile(zones, cache); err != nil {
 					debugLog("CACHE", "", fmt.Sprintf("⚠️ Konnte IONOS Cache nicht speichern: %v", err))
@@ -151,12 +144,9 @@ func runUpdate(firstRun bool) {
 func loadZonesFromDiskCache() (map[string][]Zone, error) {
 	zonesByProvider := make(map[string][]Zone)
 	loadedAny := false
-
-	// IPv64 von Disk laden
 	for i := range cfg.DomainConfigs {
 		if cfg.DomainConfigs[i].Provider == ProviderIPv64 {
 			if err := loadIPv64CacheFromDisk(); err == nil {
-				// Zones aus dem geladenen Cache erstellen
 				providerCache.RLock()
 				zones := make([]Zone, 0, len(providerCache.ipv64Records))
 				for domainName := range providerCache.ipv64Records {
@@ -177,7 +167,6 @@ func loadZonesFromDiskCache() (map[string][]Zone, error) {
 		}
 	}
 
-	// Cloudflare von Disk laden
 	for i := range cfg.DomainConfigs {
 		if cfg.DomainConfigs[i].Provider == ProviderCloudflare {
 			zones, _, err := loadCloudflareCacheFromFile()
@@ -190,7 +179,6 @@ func loadZonesFromDiskCache() (map[string][]Zone, error) {
 		}
 	}
 
-	// IONOS von Disk laden
 	for i := range cfg.DomainConfigs {
 		if cfg.DomainConfigs[i].Provider == ProviderIONOS {
 			zones, _, err := loadIONOSCacheFromFile()
@@ -219,7 +207,6 @@ func loadRecordCacheFromDisk(zonesByProvider map[string][]Zone) (*ZoneRecordCach
 
 		switch pType {
 		case ProviderIPv64:
-			// IPv64 Records aus dem bereits geladenen providerCache holen
 			providerCache.RLock()
 			for _, z := range zones {
 				domain, ok := providerCache.ipv64Records[z.Name]
@@ -244,7 +231,6 @@ func loadRecordCacheFromDisk(zonesByProvider map[string][]Zone) (*ZoneRecordCach
 		case ProviderCloudflare:
 			_, recordCache, err := loadCloudflareCacheFromFile()
 			if err == nil && recordCache != nil {
-				// Records aus dem geladenen Cache in unseren Cache übertragen
 				for _, zone := range zones {
 					if records, exists := recordCache.Get(zone.ID); exists {
 						cache.Set(zone.ID, records)
@@ -256,7 +242,6 @@ func loadRecordCacheFromDisk(zonesByProvider map[string][]Zone) (*ZoneRecordCach
 		case ProviderIONOS:
 			_, recordCache, err := loadIONOSCacheFromFile()
 			if err == nil && recordCache != nil {
-				// Records aus dem geladenen Cache in unseren Cache übertragen
 				for _, zone := range zones {
 					if records, exists := recordCache.Get(zone.ID); exists {
 						cache.Set(zone.ID, records)

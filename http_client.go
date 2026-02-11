@@ -19,7 +19,6 @@ import (
 // ============================================================================
 // HTTP CLIENT & TRANSPORT
 // ============================================================================
-
 func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if cfg.DebugHTTPRaw {
 		logReq := req.Clone(req.Context())
@@ -189,7 +188,6 @@ func getHTTPClient() *http.Client {
 // ============================================================================
 // SANITIZATION
 // ============================================================================
-
 func getSecretReplacer() *strings.Replacer {
 	secretReplacerOnce.Do(func() {
 		replacements := []string{}

@@ -11,7 +11,6 @@ import (
 // ============================================================================
 // PRINTING
 // ============================================================================
-
 func printGroupedDomains() {
 	fmt.Printf("\n🚀  %s [%s] (%s: %s) [Multi-Provider]:\n",
 		T.ServiceStarted, cfg.Lang, T.Mode, cfg.IPMode)

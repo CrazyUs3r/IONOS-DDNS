@@ -5,7 +5,6 @@ import "fmt"
 // ============================================================================
 // API ERROR HANDLING
 // ============================================================================
-
 func (e *APIError) Error() string {
 	return fmt.Sprintf("API Error [%s %s]: Status %d - %s", e.Method, e.URL, e.StatusCode, e.Message)
 }
