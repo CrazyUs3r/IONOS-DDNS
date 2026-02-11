@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,17 +27,24 @@ func saveCloudflareCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error
 		return fmt.Errorf("recordCache is nil")
 	}
 
+	if err := os.MkdirAll(cfg.LogDir, 0755); err != nil {
+		return fmt.Errorf("failed to create log dir: %w", err)
+	}
+
 	cachePath := getCloudflareCachePath()
-	
+
 	cache := CloudflareCache{
+		Version:    1,
 		Zones:      zones,
 		Records:    make(map[string][]Record),
 		LastUpdate: time.Now(),
 	}
 
+	totalRecords := 0
 	for _, zone := range zones {
 		if records, exists := recordCache.Get(zone.ID); exists {
 			cache.Records[zone.ID] = records
+			totalRecords += len(records)
 		}
 	}
 
@@ -50,17 +59,18 @@ func saveCloudflareCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error
 	}
 
 	if err := os.Rename(tmpPath, cachePath); err != nil {
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("failed to rename cache: %w", err)
 	}
 
-	debugLog("CACHE", "", fmt.Sprintf("💾 Cloudflare Cache gespeichert (%d zones, %d records)", 
-		len(zones), len(cache.Records)))
+	debugLog("CACHE", "", fmt.Sprintf("💾 Cloudflare Cache gespeichert (%d zones, %d records)",
+		len(zones), totalRecords))
 	return nil
 }
 
 func loadCloudflareCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
 	cachePath := getCloudflareCachePath()
-	
+
 	data, err := os.ReadFile(cachePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -75,15 +85,23 @@ func loadCloudflareCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
 		return nil, nil, fmt.Errorf("failed to unmarshal cache: %w", err)
 	}
 
+	if cache.Version == 0 {
+		cache.Version = 1
+	}
+
+	if cache.Version != 1 {
+		return nil, nil, fmt.Errorf("unsupported cache version: %d", cache.Version)
+	}
+
 	recordCache := NewZoneRecordCache()
 	for zoneID, records := range cache.Records {
 		recordCache.Set(zoneID, records)
 	}
 
 	age := time.Since(cache.LastUpdate)
-	debugLog("CACHE", "", fmt.Sprintf("📂 Cloudflare Cache von Disk geladen (%d zones, Alter: %v)", 
+	debugLog("CACHE", "", fmt.Sprintf("📂 Cloudflare Cache von Disk geladen (%d zones, Alter: %v)",
 		len(cache.Zones), age.Round(time.Second)))
-	
+
 	return cache.Zones, recordCache, nil
 }
 
@@ -91,30 +109,24 @@ func loadCloudflareCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
 // API - CLOUDFLARE
 // ============================================================================
 func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint string, body interface{}) ([]byte, error) {
-	url := cloudflareAPIBase + endpoint
+	fullURL := cloudflareAPIBase + endpoint
 
 	var lastErr error
 	for attempt := 0; attempt < MaxAPIRetries; attempt++ {
-		start := time.Now().Local()
+		start := time.Now()
 		debugLog("HTTP", "", fmt.Sprintf("🔄 Cloudflare %s %d/%d: %s %s",
-			T.Attempt, attempt+1, MaxAPIRetries, method, url))
-
-		var bodyBytes []byte
-		var err error
-
-		if body != nil {
-			bodyBytes, err = json.Marshal(body)
-			if err != nil {
-				return nil, fmt.Errorf("json marshal failed: %w", err)
-			}
-		}
+			T.Attempt, attempt+1, MaxAPIRetries, method, fullURL))
 
 		var bodyReader io.Reader
 		if body != nil {
+			bodyBytes, err := json.Marshal(body)
+			if err != nil {
+				return nil, fmt.Errorf("json marshal failed: %w", err)
+			}
 			bodyReader = bytes.NewReader(bodyBytes)
 		}
 
-		req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
+		req, err := http.NewRequestWithContext(ctx, method, fullURL, bodyReader)
 		if err != nil {
 			return nil, fmt.Errorf("request creation failed: %w", err)
 		}
@@ -136,11 +148,9 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 				}
 				return r
 			}, token)
-
 			if token == "" {
 				return nil, fmt.Errorf("CFToken is set but empty after sanitizing")
 			}
-
 			req.Header.Set("Authorization", "Bearer "+token)
 		} else if dc.CFEmail != "" && dc.CFSecret != "" {
 			req.Header.Set("X-Auth-Email", strings.TrimSpace(dc.CFEmail))
@@ -153,25 +163,62 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 		duration := time.Since(start)
 
 		if err != nil {
+			if res != nil && res.Body != nil {
+				_ = res.Body.Close()
+			}
 			debugLog("HTTP", "", fmt.Sprintf("❌ %s: %v | %s: %v", T.NetworkError, err, T.AvgLatency, duration))
 			apiMetrics.RecordError(0, err, duration)
 			lastErr = fmt.Errorf("network error: %w", err)
 
-			wait := calculateRetryDelay(attempt, false)
+			wait := calculateRetryDelay(attempt, true)
 			select {
 			case <-time.After(wait):
+				continue
 			case <-ctx.Done():
 				return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
 			}
-			continue
 		}
-		respBody, err := io.ReadAll(res.Body)
-		res.Body.Close()
 
-		if err != nil {
-			apiMetrics.RecordError(res.StatusCode, err, duration)
-			lastErr = fmt.Errorf("failed to read response: %w", err)
-			continue
+		respBody, readErr := io.ReadAll(res.Body)
+		_ = res.Body.Close()
+
+		if readErr != nil {
+			apiMetrics.RecordError(res.StatusCode, readErr, duration)
+			lastErr = fmt.Errorf("failed to read response: %w", readErr)
+
+			serverBusy := res.StatusCode == 429 || res.StatusCode >= 500
+			wait := calculateRetryDelay(attempt, serverBusy)
+			select {
+			case <-time.After(wait):
+				continue
+			case <-ctx.Done():
+				return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
+			}
+		}
+
+		if res.StatusCode == http.StatusTooManyRequests {
+			if d, ok := parseRetryAfter(res.Header); ok {
+				apiErr := &APIError{StatusCode: res.StatusCode, Method: method, URL: fullURL, Message: "rate limited", Retryable: true}
+				apiMetrics.RecordError(res.StatusCode, apiErr, duration)
+				lastErr = apiErr
+				select {
+				case <-time.After(d):
+					continue
+				case <-ctx.Done():
+					return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
+				}
+			}
+			apiErr := &APIError{StatusCode: res.StatusCode, Method: method, URL: fullURL, Message: "rate limited", Retryable: true}
+			apiMetrics.RecordError(res.StatusCode, apiErr, duration)
+			lastErr = apiErr
+
+			wait := calculateRetryDelay(attempt, true)
+			select {
+			case <-time.After(wait):
+				continue
+			case <-ctx.Done():
+				return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
+			}
 		}
 
 		var cfResp CloudflareResponse
@@ -181,15 +228,15 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 				if len(preview) > 200 {
 					preview = preview[:200] + "..."
 				}
-				debugLog("CACHE", "", fmt.Sprintf("Cloudflare API returned HTML: %s", preview))
+				debugLog("HTTP", "", fmt.Sprintf("Cloudflare API returned HTML (status %d): %s", res.StatusCode, preview))
 			}
-			
-			apiErr := classifyAPIError(res.StatusCode, method, url, string(respBody))
+
+			apiErr := classifyAPIError(res.StatusCode, method, fullURL, string(respBody))
 			if apiErr == nil {
 				apiErr = &APIError{
 					StatusCode: res.StatusCode,
 					Method:     method,
-					URL:        url,
+					URL:        fullURL,
 					Message:    "invalid json response",
 					Retryable:  res.StatusCode >= 500,
 				}
@@ -197,51 +244,69 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 			apiMetrics.RecordError(res.StatusCode, apiErr, duration)
 			lastErr = apiErr
 
+			if res.StatusCode == 401 || res.StatusCode == 403 {
+				return nil, apiErr
+			}
 			if attempt >= MaxAPIRetries-1 || !apiErr.IsRetryable() {
 				return nil, apiErr
 			}
 
-			wait := calculateRetryDelay(attempt, res.StatusCode >= 500)
+			serverBusy := res.StatusCode == 429 || res.StatusCode >= 500
+			wait := calculateRetryDelay(attempt, serverBusy)
 			select {
 			case <-time.After(wait):
+				continue
 			case <-ctx.Done():
 				return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
 			}
-			continue
 		}
 
 		if !cfResp.Success {
-			errMsg := "unknown error"
-			if len(cfResp.Errors) > 0 {
-				errMsg = cfResp.Errors[0].Message
+			msg := cfErrorMessage(&cfResp, "unknown error")
+			retryable := res.StatusCode == 409 || res.StatusCode == 429 || res.StatusCode >= 500
+			if res.StatusCode == 401 || res.StatusCode == 403 {
+				retryable = false
 			}
 
-			apiErr := classifyAPIError(res.StatusCode, method, url, errMsg)
+			apiErr := classifyAPIError(res.StatusCode, method, fullURL, msg)
 			if apiErr == nil {
 				apiErr = &APIError{
 					StatusCode: res.StatusCode,
 					Method:     method,
-					URL:        url,
-					Message:    errMsg,
-					Retryable:  false,
+					URL:        fullURL,
+					Message:    msg,
+					Retryable:  retryable,
 				}
 			}
 
 			apiMetrics.RecordError(res.StatusCode, apiErr, duration)
 			lastErr = apiErr
 
-			if attempt >= MaxAPIRetries-1 {
-				return nil, fmt.Errorf("max attempts reached: %w", apiErr)
+			if attempt >= MaxAPIRetries-1 || !apiErr.IsRetryable() {
+				return nil, apiErr
 			}
 
-			wait := calculateRetryDelay(attempt, res.StatusCode >= 500)
+			if res.StatusCode == 429 {
+				if d, ok := parseRetryAfter(res.Header); ok {
+					select {
+					case <-time.After(d):
+						continue
+					case <-ctx.Done():
+						return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
+					}
+				}
+			}
+
+			serverBusy := res.StatusCode == 429 || res.StatusCode >= 500
+			wait := calculateRetryDelay(attempt, serverBusy)
 			select {
 			case <-time.After(wait):
+				continue
 			case <-ctx.Done():
 				return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
 			}
-			continue
 		}
+
 		apiMetrics.RecordSuccess(duration)
 		return respBody, nil
 	}
@@ -250,54 +315,78 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 }
 
 func loadCloudflareZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
-	data, err := cloudflareAPI(ctx, dc, "GET", "/zones", nil)
-	if err != nil {
-		debugLog("CACHE", "", fmt.Sprintf("⚠️ Cloudflare API-Fehler beim Laden von Zones: %v", err))
-		return nil, fmt.Errorf("failed to load cloudflare zones: %w", err)
+	var out []Zone
+	page := 1
+	perPage := 50
+
+	for {
+		endpoint := fmt.Sprintf("/zones?page=%d&per_page=%d", page, perPage)
+		data, err := cloudflareAPI(ctx, dc, "GET", endpoint, nil)
+		if err != nil {
+			debugLog("CACHE", "", fmt.Sprintf("⚠️ Cloudflare API-Fehler beim Laden von Zones: %v", err))
+			return nil, fmt.Errorf("failed to load cloudflare zones: %w", err)
+		}
+
+		var resp struct {
+			Result     []CloudflareZone `json:"result"`
+			ResultInfo struct {
+				Page       int `json:"page"`
+				PerPage    int `json:"per_page"`
+				TotalPages int `json:"total_pages"`
+			} `json:"result_info"`
+		}
+		if err := json.Unmarshal(data, &resp); err != nil {
+			debugLog("CACHE", "", fmt.Sprintf("⚠️ Cloudflare Parse-Fehler: %v", err))
+			return nil, fmt.Errorf("failed to parse zones: %w", err)
+		}
+
+		for _, z := range resp.Result {
+			out = append(out, Zone{ID: z.ID, Name: z.Name})
+		}
+
+		if resp.ResultInfo.TotalPages == 0 || page >= resp.ResultInfo.TotalPages {
+			break
+		}
+		page++
 	}
 
-	var resp struct {
-		Result []CloudflareZone `json:"result"`
-	}
-	if err := json.Unmarshal(data, &resp); err != nil {
-		debugLog("CACHE", "", fmt.Sprintf("⚠️ Cloudflare Parse-Fehler: %v", err))
-		return nil, fmt.Errorf("failed to parse zones: %w", err)
-	}
-
-	zones := make([]Zone, len(resp.Result))
-	for i, z := range resp.Result {
-		zones[i] = Zone{ID: z.ID, Name: z.Name}
-	}
-
-	return zones, nil
+	return out, nil
 }
 
 func loadCloudflareRecords(ctx context.Context, dc *DomainConfig, zoneID string) ([]Record, error) {
-	endpoint := fmt.Sprintf("/zones/%s/dns_records", zoneID)
-	data, err := cloudflareAPI(ctx, dc, "GET", endpoint, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load records: %w", err)
-	}
+	var out []Record
+	page := 1
+	perPage := 100
 
-	var resp struct {
-		Result []CloudflareRecord `json:"result"`
-	}
-	if err := json.Unmarshal(data, &resp); err != nil {
-		return nil, fmt.Errorf("failed to parse records: %w", err)
-	}
-
-	records := make([]Record, len(resp.Result))
-	for i, r := range resp.Result {
-		records[i] = Record{
-			ID:      r.ID,
-			Name:    r.Name,
-			Type:    r.Type,
-			Content: r.Content,
-			Comment: r.Comment,
+	for {
+		endpoint := fmt.Sprintf("/zones/%s/dns_records?page=%d&per_page=%d", zoneID, page, perPage)
+		data, err := cloudflareAPI(ctx, dc, "GET", endpoint, nil)
+		if err != nil {
+			return nil, err
 		}
-	}
 
-	return records, nil
+		var resp struct {
+			Result     []CloudflareRecord `json:"result"`
+			ResultInfo struct {
+				Page       int `json:"page"`
+				PerPage    int `json:"per_page"`
+				TotalPages int `json:"total_pages"`
+			} `json:"result_info"`
+		}
+		if err := json.Unmarshal(data, &resp); err != nil {
+			return nil, err
+		}
+
+		for _, r := range resp.Result {
+			out = append(out, Record{ID: r.ID, Name: r.Name, Type: r.Type, Content: r.Content, Comment: r.Comment})
+		}
+
+		if resp.ResultInfo.TotalPages == 0 || page >= resp.ResultInfo.TotalPages {
+			break
+		}
+		page++
+	}
+	return out, nil
 }
 
 // ============================================================================
@@ -305,7 +394,6 @@ func loadCloudflareRecords(ctx context.Context, dc *DomainConfig, zoneID string)
 // ============================================================================
 func updateCloudflareDNS(ctx context.Context, dc *DomainConfig, fqdn, recordType, newIP string,
 	records []Record, zoneID string) (bool, error) {
-
 	var existing *Record
 	for i := range records {
 		if strings.EqualFold(strings.TrimSuffix(records[i].Name, "."), strings.TrimSuffix(fqdn, ".")) &&
@@ -313,6 +401,14 @@ func updateCloudflareDNS(ctx context.Context, dc *DomainConfig, fqdn, recordType
 			existing = &records[i]
 			break
 		}
+	}
+
+	if existing == nil {
+		rec, err := findCloudflareRecord(ctx, dc, zoneID, fqdn, recordType)
+		if err != nil {
+			return false, err
+		}
+		existing = rec
 	}
 
 	if existing != nil && existing.Content == newIP {
@@ -372,7 +468,28 @@ func updateCloudflareDNS(ctx context.Context, dc *DomainConfig, fqdn, recordType
 
 	_, err := cloudflareAPI(ctx, dc, method, endpoint, payload)
 	if err != nil {
-		return false, err
+		var apiErr *APIError
+		if method == "PUT" && errors.As(err, &apiErr) && apiErr.StatusCode == 404 {
+			rec, ferr := findCloudflareRecord(ctx, dc, zoneID, fqdn, recordType)
+			if ferr != nil {
+				return false, ferr
+			}
+			if rec == nil {
+				createEndpoint := fmt.Sprintf("/zones/%s/dns_records", zoneID)
+				if _, cerr := cloudflareAPI(ctx, dc, "POST", createEndpoint, payload); cerr != nil {
+					return false, cerr
+				}
+				actionType = ActionCreate
+			} else {
+				putEndpoint := fmt.Sprintf("/zones/%s/dns_records/%s", zoneID, rec.ID)
+				if _, uerr := cloudflareAPI(ctx, dc, "PUT", putEndpoint, payload); uerr != nil {
+					return false, uerr
+				}
+				actionType = ActionUpdate
+			}
+		} else {
+			return false, err
+		}
 	}
 
 	log(LogContext{
@@ -388,20 +505,26 @@ func updateCloudflareDNS(ctx context.Context, dc *DomainConfig, fqdn, recordType
 // ============================================================================
 // CLEANUP - CLOUDFLARE
 // ============================================================================
-func cleanupCloudflareRecords(ctx context.Context, zones []Zone, recordCache *ZoneRecordCache) {
-	var cfDC *DomainConfig
+func cloudflareDCForZone(zoneName string) *DomainConfig {
+	zoneName = strings.ToLower(strings.TrimSuffix(zoneName, "."))
 	for i := range cfg.DomainConfigs {
-		if cfg.DomainConfigs[i].Provider == ProviderCloudflare {
-			cfDC = &cfg.DomainConfigs[i]
-			break
+		dc := &cfg.DomainConfigs[i]
+		if dc.Provider != ProviderCloudflare {
+			continue
+		}
+		fqdn := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(dc.FQDN), "."))
+		if fqdn == "" {
+			continue
+		}
+		if fqdn == zoneName || strings.HasSuffix(fqdn, "."+zoneName) {
+			return dc
 		}
 	}
-	if cfDC == nil {
-		return
-	}
+	return nil
+}
 
+func cleanupCloudflareRecords(ctx context.Context, zones []Zone, recordCache *ZoneRecordCache) {
 	debugLog("MAINTENANCE", "", "🧹 Starte Bereinigung verwaister Cloudflare DNS-Records...")
-
 	configDomains := make(map[string]struct{})
 	for _, dc := range cfg.DomainConfigs {
 		if dc.Provider != ProviderCloudflare {
@@ -414,6 +537,11 @@ func cleanupCloudflareRecords(ctx context.Context, zones []Zone, recordCache *Zo
 	}
 
 	for _, zone := range zones {
+		cfDC := cloudflareDCForZone(zone.Name)
+		if cfDC == nil {
+			continue
+		}
+
 		records, exists := recordCache.Get(zone.ID)
 		if !exists {
 			continue
@@ -472,4 +600,105 @@ func cleanupCloudflareRecords(ctx context.Context, zones []Zone, recordCache *Zo
 			}
 		}
 	}
+}
+
+// ============================================================================
+// Helper - CLOUDFLARE
+// ============================================================================
+func parseRetryAfter(h http.Header) (time.Duration, bool) {
+	ra := strings.TrimSpace(h.Get("Retry-After"))
+	if ra == "" {
+		return 0, false
+	}
+	if secs, err := time.ParseDuration(ra + "s"); err == nil {
+		if secs < 0 {
+			return 0, false
+		}
+		return secs, true
+	}
+	if t, err := http.ParseTime(ra); err == nil {
+		d := time.Until(t)
+		if d < 0 {
+			return 0, false
+		}
+		return d, true
+	}
+	return 0, false
+}
+
+func cfErrorMessage(cfResp *CloudflareResponse, fallback string) string {
+	if cfResp == nil {
+		return fallback
+	}
+	if len(cfResp.Errors) == 0 {
+		if fallback != "" {
+			return fallback
+		}
+		return "unknown error"
+	}
+	var parts []string
+	for i, e := range cfResp.Errors {
+		if i >= 3 {
+			break
+		}
+		if e.Message != "" {
+			parts = append(parts, e.Message)
+		}
+	}
+	if len(parts) > 0 {
+		return strings.Join(parts, "; ")
+	}
+	return fallback
+}
+
+func findCloudflareRecord(ctx context.Context, dc *DomainConfig, zoneID, fqdn, recordType string) (*Record, error) {
+	name := strings.TrimSuffix(strings.TrimSpace(fqdn), ".")
+	wantName := strings.TrimSuffix(name, ".")
+
+	page := 1
+	perPage := 100
+
+	for {
+		endpoint := fmt.Sprintf("/zones/%s/dns_records?type=%s&name=%s&page=%d&per_page=%d",
+			zoneID, recordType, url.QueryEscape(name), page, perPage)
+
+		data, err := cloudflareAPI(ctx, dc, "GET", endpoint, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		var resp struct {
+			Result     []CloudflareRecord `json:"result"`
+			ResultInfo struct {
+				Page       int `json:"page"`
+				PerPage    int `json:"per_page"`
+				TotalPages int `json:"total_pages"`
+			} `json:"result_info"`
+		}
+		if err := json.Unmarshal(data, &resp); err != nil {
+			return nil, fmt.Errorf("failed to parse dns_records: %w", err)
+		}
+
+		for _, r := range resp.Result {
+			if r.Type != recordType {
+				continue
+			}
+			if strings.EqualFold(strings.TrimSuffix(r.Name, "."), wantName) {
+				return &Record{
+					ID:      r.ID,
+					Name:    r.Name,
+					Type:    r.Type,
+					Content: r.Content,
+					Comment: r.Comment,
+				}, nil
+			}
+		}
+
+		if resp.ResultInfo.TotalPages == 0 || page >= resp.ResultInfo.TotalPages {
+			break
+		}
+		page++
+	}
+
+	return nil, nil
 }
