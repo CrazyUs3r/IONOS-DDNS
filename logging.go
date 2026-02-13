@@ -98,20 +98,6 @@ func getCategoryIcon(category string) string {
 	return "🐞"
 }
 
-//func shouldPersistLevel(level LogLevel, action string) bool {
-//	if level == LogError || level == LogWarn {
-//		return persistentActions[action]
-//	}
-
-//	switch action {
-//	case ActionStart, ActionStop, ActionUpdate, ActionCreate,
-//		ActionCleanup, ActionSkip, ActionAPI, ActionRetry,
-//		ActionConfig, ActionZone, ActionServer:
-//		return true
-//	}
-//	return false
-//}
-
 func shouldPersistLevel(level LogLevel, action string) bool {
 	if level == LogError || level == LogWarn {
 		_, ok := persistOnWarnError[action]
