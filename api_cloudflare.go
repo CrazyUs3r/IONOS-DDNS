@@ -137,7 +137,8 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 			req.Header.Set("Content-Type", "application/json")
 		}
 
-		if dc.CFToken != "" {
+		switch {
+		case dc.CFToken != "":
 			token := strings.TrimSpace(dc.CFToken)
 			token = strings.Trim(token, `"'`)
 			token = strings.TrimPrefix(token, "Bearer ")
@@ -148,14 +149,18 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 				}
 				return r
 			}, token)
+
 			if token == "" {
 				return nil, fmt.Errorf("CFToken is set but empty after sanitizing")
 			}
+
 			req.Header.Set("Authorization", "Bearer "+token)
-		} else if dc.CFEmail != "" && dc.CFSecret != "" {
+
+		case dc.CFEmail != "" && dc.CFSecret != "":
 			req.Header.Set("X-Auth-Email", strings.TrimSpace(dc.CFEmail))
 			req.Header.Set("X-Auth-Key", strings.TrimSpace(dc.CFSecret))
-		} else {
+
+		default:
 			return nil, fmt.Errorf("no Cloudflare credentials configured")
 		}
 
