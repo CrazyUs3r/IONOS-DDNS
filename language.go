@@ -220,5 +220,9 @@ func setDefaultPhrases() {
 		HourlyLimitEst:           "HOURLY LIMIT (EST.)",
 		RequestsLabel:            "Requests",
 		UsageLast60Min:           "Based on requests from the last 60 minutes",
+		MaxLogLines:              "Log Max Lines",
+		MaxApiRetries:            "API Max Retries",
+		MaxConcurrent:            "Max Concurrent",
+		Interval:                 "Interval",
 	}
 }

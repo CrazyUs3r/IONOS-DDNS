@@ -174,7 +174,7 @@ const (
 	DefaultMaxLogLines     = 500
 	DefaultHourlyRateLimit = 1200
 	DefaultMaxConcurrent   = 5
-	MaxAPIRetries          = 3
+	DefaultMaxAPIRetries   = 3
 )
 
 // ============================================================================
@@ -276,6 +276,7 @@ type Phrases struct {
 	PanicLoadingLanguage, TryingLoadLanguage, LanguageFileNotFound                 string
 	TryingFallbackEn, UsingBuiltinDefaults, JsonParseError, LanguageLoaded         string
 	MissingTranslationKey, HttpPool, HourlyLimitEst, RequestsLabel, UsageLast60Min string
+	MaxLogLines, MaxApiRetries, MaxConcurrent, Interval                            string
 
 	// Statistiken & Metriken
 	Requests, SuccessRate, LastSuccess, AvgLatency, Errors, HourlyLimit       string
@@ -384,6 +385,7 @@ type Config struct {
 	HourlyRateLimit int
 	MaxConcurrent   int
 	MaxLogLines     int
+	MaxAPIRetries   int
 }
 
 type Zone struct {

@@ -1041,18 +1041,17 @@ func createMux() *http.ServeMux {
 				}
 				var e LogEntry
 				if json.Unmarshal([]byte(line), &e) == nil {
-					// Zeitstempel für die Liste direkt hübsch machen
 					e.Timestamp = formatTs(e.Timestamp)
 					logs = append(logs, e)
 				}
 			}
 			if len(logs) > 0 {
-				// Da logs[0] der neueste und logs[len-1] der älteste ist:
 				latest := logs[0].Timestamp
 				oldest := logs[len(logs)-1].Timestamp
 				logTimeRange = fmt.Sprintf("%s — %s", oldest, latest)
 			}
 		}
+
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = fmt.Fprint(w, `<!DOCTYPE html><html><head>
 		<meta charset="utf-8">
@@ -1324,6 +1323,25 @@ func createMux() *http.ServeMux {
 
 		chartSVG := generateSVGChart(hourlyStats)
 		latencySVG := generateLatencyChart(hourlyLat)
+
+		_, _ = fmt.Fprintf(w, `
+		<details class="card">
+			<summary>⚙️ `+T.ConfigHeading+`</summary>
+			<div class="card-content">
+				<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px;">
+					<div><strong>`+T.MaxLogLines+`:</strong> %d</div>
+					<div><strong>`+T.MaxApiRetries+`:</strong> %d</div>
+					<div><strong>`+T.MaxConcurrent+`:</strong> %d</div>
+					<div><strong>`+T.Interval+`:</strong> %ds</div>
+				</div>
+			</div>
+		</details>
+		`,
+			cfg.MaxLogLines,
+			cfg.MaxAPIRetries,
+			cfg.MaxConcurrent,
+			cfg.Interval,
+		)
 
 		_, _ = fmt.Fprintf(w, `
 		<details class="card" open id="metrics-card">
