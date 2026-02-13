@@ -55,17 +55,23 @@ func main() {
 		os.Exit(1)
 	}
 
-	_ = apiMetrics.LoadFromFile(metricsPersistPath)
+	if err := apiMetrics.LoadFromFile(metricsPersistPath); err != nil {
+		log(LogContext{
+			Level:   LogWarn,
+			Action:  ActionConfig,
+			Message: fmt.Sprintf("Metrics konnten nicht geladen werden: %v", err),
+		})
+	}
 
 	iv := 300
 	if i, err := strconv.Atoi(os.Getenv("INTERVAL")); err == nil && i >= 30 {
 		iv = i
 	}
 
-	maxLogLines := DefaultMaxLogLines
+	tempmaxLogLines := DefaultMaxLogLines
 	if s := strings.TrimSpace(os.Getenv("LOG_MAX_LINES")); s != "" {
 		if v, err := strconv.Atoi(s); err == nil && v > 0 {
-			maxLogLines = v
+			tempmaxLogLines = v
 		} else {
 			log(LogContext{
 				Level:   LogWarn,
@@ -114,6 +120,7 @@ func main() {
 		DebugHTTPRaw:    os.Getenv("DEBUG_HTTP_RAW") == "true",
 		HourlyRateLimit: hourlyLimit,
 		MaxConcurrent:   maxConcurrent,
+		MaxLogLines:     tempmaxLogLines,
 	}
 
 	if cfg.IPMode == "" {
@@ -145,8 +152,23 @@ func main() {
 		cfg.HealthPort = "8080"
 	}
 
-	_ = os.MkdirAll(logsDir, 0755)
-	_ = os.MkdirAll(langDir, 0755)
+	if err := os.MkdirAll(logsDir, 0755); err != nil {
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionConfig,
+			Message: fmt.Sprintf("Log-Verzeichnis konnte nicht erstellt werden: %v", err),
+		})
+		os.Exit(1)
+	}
+
+	if err := os.MkdirAll(langDir, 0755); err != nil {
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionConfig,
+			Message: fmt.Sprintf("Lang-Verzeichnis konnte nicht erstellt werden: %v", err),
+		})
+		os.Exit(1)
+	}
 
 	logPath = filepath.Join(logsDir, "dyndns.json")
 	updatePath = filepath.Join(logsDir, "update.json")
@@ -184,8 +206,21 @@ func main() {
 	globalTriggerLimiter = NewRateLimiter(10, 1.0/6.0)
 	ipTriggerLimiter = NewIPRateLimiter(5, 0.1)
 
-	updateDomainsCache()
-	updateMetricsCache()
+	if err := updateDomainsCache(); err != nil {
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: fmt.Sprintf("Failed to update domain cache: %v", err),
+		})
+	}
+
+	if err := updateMetricsCache(); err != nil {
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: fmt.Sprintf("Failed to update metric cache: %v", err),
+		})
+	}
 
 	startCacheRefresher()
 	startLogRotationWorker()
@@ -228,8 +263,8 @@ func main() {
 			debugLog("SCHEDULER", "", "Intervall erreicht, starte runUpdate(false)")
 			runUpdate(false)
 
-			limit := maxLogLines
-			if cfg.Interval > 300 {
+			limit := cfg.MaxLogLines
+			if cfg.Interval > 500 {
 				limit = 1000
 			}
 			debugLog("MAINTENANCE", "", T.MaintenanceStarting)
@@ -277,7 +312,9 @@ func main() {
 
 			debugLog("SYSTEM", "", "📝 Warte auf Log-Queue...")
 			flushLogQueue(2 * time.Second)
-			_ = apiMetrics.SaveToFile(metricsPersistPath)
+			if err := apiMetrics.SaveToFile(metricsPersistPath); err != nil {
+				debugLog("SYSTEM", "", fmt.Sprintf("Metrics konnten nicht gespeichert werden: %v", err))
+			}
 			close(logWriteQueue)
 
 			ctx, cancel := context.WithTimeout(context.Background(), ShutdownGraceTimeout)
