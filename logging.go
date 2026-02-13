@@ -214,7 +214,9 @@ func startLogWriter() {
 			data, err := json.Marshal(entry)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "[ERROR] Failed to marshal log entry: %v\n", err)
-				file.Close()
+				if err := file.Close(); err != nil {
+					fmt.Fprintf(os.Stderr, "[WARN] Failed to close file: %v\n", err)
+				}
 				logMutex.Unlock()
 				continue
 			}
@@ -224,7 +226,9 @@ func startLogWriter() {
 				fmt.Fprintf(os.Stderr, "[ERROR] Failed to write log entry: %v\n", err)
 			}
 
-			file.Close()
+			if err := file.Close(); err != nil {
+				fmt.Fprintf(os.Stderr, "[WARN] Failed to close file: %v\n", err)
+			}
 			logMutex.Unlock()
 		}
 
@@ -262,7 +266,9 @@ func doLogRotation(path string, maxLines int) {
 	for scanner.Scan() {
 		lines = append(lines, scanner.Text())
 	}
-	file.Close()
+	if err := file.Close(); err != nil {
+		fmt.Fprintf(os.Stderr, "[WARN] Failed to close file: %v\n", err)
+	}
 
 	if len(lines) <= maxLines {
 		return
