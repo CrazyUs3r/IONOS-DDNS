@@ -66,7 +66,7 @@ var (
 
 	activeUpdates atomic.Int32
 
-	lastSuccessfulDNS int32 = 0
+	lastSuccessfulDNS int32
 
 	providerCache = &ProviderDataCache{
 		ionosRecords: make(map[string][]Record),
