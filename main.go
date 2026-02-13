@@ -231,7 +231,7 @@ func main() {
 		debugLog("SYSTEM", "", fmt.Sprintf(T.DashboardStarted, cfg.HealthPort))
 		log(LogContext{
 			Level:   LogInfo,
-			Action:  "SERVER",
+			Action:  ActionServer,
 			Message: fmt.Sprintf(T.DashboardStarted, cfg.HealthPort),
 		})
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
