@@ -27,7 +27,7 @@ func splitIPv64FQDN(fqdn string) (baseDomain, praefix string) {
 func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) ([]byte, error) {
 	method := "GET"
 	var bodyData string
-	apiURL := ipv64APIBase  // Lokale Kopie verwenden!
+	apiURL := ipv64APIBase
 
 	if len(params) > 0 {
 		if _, hasGetDomains := params["get_domains"]; hasGetDomains {
@@ -115,13 +115,23 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 			continue
 		}
 
-		respBody, err := io.ReadAll(res.Body)
-		res.Body.Close()
+		respBody, readErr := io.ReadAll(res.Body)
+		_, _ = io.Copy(io.Discard, res.Body)
+		closeErr := res.Body.Close()
 
-		if err != nil {
-			apiMetrics.RecordError(res.StatusCode, err, duration)
-			lastErr = fmt.Errorf("failed to read response: %w", err)
+		if closeErr != nil {
+			debugLog("HTTP", "", fmt.Sprintf("Body close failed: %v", closeErr))
+		}
+
+		if readErr != nil {
+			apiMetrics.RecordError(res.StatusCode, readErr, duration)
+			lastErr = fmt.Errorf("failed to read response: %w", readErr)
 			continue
+		}
+
+		if apiErr := classifyAPIError(res.StatusCode, method, apiURL, string(respBody)); apiErr != nil {
+			apiMetrics.RecordError(res.StatusCode, apiErr, duration)
+			return nil, apiErr
 		}
 
 		var ipv64Resp IPv64Response
@@ -134,7 +144,7 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 				}
 				debugLog("HTTP", "", fmt.Sprintf("IPv64 API returned HTML instead of JSON: %s", preview))
 			}
-			
+
 			return nil, fmt.Errorf("failed to parse ipv64 response: %w", err)
 		}
 
@@ -145,6 +155,11 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 				Message:    ipv64Resp.Info,
 				Retryable:  false,
 			}
+			log(LogContext{
+				Level:   LogError,
+				Action:  ActionAPI,
+				Message: "IPv64 API Error: " + ipv64Resp.Info,
+			})
 			apiMetrics.RecordError(res.StatusCode, apiErr, duration)
 			return nil, apiErr
 		}
@@ -194,7 +209,7 @@ func loadIPv64Domains(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
 }
 
 // ============================================================================
-// CACHE PERSISTENCE - NEU
+// CACHE PERSISTENCE
 // ============================================================================
 func getIPv64CachePath() string {
 	return filepath.Join(cfg.LogDir, "ipv64_cache.json")
@@ -202,7 +217,7 @@ func getIPv64CachePath() string {
 
 func saveIPv64Cache() error {
 	cachePath := getIPv64CachePath()
-	
+
 	providerCache.RLock()
 	data := providerCache.ipv64Records
 	providerCache.RUnlock()
@@ -227,7 +242,7 @@ func saveIPv64Cache() error {
 
 func loadIPv64CacheFromDisk() error {
 	cachePath := getIPv64CachePath()
-	
+
 	data, err := os.ReadFile(cachePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -264,7 +279,7 @@ func loadAllIPv64Domains(ctx context.Context, dc *DomainConfig) error {
 		providerCache.RLock()
 		hasCachedData := len(providerCache.ipv64Records) > 0
 		providerCache.RUnlock()
-		
+
 		if !hasCachedData {
 			if loadErr := loadIPv64CacheFromDisk(); loadErr != nil {
 				debugLog("CACHE", "", fmt.Sprintf("⚠️ Konnte auch keinen Cache von Disk laden: %v", loadErr))
@@ -272,7 +287,7 @@ func loadAllIPv64Domains(ctx context.Context, dc *DomainConfig) error {
 				debugLog("CACHE", "", "✅ Fallback auf persistierten Cache erfolgreich")
 			}
 		}
-		
+
 		return err
 	}
 
@@ -286,12 +301,12 @@ func loadAllIPv64Domains(ctx context.Context, dc *DomainConfig) error {
 			}
 			debugLog("CACHE", "", fmt.Sprintf("API returned HTML: %s", preview))
 		}
-		
+
 		return fmt.Errorf("failed to parse ipv64 response: %w", err)
 	}
 
 	providerCache.Lock()
-	
+
 	for domainName, subdomain := range resp.Subdomains {
 		domain := IPv64Domain{
 			Domain:           domainName,
@@ -318,7 +333,7 @@ func loadAllIPv64Domains(ctx context.Context, dc *DomainConfig) error {
 			),
 		)
 	}
-	
+
 	providerCache.Unlock()
 
 	if err := saveIPv64Cache(); err != nil {
@@ -413,9 +428,17 @@ func updateIPv64DNS(
 		apiMetrics.RecordError(0, err, duration)
 		return false, err
 	}
-	defer res.Body.Close()
+	defer func() {
+		if err := res.Body.Close(); err != nil {
+			debugLog("HTTP", "", fmt.Sprintf("Body close failed: %v", err))
+		}
+	}()
 
-	body, _ := io.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		apiMetrics.RecordError(res.StatusCode, err, duration)
+		return false, fmt.Errorf("failed to read ipv64 response: %w", err)
+	}
 	resp := strings.ToLower(strings.TrimSpace(string(body)))
 
 	if res.StatusCode != 200 {

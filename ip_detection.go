@@ -29,7 +29,15 @@ func getPublicIP(url string, want IPVersion) (string, error) {
 		debugLog("IP-CHECK", "", fmt.Sprintf("❌ HTTP: %v", err))
 		return "", fmt.Errorf("http error: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log(LogContext{
+				Level:   LogError,
+				Action:  ActionError,
+				Message: fmt.Sprintf("Failed to close response body: %v", err),
+			})
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		debugLog("IP-CHECK", "", fmt.Sprintf("❌ Status Code: %d", resp.StatusCode))

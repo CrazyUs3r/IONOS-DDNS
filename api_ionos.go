@@ -28,7 +28,7 @@ func saveIONOSCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error {
 	}
 
 	cachePath := getIONOSCachePath()
-	
+
 	cache := IONOSCache{
 		Zones:      zones,
 		Records:    make(map[string][]Record),
@@ -55,14 +55,14 @@ func saveIONOSCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error {
 		return fmt.Errorf("failed to rename cache: %w", err)
 	}
 
-	debugLog("CACHE", "", fmt.Sprintf("💾 IONOS Cache gespeichert (%d zones, %d records)", 
+	debugLog("CACHE", "", fmt.Sprintf("💾 IONOS Cache gespeichert (%d zones, %d records)",
 		len(zones), len(cache.Records)))
 	return nil
 }
 
 func loadIONOSCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
 	cachePath := getIONOSCachePath()
-	
+
 	data, err := os.ReadFile(cachePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -83,9 +83,9 @@ func loadIONOSCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
 	}
 
 	age := time.Since(cache.LastUpdate)
-	debugLog("CACHE", "", fmt.Sprintf("📂 IONOS Cache von Disk geladen (%d zones, Alter: %v)", 
+	debugLog("CACHE", "", fmt.Sprintf("📂 IONOS Cache von Disk geladen (%d zones, Alter: %v)",
 		len(cache.Zones), age.Round(time.Second)))
-	
+
 	return cache.Zones, recordCache, nil
 }
 
@@ -180,7 +180,7 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 		debugLog("HTTP", "", fmt.Sprintf("✅ Status: %d | %s: %v", res.StatusCode, T.AvgLatency, duration))
 
 		respBody, err := io.ReadAll(res.Body)
-		res.Body.Close()
+		_ = res.Body.Close()
 
 		if err != nil {
 			apiMetrics.RecordError(res.StatusCode, err, duration)
@@ -472,7 +472,7 @@ func updateIONOSCache(cache *ZoneRecordCache, zoneID, recordName, fqdn, recordTy
 
 // ============================================================================
 // CLEANUP - IONOS
-// ===========================================================================
+// ============================================================================
 func cleanupIONOSRecords(ctx context.Context, zones []Zone, recordCache *ZoneRecordCache) {
 	var ionosDC *DomainConfig
 	for i := range cfg.DomainConfigs {

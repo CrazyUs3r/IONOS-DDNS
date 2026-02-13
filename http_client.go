@@ -72,7 +72,7 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		var bodyBytes []byte
 		if resp.Body != nil {
 			bodyBytes, _ = io.ReadAll(resp.Body)
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 		}
 

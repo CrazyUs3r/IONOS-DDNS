@@ -197,22 +197,14 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 		}
 
 		if res.StatusCode == http.StatusTooManyRequests {
-			if d, ok := parseRetryAfter(res.Header); ok {
-				apiErr := &APIError{StatusCode: res.StatusCode, Method: method, URL: fullURL, Message: "rate limited", Retryable: true}
-				apiMetrics.RecordError(res.StatusCode, apiErr, duration)
-				lastErr = apiErr
-				select {
-				case <-time.After(d):
-					continue
-				case <-ctx.Done():
-					return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
-				}
-			}
-			apiErr := &APIError{StatusCode: res.StatusCode, Method: method, URL: fullURL, Message: "rate limited", Retryable: true}
+			apiErr := classifyCloudflareAPIError(res.StatusCode, method, fullURL, respBody, nil, res.Header)
 			apiMetrics.RecordError(res.StatusCode, apiErr, duration)
 			lastErr = apiErr
 
-			wait := calculateRetryDelay(attempt, true)
+			wait := apiErr.RetryAfter
+			if wait <= 0 {
+				wait = calculateRetryDelay(attempt, true)
+			}
 			select {
 			case <-time.After(wait):
 				continue
@@ -262,22 +254,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 		}
 
 		if !cfResp.Success {
-			msg := cfErrorMessage(&cfResp, "unknown error")
-			retryable := res.StatusCode == 409 || res.StatusCode == 429 || res.StatusCode >= 500
-			if res.StatusCode == 401 || res.StatusCode == 403 {
-				retryable = false
-			}
-
-			apiErr := classifyAPIError(res.StatusCode, method, fullURL, msg)
-			if apiErr == nil {
-				apiErr = &APIError{
-					StatusCode: res.StatusCode,
-					Method:     method,
-					URL:        fullURL,
-					Message:    msg,
-					Retryable:  retryable,
-				}
-			}
+			apiErr := classifyCloudflareAPIError(res.StatusCode, method, fullURL, respBody, &cfResp, res.Header)
 
 			apiMetrics.RecordError(res.StatusCode, apiErr, duration)
 			lastErr = apiErr
@@ -286,19 +263,11 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 				return nil, apiErr
 			}
 
-			if res.StatusCode == 429 {
-				if d, ok := parseRetryAfter(res.Header); ok {
-					select {
-					case <-time.After(d):
-						continue
-					case <-ctx.Done():
-						return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
-					}
-				}
+			wait := apiErr.RetryAfter
+			if wait <= 0 {
+				serverBusy := res.StatusCode == 429 || res.StatusCode >= 500
+				wait = calculateRetryDelay(attempt, serverBusy)
 			}
-
-			serverBusy := res.StatusCode == 429 || res.StatusCode >= 500
-			wait := calculateRetryDelay(attempt, serverBusy)
 			select {
 			case <-time.After(wait):
 				continue
@@ -624,6 +593,73 @@ func parseRetryAfter(h http.Header) (time.Duration, bool) {
 		return d, true
 	}
 	return 0, false
+}
+
+func classifyCloudflareAPIError(
+	statusCode int,
+	method, url string,
+	responseBody []byte,
+	cfResp *CloudflareResponse,
+	headers http.Header,
+) *APIError {
+
+	msg := strings.TrimSpace(string(responseBody))
+
+	if cfResp != nil && !cfResp.Success {
+		msg = cfErrorMessage(cfResp, msg)
+	}
+
+	if msg == "" {
+		msg = http.StatusText(statusCode)
+	}
+
+	apiErr := &APIError{
+		StatusCode: statusCode,
+		Method:     method,
+		URL:        url,
+		Message:    msg,
+		Retryable:  false,
+	}
+
+	if statusCode == 401 || statusCode == 403 {
+
+		if msg != "" {
+			apiErr.Message = fmt.Sprintf("%s - %s", http.StatusText(statusCode), msg)
+		}
+
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionConfig,
+			Message: apiErr.Message,
+		})
+
+		return apiErr
+	}
+
+	if statusCode == http.StatusTooManyRequests {
+		apiErr.Retryable = true
+
+		if d, ok := parseRetryAfter(headers); ok {
+			apiErr.RetryAfter = d
+		} else {
+			apiErr.RetryAfter = RateLimitRetryDelay
+		}
+
+		log(LogContext{
+			Level:   LogWarn,
+			Action:  ActionRetry,
+			Message: T.RateLimitExceeded,
+		})
+
+		return apiErr
+	}
+
+	if statusCode >= 500 {
+		apiErr.Retryable = true
+		apiErr.RetryAfter = ServerErrorRetryDelay
+	}
+
+	return apiErr
 }
 
 func cfErrorMessage(cfResp *CloudflareResponse, fallback string) string {

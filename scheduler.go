@@ -42,7 +42,7 @@ func runUpdate(firstRun bool) {
 	if err != nil {
 		debugLog("SCHEDULER", "", fmt.Sprintf("⚠️ API-Fehler beim Laden der Zones: %v", err))
 		debugLog("SCHEDULER", "", "🔄 Versuche Fallback auf Disk-Caches...")
-		
+
 		zonesByProvider, err = loadZonesFromDiskCache()
 		if err != nil {
 			lastOk.Store(false)
@@ -61,7 +61,7 @@ func runUpdate(firstRun bool) {
 	if err != nil {
 		debugLog("CACHE", "", fmt.Sprintf("⚠️ Cache-Fehler: %v", err))
 		debugLog("CACHE", "", "🔄 Versuche Record-Cache von Disk zu laden...")
-		
+
 		cache, err = loadRecordCacheFromDisk(zonesByProvider)
 		if err != nil {
 			lastOk.Store(false)
@@ -156,7 +156,7 @@ func loadZonesFromDiskCache() (map[string][]Zone, error) {
 					})
 				}
 				providerCache.RUnlock()
-				
+
 				if len(zones) > 0 {
 					zonesByProvider[string(ProviderIPv64)] = zones
 					loadedAny = true

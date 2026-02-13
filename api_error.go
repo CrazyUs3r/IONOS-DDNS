@@ -43,7 +43,7 @@ func classifyAPIError(statusCode int, method, url, responseBody string) *APIErro
 		apiErr.Message = T.RateLimitExceeded
 		apiErr.Retryable = true
 		apiErr.RetryAfter = RateLimitRetryDelay
-		log(LogContext{Level: LogWarn, Action: ActionRetry, Message: "⚠️ " + T.RateLimitExceeded})
+		log(LogContext{Level: LogWarn, Action: ActionRetry, Message: T.RateLimitExceeded})
 	case 500:
 		apiErr.Message = T.InternalServerError
 		apiErr.Retryable = true
