@@ -137,20 +137,6 @@ const (
 	ActionServer  = "SERVER"
 )
 
-//	var persistentActions = map[string]bool{
-//		ActionStart:   true,
-//		ActionStop:    true,
-//		ActionUpdate:  true,
-//		ActionCreate:  true,
-//		ActionError:   true,
-//		ActionRetry:   true,
-//		ActionConfig:  true,
-//		ActionZone:    true,
-//		ActionCleanup: true,
-//		ActionSkip:    true,
-//		ActionAPI:     true,
-//		ActionServer:  true,
-//	}
 var persistOnWarnError = map[string]struct{}{
 	ActionStart:   {},
 	ActionStop:    {},
