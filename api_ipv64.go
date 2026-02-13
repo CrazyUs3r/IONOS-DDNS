@@ -72,10 +72,10 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 	}
 
 	var lastErr error
-	for attempt := 0; attempt < MaxAPIRetries; attempt++ {
+	for attempt := 0; attempt < cfg.MaxAPIRetries; attempt++ {
 		start := time.Now().Local()
 		debugLog("HTTP", "", fmt.Sprintf("🔄 IPv64 %s %d/%d: %s %s",
-			T.Attempt, attempt+1, MaxAPIRetries, method, apiURL))
+			T.Attempt, attempt+1, cfg.MaxAPIRetries, method, apiURL))
 
 		var req *http.Request
 		var err error
@@ -168,7 +168,7 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 		return respBody, nil
 	}
 
-	return nil, fmt.Errorf("ipv64 api failed after %d attempts: %w", MaxAPIRetries, lastErr)
+	return nil, fmt.Errorf("ipv64 api failed after %d attempts: %w", cfg.MaxAPIRetries, lastErr)
 }
 
 func loadIPv64Domains(ctx context.Context, dc *DomainConfig) ([]Zone, error) {

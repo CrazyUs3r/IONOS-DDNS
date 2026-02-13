@@ -112,10 +112,10 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 	fullURL := cloudflareAPIBase + endpoint
 
 	var lastErr error
-	for attempt := 0; attempt < MaxAPIRetries; attempt++ {
+	for attempt := 0; attempt < cfg.MaxAPIRetries; attempt++ {
 		start := time.Now()
 		debugLog("HTTP", "", fmt.Sprintf("🔄 Cloudflare %s %d/%d: %s %s",
-			T.Attempt, attempt+1, MaxAPIRetries, method, fullURL))
+			T.Attempt, attempt+1, cfg.MaxAPIRetries, method, fullURL))
 
 		var bodyReader io.Reader
 		if body != nil {
@@ -244,7 +244,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 			if res.StatusCode == 401 || res.StatusCode == 403 {
 				return nil, apiErr
 			}
-			if attempt >= MaxAPIRetries-1 || !apiErr.IsRetryable() {
+			if attempt >= cfg.MaxAPIRetries-1 || !apiErr.IsRetryable() {
 				return nil, apiErr
 			}
 
@@ -264,7 +264,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 			apiMetrics.RecordError(res.StatusCode, apiErr, duration)
 			lastErr = apiErr
 
-			if attempt >= MaxAPIRetries-1 || !apiErr.IsRetryable() {
+			if attempt >= cfg.MaxAPIRetries-1 || !apiErr.IsRetryable() {
 				return nil, apiErr
 			}
 
@@ -285,7 +285,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 		return respBody, nil
 	}
 
-	return nil, fmt.Errorf("cloudflare api failed after %d attempts: %w", MaxAPIRetries, lastErr)
+	return nil, fmt.Errorf("cloudflare api failed after %d attempts: %w", cfg.MaxAPIRetries, lastErr)
 }
 
 func loadCloudflareZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {

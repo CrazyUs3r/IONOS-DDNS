@@ -118,11 +118,11 @@ func calculateRetryDelay(attempt int, isServerError bool) time.Duration {
 func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body interface{}) ([]byte, error) {
 	var lastErr error
 
-	for attempt := 0; attempt < MaxAPIRetries; attempt++ {
+	for attempt := 0; attempt < cfg.MaxAPIRetries; attempt++ {
 		start := time.Now().Local()
 		debugLog("HTTP", "", fmt.Sprintf(
 			"🔄 %s %d/%d: %s %s",
-			T.Attempt, attempt+1, MaxAPIRetries, method, url,
+			T.Attempt, attempt+1, cfg.MaxAPIRetries, method, url,
 		))
 
 		var bodyBytes []byte
@@ -226,8 +226,8 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 			return nil, apiErr
 		}
 
-		if attempt >= MaxAPIRetries-1 {
-			debugLog("HTTP", "", fmt.Sprintf("❌ %s (%d)", T.MaxAttemptsReached, MaxAPIRetries))
+		if attempt >= cfg.MaxAPIRetries-1 {
+			debugLog("HTTP", "", fmt.Sprintf("❌ %s (%d)", T.MaxAttemptsReached, cfg.MaxAPIRetries))
 			return nil, fmt.Errorf("maximale Versuche erreicht: %w", apiErr)
 		}
 
@@ -248,7 +248,7 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 		}
 	}
 
-	return nil, fmt.Errorf("API fehlgeschlagen nach %d Versuchen: %w", MaxAPIRetries, lastErr)
+	return nil, fmt.Errorf("API fehlgeschlagen nach %d Versuchen: %w", cfg.MaxAPIRetries, lastErr)
 }
 
 // ============================================================================
