@@ -18,7 +18,14 @@ func updateStatusFile(fqdn, ipv4, ipv6, provider string) {
 
 	domains := make(map[string]DomainHistory)
 	if b, err := os.ReadFile(updatePath); err == nil {
-		json.Unmarshal(b, &domains)
+		if err := json.Unmarshal(b, &domains); err != nil {
+			log(LogContext{
+				Level:   LogError,
+				Action:  ActionError,
+				Message: fmt.Sprintf("Failed to parse status file: %v", err),
+			})
+			return
+		}
 	}
 
 	h := domains[fqdn]
@@ -87,13 +94,13 @@ func updateDomainsCache() error {
 	return nil
 }
 
-func updateMetricsCache() {
+func updateMetricsCache() error {
 	stats := apiMetrics.GetStats()
 
 	data, err := json.Marshal(stats)
 	if err != nil {
 		debugLog("CACHE", "", fmt.Sprintf("Metrics cache marshal error: %v", err))
-		return
+		return err
 	}
 
 	etag := fmt.Sprintf(`"%x"`, md5.Sum(data))
@@ -103,6 +110,8 @@ func updateMetricsCache() {
 	metricsCache.ETag = etag
 	metricsCache.LastModified = time.Now().Local()
 	metricsCache.mu.Unlock()
+
+	return nil
 }
 
 func serveCachedJSON(w http.ResponseWriter, r *http.Request, cache *CachedResponse) {
