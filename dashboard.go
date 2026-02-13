@@ -900,7 +900,7 @@ func createMux() *http.ServeMux {
 		}
 	})
 
-	mux.HandleFunc("/api/export", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/export", func(w http.ResponseWriter, _ *http.Request) {
 		statusMutex.Lock()
 		defer statusMutex.Unlock()
 
@@ -1008,7 +1008,7 @@ func createMux() *http.ServeMux {
 		serveCachedJSON(w, r, metricsCache)
 	})
 
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		statusMutex.Lock()
 		data := make(map[string]interface{})
 		if fileData, err := os.ReadFile(updatePath); err == nil {
