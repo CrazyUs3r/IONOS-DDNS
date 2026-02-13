@@ -96,6 +96,24 @@ var (
 			return strings.EqualFold(u.Host, r.Host)
 		},
 	}
+
+	DefaultIPv4Endpoints = []string{
+		"https://4.tnedi.me/",
+		"https://4.ident.me/",
+		"https://api.ipify.org/",
+		"https://checkip.amazonaws.com/",
+		"https://ifconfig.me/ip",
+		"https://ipinfo.io/ip",
+	}
+
+	DefaultIPv6Endpoints = []string{
+		"https://6.tnedi.me/",
+		"https://6.ident.me/",
+		"https://api6.ipify.org/",
+		"https://ipv6.myip.wtf/text",
+		"https://ip.wtf",
+		"https://botwhatismyipaddress.com",
+	}
 )
 
 // ============================================================================
@@ -115,6 +133,7 @@ const (
 	ActionDryRun  = "DRY-RUN"
 	ActionCleanup = "CLEANUP"
 	ActionSkip    = "SKIP"
+	ActionAPI     = "API"
 )
 
 var persistentActions = map[string]bool{
@@ -128,6 +147,7 @@ var persistentActions = map[string]bool{
 	ActionZone:    true,
 	ActionCleanup: true,
 	ActionSkip:    true,
+	ActionAPI:     true,
 }
 
 // ============================================================================
@@ -172,6 +192,12 @@ const (
 	HTTPTLSTimeout       = 10 * time.Second
 	HTTPResponseTimeout  = 10 * time.Second
 	HTTPExpectTimeout    = 1 * time.Second
+)
+
+const (
+	IPAny IPVersion = 0
+	IPV4  IPVersion = 4
+	IPV6  IPVersion = 6
 )
 
 // ============================================================================
@@ -313,7 +339,7 @@ type DomainHistory struct {
 }
 
 type DomainConfig struct {
-	FQDN     string       `json:"domain"`
+	FQDN     string       `json:"fqdn"`
 	Provider ProviderType `json:"provider"`
 
 	APIPrefix string `json:"api_prefix,omitempty"`
@@ -341,6 +367,7 @@ type Config struct {
 	DebugHTTPRaw    bool
 	HourlyRateLimit int
 	MaxConcurrent   int
+	MaxLogLines     int
 }
 
 type Zone struct {
@@ -393,6 +420,7 @@ type CloudflareError struct {
 }
 
 type CloudflareCache struct {
+	Version    int                 `json:"version"`
 	Zones      []Zone              `json:"zones"`
 	Records    map[string][]Record `json:"records"`
 	LastUpdate time.Time           `json:"last_update"`
@@ -442,6 +470,8 @@ type IONOSCache struct {
 	Records    map[string][]Record `json:"records"`
 	LastUpdate time.Time           `json:"last_update"`
 }
+
+type IPVersion int
 
 type ZoneRecordCache struct {
 	sync.RWMutex
