@@ -82,7 +82,8 @@ func printInfrastructure(ctx context.Context, zonesByProvider map[string][]Zone)
 			fmt.Printf("\n🌐 Zone: %s\n", z.Name)
 			var records []Record
 
-			if ProviderType(pt) == ProviderIPv64 {
+			switch ProviderType(pt) {
+			case ProviderIPv64:
 				providerCache.RLock()
 				if data, ok := providerCache.ipv64Records[z.Name]; ok {
 					for _, ir := range data.Records {
@@ -98,11 +99,13 @@ func printInfrastructure(ctx context.Context, zonesByProvider map[string][]Zone)
 					}
 				}
 				providerCache.RUnlock()
-			} else if ProviderType(pt) == ProviderCloudflare {
+
+			case ProviderCloudflare:
 				if dc != nil {
 					records, _ = loadCloudflareRecords(ctx, dc, z.ID)
 				}
-			} else {
+
+			default:
 				if dc != nil {
 					data, _ := ionosAPI(ctx, dc, "GET", ionosBaseURL+"/"+z.ID, nil)
 					var detail struct{ Records []Record }
