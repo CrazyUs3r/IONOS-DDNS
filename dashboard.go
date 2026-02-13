@@ -1022,19 +1022,37 @@ func createMux() *http.ServeMux {
 		}
 
 		var logs []LogEntry
+		var logTimeRange string
+
 		if b, err := os.ReadFile(logPath); err == nil {
 			lines := strings.Split(string(b), "\n")
-			for i := len(lines) - 1; i >= 0 && len(logs) < 500; i-- {
-				if strings.TrimSpace(lines[i]) == "" {
+			formatTs := func(ts string) string {
+				t, err := time.Parse("2006-01-02T15:04:05", ts)
+				if err != nil {
+					return ts
+				}
+				return t.Format("02.01.2006 15:04:05")
+			}
+
+			for i := len(lines) - 1; i >= 0 && len(logs) < cfg.MaxLogLines; i-- {
+				line := strings.TrimSpace(lines[i])
+				if line == "" {
 					continue
 				}
 				var e LogEntry
-				if json.Unmarshal([]byte(lines[i]), &e) == nil {
+				if json.Unmarshal([]byte(line), &e) == nil {
+					// Zeitstempel für die Liste direkt hübsch machen
+					e.Timestamp = formatTs(e.Timestamp)
 					logs = append(logs, e)
 				}
 			}
+			if len(logs) > 0 {
+				// Da logs[0] der neueste und logs[len-1] der älteste ist:
+				latest := logs[0].Timestamp
+				oldest := logs[len(logs)-1].Timestamp
+				logTimeRange = fmt.Sprintf("%s — %s", oldest, latest)
+			}
 		}
-
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = fmt.Fprint(w, `<!DOCTYPE html><html><head>
 		<meta charset="utf-8">
@@ -1360,22 +1378,30 @@ func createMux() *http.ServeMux {
 
 		if len(logs) > 0 {
 			_, _ = fmt.Fprintf(w, `
-		<details class="card" id="logs-card">
-			<summary>🧾 %s <span style="opacity:0.6; font-size:0.9em;">(%d entries)</span></summary>
-			<div class="card-content">
-				<div class="log-filters">
-					<button class="filter-btn active" data-filter="all" onclick="filterLogs('all')">All</button>
-					<button class="filter-btn" data-filter="ERR" onclick="filterLogs('ERR')">Errors</button>
-					<button class="filter-btn" data-filter="WARN" onclick="filterLogs('WARN')">Warnings</button>
-					<button class="filter-btn" data-filter="UPDATE" onclick="filterLogs('UPDATE')">Updates</button>
-					<button class="filter-btn" data-filter="START" onclick="filterLogs('START')">Starts</button>
-					<button class="filter-btn" data-filter="STOP" onclick="filterLogs('STOP')">Stop</button>
-					<button class="filter-btn" data-filter="CREATE" onclick="filterLogs('CREATE')">Created</button>
-					<button class="filter-btn" data-filter="CLEANUP" onclick="filterLogs('CLEANUP')">Cleanup</button>
-					<button class="filter-btn" data-filter="SKIP" onclick="filterLogs('SKIP')">Skip</button>
-				</div>
-			<div id="logContainer" style="max-height: 300px; overflow-y: auto; font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 13px; padding-right: 5px;">
-			`, T.SystemEvents, len(logs))
+                     <details class="card" id="logs-card">
+                          <summary>
+                          🧾 %s 
+                      <span style="opacity:0.6; font-size:0.9em; margin-left: 10px;">
+                          (%d entries) 
+                     <span style="margin-left: 10px; border-left: 1px solid #ccc; padding-left: 10px;">
+                     🕒 %s
+                     </span>
+                     </span>
+                       </summary>
+                   <div class="card-content">
+                        <div class="log-filters">
+                               <button class="filter-btn active" data-filter="all" onclick="filterLogs('all')">All</button>
+                               <button class="filter-btn" data-filter="ERR" onclick="filterLogs('ERR')">Errors</button>
+                               <button class="filter-btn" data-filter="WARN" onclick="filterLogs('WARN')">Warnings</button>
+                               <button class="filter-btn" data-filter="UPDATE" onclick="filterLogs('UPDATE')">Updates</button>
+                               <button class="filter-btn" data-filter="START" onclick="filterLogs('START')">Starts</button>
+                               <button class="filter-btn" data-filter="STOP" onclick="filterLogs('STOP')">Stop</button>
+                               <button class="filter-btn" data-filter="CREATE" onclick="filterLogs('CREATE')">Created</button>
+                               <button class="filter-btn" data-filter="CLEANUP" onclick="filterLogs('CLEANUP')">Cleanup</button>
+                               <button class="filter-btn" data-filter="SKIP" onclick="filterLogs('SKIP')">Skip</button>
+                           </div>
+                       <div id="logContainer" style="max-height: 300px; overflow-y: auto; font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 13px; padding-right: 5px;">
+                       `, T.SystemEvents, len(logs), logTimeRange)
 
 			for _, e := range logs {
 				displayTime := e.Timestamp
