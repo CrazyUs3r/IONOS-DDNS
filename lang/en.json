@@ -134,5 +134,9 @@
   "http_pool": "HTTP Pool expanded:",
   "hourly_limit_est": "HOURLY LIMIT (EST.)",
   "requests_label": "Requests",
-  "usage_last60_min": "Based on requests from the last 60 minutes"
+  "usage_last60_min": "Based on requests from the last 60 minutes",
+  "max_log_lines": "Log Max Lines",
+  "max_api_retries": "API Max Retries",
+  "max_concurrent": "Max Concurrent",
+  "interval": "Interval"
 }

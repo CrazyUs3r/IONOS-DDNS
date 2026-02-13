@@ -126,5 +126,12 @@
   "http_pool": "Rozszerzono pulę HTTP:",
   "hourly_limit_est": "LIMIT GODZINOWY (SZAC.)",
   "requests_label": "Upraszanie",
-  "usage_last60_min": "Na podstawie próśb z ostatnich 60 minut"
+  "usage_last60_min": "Na podstawie próśb z ostatnich 60 minut",
+  "max_log_lines": "Maksymalna liczba wierszy dziennika",
+  "max_api_retries": "Maksymalna liczba ponownych prób API",
+  "max_concurrent": "Maksymalna liczba równoczesnych prób",
+  "interval": "Interwał"
 }
+
+
+

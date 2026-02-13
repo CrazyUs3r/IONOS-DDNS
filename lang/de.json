@@ -134,5 +134,12 @@
   "http_pool": "HTTP Pool erweitert:",
   "hourly_limit_est": "STÜNDLICHES LIMIT (EST.)",
   "requests_label": "Anfragen",
-  "usage_last60_min": "Basierend auf Requests der letzten 60 Minuten"
+  "usage_last60_min": "Basierend auf Requests der letzten 60 Minuten",
+  "max_log_lines": "Maximale Zeilenanzahl protokollieren",
+  "max_api_retries": "Maximale API-Wiederholungsversuche",
+  "max_concurrent": "Maximale Anzahl gleichzeitiger Anfragen",
+  "interval": "Intervall"
 }
+
+
+

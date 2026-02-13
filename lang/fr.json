@@ -126,5 +126,12 @@
   "http_pool": "Pool HTTP étendu:",
   "hourly_limit_est": "LIMITE HORAIRE (EST.)",
   "requests_label": "Demandes",
-  "usage_last60_min": "Basierend auf Requests der letzten 60 Minuten"
+  "usage_last60_min": "D'après les demandes des 60 dernières minutes",
+  "max_log_lines": "Nombre maximal de lignes enregistrées",
+  "max_api_retries": "Nombre maximal de tentatives API",
+  "max_concurrent": "Nombre maximal de connexions simultanées",
+  "interval": "Intervalle"
 }
+
+
+

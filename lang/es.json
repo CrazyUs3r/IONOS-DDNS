@@ -126,5 +126,9 @@
   "http_pool": "Grupo HTTP ampliado:",
   "hourly_limit_est": "LÍMITE HORARIO (EST.)",
   "requests_label": "Solicitudes",
-  "usage_last60_min": "D'après les demandes des 60 dernières minutes"
+  "usage_last60_min": "D'après les demandes des 60 dernières minutes",
+  "max_log_lines": "Máximo de líneas de registro",
+  "max_api_retries": "Máximo de reintentos de API",
+  "max_concurrent": "Máximo de concurrencia",
+  "interval": "Intervalo"
 }
