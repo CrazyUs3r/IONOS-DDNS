@@ -104,7 +104,7 @@ func shouldPersistLevel(level LogLevel, action string) bool {
 	}
 
 	switch action {
-	case ActionStart, ActionStop, ActionUpdate, ActionCreate, ActionCleanup, ActionSkip:
+	case ActionStart, ActionStop, ActionUpdate, ActionCreate, ActionCleanup, ActionSkip, ActionAPI:
 		return true
 	}
 	return false
@@ -176,6 +176,15 @@ func debugLog(category, domain, msg string) {
 	log(LogContext{
 		Level:    LogDebug,
 		Category: category,
+		Domain:   domain,
+		Message:  msg,
+	})
+}
+
+func ipLog(domain, msg string) {
+	log(LogContext{
+		Level:    LogInfo,
+		Category: "IP-CHECK",
 		Domain:   domain,
 		Message:  msg,
 	})
