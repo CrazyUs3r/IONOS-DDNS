@@ -106,7 +106,7 @@ func calculateRetryDelay(attempt int, isServerError bool) time.Duration {
 	wait := baseWait + jitter
 
 	if isServerError {
-		wait = wait * 2
+		wait *= 2
 		if wait > RetryMaxDelay {
 			wait = RetryMaxDelay
 		}
