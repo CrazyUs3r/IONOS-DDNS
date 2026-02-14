@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -129,8 +130,57 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 			continue
 		}
 
+		if res.StatusCode == 429 {
+			apiMetrics.RecordError(res.StatusCode, fmt.Errorf("rate limit exceeded"), duration)
+			retryAfter := res.Header.Get("Retry-After")
+			var waitDuration time.Duration
+
+			if retryAfter != "" {
+				if seconds, err := strconv.Atoi(retryAfter); err == nil {
+					waitDuration = time.Duration(seconds) * time.Second
+					debugLog("HTTP", "", fmt.Sprintf("⏱️ Rate Limit: Warte %ds (Retry-After Header)", seconds))
+				}
+			}
+
+			if waitDuration == 0 {
+				baseWait := time.Duration(60+attempt*30) * time.Second // 60s, 90s, 120s, ...
+				if baseWait > 5*time.Minute {
+					baseWait = 5 * time.Minute
+				}
+				waitDuration = baseWait
+				debugLog("HTTP", "", fmt.Sprintf("⏱️ Rate Limit: Warte %s (exponentielles Backoff)", waitDuration))
+			}
+
+			lastErr = fmt.Errorf("rate limit exceeded (429)")
+
+			if attempt < cfg.MaxAPIRetries-1 {
+				debugLog("HTTP", "", fmt.Sprintf("⏳ Warte %s wegen Rate Limit...", waitDuration))
+				select {
+				case <-time.After(waitDuration):
+				case <-ctx.Done():
+					return nil, fmt.Errorf("context cancelled during rate limit wait: %w", ctx.Err())
+				}
+				continue
+			}
+
+			return nil, lastErr
+		}
+
 		if apiErr := classifyAPIError(res.StatusCode, method, apiURL, string(respBody)); apiErr != nil {
 			apiMetrics.RecordError(res.StatusCode, apiErr, duration)
+
+			if apiErr.Retryable && attempt < cfg.MaxAPIRetries-1 {
+				wait := calculateRetryDelay(attempt, res.StatusCode >= 500)
+				debugLog("HTTP", "", fmt.Sprintf("⏳ Retriable error, warte %s...", wait))
+				select {
+				case <-time.After(wait):
+				case <-ctx.Done():
+					return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
+				}
+				lastErr = apiErr
+				continue
+			}
+
 			return nil, apiErr
 		}
 

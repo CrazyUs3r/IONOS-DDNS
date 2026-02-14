@@ -1433,16 +1433,36 @@ func createMux() *http.ServeMux {
 
 				icon := "🔹"
 				switch actionUpper {
-				case "ERROR", "FAIL":
-					icon = "⚠️"
-				case "CLEANUP":
-					icon = "🧹♻️"
-				case "SUCCESS", "ADDED":
-					icon = "✅"
+				case "START":
+					icon = "🚀"
+				case "STOP":
+					icon = "🛑"
 				case "UPDATE":
 					icon = "🔄"
 				case "CREATE":
 					icon = "🆕"
+				case "CURRENT":
+					icon = "✓"
+				case "RETRY":
+					icon = "🔁"
+				case "ERROR", "FAIL":
+					icon = "❌"
+				case "CONFIG":
+					icon = "⚙️"
+				case "ZONE":
+					icon = "🌐"
+				case "DRY-RUN":
+					icon = "🔍"
+				case "CLEANUP":
+					icon = "🧹"
+				case "SKIP":
+					icon = "⏭️"
+				case "API":
+					icon = "🔌"
+				case "SERVER":
+					icon = "🖥️"
+				case "SUCCESS", "ADDED":
+					icon = "✅"
 				}
 
 				_, _ = fmt.Fprintf(w, `

@@ -74,8 +74,11 @@ var (
 	}
 	workerSemaphore chan struct{}
 
-	lastIPv64Update time.Time
-	ipv64Mutex      sync.Mutex
+	lastIPv64Update     time.Time
+	ipv64Mutex          sync.Mutex
+	ipv64RateLimitUntil atomic.Value
+	ipv64RateLimitCount atomic.Int32
+	ipv64RateLimitMutex sync.Mutex
 
 	wsHub = &WSHub{
 		clients:    make(map[*WSClient]bool),
