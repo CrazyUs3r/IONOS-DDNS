@@ -48,7 +48,7 @@ func initLegacyConfig() error {
 		apiSecret := os.Getenv("API_SECRET")
 
 		if apiPrefix == "" || apiSecret == "" {
-			return fmt.Errorf("IONOS requires API_PREFIX and API_SECRET")
+			return fmt.Errorf("ionos requires API_PREFIX and API_SECRET")
 		}
 
 		for _, d := range domains {
@@ -70,7 +70,7 @@ func initLegacyConfig() error {
 		cfSecret := os.Getenv("CLOUDFLARE_API_SECRET")
 
 		if cfToken == "" && (cfEmail == "" || cfSecret == "") {
-			return fmt.Errorf("Cloudflare requires CLOUDFLARE_TOKEN or CLOUDFLARE_EMAIL + CLOUDFLARE_API_SECRET")
+			return fmt.Errorf("cloudflare requires CLOUDFLARE_TOKEN or CLOUDFLARE_EMAIL + CLOUDFLARE_API_SECRET")
 		}
 
 		for _, d := range domains {
@@ -91,7 +91,7 @@ func initLegacyConfig() error {
 		token := os.Getenv("IPV64_TOKEN")
 
 		if token == "" {
-			return fmt.Errorf("IPv64 requires IPV64_TOKEN")
+			return fmt.Errorf("ipv64 requires IPV64_TOKEN")
 		}
 
 		for _, d := range domains {
