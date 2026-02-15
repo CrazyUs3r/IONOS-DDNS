@@ -12,7 +12,6 @@ linters:
     - errcheck      # Prüft, ob Fehler ignoriert werden
     - revive        # Moderner Nachfolger von golint
     - gocritic      # Findet Stil-Fehler und unsauberen Code
-    - gosimple      # Schlägt Vereinfachungen vor (z.B. den len(data) == 0 Check)
     - unused        # Findet ungenutzte Variablen/Funktionen
     - misspell      # Findet Tippfehler im Code/Kommentaren
     - bodyclose     # WICHTIG: Prüft, ob http response bodies geschlossen werden
