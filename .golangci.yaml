@@ -50,6 +50,9 @@ issues:
   max-issues-per-linter: 0
   max-same-issues: 0
   exclude-rules:
-    - path: _test\.go
+    - text: "ST1003:"
       linters:
-        - errcheck
+        - staticcheck
+    - text: "should not use underscores in Go names"
+      linters:
+        - revive
