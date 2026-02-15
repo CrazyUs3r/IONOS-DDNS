@@ -17,7 +17,7 @@ import (
 )
 
 // ============================================================================
-// HTTP CLIENT & TRANSPORT - FIXED
+// HTTP CLIENT & TRANSPORT
 // ============================================================================
 func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if cfg.DebugHTTPRaw {
@@ -149,7 +149,6 @@ func getHTTPClient() *http.Client {
 					}
 
 					for i := 0; i < len(dnsList); i++ {
-						// Check context bei jedem Versuch
 						select {
 						case <-ctx.Done():
 							return nil, ctx.Err()
