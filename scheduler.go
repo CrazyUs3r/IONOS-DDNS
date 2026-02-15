@@ -9,7 +9,7 @@ import (
 )
 
 // ============================================================================
-// UPDATE ORCHESTRATION
+// UPDATE ORCHESTRATION - OPTIMIZED WITH CACHE
 // ============================================================================
 func runUpdate(firstRun bool) {
 	activeUpdates.Add(1)
@@ -39,37 +39,23 @@ func runUpdate(firstRun bool) {
 		return
 	}
 
-	zonesByProvider, err := loadAllProviderZones(ctx)
+	zonesByProvider, err := loadZonesWithCache(ctx, firstRun)
 	if err != nil {
-		debugLog("SCHEDULER", "", fmt.Sprintf("⚠️ API-Fehler beim Laden der Zones: %v", err))
-		debugLog("SCHEDULER", "", "🔄 Versuche Fallback auf Disk-Caches...")
-
-		zonesByProvider, err = loadZonesFromDiskCache()
-		if err != nil {
-			lastOk.Store(false)
-			log(LogContext{
-				Level:   LogError,
-				Action:  ActionError,
-				Message: T.NoZones,
-				Error:   fmt.Errorf("API und Disk-Cache fehlgeschlagen: %w", err),
-			})
-			return
-		}
-		debugLog("SCHEDULER", "", "✅ Zones erfolgreich von Disk-Cache geladen")
+		lastOk.Store(false)
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: T.NoZones,
+			Error:   fmt.Errorf("Zone loading fehlgeschlagen: %w", err),
+		})
+		return
 	}
 
-	cache, err := loadZoneCache(ctx, zonesByProvider)
+	cache, err := loadRecordsWithCache(ctx, zonesByProvider, firstRun)
 	if err != nil {
-		debugLog("CACHE", "", fmt.Sprintf("⚠️ Cache-Fehler: %v", err))
-		debugLog("CACHE", "", "🔄 Versuche Record-Cache von Disk zu laden...")
-
-		cache, err = loadRecordCacheFromDisk(zonesByProvider)
-		if err != nil {
-			lastOk.Store(false)
-			debugLog("CACHE", "", fmt.Sprintf("❌ Konnte Record-Cache nicht laden: %v", err))
-			return
-		}
-		debugLog("CACHE", "", "✅ Record-Cache erfolgreich von Disk geladen")
+		lastOk.Store(false)
+		debugLog("CACHE", "", fmt.Sprintf("❌ Konnte Record-Cache nicht laden: %v", err))
+		return
 	}
 
 	for i := range cfg.DomainConfigs {
@@ -81,25 +67,152 @@ func runUpdate(firstRun bool) {
 		}
 	}
 
+	saveCachesToDisk(zonesByProvider, cache)
+	runCleanupIfNeeded(ctx, zonesByProvider, cache)
+
+	if firstRun {
+		printGroupedDomains()
+		printInfrastructure(ctx, zonesByProvider)
+	}
+
+	successCount := processDomains(ctx, zonesByProvider, cache, currentIPv4, currentIPv6)
+
+	debugLog("SCHEDULER", "", fmt.Sprintf(T.SchedulerCompleted, successCount))
+}
+
+// ============================================================================
+// CACHE-FIRST ZONE LOADING
+// ============================================================================
+func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zone, error) {
+	zoneCacheMutex.RLock()
+	cacheAge := time.Since(lastZoneLoad)
+	hasCachedZones := cachedZones != nil && len(cachedZones) > 0
+	zoneCacheMutex.RUnlock()
+	if !forceRefresh && hasCachedZones && cacheAge < ZoneCacheTTL {
+		debugLog("SCHEDULER", "", fmt.Sprintf("✅ Nutze Zone-Cache (Alter: %v)", cacheAge.Round(time.Second)))
+		
+		zoneCacheMutex.RLock()
+		zones := cachedZones
+		zoneCacheMutex.RUnlock()
+		
+		return zones, nil
+	}
+
+	if forceRefresh {
+		debugLog("SCHEDULER", "", "🔄 Forced Refresh - lade Zones von API...")
+	} else if !hasCachedZones {
+		debugLog("SCHEDULER", "", "🔄 Kein Zone-Cache vorhanden - Initial Load...")
+	} else {
+		debugLog("SCHEDULER", "", fmt.Sprintf("🔄 Zone-Cache ist alt (%v) - lade von API...", cacheAge.Round(time.Second)))
+	}
+	
+	zonesByProvider, err := loadAllProviderZones(ctx)
+	if err != nil {
+		debugLog("SCHEDULER", "", fmt.Sprintf("⚠️ API-Fehler beim Laden der Zones: %v", err))
+		debugLog("SCHEDULER", "", "📄 Versuche Fallback auf Disk-Cache...")
+
+		zonesByProvider, err = loadZonesFromDiskCache()
+		if err != nil {
+			return nil, fmt.Errorf("API und Disk-Cache fehlgeschlagen: %w", err)
+		}
+		debugLog("SCHEDULER", "", "✅ Zones erfolgreich von Disk-Cache geladen")
+	} else {
+		debugLog("SCHEDULER", "", "✅ Zones erfolgreich von API geladen")
+	}
+
+	zoneCacheMutex.Lock()
+	cachedZones = zonesByProvider
+	lastZoneLoad = time.Now()
+	zoneCacheMutex.Unlock()
+
+	return zonesByProvider, nil
+}
+
+// ============================================================================
+// CACHE-FIRST RECORD LOADING
+// ============================================================================
+func loadRecordsWithCache(ctx context.Context, zonesByProvider map[string][]Zone, forceRefresh bool) (*ZoneRecordCache, error) {
+	zoneCacheMutex.RLock()
+	cacheAge := time.Since(lastZoneLoad)
+	hasCachedRecords := cachedRecords != nil
+	zoneCacheMutex.RUnlock()
+	if !forceRefresh && hasCachedRecords && cacheAge < RecordCacheTTL {
+		debugLog("SCHEDULER", "", fmt.Sprintf("✅ Nutze Record-Cache (Alter: %v)", cacheAge.Round(time.Second)))
+		
+		zoneCacheMutex.RLock()
+		cache := cachedRecords
+		zoneCacheMutex.RUnlock()
+		
+		return cache, nil
+	}
+
+	if forceRefresh {
+		debugLog("SCHEDULER", "", "🔄 Forced Refresh - lade Records...")
+	} else if !hasCachedRecords {
+		debugLog("SCHEDULER", "", "🔄 Kein Record-Cache vorhanden - Initial Load...")
+	} else {
+		debugLog("SCHEDULER", "", fmt.Sprintf("🔄 Record-Cache ist alt (%v) - lade Records...", cacheAge.Round(time.Second)))
+	}
+
+	cache, err := loadZoneCache(ctx, zonesByProvider)
+	if err != nil {
+		debugLog("CACHE", "", fmt.Sprintf("⚠️ Cache-Fehler: %v", err))
+		debugLog("CACHE", "", "📄 Versuche Record-Cache von Disk zu laden...")
+
+		cache, err = loadRecordCacheFromDisk(zonesByProvider)
+		if err != nil {
+			return nil, fmt.Errorf("Record-Cache konnte nicht geladen werden: %w", err)
+		}
+		debugLog("CACHE", "", "✅ Record-Cache erfolgreich von Disk geladen")
+	} else {
+		debugLog("CACHE", "", "✅ Records erfolgreich geladen")
+	}
+
+	zoneCacheMutex.Lock()
+	cachedRecords = cache
+	zoneCacheMutex.Unlock()
+
+	return cache, nil
+}
+
+// ============================================================================
+// CACHE ZU DISK
+// ============================================================================
+func saveCachesToDisk(zonesByProvider map[string][]Zone, cache *ZoneRecordCache) {
 	for providerStr, zones := range zonesByProvider {
+		if len(zones) == 0 || cache == nil {
+			continue
+		}
+
 		pType := ProviderType(providerStr)
 
 		switch pType {
 		case ProviderCloudflare:
-			if len(zones) > 0 && cache != nil {
-				if err := saveCloudflareCacheToFile(zones, cache); err != nil {
-					debugLog("CACHE", "", fmt.Sprintf("⚠️ Konnte Cloudflare Cache nicht speichern: %v", err))
-				}
+			if err := saveCloudflareCacheToFile(zones, cache); err != nil {
+				debugLog("CACHE", "", fmt.Sprintf("⚠️ Konnte Cloudflare Cache nicht speichern: %v", err))
 			}
 
 		case ProviderIONOS:
-			if len(zones) > 0 && cache != nil {
-				if err := saveIONOSCacheToFile(zones, cache); err != nil {
-					debugLog("CACHE", "", fmt.Sprintf("⚠️ Konnte IONOS Cache nicht speichern: %v", err))
-				}
+			if err := saveIONOSCacheToFile(zones, cache); err != nil {
+				debugLog("CACHE", "", fmt.Sprintf("⚠️ Konnte IONOS Cache nicht speichern: %v", err))
 			}
 		}
 	}
+}
+
+// ============================================================================
+// CLEANUP NUR WENN NÖTIG
+// ============================================================================
+func runCleanupIfNeeded(ctx context.Context, zonesByProvider map[string][]Zone, cache *ZoneRecordCache) {
+	timeSinceLastCleanup := time.Since(lastCleanup)
+	
+	if timeSinceLastCleanup < CleanupInterval {
+		debugLog("MAINTENANCE", "", fmt.Sprintf("⏭️ Cleanup übersprungen (letzter Lauf vor %v)", timeSinceLastCleanup.Round(time.Minute)))
+		return
+	}
+
+	debugLog("MAINTENANCE", "", fmt.Sprintf("🧹 Starte Cleanup (letzter Lauf vor %v)", timeSinceLastCleanup.Round(time.Minute)))
+	lastCleanup = time.Now()
 
 	for providerStr, zones := range zonesByProvider {
 		pType := ProviderType(providerStr)
@@ -128,15 +241,6 @@ func runUpdate(firstRun bool) {
 			}
 		}
 	}
-
-	if firstRun {
-		printGroupedDomains()
-		printInfrastructure(ctx, zonesByProvider)
-	}
-
-	successCount := processDomains(ctx, zonesByProvider, cache, currentIPv4, currentIPv6)
-
-	debugLog("SCHEDULER", "", fmt.Sprintf(T.SchedulerCompleted, successCount))
 }
 
 // ============================================================================
@@ -145,6 +249,7 @@ func runUpdate(firstRun bool) {
 func loadZonesFromDiskCache() (map[string][]Zone, error) {
 	zonesByProvider := make(map[string][]Zone)
 	loadedAny := false
+	
 	for i := range cfg.DomainConfigs {
 		if cfg.DomainConfigs[i].Provider == ProviderIPv64 {
 			if err := loadIPv64CacheFromDisk(); err == nil {

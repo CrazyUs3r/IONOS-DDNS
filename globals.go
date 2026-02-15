@@ -57,6 +57,12 @@ var (
 	ipTriggerLimiter     *IPRateLimiter
 	updateInProgress     atomic.Bool
 
+  lastZoneLoad    time.Time
+	cachedZones     map[string][]Zone
+	cachedRecords   *ZoneRecordCache
+	lastCleanup     time.Time
+	zoneCacheMutex  sync.RWMutex
+
 	domainsCache = &CachedResponse{}
 	metricsCache = &CachedResponse{}
 
@@ -238,6 +244,9 @@ const (
 	RetryExponentBase     = 2.0
 	RateLimitRetryDelay   = 60 * time.Second
 	ServerErrorRetryDelay = 30 * time.Second
+  ZoneCacheTTL     = 30 * time.Minute
+	RecordCacheTTL   = 30 * time.Minute
+	CleanupInterval  = 1 * time.Hour
 )
 
 // ============================================================================
