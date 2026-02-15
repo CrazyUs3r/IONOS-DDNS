@@ -68,6 +68,18 @@ func main() {
 		iv = i
 	}
 
+	dnsEnv := os.Getenv("DNS_SERVERS")
+	var dnsList []string
+	if dnsEnv != "" {
+		parts := strings.Split(dnsEnv, ",")
+		for _, p := range parts {
+			trimmed := strings.TrimSpace(p)
+			if trimmed != "" {
+				dnsList = append(dnsList, trimmed)
+			}
+		}
+	}
+
 	tempmaxLogLines := DefaultMaxLogLines
 	if s := strings.TrimSpace(os.Getenv("LOG_MAX_LINES")); s != "" {
 		if v, err := strconv.Atoi(s); err == nil && v > 0 {
@@ -78,18 +90,6 @@ func main() {
 				Action:  ActionConfig,
 				Message: fmt.Sprintf("Ungültiger LOG_MAX_LINES Wert '%s', benutze Default %d", s, DefaultMaxLogLines),
 			})
-		}
-	}
-
-	dnsEnv := os.Getenv("DNS_SERVERS")
-	var dnsList []string
-	if dnsEnv != "" {
-		parts := strings.Split(dnsEnv, ",")
-		for _, p := range parts {
-			trimmed := strings.TrimSpace(p)
-			if trimmed != "" {
-				dnsList = append(dnsList, trimmed)
-			}
 		}
 	}
 
@@ -121,6 +121,15 @@ func main() {
 		HourlyRateLimit: hourlyLimit,
 		MaxConcurrent:   maxConcurrent,
 		MaxLogLines:     tempmaxLogLines,
+		MaxAPIRetries:   DefaultMaxAPIRetries,
+	}
+
+	if cfg.MaxLogLines < 10 || cfg.MaxLogLines > 10000 {
+		log(LogContext{
+			Level:   LogWarn,
+			Message: fmt.Sprintf("LOG_MAX_LINES außerhalb Range (10-10000): %d", cfg.MaxLogLines),
+		})
+		cfg.MaxLogLines = DefaultMaxLogLines
 	}
 
 	if cfg.IPMode == "" {
@@ -141,6 +150,9 @@ func main() {
 	if cfg.DebugEnabled {
 		debugLog("CONFIG", "", fmt.Sprintf("Debug-Modus aktiv. Intervall: %ds, Mode: %s", cfg.Interval, cfg.IPMode))
 		debugLog("CONFIG", "", fmt.Sprintf("Geladene Domains: %d", len(cfg.DomainConfigs)))
+		debugLog("CONFIG", "", fmt.Sprintf("Max Log Lines: %d", cfg.MaxLogLines))
+		debugLog("CONFIG", "", fmt.Sprintf("Max API Retries: %d", cfg.MaxAPIRetries))
+		debugLog("CONFIG", "", fmt.Sprintf("Max Concurrent: %d", cfg.MaxConcurrent))
 		for _, dc := range cfg.DomainConfigs {
 			debugLog("CONFIG", "", fmt.Sprintf("  - %s (%s)", dc.FQDN, dc.Provider))
 		}
@@ -264,9 +276,10 @@ func main() {
 			runUpdate(false)
 
 			limit := cfg.MaxLogLines
-			if cfg.Interval > 500 {
+			if cfg.Interval > 500 && limit == DefaultMaxLogLines {
 				limit = 1000
 			}
+
 			debugLog("MAINTENANCE", "", T.MaintenanceStarting)
 			rotateLogFile(logPath, limit)
 
@@ -278,8 +291,8 @@ func main() {
 				Message: fmt.Sprintf("🛑 %s (Signal: %v)", T.Shutdown, sig),
 			})
 
-			shutdownCancel()
 			ticker.Stop()
+			shutdownCancel()
 
 			if httpClient != nil {
 				httpClient.CloseIdleConnections()

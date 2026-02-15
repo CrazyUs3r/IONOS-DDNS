@@ -109,6 +109,10 @@ func loadCloudflareCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
 // API - CLOUDFLARE
 // ============================================================================
 func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint string, body interface{}) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("context error: %w", err)
+	}
+
 	fullURL := cloudflareAPIBase + endpoint
 
 	var lastErr error
@@ -168,9 +172,6 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 		duration := time.Since(start)
 
 		if err != nil {
-			if res != nil && res.Body != nil {
-				_ = res.Body.Close()
-			}
 			debugLog("HTTP", "", fmt.Sprintf("❌ %s: %v | %s: %v", T.NetworkError, err, T.AvgLatency, duration))
 			apiMetrics.RecordError(0, err, duration)
 			lastErr = fmt.Errorf("network error: %w", err)
@@ -185,7 +186,10 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 		}
 
 		respBody, readErr := io.ReadAll(res.Body)
-		_ = res.Body.Close()
+		closeErr := res.Body.Close()
+		if closeErr != nil {
+			debugLog("HTTP", "", fmt.Sprintf("Warning: failed to close response body: %v", closeErr))
+		}
 
 		if readErr != nil {
 			apiMetrics.RecordError(res.StatusCode, readErr, duration)
@@ -336,7 +340,7 @@ func loadCloudflareRecords(ctx context.Context, dc *DomainConfig, zoneID string)
 		endpoint := fmt.Sprintf("/zones/%s/dns_records?page=%d&per_page=%d", zoneID, page, perPage)
 		data, err := cloudflareAPI(ctx, dc, "GET", endpoint, nil)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed: %w", err)
 		}
 
 		var resp struct {
@@ -348,7 +352,7 @@ func loadCloudflareRecords(ctx context.Context, dc *DomainConfig, zoneID string)
 			} `json:"result_info"`
 		}
 		if err := json.Unmarshal(data, &resp); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed: %w", err)
 		}
 
 		for _, r := range resp.Result {
@@ -705,7 +709,7 @@ func findCloudflareRecord(ctx context.Context, dc *DomainConfig, zoneID, fqdn, r
 
 		data, err := cloudflareAPI(ctx, dc, "GET", endpoint, nil)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed: %w", err)
 		}
 
 		var resp struct {

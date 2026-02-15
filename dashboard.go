@@ -734,7 +734,7 @@ func handleMetricsReset(w http.ResponseWriter, r *http.Request) {
 	apiMetrics.LastError = ""
 	apiMetrics.LastErrorTimestamp = time.Time{}
 	apiMetrics.LastSuccessTimestamp = time.Time{}
-	
+
 	statsCopy := apiMetrics.getStatsUnsafe()
 	apiMetrics.Unlock()
 
@@ -748,8 +748,6 @@ func handleMetricsReset(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "reset_success"})
 }
-
-
 
 // ============================================================================
 // DASHBOARD HTTP HANDLER
@@ -935,9 +933,14 @@ func createMux() *http.ServeMux {
 		clientIP := getClientIP(r)
 		ipLimiter := ipTriggerLimiter.GetLimiter(clientIP)
 
+		if !ipLimiter.Allow() {
+			http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+			return
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(map[string]interface{}{
-			"ip":                 clientIP,
+	   	"ip":                 clientIP,
 			"remaining_requests": ipLimiter.Remaining(),
 			"update_in_progress": updateInProgress.Load(),
 			"global_limit":       globalTriggerLimiter.Remaining(),
@@ -974,7 +977,7 @@ func createMux() *http.ServeMux {
 		}
 	})
 
-  mux.HandleFunc("/api/metrics/reset", handleMetricsReset)
+	mux.HandleFunc("/api/metrics/reset", handleMetricsReset)
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		isHealthy := lastOk.Load()

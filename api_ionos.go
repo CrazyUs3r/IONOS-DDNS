@@ -92,7 +92,6 @@ func loadIONOSCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
 // ============================================================================
 // API - IONOS
 // ============================================================================
-
 func calculateRetryDelay(attempt int, isServerError bool) time.Duration {
 	baseWait := time.Duration(math.Pow(RetryExponentBase, float64(attempt+1))) * RetryBaseDelay
 	if baseWait < RetryBaseDelay {
@@ -116,6 +115,10 @@ func calculateRetryDelay(attempt int, isServerError bool) time.Duration {
 }
 
 func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body interface{}) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("context error: %w", err)
+	}
+
 	var lastErr error
 
 	for attempt := 0; attempt < cfg.MaxAPIRetries; attempt++ {
@@ -180,7 +183,10 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 		debugLog("HTTP", "", fmt.Sprintf("✅ Status: %d | %s: %v", res.StatusCode, T.AvgLatency, duration))
 
 		respBody, err := io.ReadAll(res.Body)
-		_ = res.Body.Close()
+		closeErr := res.Body.Close()
+		if closeErr != nil {
+			debugLog("HTTP", "", fmt.Sprintf("Warning: failed to close response body: %v", closeErr))
+		}
 
 		if err != nil {
 			apiMetrics.RecordError(res.StatusCode, err, duration)

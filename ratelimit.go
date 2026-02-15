@@ -82,19 +82,26 @@ func (ipl *IPRateLimiter) cleanupRoutine() {
 	ticker := time.NewTicker(ipl.cleanup)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		ipl.mu.Lock()
+	for {
+		select {
+		case <-ticker.C:
+			ipl.mu.Lock()
 
-		for ip, limiter := range ipl.limiters {
-			limiter.mu.Lock()
-			inactive := time.Since(limiter.lastRefill) > ipl.cleanup
-			limiter.mu.Unlock()
+			for ip, limiter := range ipl.limiters {
+				limiter.mu.Lock()
+				inactive := time.Since(limiter.lastRefill) > ipl.cleanup
+				limiter.mu.Unlock()
 
-			if inactive {
-				delete(ipl.limiters, ip)
+				if inactive {
+					delete(ipl.limiters, ip)
+				}
 			}
-		}
 
-		ipl.mu.Unlock()
+			ipl.mu.Unlock()
+
+		case <-shutdownCtx.Done():
+			debugLog("SYSTEM", "", "Rate Limiter cleanup routine stopping...")
+			return
+		}
 	}
 }

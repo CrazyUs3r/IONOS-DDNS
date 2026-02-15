@@ -26,6 +26,10 @@ func splitIPv64FQDN(fqdn string) (baseDomain, praefix string) {
 }
 
 func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("context error: %w", err)
+	}
+
 	method := "GET"
 	var bodyData string
 	apiURL := ipv64APIBase
@@ -117,11 +121,9 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 		}
 
 		respBody, readErr := io.ReadAll(res.Body)
-		_, _ = io.Copy(io.Discard, res.Body)
 		closeErr := res.Body.Close()
-
 		if closeErr != nil {
-			debugLog("HTTP", "", fmt.Sprintf("Body close failed: %v", closeErr))
+			debugLog("HTTP", "", fmt.Sprintf("Warning: failed to close response body: %v", closeErr))
 		}
 
 		if readErr != nil {
@@ -143,7 +145,7 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 			}
 
 			if waitDuration == 0 {
-				baseWait := time.Duration(60+attempt*30) * time.Second // 60s, 90s, 120s, ...
+				baseWait := time.Duration(60+attempt*30) * time.Second
 				if baseWait > 5*time.Minute {
 					baseWait = 5 * time.Minute
 				}
@@ -316,7 +318,7 @@ func loadIPv64CacheFromDisk() error {
 }
 
 // ============================================================================
-// LOAD ALL IPV64 DOMAINS - VERBESSERT
+// LOAD ALL IPV64 DOMAINS
 // ============================================================================
 func loadAllIPv64Domains(ctx context.Context, dc *DomainConfig) error {
 	params := map[string]string{

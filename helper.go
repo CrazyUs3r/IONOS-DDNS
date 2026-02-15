@@ -108,6 +108,9 @@ func loadIONOSZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to load ionos zones: %w", err)
 	}
+	if data == nil || len(data) == 0 {
+		return nil, fmt.Errorf("empty response from IONOS API")
+	}
 
 	var zones []Zone
 	if err := json.Unmarshal(data, &zones); err != nil {

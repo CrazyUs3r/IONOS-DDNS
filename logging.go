@@ -13,7 +13,6 @@ import (
 // ============================================================================
 // LOGGING
 // ============================================================================
-
 func log(ctx LogContext) {
 	if ctx.Level == LogDebug && !cfg.DebugEnabled {
 		return
@@ -188,7 +187,7 @@ func ipLog(domain, msg string) {
 }
 
 // ============================================================================
-// LOG ROTATION
+// LOG WRITER
 // ============================================================================
 func startLogWriter() {
 	go func() {
@@ -198,40 +197,107 @@ func startLogWriter() {
 			}
 		}()
 
-		for entry := range logWriteQueue {
-			logMutex.Lock()
+		var file *os.File
+		var writer *bufio.Writer
+		var err error
 
-			file, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "[ERROR] Failed to open log file: %v\n", err)
-				logMutex.Unlock()
-				continue
-			}
-
-			data, err := json.Marshal(entry)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "[ERROR] Failed to marshal log entry: %v\n", err)
-				if err := file.Close(); err != nil {
-					fmt.Fprintf(os.Stderr, "[WARN] Failed to close file: %v\n", err)
+		openLogFile := func() error {
+			if file != nil {
+				if writer != nil {
+					writer.Flush()
 				}
-				logMutex.Unlock()
-				continue
+				file.Close()
 			}
 
-			_, err = file.Write(append(data, '\n'))
+			file, err = os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "[ERROR] Failed to write log entry: %v\n", err)
+				return err
 			}
 
-			if err := file.Close(); err != nil {
-				fmt.Fprintf(os.Stderr, "[WARN] Failed to close file: %v\n", err)
-			}
-			logMutex.Unlock()
+			writer = bufio.NewWriterSize(file, 64*1024) // 64KB Buffer
+			return nil
 		}
 
-		debugLog("SYSTEM", "", "📝 Log-Writer beendet")
+		if err := openLogFile(); err != nil {
+			fmt.Fprintf(os.Stderr, "[ERROR] Failed to open log file: %v\n", err)
+			return
+		}
+		defer func() {
+			if writer != nil {
+				writer.Flush()
+			}
+			if file != nil {
+				file.Close()
+			}
+		}()
+
+		flushTicker := time.NewTicker(500 * time.Millisecond)
+		defer flushTicker.Stop()
+
+		batchCount := 0
+		const maxBatchSize = 10
+
+		for {
+			select {
+			case entry, ok := <-logWriteQueue:
+				if !ok {
+					if writer != nil {
+						writer.Flush()
+					}
+					debugLog("SYSTEM", "", "📝 Log-Writer beendet")
+					return
+				}
+
+				logMutex.Lock()
+
+				data, err := json.Marshal(entry)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "[ERROR] Failed to marshal log entry: %v\n", err)
+					logMutex.Unlock()
+					continue
+				}
+
+				_, err = writer.Write(append(data, '\n'))
+				if err != nil {
+					// Bei Fehler: File neu öffnen versuchen
+					fmt.Fprintf(os.Stderr, "[ERROR] Failed to write log entry: %v\n", err)
+					if err := openLogFile(); err != nil {
+						fmt.Fprintf(os.Stderr, "[ERROR] Failed to reopen log file: %v\n", err)
+					}
+				}
+
+				batchCount++
+
+				if entry.Level == "ERR" || entry.Level == "WARN" {
+					writer.Flush()
+					batchCount = 0
+				} else if batchCount >= maxBatchSize {
+					writer.Flush()
+					batchCount = 0
+				}
+
+				logMutex.Unlock()
+
+			case <-flushTicker.C:
+				// Regelmäßiges Flush
+				logMutex.Lock()
+				if writer != nil && batchCount > 0 {
+					writer.Flush()
+					batchCount = 0
+				}
+				logMutex.Unlock()
+
+			case <-shutdownCtx.Done():
+				// Graceful shutdown
+				if writer != nil {
+					writer.Flush()
+				}
+				return
+			}
+		}
 	}()
 }
+
 func startLogRotationWorker() {
 	go func() {
 		defer func() {
@@ -240,8 +306,18 @@ func startLogRotationWorker() {
 			}
 		}()
 
-		for job := range rotationQueue {
-			doLogRotation(job.path, job.maxLines)
+		for {
+			select {
+			case job, ok := <-rotationQueue:
+				if !ok {
+					return
+				}
+				doLogRotation(job.path, job.maxLines)
+
+			case <-shutdownCtx.Done():
+				debugLog("MAINTENANCE", "", "Log rotation worker stopping...")
+				return
+			}
 		}
 	}()
 }
@@ -263,8 +339,9 @@ func doLogRotation(path string, maxLines int) {
 	for scanner.Scan() {
 		lines = append(lines, scanner.Text())
 	}
-	if err := file.Close(); err != nil {
-		fmt.Fprintf(os.Stderr, "[WARN] Failed to close file: %v\n", err)
+	closeErr := file.Close()
+	if closeErr != nil {
+		fmt.Fprintf(os.Stderr, "[WARN] Failed to close file: %v\n", closeErr)
 	}
 
 	if len(lines) <= maxLines {
@@ -302,7 +379,6 @@ func rotateLogFile(path string, maxLines int) {
 // ============================================================================
 // LOG QUEUE FLUSH
 // ============================================================================
-
 func flushLogQueue(timeout time.Duration) {
 	deadline := time.Now().Local().Add(timeout)
 
@@ -313,6 +389,5 @@ func flushLogQueue(timeout time.Duration) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-
 	debugLog("SYSTEM", "", fmt.Sprintf("⚠️ Log-Queue nicht vollständig geleert (%d verbleibend)", len(logWriteQueue)))
 }

@@ -17,14 +17,20 @@ import (
 )
 
 // ============================================================================
-// HTTP CLIENT & TRANSPORT
+// HTTP CLIENT & TRANSPORT - FIXED
 // ============================================================================
 func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if cfg.DebugHTTPRaw {
 		logReq := req.Clone(req.Context())
+
 		if req.GetBody != nil {
 			if rc, err := req.GetBody(); err == nil {
 				logReq.Body = rc
+				defer func() {
+					if closeErr := rc.Close(); closeErr != nil {
+						debugLog("HTTP-RAW", "", fmt.Sprintf("Failed to close cloned body: %v", closeErr))
+					}
+				}()
 			}
 		}
 
@@ -72,7 +78,10 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		var bodyBytes []byte
 		if resp.Body != nil {
 			bodyBytes, _ = io.ReadAll(resp.Body)
-			_ = resp.Body.Close()
+			closeErr := resp.Body.Close()
+			if closeErr != nil {
+				debugLog("HTTP-RAW", "", fmt.Sprintf("Failed to close response body: %v", closeErr))
+			}
 			resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 		}
 
@@ -133,7 +142,20 @@ func getHTTPClient() *http.Client {
 					var lastErr error
 					startIndex := int(atomic.LoadInt32(&lastSuccessfulDNS))
 
+					select {
+					case <-ctx.Done():
+						return nil, ctx.Err()
+					default:
+					}
+
 					for i := 0; i < len(dnsList); i++ {
+						// Check context bei jedem Versuch
+						select {
+						case <-ctx.Done():
+							return nil, ctx.Err()
+						default:
+						}
+
 						idx := (startIndex + i) % len(dnsList)
 						dnsAddr := dnsList[idx]
 						targetAddr := dnsAddr
