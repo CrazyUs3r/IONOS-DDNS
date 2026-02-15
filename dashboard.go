@@ -756,7 +756,6 @@ func handleMetricsReset(w http.ResponseWriter, r *http.Request) {
 // ============================================================================
 // DASHBOARD HTTP HANDLER
 // ============================================================================
-
 func createMux() *http.ServeMux {
 	mux := http.NewServeMux()
 
