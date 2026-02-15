@@ -17,6 +17,7 @@ func updateStatusFile(fqdn, ipv4, ipv6, provider string) {
 	defer statusMutex.Unlock()
 
 	domains := make(map[string]DomainHistory)
+
 	if b, err := os.ReadFile(updatePath); err == nil {
 		if err := json.Unmarshal(b, &domains); err != nil {
 			log(LogContext{
@@ -31,28 +32,55 @@ func updateStatusFile(fqdn, ipv4, ipv6, provider string) {
 	h := domains[fqdn]
 	h.Provider = provider
 	h.LastChanged = time.Now().Local().Format("02.01.2006 15:04:05")
+
 	newEntry := IPEntry{
 		Time: time.Now().Local().Format("02.01.2006 15:04:05"),
 		IPv4: ipv4,
 		IPv6: ipv6,
 	}
-	h.IPs = append(h.IPs, newEntry)
 
+	h.IPs = append(h.IPs, newEntry)
 	if len(h.IPs) > MaxStatusHistoryItems {
 		h.IPs = h.IPs[len(h.IPs)-MaxStatusHistoryItems:]
 	}
+
 	domains[fqdn] = h
 
 	js, err := json.MarshalIndent(domains, "", "  ")
 	if err != nil {
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: fmt.Sprintf("Failed to marshal status file: %v", err),
+		})
 		return
 	}
 
 	tmp := updatePath + ".tmp"
-	os.WriteFile(tmp, js, 0644)
-	os.Rename(tmp, updatePath)
 
-	go updateDomainsCache()
+	if err := os.WriteFile(tmp, js, 0644); err != nil {
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: fmt.Sprintf("Failed to write temp status file: %v", err),
+		})
+		return
+	}
+
+	if err := os.Rename(tmp, updatePath); err != nil {
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: fmt.Sprintf("Failed to replace status file: %v", err),
+		})
+		return
+	}
+
+	go func() {
+		if err := updateDomainsCache(); err != nil {
+			debugLog("CACHE", "", fmt.Sprintf("updateDomainsCache failed: %v", err))
+		}
+	}()
 
 	broadcastUpdate("domain_update", map[string]interface{}{
 		"domain": fqdn,
@@ -70,6 +98,7 @@ func updateDomainsCache() error {
 	defer statusMutex.Unlock()
 
 	domains := make(map[string]DomainHistory)
+
 	if b, err := os.ReadFile(updatePath); err == nil {
 		if err := json.Unmarshal(b, &domains); err != nil {
 			return err
@@ -150,7 +179,9 @@ func serveCachedJSON(w http.ResponseWriter, r *http.Request, cache *CachedRespon
 	w.Header().Set("Last-Modified", lastMod.UTC().Format(http.TimeFormat))
 	w.Header().Set("Cache-Control", "public, max-age=5")
 
-	w.Write(data)
+	if _, err := w.Write(data); err != nil {
+		debugLog("HTTP", "", fmt.Sprintf("Response write failed: %v", err))
+	}
 }
 
 func startCacheRefresher() {
@@ -181,7 +212,10 @@ func startCacheRefresher() {
 					if err := updateDomainsCache(); err != nil {
 						debugLog("CACHE", "", fmt.Sprintf("Domain cache refresh failed: %v", err))
 					}
-					updateMetricsCache()
+
+					if err := updateMetricsCache(); err != nil {
+						debugLog("CACHE", "", fmt.Sprintf("Metrics cache refresh failed: %v", err))
+					}
 				}()
 			}
 		}
