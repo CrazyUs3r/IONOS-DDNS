@@ -9,7 +9,7 @@ import (
 )
 
 // ============================================================================
-// UPDATE ORCHESTRATION - OPTIMIZED WITH CACHE
+// UPDATE ORCHESTRATION
 // ============================================================================
 func runUpdate(firstRun bool) {
 	activeUpdates.Add(1)
@@ -57,7 +57,6 @@ func runUpdate(firstRun bool) {
 		debugLog("CACHE", "", fmt.Sprintf("❌ Konnte Record-Cache nicht laden: %v", err))
 		return
 	}
-
 	for i := range cfg.DomainConfigs {
 		if cfg.DomainConfigs[i].Provider == ProviderIPv64 {
 			if err := loadAllIPv64Domains(ctx, &cfg.DomainConfigs[i]); err != nil {
@@ -88,6 +87,7 @@ func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zo
 	cacheAge := time.Since(lastZoneLoad)
 	hasCachedZones := cachedZones != nil && len(cachedZones) > 0
 	zoneCacheMutex.RUnlock()
+
 	if !forceRefresh && hasCachedZones && cacheAge < ZoneCacheTTL {
 		debugLog("SCHEDULER", "", fmt.Sprintf("✅ Nutze Zone-Cache (Alter: %v)", cacheAge.Round(time.Second)))
 		
@@ -98,11 +98,12 @@ func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zo
 		return zones, nil
 	}
 
-	if forceRefresh {
+	switch {
+	case forceRefresh:
 		debugLog("SCHEDULER", "", "🔄 Forced Refresh - lade Zones von API...")
-	} else if !hasCachedZones {
+	case !hasCachedZones:
 		debugLog("SCHEDULER", "", "🔄 Kein Zone-Cache vorhanden - Initial Load...")
-	} else {
+	default:
 		debugLog("SCHEDULER", "", fmt.Sprintf("🔄 Zone-Cache ist alt (%v) - lade von API...", cacheAge.Round(time.Second)))
 	}
 	
@@ -136,6 +137,7 @@ func loadRecordsWithCache(ctx context.Context, zonesByProvider map[string][]Zone
 	cacheAge := time.Since(lastZoneLoad)
 	hasCachedRecords := cachedRecords != nil
 	zoneCacheMutex.RUnlock()
+
 	if !forceRefresh && hasCachedRecords && cacheAge < RecordCacheTTL {
 		debugLog("SCHEDULER", "", fmt.Sprintf("✅ Nutze Record-Cache (Alter: %v)", cacheAge.Round(time.Second)))
 		
@@ -146,11 +148,12 @@ func loadRecordsWithCache(ctx context.Context, zonesByProvider map[string][]Zone
 		return cache, nil
 	}
 
-	if forceRefresh {
+	switch {
+	case forceRefresh:
 		debugLog("SCHEDULER", "", "🔄 Forced Refresh - lade Records...")
-	} else if !hasCachedRecords {
+	case !hasCachedRecords:
 		debugLog("SCHEDULER", "", "🔄 Kein Record-Cache vorhanden - Initial Load...")
-	} else {
+	default:
 		debugLog("SCHEDULER", "", fmt.Sprintf("🔄 Record-Cache ist alt (%v) - lade Records...", cacheAge.Round(time.Second)))
 	}
 
@@ -176,7 +179,7 @@ func loadRecordsWithCache(ctx context.Context, zonesByProvider map[string][]Zone
 }
 
 // ============================================================================
-// CACHE ZU DISK
+// CACHE ZU DISK SPEICHERN
 // ============================================================================
 func saveCachesToDisk(zonesByProvider map[string][]Zone, cache *ZoneRecordCache) {
 	for providerStr, zones := range zonesByProvider {
