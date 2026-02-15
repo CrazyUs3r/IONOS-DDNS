@@ -85,7 +85,7 @@ func runUpdate(firstRun bool) {
 func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zone, error) {
 	zoneCacheMutex.RLock()
 	cacheAge := time.Since(lastZoneLoad)
-	hasCachedZones := cachedZones != nil && len(cachedZones) > 0
+	hasCachedZones := len(cachedZones) > 0
 	zoneCacheMutex.RUnlock()
 
 	if !forceRefresh && hasCachedZones && cacheAge < ZoneCacheTTL {
