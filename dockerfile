@@ -1,13 +1,13 @@
 # =============================================================================
 # Builder Stage
 # =============================================================================
-FROM --platform=${BUILDPLATFORM} golang:1.25-alpine AS builder
+FROM --platform=${BUILDPLATFORM} golang:1.26-alpine AS builder
 
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 ARG TARGETOS
 ARG TARGETARCH
-ARG VERSION=2.2.0
+ARG VERSION=2.3.0
 ARG BUILD_DATE
 ARG VCS_REF
 
@@ -29,9 +29,9 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
 # =============================================================================
 # Runtime Stage
 # =============================================================================
-FROM alpine:3.22
+FROM alpine:3.23
 
-ARG VERSION=2.2.0
+ARG VERSION=2.3.0
 ARG BUILD_DATE
 ARG VCS_REF
 
