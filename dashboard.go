@@ -712,7 +712,9 @@ func handleMetricsReset(w http.ResponseWriter, r *http.Request) {
 
 	if !validateTriggerToken(r) {
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid token"})
+		if err := json.NewEncoder(w).Encode(map[string]string{"error": "invalid token"}); err != nil {
+			debugLog("API", "", fmt.Sprintf("Failed to encode error response: %v", err))
+		}
 		return
 	}
 
@@ -746,7 +748,9 @@ func handleMetricsReset(w http.ResponseWriter, r *http.Request) {
 	broadcastNotification("📊 Metriken wurden zurückgesetzt", "info")
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "reset_success"})
+	if err := json.NewEncoder(w).Encode(map[string]string{"status": "reset_success"}); err != nil {
+		debugLog("API", "", fmt.Sprintf("Failed to encode reset response: %v", err))
+	}
 }
 
 // ============================================================================
