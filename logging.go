@@ -204,9 +204,13 @@ func startLogWriter() {
 		openLogFile := func() error {
 			if file != nil {
 				if writer != nil {
-					writer.Flush()
+					if flushErr := writer.Flush(); flushErr != nil {
+						fmt.Fprintf(os.Stderr, "[WARN] Failed to flush writer: %v\n", flushErr)
+					}
 				}
-				file.Close()
+				if closeErr := file.Close(); closeErr != nil {
+					fmt.Fprintf(os.Stderr, "[WARN] Failed to close file: %v\n", closeErr)
+				}
 			}
 
 			file, err = os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -224,10 +228,14 @@ func startLogWriter() {
 		}
 		defer func() {
 			if writer != nil {
-				writer.Flush()
+				if flushErr := writer.Flush(); flushErr != nil {
+					fmt.Fprintf(os.Stderr, "[WARN] Failed to flush writer on exit: %v\n", flushErr)
+				}
 			}
 			if file != nil {
-				file.Close()
+				if closeErr := file.Close(); closeErr != nil {
+					fmt.Fprintf(os.Stderr, "[WARN] Failed to close file on exit: %v\n", closeErr)
+				}
 			}
 		}()
 
@@ -242,7 +250,9 @@ func startLogWriter() {
 			case entry, ok := <-logWriteQueue:
 				if !ok {
 					if writer != nil {
-						writer.Flush()
+						if flushErr := writer.Flush(); flushErr != nil {
+							fmt.Fprintf(os.Stderr, "[ERROR] Failed to flush on channel close: %v\n", flushErr)
+						}
 					}
 					debugLog("SYSTEM", "", "📝 Log-Writer beendet")
 					return
@@ -269,10 +279,14 @@ func startLogWriter() {
 				batchCount++
 
 				if entry.Level == "ERR" || entry.Level == "WARN" {
-					writer.Flush()
+					if flushErr := writer.Flush(); flushErr != nil {
+						fmt.Fprintf(os.Stderr, "[ERROR] Failed to flush on error/warn: %v\n", flushErr)
+					}
 					batchCount = 0
 				} else if batchCount >= maxBatchSize {
-					writer.Flush()
+					if flushErr := writer.Flush(); flushErr != nil {
+						fmt.Fprintf(os.Stderr, "[ERROR] Failed to flush batch: %v\n", flushErr)
+					}
 					batchCount = 0
 				}
 
@@ -282,7 +296,9 @@ func startLogWriter() {
 				// Regelmäßiges Flush
 				logMutex.Lock()
 				if writer != nil && batchCount > 0 {
-					writer.Flush()
+					if flushErr := writer.Flush(); flushErr != nil {
+						fmt.Fprintf(os.Stderr, "[ERROR] Failed to flush on timer: %v\n", flushErr)
+					}
 					batchCount = 0
 				}
 				logMutex.Unlock()
@@ -290,7 +306,9 @@ func startLogWriter() {
 			case <-shutdownCtx.Done():
 				// Graceful shutdown
 				if writer != nil {
-					writer.Flush()
+					if flushErr := writer.Flush(); flushErr != nil {
+						fmt.Fprintf(os.Stderr, "[ERROR] Failed to flush on shutdown: %v\n", flushErr)
+					}
 				}
 				return
 			}
