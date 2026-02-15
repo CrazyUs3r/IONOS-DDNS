@@ -50,9 +50,15 @@ issues:
   max-issues-per-linter: 0
   max-same-issues: 0
   exclude-rules:
+    - name: var-naming
+      linters:
+        - revive
     - text: "ST1003:"
       linters:
         - staticcheck
-    - text: "should not use underscores in Go names"
+    - text: "should be .*API"
+      linters:
+        - revive
+    - text: "should be .*JSON"
       linters:
         - revive
