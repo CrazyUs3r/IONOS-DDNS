@@ -5,16 +5,16 @@ run:
   tests: true
 
 linters:
-  disable-all: true # Zuerst alles aus, dann gezielt an (Best Practice)
+  disable-all: true
   enable:
-    - govet         # Standard Go-Fehler (printf-Fehler, etc.)
-    - staticcheck   # Findet Bugs und Performance-Probleme
-    - errcheck      # Prüft, ob Fehler ignoriert werden
-    - revive        # Moderner Nachfolger von golint
-    - gocritic      # Findet Stil-Fehler und unsauberen Code
-    - unused        # Findet ungenutzte Variablen/Funktionen
-    - misspell      # Findet Tippfehler im Code/Kommentaren
-    - bodyclose     # WICHTIG: Prüft, ob http response bodies geschlossen werden
+    - govet
+    - staticcheck
+    - errcheck
+    - revive
+    - gocritic
+    - unused
+    - bodyclose
+    - misspell
 
 linters-settings:
   errcheck:
@@ -22,6 +22,10 @@ linters-settings:
     exclude-functions:
       - (net/http.ResponseWriter).Write
       - (*encoding/json.Encoder).Encode
+      - fmt.Fprint
+      - fmt.Fprintf
+      - fmt.Fprintln
+
   revive:
     ignore-generated-header: true
     severity: warning
@@ -29,13 +33,18 @@ linters-settings:
       - name: early-return
       - name: indent-error-flow
       - name: package-comments
-      - name: exported          
+      - name: blank-imports
+      - name: error-return
+      - name: error-naming
+      - name: if-return
+
   gocritic:
     enabled-checks:
       - ifElseChain
       - appendCombine
       - badCond
       - commentFormatting
+      - wrapperFunc
 
 issues:
   max-issues-per-linter: 0
