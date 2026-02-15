@@ -47,18 +47,20 @@ func log(ctx LogContext) {
 		icon = getCategoryIcon(ctx.Category)
 	}
 
-	if ctx.Domain != "" {
-		if ctx.Category != "" {
-			fmt.Printf("[%s] [%-4s] %s %-12s | %-35s: %s\n",
-				ts, levelStr, icon, ctx.Category, ctx.Domain, msg)
-		} else {
-			fmt.Printf("[%s] [%-4s] %s %-35s: %s\n",
-				ts, levelStr, icon, ctx.Domain, msg)
-		}
-	} else if ctx.Category != "" {
+	switch {
+	case ctx.Domain != "" && ctx.Category != "":
+		fmt.Printf("[%s] [%-4s] %s %-12s | %-35s: %s\n",
+			ts, levelStr, icon, ctx.Category, ctx.Domain, msg)
+
+	case ctx.Domain != "":
+		fmt.Printf("[%s] [%-4s] %s %-35s: %s\n",
+			ts, levelStr, icon, ctx.Domain, msg)
+
+	case ctx.Category != "":
 		fmt.Printf("[%s] [%-4s] %s %-12s: %s\n",
 			ts, levelStr, icon, ctx.Category, msg)
-	} else {
+
+	default:
 		fmt.Printf("[%s] [%-4s] %s %s\n",
 			ts, levelStr, icon, msg)
 	}
