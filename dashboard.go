@@ -704,6 +704,53 @@ func metricsBroadcasterLoop() {
 	}()
 }
 
+func handleMetricsReset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if !validateTriggerToken(r) {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid token"})
+		return
+	}
+
+	apiMetrics.Lock()
+	apiMetrics.TotalRequests = 0
+	apiMetrics.SuccessRequests = 0
+	apiMetrics.FailedRequests = 0
+	apiMetrics.RateLimitHits = 0
+	apiMetrics.ServerErrors = 0
+	apiMetrics.ClientErrors = 0
+	apiMetrics.LatencySum = 0
+	apiMetrics.LatencyCount = 0
+	apiMetrics.AverageLatency = 0
+	apiMetrics.HourlyStats = [24]int{}
+	apiMetrics.HourlyLatency = [24]time.Duration{}
+	apiMetrics.HourlyLatencySum = [24]time.Duration{}
+	apiMetrics.HourlyLatencyCount = [24]int64{}
+	apiMetrics.RequestTimestamps = nil
+	apiMetrics.LastError = ""
+	apiMetrics.LastErrorTimestamp = time.Time{}
+	apiMetrics.LastSuccessTimestamp = time.Time{}
+	
+	statsCopy := apiMetrics.getStatsUnsafe()
+	apiMetrics.Unlock()
+
+	if err := apiMetrics.SaveToFile(metricsPersistPath); err != nil {
+		debugLog("API", getClientIP(r), "Failed to save empty metrics: "+err.Error())
+	}
+
+	setLatestMetrics(statsCopy)
+	broadcastNotification("📊 Metriken wurden zurückgesetzt", "info")
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "reset_success"})
+}
+
+
+
 // ============================================================================
 // DASHBOARD HTTP HANDLER
 // ============================================================================
@@ -926,6 +973,8 @@ func createMux() *http.ServeMux {
 			return
 		}
 	})
+
+  mux.HandleFunc("/api/metrics/reset", handleMetricsReset)
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		isHealthy := lastOk.Load()
@@ -1296,6 +1345,7 @@ func createMux() *http.ServeMux {
 			<div style="display: flex; gap: 10px; align-items: center;">
 				<button class="action-btn" onclick="triggerUpdate()">🔄 Update</button>
 				<button class="action-btn" onclick="exportData()">📥 Export</button>
+         <button class="action-btn" style="background: var(--error);" onclick="resetMetrics()">🗑️ Reset</button> 
 				<button class="theme-toggle" onclick="toggleTheme()">🌓</button>
 			</div>
 		</div>
@@ -1841,6 +1891,25 @@ func createMux() *http.ServeMux {
 			bar.style.width = String(isFinite(p) ? p : 0) + "%";
 			if (m.usage_color) bar.style.background = m.usage_color;
 		}
+	}
+
+	function resetMetrics() {
+    	if (!confirm('Möchtest du wirklich alle Metriken (Statistiken) löschen?')) return;
+
+    	const token = localStorage.getItem('triggerToken') || '';
+    
+    	fetch('/api/metrics/reset', {
+        	method: 'POST',
+        	headers: token ? {'X-Trigger-Token': token} : {}
+    	})
+    	.then(r => {
+        	if (r.ok) {
+            	showToast('✅ Metriken zurückgesetzt', 'success');
+       	 } else {
+           		showToast('❌ Reset fehlgeschlagen', 'error');
+       	 }
+    	})
+    	.catch(() => showToast('❌ Verbindungsfehler', 'error'));
 	}
 
 	function filterLogs(filter) {
