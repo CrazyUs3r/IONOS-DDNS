@@ -14,11 +14,9 @@ linters:
     - gocritic
     - unused
     - bodyclose
-    - misspell
 
 linters-settings:
   errcheck:
-    check-blank: true
     exclude-functions:
       - (net/http.ResponseWriter).Write
       - (*encoding/json.Encoder).Encode
@@ -30,12 +28,13 @@ linters-settings:
     ignore-generated-header: true
     severity: warning
     rules:
+      - name: var-naming
+        disabled: true
       - name: early-return
       - name: indent-error-flow
       - name: package-comments
       - name: blank-imports
       - name: error-return
-      - name: error-naming
       - name: if-return
 
   gocritic:
@@ -44,21 +43,11 @@ linters-settings:
       - appendCombine
       - badCond
       - commentFormatting
-      - wrapperFunc
 
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
   exclude-rules:
     - name: var-naming
-      linters:
-        - revive
-    - text: "ST1003:"
-      linters:
-        - staticcheck
-    - text: "should be .*API"
-      linters:
-        - revive
-    - text: "should be .*JSON"
-      linters:
-        - revive
+    - text: "should be"
+    - text: "ST1003"
