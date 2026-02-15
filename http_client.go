@@ -138,7 +138,7 @@ func getHTTPClient() *http.Client {
 			KeepAlive: DNSKeepalive,
 			Resolver: &net.Resolver{
 				PreferGo: true,
-				Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+				Dial: func(ctx context.Context, _, address string) (net.Conn, error) {
 					var lastErr error
 					startIndex := int(atomic.LoadInt32(&lastSuccessfulDNS))
 
