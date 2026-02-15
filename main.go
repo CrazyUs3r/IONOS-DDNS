@@ -15,13 +15,17 @@ import (
 )
 
 // ============================================================================
-// MAIN
+// MAIN - FIXED: exitAfterDefer by separating main() and run()
 // ============================================================================
 func main() {
+	exitCode := run()
+	os.Exit(exitCode)
+}
+
+func run() int {
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Printf("[FATAL] Main-Panic: %v\n", r)
-			os.Exit(1)
 		}
 	}()
 
@@ -52,7 +56,7 @@ func main() {
 
 	if err := loadLanguage(lang); err != nil {
 		fmt.Printf("[FATAL] Sprachdatei konnte nicht geladen werden: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 
 	if err := apiMetrics.LoadFromFile(metricsPersistPath); err != nil {
@@ -144,7 +148,7 @@ func main() {
 			Action:  ActionConfig,
 			Message: fmt.Sprintf("Provider-%s fehlgeschlagen: %v", T.ConfigHeading, err),
 		})
-		os.Exit(1)
+		return 1
 	}
 
 	if cfg.DebugEnabled {
@@ -170,7 +174,7 @@ func main() {
 			Action:  ActionConfig,
 			Message: fmt.Sprintf("Log-Verzeichnis konnte nicht erstellt werden: %v", err),
 		})
-		os.Exit(1)
+		return 1
 	}
 
 	if err := os.MkdirAll(langDir, 0755); err != nil {
@@ -179,7 +183,7 @@ func main() {
 			Action:  ActionConfig,
 			Message: fmt.Sprintf("Lang-Verzeichnis konnte nicht erstellt werden: %v", err),
 		})
-		os.Exit(1)
+		return 1
 	}
 
 	logPath = filepath.Join(logsDir, "dyndns.json")
@@ -193,7 +197,7 @@ func main() {
 			Action:  ActionConfig,
 			Message: fmt.Sprintf("%v", err),
 		})
-		os.Exit(1)
+		return 1
 	}
 
 	providers := make(map[ProviderType]bool)
@@ -269,7 +273,7 @@ func main() {
 		select {
 		case <-shutdownCtx.Done():
 			debugLog("SCHEDULER", "", "Shutdown aktiv, beende Scheduler")
-			return
+			return 0
 
 		case <-ticker.C:
 			debugLog("SCHEDULER", "", "Intervall erreicht, starte runUpdate(false)")
@@ -344,7 +348,7 @@ func main() {
 				debugLog("SYSTEM", "", T.ServerShutdownComplete)
 			}
 
-			return
+			return 0
 		}
 	}
 }
