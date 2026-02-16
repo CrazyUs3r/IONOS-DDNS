@@ -3,6 +3,7 @@
 [![GitHub Release](https://img.shields.io/github/v/release/crazyUs3r/ionos-ddns?style=flat-square&color=blue)](https://github.com/crazyUs3r/ionos-ddns/releases/latest)
 [![GitHub Pre-Release](https://img.shields.io/github/v/release/crazyUs3r/ionos-ddns?include_prereleases&label=pre-release&color=orange&style=flat-square)](https://github.com/crazyUs3r/ionos-ddns/releases)
 [![License](https://img.shields.io/github/license/crazyUs3r/ionos-ddns?style=flat-square)](https://github.com/CrazyUs3r/IONOS-DDNS/blob/main/LICENSE)
+[![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/crazyUs3r/ionos-ddns/total)](https://github.com/crazyUs3r/ionos-ddns/releases)
 [![GitHub Activity](https://img.shields.io/github/commit-activity/y/crazyUs3r/ionos-ddns?style=flat-square)](https://github.com/crazyUs3r/ionos-ddns/commits/main)
 
 <br />
