@@ -68,7 +68,7 @@ func run() int {
 		})
 	}
 
-	tempInterval := DefaultIntervall
+	tempInterval := DefaultInterval
 	if s := strings.TrimSpace(os.Getenv("INTERVAL")); s != "" {
 		if i, err := strconv.Atoi(s); err == nil && i >= 30 {
 			tempInterval = i
