@@ -136,7 +136,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 			return nil, fmt.Errorf("request creation failed: %w", err)
 		}
 
-		req.Header.Set("User-Agent", "Go-DynDNS/2.0")
+		req.Header.Set("User-Agent", ManagedComment)
 		req.Header.Set("Accept", "application/json")
 		if body != nil {
 			req.Header.Set("Content-Type", "application/json")
