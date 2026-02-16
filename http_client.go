@@ -18,7 +18,7 @@ import (
 )
 
 // ============================================================================
-// HTTP CLIENT & TRANSPORT - FIXED
+// HTTP CLIENT & TRANSPORT
 // ============================================================================
 func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if cfg.DebugHTTPRaw {

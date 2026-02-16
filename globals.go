@@ -182,7 +182,7 @@ const (
 	DefaultHourlyRateLimit = 1200
 	DefaultMaxConcurrent   = 5
 	DefaultMaxAPIRetries   = 3
-	DefaultInterval       = 300
+	DefaultInterval        = 300
 )
 
 // ============================================================================

@@ -90,11 +90,11 @@ func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zo
 
 	if !forceRefresh && hasCachedZones && cacheAge < ZoneCacheTTL {
 		debugLog("SCHEDULER", "", fmt.Sprintf("✅ Nutze Zone-Cache (Alter: %v)", cacheAge.Round(time.Second)))
-		
+
 		zoneCacheMutex.RLock()
 		zones := cachedZones
 		zoneCacheMutex.RUnlock()
-		
+
 		return zones, nil
 	}
 
@@ -106,7 +106,7 @@ func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zo
 	default:
 		debugLog("SCHEDULER", "", fmt.Sprintf("🔄 Zone-Cache ist alt (%v) - lade von API...", cacheAge.Round(time.Second)))
 	}
-	
+
 	zonesByProvider, err := loadAllProviderZones(ctx)
 	if err != nil {
 		debugLog("SCHEDULER", "", fmt.Sprintf("⚠️ API-Fehler beim Laden der Zones: %v", err))
@@ -140,11 +140,11 @@ func loadRecordsWithCache(ctx context.Context, zonesByProvider map[string][]Zone
 
 	if !forceRefresh && hasCachedRecords && cacheAge < RecordCacheTTL {
 		debugLog("SCHEDULER", "", fmt.Sprintf("✅ Nutze Record-Cache (Alter: %v)", cacheAge.Round(time.Second)))
-		
+
 		zoneCacheMutex.RLock()
 		cache := cachedRecords
 		zoneCacheMutex.RUnlock()
-		
+
 		return cache, nil
 	}
 
@@ -208,7 +208,7 @@ func saveCachesToDisk(zonesByProvider map[string][]Zone, cache *ZoneRecordCache)
 // ============================================================================
 func runCleanupIfNeeded(ctx context.Context, zonesByProvider map[string][]Zone, cache *ZoneRecordCache) {
 	timeSinceLastCleanup := time.Since(lastCleanup)
-	
+
 	if timeSinceLastCleanup < CleanupInterval {
 		debugLog("MAINTENANCE", "", fmt.Sprintf("⏭️ Cleanup übersprungen (letzter Lauf vor %v)", timeSinceLastCleanup.Round(time.Minute)))
 		return
@@ -252,7 +252,7 @@ func runCleanupIfNeeded(ctx context.Context, zonesByProvider map[string][]Zone, 
 func loadZonesFromDiskCache() (map[string][]Zone, error) {
 	zonesByProvider := make(map[string][]Zone)
 	loadedAny := false
-	
+
 	for i := range cfg.DomainConfigs {
 		if cfg.DomainConfigs[i].Provider == ProviderIPv64 {
 			if err := loadIPv64CacheFromDisk(); err == nil {

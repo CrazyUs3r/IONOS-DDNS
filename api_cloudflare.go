@@ -398,7 +398,7 @@ func updateCloudflareDNS(ctx context.Context, dc *DomainConfig, fqdn, recordType
 		return false, nil
 	}
 
-	if existing != nil && strings.TrimSpace(existing.Comment) != cfManagedComment {
+	if existing != nil && strings.TrimSpace(existing.Comment) != ManagedComment {
 		msg := fmt.Sprintf("⚠️ Cloudflare %s-Record existiert, aber ist nicht 'managed' (comment=%q). Überspringe Update.",
 			recordType, strings.TrimSpace(existing.Comment))
 
@@ -428,7 +428,7 @@ func updateCloudflareDNS(ctx context.Context, dc *DomainConfig, fqdn, recordType
 		"content": newIP,
 		"ttl":     60,
 		"proxied": false,
-		"comment": cfManagedComment,
+		"comment": ManagedComment,
 	}
 
 	var endpoint string
@@ -533,7 +533,7 @@ func cleanupCloudflareRecords(ctx context.Context, zones []Zone, recordCache *Zo
 				continue
 			}
 
-			if strings.TrimSpace(rec.Comment) != cfManagedComment {
+			if strings.TrimSpace(rec.Comment) != ManagedComment {
 				continue
 			}
 

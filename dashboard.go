@@ -944,7 +944,7 @@ func createMux() *http.ServeMux {
 
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(map[string]interface{}{
-	   	"ip":                 clientIP,
+			"ip":                 clientIP,
 			"remaining_requests": ipLimiter.Remaining(),
 			"update_in_progress": updateInProgress.Load(),
 			"global_limit":       globalTriggerLimiter.Remaining(),
@@ -1887,7 +1887,7 @@ func createMux() *http.ServeMux {
 		if (elUsage) {
 			const used = m.usage_count != null ? m.usage_count : "?";
 			const lim = m.hourly_limit != null ? m.hourly_limit : "?";
-      elUsage.textContent = String(used) + " / " + String(lim) + " `+T.RequestsLabel+`";
+      		elUsage.textContent = String(used) + " / " + String(lim) + " `+T.RequestsLabel+`";
 		}
 
 		const bar = document.getElementById('mUsageBar');

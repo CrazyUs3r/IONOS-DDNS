@@ -102,7 +102,7 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 		if dc != nil && dc.IPv64Token != "" {
 			req.Header.Set("Authorization", "Bearer "+dc.IPv64Token)
 		}
-		req.Header.Set("User-Agent", "Go-DynDNS/2.0")
+		req.Header.Set("User-Agent", ManagedComment)
 
 		res, err := getHTTPClient().Do(req)
 		duration := time.Since(start)
@@ -471,7 +471,7 @@ func updateIPv64DNS(
 	if err != nil {
 		return false, err
 	}
-	req.Header.Set("User-Agent", "Go-DynDNS/2.0")
+	req.Header.Set("User-Agent", ManagedComment)
 
 	start := time.Now().Local()
 	res, err := getHTTPClient().Do(req)

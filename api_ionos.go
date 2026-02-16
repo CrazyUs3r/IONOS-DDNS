@@ -161,7 +161,7 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", "application/json")
 		req.Header.Set("Connection", "keep-alive")
-		req.Header.Set("User-Agent", "Go-DynDNS/2.0")
+		req.Header.Set("User-Agent", ManagedComment)
 
 		res, err := getHTTPClient().Do(req)
 		duration := time.Since(start)
