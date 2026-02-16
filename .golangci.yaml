@@ -23,7 +23,7 @@ linters-settings:
       - fmt.Fprint
       - fmt.Fprintf
       - fmt.Fprintln
-
+      
   revive:
     ignore-generated-header: true
     severity: warning
