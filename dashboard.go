@@ -1480,10 +1480,8 @@ func createMux() *http.ServeMux {
 
 			for _, e := range logs {
 				displayTime := e.Timestamp
-				if len(displayTime) >= 16 {
-					datePart := displayTime[8:10] + "." + displayTime[5:7] + "." + displayTime[0:4]
-					timePart := displayTime[11:16]
-					displayTime = datePart + " " + timePart
+				if t, err := time.Parse(time.RFC3339, e.Timestamp); err == nil {
+					displayTime = t.Local().Format("02.01.2006 15:04")
 				}
 
 				actionUpper := strings.ToUpper(e.Action)
