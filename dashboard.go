@@ -1359,7 +1359,11 @@ func createMux() *http.ServeMux {
 		
 		<div class="status-banner `+statusClass+`">
 			<span>`+statusText+`</span>
-			<span>`+T.LastUpdate+`: <span id="lastUpdate">`+time.Now().Local().Format("15:04:05")+`</span></span>
+			<span>
+              `+T.LastUpdate+`: <span id="lastUpdate">`+time.Now().Local().Format("15:04:05")+`</span>
+              <span style="opacity:0.6; margin: 0 8px;">|</span>
+              🕒 <span id="clock">--:--:--</span>
+            </span>
 		</div>
 		
 		<div id="toast" class="toast"></div>
@@ -1947,8 +1951,8 @@ func createMux() *http.ServeMux {
         }
 
         entry.style.display = shouldShow ? '' : 'none';
-    });
-  }
+      });
+    }
 
 	function copyIP(text) {
 		if (!text || text === 'N/A' || text === '-') {
@@ -2076,7 +2080,6 @@ func createMux() *http.ServeMux {
 		});
 	}
 
-
 	document.querySelectorAll('details.card').forEach(details => {
 	  const id = details.id;
 	  const saved = id ? localStorage.getItem('collapse-' + id) : null;
@@ -2107,6 +2110,22 @@ func createMux() *http.ServeMux {
 	currentLevel = calcLevelFromMetrics(initialMetrics);
 	applyFavicon(theme, currentLevel, false);
 	setBlinking(theme, currentLevel);
+    function pad2(n) { return String(n).padStart(2, '0'); }
+    
+    function formatClock(d) {
+      return pad2(d.getHours()) + ":" + pad2(d.getMinutes()) + ":" + pad2(d.getSeconds());
+    }
+    
+    function startClock() {
+      const el = document.getElementById('clock');
+      if (!el) return;
+    
+      const tick = () => { el.textContent = formatClock(new Date()); };
+    
+      tick();
+      setInterval(tick, 1000);
+    }
+    startClock();
 	connectWS();
 	</script>
 	</div>
