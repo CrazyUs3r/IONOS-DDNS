@@ -57,11 +57,11 @@ var (
 	ipTriggerLimiter     *IPRateLimiter
 	updateInProgress     atomic.Bool
 
-	lastZoneLoad    time.Time
-	cachedZones     map[string][]Zone
-	cachedRecords   *ZoneRecordCache
-	lastCleanup     time.Time
-	zoneCacheMutex  sync.RWMutex
+	lastZoneLoad   time.Time
+	cachedZones    map[string][]Zone
+	cachedRecords  *ZoneRecordCache
+	lastCleanup    time.Time
+	zoneCacheMutex sync.RWMutex
 
 	domainsCache = &CachedResponse{}
 	metricsCache = &CachedResponse{}
@@ -81,8 +81,8 @@ var (
 	}
 	workerSemaphore chan struct{}
 
-	lastIPv64Update     time.Time
-	ipv64Mutex          sync.Mutex
+	lastIPv64Update time.Time
+	ipv64Mutex      sync.Mutex
 
 	wsHub = &WSHub{
 		clients:    make(map[*WSClient]bool),
@@ -182,6 +182,7 @@ const (
 	DefaultHourlyRateLimit = 1200
 	DefaultMaxConcurrent   = 5
 	DefaultMaxAPIRetries   = 3
+	DefaultIntervall       = 300
 )
 
 // ============================================================================
@@ -244,9 +245,9 @@ const (
 	RetryExponentBase     = 2.0
 	RateLimitRetryDelay   = 60 * time.Second
 	ServerErrorRetryDelay = 30 * time.Second
-	ZoneCacheTTL     = 30 * time.Minute
-	RecordCacheTTL   = 30 * time.Minute
-	CleanupInterval  = 1 * time.Hour
+	ZoneCacheTTL          = 30 * time.Minute
+	RecordCacheTTL        = 30 * time.Minute
+	CleanupInterval       = 1 * time.Hour
 )
 
 // ============================================================================
@@ -257,7 +258,7 @@ const (
 	IPCheckBodyMaxBytes   = 1024
 	MaxStatusHistoryItems = 20
 	TriggerTokenHeader    = "X-Trigger-Token"
-	cfManagedComment      = "Go-DynDNS/2.0"
+	ManagedComment        = "Go-DynDNS/2.0"
 )
 
 // ============================================================================
