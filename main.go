@@ -84,7 +84,20 @@ func run() int {
 			}
 		}
 	}
-
+	
+	tempmaxAPIRetries := DefaultMaxAPIRetries
+	if s := strings.TrimSpace(os.Getenv("MAX_API_RETRIES")); s != "" {
+		if v, err := strconv.Atoi(s); err == nil && v >= 0 && v <= 20 {
+			tempmaxAPIRetries = v
+		} else {
+			log(LogContext{
+				Level:   LogWarn,
+				Action:  ActionConfig,
+				Message: fmt.Sprintf("Ungültiger MAX_API_RETRIES Wert '%s', benutze Default %d", s, DefaultMaxAPIRetries),
+			})
+		}
+	}
+	
 	tempmaxLogLines := DefaultMaxLogLines
 	if s := strings.TrimSpace(os.Getenv("LOG_MAX_LINES")); s != "" {
 		if v, err := strconv.Atoi(s); err == nil && v > 0 {
@@ -126,7 +139,7 @@ func run() int {
 		HourlyRateLimit: hourlyLimit,
 		MaxConcurrent:   maxConcurrent,
 		MaxLogLines:     tempmaxLogLines,
-		MaxAPIRetries:   DefaultMaxAPIRetries,
+		MaxAPIRetries:   tempmaxLogLines,
 	}
 
 	if cfg.MaxLogLines < 10 || cfg.MaxLogLines > 10000 {
