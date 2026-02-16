@@ -68,9 +68,17 @@ func run() int {
 		})
 	}
 
-	iv := 300
-	if i, err := strconv.Atoi(os.Getenv("INTERVAL")); err == nil && i >= 30 {
-		iv = i
+	tempInterval := DefaultIntervall
+	if s := strings.TrimSpace(os.Getenv("INTERVAL")); s != "" {
+		if i, err := strconv.Atoi(s); err == nil && i >= 30 {
+			tempInterval = i
+		} else {
+			log(LogContext{
+				Level:   LogWarn,
+				Action:  ActionConfig,
+				Message: fmt.Sprintf("Ungültiger INTERVAL Wert '%s', benutze Default 300", s),
+			})
+		}
 	}
 
 	dnsEnv := os.Getenv("DNS_SERVERS")
@@ -84,7 +92,7 @@ func run() int {
 			}
 		}
 	}
-	
+
 	tempmaxAPIRetries := DefaultMaxAPIRetries
 	if s := strings.TrimSpace(os.Getenv("MAX_API_RETRIES")); s != "" {
 		if v, err := strconv.Atoi(s); err == nil && v >= 0 && v <= 20 {
@@ -97,7 +105,7 @@ func run() int {
 			})
 		}
 	}
-	
+
 	tempmaxLogLines := DefaultMaxLogLines
 	if s := strings.TrimSpace(os.Getenv("LOG_MAX_LINES")); s != "" {
 		if v, err := strconv.Atoi(s); err == nil && v > 0 {
@@ -126,7 +134,7 @@ func run() int {
 	}
 
 	cfg = Config{
-		Interval:        iv,
+		Interval:        tempInterval,
 		IPMode:          strings.ToUpper(os.Getenv("IP_MODE")),
 		IfaceName:       os.Getenv("INTERFACE"),
 		HealthPort:      os.Getenv("HEALTH_PORT"),
@@ -139,7 +147,7 @@ func run() int {
 		HourlyRateLimit: hourlyLimit,
 		MaxConcurrent:   maxConcurrent,
 		MaxLogLines:     tempmaxLogLines,
-		MaxAPIRetries:   tempmaxLogLines,
+		MaxAPIRetries:   tempmaxAPIRetries,
 	}
 
 	if cfg.MaxLogLines < 10 || cfg.MaxLogLines > 10000 {
