@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"os"
 	"strings"
+
+	"golang.org/x/sync/singleflight"
 )
 
 // ============================================================================
@@ -73,8 +75,8 @@ func recordNameFromFQDN(fqdn, zone string) string {
 	}
 
 	suffix := "." + zone
-	if strings.HasSuffix(fqdn, suffix) {
-		return strings.TrimSuffix(fqdn, suffix)
+	if before, ok := strings.CutSuffix(fqdn, suffix); ok {
+		return before
 	}
 
 	return fqdn
@@ -143,4 +145,31 @@ func loadAllProviderZones(ctx context.Context) (map[string][]Zone, error) {
 	}
 
 	return zonesByProvider, nil
+}
+
+func doSingleflight[T any](
+	ctx context.Context,
+	g *singleflight.Group,
+	key string,
+	fn func() (T, error),
+) (T, error) {
+	var zero T
+
+	ch := g.DoChan(key, func() (interface{}, error) {
+		v, err := fn()
+		if err != nil {
+			return nil, err
+		}
+		return v, nil
+	})
+
+	select {
+	case <-ctx.Done():
+		return zero, ctx.Err()
+	case res := <-ch:
+		if res.Err != nil {
+			return zero, res.Err
+		}
+		return res.Val.(T), nil
+	}
 }

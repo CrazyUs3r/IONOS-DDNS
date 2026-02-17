@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"golang.org/x/sync/singleflight"
 )
 
 // ============================================================================
@@ -63,6 +64,12 @@ var (
 	cachedRecords  *ZoneRecordCache
 	lastCleanup    time.Time
 	zoneCacheMutex sync.RWMutex
+
+	ipLoadGroup      singleflight.Group
+	zonesLoadGroup   singleflight.Group
+	recordsLoadGroup singleflight.Group
+
+	cacheWriteMutex sync.Mutex
 
 	domainsCache = &CachedResponse{}
 	metricsCache = &CachedResponse{}

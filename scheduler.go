@@ -33,11 +33,17 @@ func runUpdate(firstRun bool) {
 	ctx, cancel := context.WithTimeout(shutdownCtx, totalTimeout)
 	defer cancel()
 
-	currentIPv4, currentIPv6, err := fetchCurrentIPs(ctx)
+	// --- singleflight: current IPs deduplizieren ---
+	type ipPair struct{ v4, v6 string }
+	ips, err := doSingleflight(ctx, &ipLoadGroup, "current_ips", func() (ipPair, error) {
+		v4, v6, err := fetchCurrentIPs(ctx)
+		return ipPair{v4: v4, v6: v6}, err
+	})
 	if err != nil {
 		lastOk.Store(false)
 		return
 	}
+	currentIPv4, currentIPv6 := ips.v4, ips.v6
 
 	zonesByProvider, err := loadZonesWithCache(ctx, firstRun)
 	if err != nil {
@@ -57,6 +63,7 @@ func runUpdate(firstRun bool) {
 		debugLog("CACHE", "", fmt.Sprintf("❌ Konnte Record-Cache nicht laden: %v", err))
 		return
 	}
+
 	for i := range cfg.DomainConfigs {
 		if cfg.DomainConfigs[i].Provider == ProviderIPv64 {
 			if err := loadAllIPv64Domains(ctx, &cfg.DomainConfigs[i]); err != nil {
@@ -75,7 +82,6 @@ func runUpdate(firstRun bool) {
 	}
 
 	successCount := processDomains(ctx, zonesByProvider, cache, currentIPv4, currentIPv6)
-
 	debugLog("SCHEDULER", "", fmt.Sprintf(T.SchedulerCompleted, successCount))
 }
 
@@ -107,7 +113,11 @@ func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zo
 		debugLog("SCHEDULER", "", fmt.Sprintf("🔄 Zone-Cache ist alt (%v) - lade von API...", cacheAge.Round(time.Second)))
 	}
 
-	zonesByProvider, err := loadAllProviderZones(ctx)
+	// --- singleflight: Zonen-API-Load deduplizieren ---
+	zonesByProvider, err := doSingleflight(ctx, &zonesLoadGroup, "zones_api", func() (map[string][]Zone, error) {
+		return loadAllProviderZones(ctx)
+	})
+
 	if err != nil {
 		debugLog("SCHEDULER", "", fmt.Sprintf("⚠️ API-Fehler beim Laden der Zones: %v", err))
 		debugLog("SCHEDULER", "", "📄 Versuche Fallback auf Disk-Cache...")
@@ -157,7 +167,10 @@ func loadRecordsWithCache(ctx context.Context, zonesByProvider map[string][]Zone
 		debugLog("SCHEDULER", "", fmt.Sprintf("🔄 Record-Cache ist alt (%v) - lade Records...", cacheAge.Round(time.Second)))
 	}
 
-	cache, err := loadZoneCache(ctx, zonesByProvider)
+	cache, err := doSingleflight(ctx, &recordsLoadGroup, "records_api", func() (*ZoneRecordCache, error) {
+		return loadZoneCache(ctx, zonesByProvider)
+	})
+
 	if err != nil {
 		debugLog("CACHE", "", fmt.Sprintf("⚠️ Cache-Fehler: %v", err))
 		debugLog("CACHE", "", "📄 Versuche Record-Cache von Disk zu laden...")
@@ -183,6 +196,9 @@ func loadRecordsWithCache(ctx context.Context, zonesByProvider map[string][]Zone
 // CACHE ZU DISK SPEICHERN
 // ============================================================================
 func saveCachesToDisk(zonesByProvider map[string][]Zone, cache *ZoneRecordCache) {
+	cacheWriteMutex.Lock()
+	defer cacheWriteMutex.Unlock()
+
 	for providerStr, zones := range zonesByProvider {
 		if len(zones) == 0 || cache == nil {
 			continue
