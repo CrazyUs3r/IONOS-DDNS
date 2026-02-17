@@ -58,6 +58,7 @@ var (
 	updateInProgress     atomic.Bool
 
 	lastZoneLoad   time.Time
+	lastRecordLoad time.Time
 	cachedZones    map[string][]Zone
 	cachedRecords  *ZoneRecordCache
 	lastCleanup    time.Time
