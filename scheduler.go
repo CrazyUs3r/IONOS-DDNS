@@ -134,7 +134,7 @@ func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zo
 // ============================================================================
 func loadRecordsWithCache(ctx context.Context, zonesByProvider map[string][]Zone, forceRefresh bool) (*ZoneRecordCache, error) {
 	zoneCacheMutex.RLock()
-	cacheAge := time.Since(lastZoneLoad)
+	cacheAge := time.Since(lastRecordLoad)
 	hasCachedRecords := cachedRecords != nil
 	zoneCacheMutex.RUnlock()
 
@@ -173,6 +173,7 @@ func loadRecordsWithCache(ctx context.Context, zonesByProvider map[string][]Zone
 
 	zoneCacheMutex.Lock()
 	cachedRecords = cache
+	lastRecordLoad = time.Now()
 	zoneCacheMutex.Unlock()
 
 	return cache, nil
