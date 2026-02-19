@@ -306,7 +306,6 @@ func updateDNS(
 			fmt.Sprintf("📌 %s: %s (ID: %s)", T.RecordFound, existing.Content, existing.ID))
 	}
 
-	//________________________________________________________
 	if existing != nil && existing.Content == newIP {
 		debugLog("DNS-LOGIC", fqdn,
 			fmt.Sprintf("✅ %s: %s = %s",
