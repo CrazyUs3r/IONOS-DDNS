@@ -191,13 +191,13 @@ func generateSVGChart(data [24]int) string {
 	}
 
 	var pathBuilder strings.Builder
-	pathBuilder.WriteString(fmt.Sprintf("M %.1f,%.1f", points[0][0], points[0][1]))
+	fmt.Fprintf(&pathBuilder, "M %.1f,%.1f", points[0][0], points[0][1])
 
 	for i := 0; i < len(points)-1; i++ {
 		p0, p1 := points[i], points[i+1]
 		cp1x := p0[0] + (p1[0]-p0[0])/2
-		pathBuilder.WriteString(fmt.Sprintf(" C %.1f,%.1f %.1f,%.1f %.1f,%.1f",
-			cp1x, p0[1], cp1x, p1[1], p1[0], p1[1]))
+		fmt.Fprintf(&pathBuilder, " C %.1f,%.1f %.1f,%.1f %.1f,%.1f",
+			cp1x, p0[1], cp1x, p1[1], p1[0], p1[1])
 	}
 	pathData := pathBuilder.String()
 
@@ -277,7 +277,7 @@ func generateLatencyChart(data [24]time.Duration) string {
 		if off == 0 {
 			labelsBuilder.WriteString(fmt.Sprintf(`<span style="color:#e5e7eb;">%02dh</span>`, h))
 		} else {
-			labelsBuilder.WriteString(fmt.Sprintf("<span>%02dh</span>", h))
+			fmt.Fprintf(&labelsBuilder, "<span>%02dh</span>", h)
 		}
 	}
 	timeLabels := labelsBuilder.String()
@@ -464,6 +464,41 @@ func (m *APIMetrics) updateLatency(duration time.Duration, hour int) {
 	if m.HourlyLatencyCount[hour] > 0 {
 		m.HourlyLatency[hour] = (m.HourlyLatencySum[hour] / time.Duration(m.HourlyLatencyCount[hour])).Round(time.Millisecond)
 	}
+
+	ms := duration.Milliseconds()
+	m.LatencySamples[m.LatencySampleIdx] = ms
+	m.LatencySampleIdx = (m.LatencySampleIdx + 1) % len(m.LatencySamples)
+	if m.LatencySampleCount < len(m.LatencySamples) {
+		m.LatencySampleCount++
+	}
+}
+
+func (m *APIMetrics) calcPercentile(p float64) time.Duration {
+	if m.LatencySampleCount == 0 {
+		return 0
+	}
+	count := m.LatencySampleCount
+	samples := make([]int64, count)
+	copy(samples, m.LatencySamples[:count])
+
+	for i := 1; i < len(samples); i++ {
+		key := samples[i]
+		j := i - 1
+		for j >= 0 && samples[j] > key {
+			samples[j+1] = samples[j]
+			j--
+		}
+		samples[j+1] = key
+	}
+
+	idx := int(float64(count-1) * p)
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= count {
+		idx = count - 1
+	}
+	return time.Duration(samples[idx]) * time.Millisecond
 }
 
 func (m *APIMetrics) cleanupOldTimestamps(now time.Time) {
@@ -543,10 +578,17 @@ func (m *APIMetrics) getStatsUnsafe() map[string]interface{} {
 	chronologicalStats := reorderHourlyStatsToChronological(m.HourlyStats)
 	chronologicalLatency := reorderHourlyLatencyToChronological(m.HourlyLatency)
 
+	p50 := m.calcPercentile(0.50)
+	p85 := m.calcPercentile(0.85)
+	p99 := m.calcPercentile(0.99)
+
 	return map[string]interface{}{
 		"total_requests":    m.TotalRequests,
 		"success_rate":      fmt.Sprintf("%.2f%%", successRate),
 		"avg_latency":       m.AverageLatency.String(),
+		"p50_latency":       p50.String(),
+		"p85_latency":       p85.String(),
+		"p99_latency":       p99.String(),
 		"server_errors":     m.ServerErrors,
 		"client_errors":     m.ClientErrors,
 		"last_success_time": m.LastSuccessTimestamp.Format("15:04:05"),
@@ -737,6 +779,9 @@ func handleMetricsReset(w http.ResponseWriter, r *http.Request) {
 	apiMetrics.LastError = ""
 	apiMetrics.LastErrorTimestamp = time.Time{}
 	apiMetrics.LastSuccessTimestamp = time.Time{}
+	apiMetrics.LatencySamples = [1000]int64{}
+	apiMetrics.LatencySampleIdx = 0
+	apiMetrics.LatencySampleCount = 0
 
 	statsCopy := apiMetrics.getStatsUnsafe()
 	apiMetrics.Unlock()
@@ -1371,7 +1416,12 @@ func createMux() *http.ServeMux {
 		<input type="text" class="search-box" id="domainSearch" placeholder="🔍 Domain suchen..." oninput="filterDomains(this.value)">
 	`)
 
-		stats := apiMetrics.GetStats()
+		latestMetricsMu.RLock()
+		stats := latestMetrics
+		latestMetricsMu.RUnlock()
+		if stats == nil {
+			stats = apiMetrics.GetStats()
+		}
 		hourlyStats, ok1 := toInt24(stats["hourly_stats"])
 		hourlyLat, ok2 := toDur24(stats["hourly_latency"])
 
@@ -1414,6 +1464,23 @@ func createMux() *http.ServeMux {
 					<div><strong>`+T.AvgLatency+`:</strong> <span id="mLatency">%v</span></div>
 					<div title="Client Errors (inkl. Netzwerk) / Server Errors"><strong>`+T.Errors+`:</strong> <span id="mErrors">%v / %v</span></div>
 				</div>
+				<div style="margin-top: 14px; padding: 12px 14px; background: rgba(139,92,246,0.08); border: 1px solid rgba(139,92,246,0.2); border-radius: 8px;">
+					<div style="font-size: 0.68rem; color: #94a3b8; letter-spacing: 0.06em; margin-bottom: 8px; font-weight: 600; text-transform: uppercase;">Latenz Percentile</div>
+					<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center;">
+						<div style="padding: 8px; background: rgba(74,222,128,0.08); border-radius: 6px; border: 1px solid rgba(74,222,128,0.2);">
+							<div style="font-size: 0.65rem; color: #94a3b8; margin-bottom: 3px; letter-spacing: 0.05em;">P50</div>
+							<div id="mP50" style="font-size: 1.05rem; font-weight: 700; color: #4ade80; font-family: monospace;">%v</div>
+						</div>
+						<div style="padding: 8px; background: rgba(250,204,21,0.08); border-radius: 6px; border: 1px solid rgba(250,204,21,0.2);">
+							<div style="font-size: 0.65rem; color: #94a3b8; margin-bottom: 3px; letter-spacing: 0.05em;">P85</div>
+							<div id="mP85" style="font-size: 1.05rem; font-weight: 700; color: #facc15; font-family: monospace;">%v</div>
+						</div>
+						<div style="padding: 8px; background: rgba(248,113,113,0.08); border-radius: 6px; border: 1px solid rgba(248,113,113,0.2);">
+							<div style="font-size: 0.65rem; color: #94a3b8; margin-bottom: 3px; letter-spacing: 0.05em;">P99</div>
+							<div id="mP99" style="font-size: 1.05rem; font-weight: 700; color: #f87171; font-family: monospace;">%v</div>
+						</div>
+					</div>
+				</div>
 				<div style="margin-top: 20px;">
 					<div style="display: flex; justify-content: space-between; align-items: baseline;
 								font-size: 0.7rem; color: #94a3b8; margin-bottom: 6px;">
@@ -1448,6 +1515,9 @@ func createMux() *http.ServeMux {
 			stats["avg_latency"],
 			stats["client_errors"],
 			stats["server_errors"],
+			stats["p50_latency"],
+			stats["p85_latency"],
+			stats["p99_latency"],
 			stats["usage_count"],
 			stats["hourly_limit"],
 			stats["usage_percent"],
@@ -1886,6 +1956,15 @@ func createMux() *http.ServeMux {
 			const s = m.server_errors != null ? m.server_errors : "?";
 			elErrors.textContent = String(c) + " / " + String(s);
 		}
+
+		const elP50 = document.getElementById('mP50');
+		if (elP50 && m.p50_latency != null) elP50.textContent = m.p50_latency;
+
+		const elP85 = document.getElementById('mP85');
+		if (elP85 && m.p85_latency != null) elP85.textContent = m.p85_latency;
+
+		const elP99 = document.getElementById('mP99');
+		if (elP99 && m.p99_latency != null) elP99.textContent = m.p99_latency;
 
 		const elUsage = document.getElementById('mUsage');
 		if (elUsage) {
