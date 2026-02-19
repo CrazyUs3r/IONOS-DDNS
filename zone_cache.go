@@ -112,6 +112,11 @@ func loadZoneCache(ctx context.Context, zonesByProvider map[string][]Zone) (*Zon
 				continue
 			}
 
+			if existingRecords, hit := cache.Get(z.ID); hit && len(existingRecords) > 0 {
+				debugLog("CACHE", z.Name, fmt.Sprintf("✅ Zone bereits im Cache (%d Records) – überspringe API-Call", len(existingRecords)))
+				continue
+			}
+
 			cacheWg.Add(1)
 			go func(zone Zone, domainConfig *DomainConfig, prov ProviderType) {
 				defer cacheWg.Done()
@@ -125,7 +130,9 @@ func loadZoneCache(ctx context.Context, zonesByProvider map[string][]Zone) (*Zon
 					var detailData []byte
 					detailData, err = ionosAPI(ctx, domainConfig, "GET", ionosBaseURL+"/"+zone.ID, nil)
 					if err == nil {
-						var detail struct{ Records []Record }
+						var detail struct {
+							Records []Record `json:"records"`
+						}
 						err = json.Unmarshal(detailData, &detail)
 						if err == nil {
 							records = detail.Records
