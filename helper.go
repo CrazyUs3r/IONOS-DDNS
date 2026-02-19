@@ -120,7 +120,31 @@ func loadIONOSZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
 		return nil, fmt.Errorf("failed to parse ionos zones: %w", err)
 	}
 
-	return zones, nil
+	needed := make(map[string]struct{})
+	for _, cfg := range cfg.DomainConfigs {
+		if cfg.Provider != ProviderIONOS {
+			continue
+		}
+		dn := strings.TrimSuffix(strings.ToLower(cfg.FQDN), ".")
+		needed[dn] = struct{}{}
+	}
+
+	filtered := zones[:0]
+	for _, z := range zones {
+		zn := strings.TrimSuffix(strings.ToLower(z.Name), ".")
+		for dn := range needed {
+			if dn == zn || strings.HasSuffix(dn, "."+zn) {
+				filtered = append(filtered, z)
+				break
+			}
+		}
+	}
+
+	if len(filtered) < len(zones) {
+		debugLog("ZONE", "", fmt.Sprintf("IONOS: %d von %d Zones relevant (Rest gefiltert)", len(filtered), len(zones)))
+	}
+
+	return filtered, nil
 }
 
 func loadAllProviderZones(ctx context.Context) (map[string][]Zone, error) {
