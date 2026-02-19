@@ -45,7 +45,7 @@ func (t *httpTimings) trace() *httptrace.ClientTrace {
 				t.connectAddr = addr
 			}
 		},
-		ConnectDone: func(_ , addr string, err error) {
+		ConnectDone: func(_, addr string, err error) {
 			if t.connectDone.IsZero() {
 				t.connectDone = time.Now()
 				t.connectErr = err
