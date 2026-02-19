@@ -141,7 +141,7 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 			if retryAfter != "" {
 				if seconds, err := strconv.Atoi(retryAfter); err == nil {
 					waitDuration = time.Duration(seconds) * time.Second
-					debugLog("HTTP", "", fmt.Sprintf("⏱️ Rate Limit: Warte %ds (Retry-After Header)", seconds))
+					debugLog("HTTP", "", fmt.Sprintf("⌛ Rate Limit: Warte %ds (Retry-After Header)", seconds))
 				}
 			}
 
@@ -151,7 +151,7 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 					baseWait = 5 * time.Minute
 				}
 				waitDuration = baseWait
-				debugLog("HTTP", "", fmt.Sprintf("⏱️ Rate Limit: Warte %s (exponentielles Backoff)", waitDuration))
+				debugLog("HTTP", "", fmt.Sprintf("⌛ Rate Limit: Warte %s (exponentielles Backoff)", waitDuration))
 			}
 
 			lastErr = fmt.Errorf("rate limit exceeded (429)")
@@ -225,6 +225,32 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 }
 
 func loadIPv64Domains(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
+	providerCache.RLock()
+	hasCached := len(providerCache.ipv64Records) > 0
+	providerCache.RUnlock()
+
+	if hasCached {
+		providerCache.RLock()
+		zones := make([]Zone, 0, len(providerCache.ipv64Records))
+		for domainName, domain := range providerCache.ipv64Records {
+			zone := Zone{
+				ID:   domainName,
+				Name: domainName,
+			}
+			for _, rec := range domain.Records {
+				zone.Records = append(zone.Records, Record{
+					ID:      fmt.Sprintf("%d", rec.RecordID),
+					Type:    rec.Type,
+					Content: rec.Content,
+				})
+			}
+			zones = append(zones, zone)
+		}
+		providerCache.RUnlock()
+		debugLog("CACHE", "", fmt.Sprintf("✅ IPv64 Zones aus providerCache gebaut (%d domains, kein API-Call)", len(zones)))
+		return zones, nil
+	}
+
 	params := map[string]string{
 		"get_domains": dc.IPv64Token,
 	}
@@ -315,6 +341,41 @@ func loadIPv64CacheFromDisk() error {
 	providerCache.Unlock()
 
 	debugLog("CACHE", "", fmt.Sprintf("📂 IPv64 Cache von Disk geladen (%d domains)", len(cached)))
+	lastIPv64DomainsLoad = time.Now().Local()
+	return nil
+}
+
+func ensureIPv64DomainsFresh(ctx context.Context, dc *DomainConfig, force bool) error {
+	providerCache.RLock()
+	hasData := len(providerCache.ipv64Records) > 0
+	age := time.Since(lastIPv64DomainsLoad)
+	providerCache.RUnlock()
+
+	if !force && hasData && !lastIPv64DomainsLoad.IsZero() && age < ipv64DomainsCacheTTL {
+		debugLog("SCHEDULER", "", fmt.Sprintf("✅ Nutze IPv64-Cache (Alter: %s)", age.Round(time.Second)))
+		return nil
+	}
+
+	if !hasData {
+		debugLog("CACHE", "", "⚠️ Kein IPv64 Cache im RAM - versuche von Disk zu laden")
+		if err := loadIPv64CacheFromDisk(); err == nil {
+			lastIPv64DomainsLoad = time.Now().Local()
+			providerCache.RLock()
+			hasData = len(providerCache.ipv64Records) > 0
+			providerCache.RUnlock()
+
+			if !force && hasData {
+				debugLog("SCHEDULER", "", "✅ IPv64 Cache von Disk geladen (kein API Call nötig)")
+				return nil
+			}
+		}
+	}
+
+	if err := loadAllIPv64Domains(ctx, dc); err != nil {
+		return err
+	}
+
+	lastIPv64DomainsLoad = time.Now().Local()
 	return nil
 }
 
@@ -393,7 +454,10 @@ func loadAllIPv64Domains(ctx context.Context, dc *DomainConfig) error {
 		debugLog("CACHE", "", fmt.Sprintf("⚠️ Konnte Cache nicht speichern: %v", err))
 	}
 
+	lastIPv64DomainsLoad = time.Now().Local()
+
 	return nil
+
 }
 
 // ============================================================================
