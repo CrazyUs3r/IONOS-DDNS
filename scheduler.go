@@ -33,7 +33,6 @@ func runUpdate(firstRun bool) {
 	ctx, cancel := context.WithTimeout(shutdownCtx, totalTimeout)
 	defer cancel()
 
-	// --- singleflight: current IPs deduplizieren ---
 	type ipPair struct{ v4, v6 string }
 	ips, err := doSingleflight(ctx, &ipLoadGroup, "current_ips", func() (ipPair, error) {
 		v4, v6, err := fetchCurrentIPs(ctx)
@@ -66,7 +65,7 @@ func runUpdate(firstRun bool) {
 
 	for i := range cfg.DomainConfigs {
 		if cfg.DomainConfigs[i].Provider == ProviderIPv64 {
-			if err := loadAllIPv64Domains(ctx, &cfg.DomainConfigs[i]); err != nil {
+			if err := ensureIPv64DomainsFresh(ctx, &cfg.DomainConfigs[i], firstRun); err != nil {
 				debugLog("CACHE", "", fmt.Sprintf("IPv64 Cache-Fehler: %v", err))
 			}
 			break
@@ -113,7 +112,19 @@ func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zo
 		debugLog("SCHEDULER", "", fmt.Sprintf("🔄 Zone-Cache ist alt (%v) - lade von API...", cacheAge.Round(time.Second)))
 	}
 
-	// --- singleflight: Zonen-API-Load deduplizieren ---
+	if !forceRefresh && !hasCachedZones {
+		if zonesFromDisk, err := loadZonesFromDiskCache(); err == nil && len(zonesFromDisk) > 0 {
+			debugLog("SCHEDULER", "", "✅ Zones aus Disk-Cache übernommen (kein API Call nötig)")
+
+			zoneCacheMutex.Lock()
+			cachedZones = zonesFromDisk
+			lastZoneLoad = time.Now()
+			zoneCacheMutex.Unlock()
+
+			return zonesFromDisk, nil
+		}
+	}
+
 	zonesByProvider, err := doSingleflight(ctx, &zonesLoadGroup, "zones_api", func() (map[string][]Zone, error) {
 		return loadAllProviderZones(ctx)
 	})
@@ -165,6 +176,19 @@ func loadRecordsWithCache(ctx context.Context, zonesByProvider map[string][]Zone
 		debugLog("SCHEDULER", "", "🔄 Kein Record-Cache vorhanden - Initial Load...")
 	default:
 		debugLog("SCHEDULER", "", fmt.Sprintf("🔄 Record-Cache ist alt (%v) - lade Records...", cacheAge.Round(time.Second)))
+	}
+
+	if !forceRefresh && !hasCachedRecords {
+		if cacheFromDisk, err := loadRecordCacheFromDisk(zonesByProvider); err == nil && cacheFromDisk != nil {
+			debugLog("SCHEDULER", "", "✅ Record-Cache aus Disk übernommen (kein API Call nötig)")
+
+			zoneCacheMutex.Lock()
+			cachedRecords = cacheFromDisk
+			lastRecordLoad = time.Now()
+			zoneCacheMutex.Unlock()
+
+			return cacheFromDisk, nil
+		}
 	}
 
 	cache, err := doSingleflight(ctx, &recordsLoadGroup, "records_api", func() (*ZoneRecordCache, error) {
