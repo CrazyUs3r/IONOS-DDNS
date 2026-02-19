@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -89,8 +90,9 @@ var (
 	}
 	workerSemaphore chan struct{}
 
-	lastIPv64Update time.Time
-	ipv64Mutex      sync.Mutex
+	lastIPv64Update      time.Time
+	ipv64Mutex           sync.Mutex
+	lastIPv64DomainsLoad time.Time
 
 	wsHub = &WSHub{
 		clients:    make(map[*WSClient]bool),
@@ -126,8 +128,7 @@ var (
 		"https://6.tnedi.me/",
 		"https://api6.ipify.org/",
 		"https://ipv6.myip.wtf/text",
-		"https://ip.wtf",
-		"https://botwhatismyipaddress.com",
+		"https://botwhatismyipaddress.com/",
 	}
 )
 
@@ -256,6 +257,7 @@ const (
 	ZoneCacheTTL          = 30 * time.Minute
 	RecordCacheTTL        = 30 * time.Minute
 	CleanupInterval       = 1 * time.Hour
+	ipv64DomainsCacheTTL  = 45 * time.Minute
 )
 
 // ============================================================================
@@ -544,6 +546,9 @@ type APIMetrics struct {
 	RequestTimestamps    []time.Time
 	HourlyStats          [24]int
 	lastHour             int64
+	LatencySamples       [1000]int64
+	LatencySampleIdx     int
+	LatencySampleCount   int
 }
 
 type SafeErrorMsg struct {
@@ -638,4 +643,30 @@ type apiMetricsSnapshot struct {
 	LastError         string      `json:"last_error"`
 	LastErrorTime     time.Time   `json:"last_error_at"`
 	SavedAt           time.Time   `json:"saved_at"`
+}
+
+// ============================================================================
+// HTTP TRACE / TIMINGS (DNS, CONNECT, TLS, TTFB, REUSE)
+// ============================================================================
+type httpTimings struct {
+	start        time.Time
+	end          time.Time
+	gotConn      time.Time
+	connReused   bool
+	connWasIdle  bool
+	connIdleTime time.Duration
+	dnsStart     time.Time
+	dnsDone      time.Time
+	dnsErr       error
+	connectStart time.Time
+	connectDone  time.Time
+	connectNet   string
+	connectAddr  string
+	connectErr   error
+	tlsStart     time.Time
+	tlsDone      time.Time
+	tlsState     *tls.ConnectionState
+	tlsErr       error
+	wroteRequest time.Time
+	firstByte    time.Time
 }
