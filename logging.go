@@ -221,7 +221,7 @@ func startLogWriter() {
 				return err
 			}
 
-			writer = bufio.NewWriterSize(file, 64*1024) // 64KB Buffer
+			writer = bufio.NewWriterSize(file, 64*1024)
 			return nil
 		}
 
@@ -272,7 +272,6 @@ func startLogWriter() {
 
 				_, err = writer.Write(append(data, '\n'))
 				if err != nil {
-					// Bei Fehler: File neu öffnen versuchen
 					fmt.Fprintf(os.Stderr, "[ERROR] Failed to write log entry: %v\n", err)
 					if err := openLogFile(); err != nil {
 						fmt.Fprintf(os.Stderr, "[ERROR] Failed to reopen log file: %v\n", err)
@@ -296,7 +295,6 @@ func startLogWriter() {
 				logMutex.Unlock()
 
 			case <-flushTicker.C:
-				// Regelmäßiges Flush
 				logMutex.Lock()
 				if writer != nil && batchCount > 0 {
 					if flushErr := writer.Flush(); flushErr != nil {
@@ -307,7 +305,6 @@ func startLogWriter() {
 				logMutex.Unlock()
 
 			case <-shutdownCtx.Done():
-				// Graceful shutdown
 				if writer != nil {
 					if flushErr := writer.Flush(); flushErr != nil {
 						fmt.Fprintf(os.Stderr, "[ERROR] Failed to flush on shutdown: %v\n", flushErr)
