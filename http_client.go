@@ -345,7 +345,7 @@ func getHTTPClient() *http.Client {
 			DisableKeepAlives:     false,
 			ForceAttemptHTTP2:     true,
 			TLSClientConfig: &tls.Config{
-				MinVersion:         tls.VersionTLS13,
+				MinVersion:         tls.VersionTLS12,
 				ClientSessionCache: tls.NewLRUClientSessionCache(256),
 			},
 		}
