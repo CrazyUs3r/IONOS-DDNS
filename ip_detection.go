@@ -70,7 +70,6 @@ func getPublicIP(url string, want IPVersion) (string, error) {
 			return "", fmt.Errorf("expected IPv6 but got: %s", ipStr)
 		}
 	}
-
 	duration := time.Since(start)
 	debugLog("IP-CHECK", "", fmt.Sprintf("✅ %s: %s | %s: %v", T.ReceivedIp, ipStr, T.AvgLatency, duration))
 	ipLog("", fmt.Sprintf("✅ Öffentliche IP (%v) erkannt via %s: %s | %s: %v", want, url, ipStr, T.AvgLatency, duration))
