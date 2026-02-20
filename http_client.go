@@ -289,13 +289,7 @@ func getHTTPClient() *http.Client {
 			},
 		}
 
-		dnsTTL := time.Duration(cfg.Interval)*time.Second + 30*time.Second
-		if dnsTTL < 60*time.Second {
-			dnsTTL = 60 * time.Second
-		}
-		if dnsTTL > 10*time.Minute {
-			dnsTTL = 10 * time.Minute
-		}
+		dnsTTL := 5 * time.Second // <- hier ggf. cfg.DNSCacheTTL
 		cache := newDNSCache(resolver, dnsTTL)
 
 		baseDialer := &net.Dialer{
@@ -346,7 +340,7 @@ func getHTTPClient() *http.Client {
 			ForceAttemptHTTP2:     true,
 			TLSClientConfig: &tls.Config{
 				MinVersion:         tls.VersionTLS12,
-				ClientSessionCache: tls.NewLRUClientSessionCache(256),
+				ClientSessionCache: tls.NewLRUClientSessionCache(32),
 			},
 		}
 
