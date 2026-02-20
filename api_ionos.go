@@ -273,37 +273,16 @@ func updateDNS(
 
 	recordName := recordNameFromFQDN(fqdn, zoneName)
 
-	fqdnNorm := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(fqdn), "."))
-	zoneNorm := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(zoneName), "."))
-	recordNameNorm := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(recordName), "."))
+	var existing *Record
 
-	wanted := map[string]struct{}{
-		recordNameNorm: {},
-		fqdnNorm:       {},
-	}
-
-	if recordNameNorm == "*" {
-		wanted["*."+zoneNorm] = struct{}{}
-		wanted["*"] = struct{}{}
-	}
-
-	existingIdx := -1
 	for i := range records {
-		if records[i].Type != recordType {
-			continue
-		}
-		nameNorm := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(records[i].Name), "."))
-		if _, ok := wanted[nameNorm]; ok {
-			existingIdx = i
+		if (records[i].Name == fqdn || records[i].Name == recordName) && records[i].Type == recordType {
+			existing = &records[i]
+			debugLog("DNS-LOGIC", fqdn,
+				fmt.Sprintf("📌 %s: %s (ID: %s)", T.RecordFound, existing.Content, existing.ID))
+
 			break
 		}
-	}
-
-	var existing *Record
-	if existingIdx >= 0 {
-		existing = &records[existingIdx]
-		debugLog("DNS-LOGIC", fqdn,
-			fmt.Sprintf("📌 %s: %s (ID: %s)", T.RecordFound, existing.Content, existing.ID))
 	}
 
 	if existing != nil && existing.Content == newIP {
@@ -347,7 +326,7 @@ func updateDNS(
 		actionType = ActionUpdate
 
 		payload = map[string]interface{}{
-			"name":    recordName,
+			"name":    fqdn,
 			"type":    recordType,
 			"content": newIP,
 			"ttl":     60,
@@ -359,7 +338,7 @@ func updateDNS(
 
 		payload = []DNSRecord{
 			{
-				Name:    recordName,
+				Name:    fqdn,
 				Type:    recordType,
 				Content: newIP,
 				TTL:     60,
@@ -371,10 +350,10 @@ func updateDNS(
 		fmt.Sprintf("📡 %s: %s %s", T.APICall, method, url))
 
 	debugLog("DNS-LOGIC", fqdn,
-		fmt.Sprintf("📦 Payload: zone=%s recordName=%s fqdn=%s type=%s",
-			zoneName, recordName, fqdn, recordType))
+		fmt.Sprintf("📦 Payload: zone=%s name=%s type=%s",
+			zoneName, fqdn, recordType))
 
-	respBody, err := ionosAPI(ctx, dc, method, url, payload)
+	_, err := ionosAPI(ctx, dc, method, url, payload)
 	if err != nil {
 		var apiErrPtr *APIError
 		if errors.As(err, &apiErrPtr) && apiErrPtr != nil {
@@ -451,21 +430,6 @@ func updateDNS(
 
 	if zoneName == "" {
 		return false, fmt.Errorf("zoneName is empty for fqdn %s", fqdn)
-	}
-
-	if method == "POST" && len(respBody) > 0 {
-		var created []struct {
-			ID string `json:"id"`
-		}
-		if jerr := json.Unmarshal(respBody, &created); jerr == nil && len(created) > 0 && created[0].ID != "" {
-			debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("Neue Record-ID von IONOS: %s", created[0].ID))
-			existing = &Record{
-				ID:      created[0].ID,
-				Name:    recordName,
-				Type:    recordType,
-				Content: newIP,
-			}
-		}
 	}
 
 	updateIONOSCache(cache, zoneID, recordName, fqdn, recordType, newIP, existing)
