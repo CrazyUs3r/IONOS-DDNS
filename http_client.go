@@ -289,7 +289,13 @@ func getHTTPClient() *http.Client {
 			},
 		}
 
-		dnsTTL := 5 * time.Second // <- hier ggf. cfg.DNSCacheTTL
+		dnsTTL := time.Duration(cfg.Interval)*time.Second + 30*time.Second
+		if dnsTTL < 60*time.Second {
+			dnsTTL = 60 * time.Second
+		}
+		if dnsTTL > 10*time.Minute {
+			dnsTTL = 10 * time.Minute
+		}
 		cache := newDNSCache(resolver, dnsTTL)
 
 		baseDialer := &net.Dialer{
