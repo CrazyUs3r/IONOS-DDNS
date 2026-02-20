@@ -582,22 +582,34 @@ func (m *APIMetrics) getStatsUnsafe() map[string]interface{} {
 	p85 := m.calcPercentile(0.85)
 	p99 := m.calcPercentile(0.99)
 
+	lastSuccessAge := -1.0
+	if !m.LastSuccessTimestamp.IsZero() {
+		lastSuccessAge = time.Since(m.LastSuccessTimestamp).Seconds()
+	}
+
+	lastErrorAge := -1.0
+	if !m.LastErrorTimestamp.IsZero() {
+		lastErrorAge = time.Since(m.LastErrorTimestamp).Seconds()
+	}
+
 	return map[string]interface{}{
-		"total_requests":    m.TotalRequests,
-		"success_rate":      fmt.Sprintf("%.2f%%", successRate),
-		"avg_latency":       m.AverageLatency.String(),
-		"p50_latency":       p50.String(),
-		"p85_latency":       p85.String(),
-		"p99_latency":       p99.String(),
-		"server_errors":     m.ServerErrors,
-		"client_errors":     m.ClientErrors,
-		"last_success_time": m.LastSuccessTimestamp.Format("15:04:05"),
-		"usage_count":       currentCount,
-		"usage_percent":     fmt.Sprintf("%.1f", percent),
-		"usage_color":       m.getUsageColor(percent),
-		"hourly_stats":      chronologicalStats,
-		"hourly_latency":    chronologicalLatency,
-		"hourly_limit":      cfg.HourlyRateLimit,
+		"total_requests":         m.TotalRequests,
+		"success_rate":           fmt.Sprintf("%.2f%%", successRate),
+		"avg_latency":            m.AverageLatency.String(),
+		"p50_latency":            p50.String(),
+		"p85_latency":            p85.String(),
+		"p99_latency":            p99.String(),
+		"server_errors":          m.ServerErrors,
+		"client_errors":          m.ClientErrors,
+		"last_success_time":      m.LastSuccessTimestamp.Format("15:04:05"),
+		"last_success_age_secs":  lastSuccessAge,
+		"last_error_age_secs":    lastErrorAge,
+		"usage_count":            currentCount,
+		"usage_percent":          fmt.Sprintf("%.1f", percent),
+		"usage_color":            m.getUsageColor(percent),
+		"hourly_stats":           chronologicalStats,
+		"hourly_latency":         chronologicalLatency,
+		"hourly_limit":           cfg.HourlyRateLimit,
 	}
 }
 
@@ -1790,11 +1802,21 @@ func createMux() *http.ServeMux {
 		const total = toNum(m.total_requests, 0);
 		const successRate = toNum(m.success_rate, 100);
 
-		const clientErr = toNum(m.client_errors, 0);
-		const serverErr = toNum(m.server_errors, 0);
-		const totalErr = clientErr + serverErr;
+		const successAge = toNum(m.last_success_age_secs, -1);
+		const errorAge   = toNum(m.last_error_age_secs,   -1);
 
-		if (totalErr > 0) return 'err';
+		// Fehler bekannt, aber letzter Erfolg ist neuer als letzter Fehler -> erholt
+		const recovered = successAge >= 0 && errorAge >= 0 && successAge < errorAge;
+
+		// Aktiver Fehler: Fehler existiert UND kein neuerer Erfolg danach
+		const hasActiveError = errorAge >= 0 && !recovered;
+
+		if (hasActiveError) {
+			// Fehler aelter als 10min -> nur warn (vermutlich transienter Fehler)
+			if (errorAge > 600) return 'warn';
+			return 'err';
+		}
+
 		if (total >= 5 && successRate <= 0) return 'err';
 		if (total >= 10 && successRate < 50) return 'err';
 
@@ -1807,7 +1829,7 @@ func createMux() *http.ServeMux {
 		if (total >= 10 && successRate < 90) return 'warn';
 
 		return 'ok';
-	}	
+	}
 
 	function toggleTheme() {
 	const html = document.documentElement;
