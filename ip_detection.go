@@ -16,7 +16,6 @@ import (
 // ============================================================================
 func getPublicIP(url string, want IPVersion) (string, error) {
 	debugLog("IP-CHECK", "", "🌐 "+url)
-	start := time.Now()
 
 	ctx, cancel := context.WithTimeout(context.Background(), IPCheckTimeout)
 	defer cancel()
@@ -27,7 +26,10 @@ func getPublicIP(url string, want IPVersion) (string, error) {
 		return "", fmt.Errorf("request error: %w", err)
 	}
 
+	start := time.Now().Local()
 	resp, err := getHTTPClient().Do(req)
+	duration := time.Since(start)
+
 	if err != nil {
 		debugLog("IP-CHECK", "", fmt.Sprintf("❌ HTTP: %v", err))
 		return "", fmt.Errorf("http error: %w", err)
@@ -70,7 +72,7 @@ func getPublicIP(url string, want IPVersion) (string, error) {
 			return "", fmt.Errorf("expected IPv6 but got: %s", ipStr)
 		}
 	}
-	duration := time.Since(start)
+
 	debugLog("IP-CHECK", "", fmt.Sprintf("✅ %s: %s | %s: %v", T.ReceivedIp, ipStr, T.AvgLatency, duration))
 	ipLog("", fmt.Sprintf("✅ Öffentliche IP (%v) erkannt via %s: %s | %s: %v", want, url, ipStr, T.AvgLatency, duration))
 
