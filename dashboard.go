@@ -1409,7 +1409,6 @@ func createMux() *http.ServeMux {
 			<div style="display: flex; gap: 10px; align-items: center;">
 				<button class="action-btn" onclick="triggerUpdate()">🔄 Update</button>
 				<button class="action-btn" onclick="exportData()">📥 Export</button>
-         <button class="action-btn" style="background: var(--error);" onclick="resetMetrics()">🗑️ Reset</button> 
 				<button class="theme-toggle" onclick="toggleTheme()">🌓</button>
 			</div>
 		</div>
@@ -1468,7 +1467,7 @@ func createMux() *http.ServeMux {
 
 		_, _ = fmt.Fprintf(w, `
 		<details class="card" open id="metrics-card">
-			<summary>📊 %s </summary>
+			<summary style="display:flex; justify-content:space-between; align-items:center;">📊 %s<button class="action-btn" style="background:var(--error); font-size:0.7rem; padding:3px 10px; margin-left:auto;" onclick="event.preventDefault(); resetMetrics()">🗑️ Reset</button></summary>
 			<div class="card-content">
 				<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-top: 10px;">
 					<div><strong>`+T.TotalRequests+`:</strong> <span id="mTotal">%v</span></div>
