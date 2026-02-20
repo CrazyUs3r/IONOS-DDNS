@@ -118,7 +118,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 
 	var lastErr error
 	for attempt := 0; attempt < cfg.MaxAPIRetries; attempt++ {
-		start := time.Now()
+
 		debugLog("HTTP", "", fmt.Sprintf("🔄 Cloudflare %s %d/%d: %s %s",
 			T.Attempt, attempt+1, cfg.MaxAPIRetries, method, fullURL))
 
@@ -169,6 +169,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 			return nil, fmt.Errorf("no Cloudflare credentials configured")
 		}
 
+		start := time.Now()
 		res, err := getHTTPClient().Do(req)
 		duration := time.Since(start)
 
