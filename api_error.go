@@ -31,40 +31,50 @@ func classifyAPIError(statusCode int, method, url, responseBody string) *APIErro
 	switch statusCode {
 	case 400:
 		apiErr.Message = T.BadRequest
+		log(LogContext{Level: LogError, Action: ActionError, Message: fmt.Sprintf("%s %s %s: %s", method, url, T.BadRequest, responseBody)})
 	case 401:
 		apiErr.Message = T.Unauthorized
-		log(LogContext{Level: LogError, Action: ActionConfig, Message: T.Unauthorized})
+		log(LogContext{Level: LogError, Action: ActionConfig, Message: fmt.Sprintf("%s %s: %s", method, url, T.Unauthorized)})
 	case 403:
 		apiErr.Message = T.Forbidden
+		log(LogContext{Level: LogError, Action: ActionError, Message: fmt.Sprintf("%s %s: %s", method, url, T.Forbidden)})
 	case 404:
 		apiErr.Message = T.NotFound
+		log(LogContext{Level: LogWarn, Action: ActionZone, Message: fmt.Sprintf("%s %s: %s", method, url, T.NotFound)})
 	case 422:
 		apiErr.Message = T.UnprocessableEntity
+		log(LogContext{Level: LogError, Action: ActionError, Message: fmt.Sprintf("%s %s: %s - %s", method, url, T.UnprocessableEntity, responseBody)})
 	case 429:
 		apiErr.Message = T.RateLimitExceeded
 		apiErr.Retryable = true
 		apiErr.RetryAfter = RateLimitRetryDelay
-		log(LogContext{Level: LogWarn, Action: ActionRetry, Message: T.RateLimitExceeded})
+		log(LogContext{Level: LogWarn, Action: ActionRetry, Message: fmt.Sprintf("%s %s: %s", method, url, T.RateLimitExceeded)})
 	case 500:
 		apiErr.Message = T.InternalServerError
 		apiErr.Retryable = true
+		log(LogContext{Level: LogError, Action: ActionError, Message: fmt.Sprintf("%s %s: %s", method, url, T.InternalServerError)})
 	case 502:
 		apiErr.Message = T.BadGateway
 		apiErr.Retryable = true
+		log(LogContext{Level: LogError, Action: ActionError, Message: fmt.Sprintf("%s %s: %s", method, url, T.BadGateway)})
 	case 503:
 		apiErr.Message = T.ServiceUnavailable
 		apiErr.Retryable = true
 		apiErr.RetryAfter = ServerErrorRetryDelay
+		log(LogContext{Level: LogError, Action: ActionError, Message: fmt.Sprintf("%s %s: %s", method, url, T.ServiceUnavailable)})
 	case 504:
 		apiErr.Message = T.GatewayTimeout
 		apiErr.Retryable = true
+		log(LogContext{Level: LogError, Action: ActionError, Message: fmt.Sprintf("%s %s: %s", method, url, T.GatewayTimeout)})
 	default:
 		if statusCode >= 500 {
 			apiErr.Message = fmt.Sprintf("Server Error %d", statusCode)
 			apiErr.Retryable = true
+			log(LogContext{Level: LogError, Action: ActionError, Message: fmt.Sprintf("%s %s: Server Error %d - %s", method, url, statusCode, responseBody)})
 		} else {
 			apiErr.Message = fmt.Sprintf("Client Error %d", statusCode)
 			apiErr.Retryable = false
+			log(LogContext{Level: LogError, Action: ActionError, Message: fmt.Sprintf("%s %s: Client Error %d - %s", method, url, statusCode, responseBody)})
 		}
 	}
 
