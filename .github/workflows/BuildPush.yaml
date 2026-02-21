@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release-Version (z.B. 2.3.0)"
+        description: "Release-Version (z.B. 2.3.1)"
         required: true
-        default: "2.3.0"
+        default: "2.3.1"
 
       prerelease:
         description: "Als Prerelease veröffentlichen?"
@@ -53,10 +53,8 @@ jobs:
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 
           if [ -z "$LAST_TAG" ]; then
-            echo "Kein vorheriger Tag gefunden, nehme letzten 20 Commits"
             RAW=$(git log --pretty=format:"%s|%h|%an" -20)
           else
-            echo "Changelog seit $LAST_TAG"
             RAW=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s|%h|%an")
           fi
 
@@ -71,7 +69,8 @@ jobs:
             HASH=$(echo "$line" | cut -d'|' -f2)
             AUTHOR=$(echo "$line" | cut -d'|' -f3)
 
-            ENTRY="- ${MSG} (\`${HASH}\`) – ${AUTHOR}"
+            # Hier ist die entscheidende Änderung für die Verlinkung:
+            ENTRY="- ${MSG} ([${HASH}](${{ github.server_url }}/${{ github.repository }}/commit/${HASH})) – ${AUTHOR}"
 
             case "$MSG" in
               feat*|feature*|add*|Add*|Feat*)
