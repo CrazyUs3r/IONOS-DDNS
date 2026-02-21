@@ -1177,9 +1177,13 @@ func createMux() *http.ServeMux {
 		:root {
 			--bg: #0f172a; --card: #1e293b; --text: #f8fafc; --border: #334155;
 			--success: #4ade80; --error: #f87171; --warning: #facc15;
+			--btn-bg: #1e3a5f; --btn-text: #93c5fd; --btn-border: #3b82f6;
+			--btn-hover: #1d4ed8; --btn-shadow: rgba(59,130,246,0.4);
 		}
 		[data-theme="light"] {
 			--bg: #f8fafc; --card: #ffffff; --text: #0f172a; --border: #e2e8f0;
+			--btn-bg: #eff6ff; --btn-text: #1d4ed8; --btn-border: #93c5fd;
+			--btn-hover: #dbeafe; --btn-shadow: rgba(59,130,246,0.25);
 		}
 		
 		body {
@@ -1364,19 +1368,20 @@ func createMux() *http.ServeMux {
 		.log-entry.hidden {display: none;}
 
 		.action-btn {
-			background: var(--success);
-			color: white;
-			border: none;
+			background: var(--btn-bg);
+			color: var(--btn-text);
+			border: 1px solid var(--btn-border);
 			padding: 10px 20px;
 			border-radius: 8px;
 			cursor: pointer;
 			font-weight: 600;
 			transition: all 0.2s;
 		}
-		
+
 		.action-btn:hover {
+			background: var(--btn-hover);
 			transform: translateY(-2px);
-			box-shadow: 0 4px 12px rgba(74, 222, 128, 0.3);
+			box-shadow: 0 4px 12px var(--btn-shadow);
 		}
 
 		@media (max-width: 768px) {
@@ -1423,8 +1428,6 @@ func createMux() *http.ServeMux {
 		</div>
 		
 		<div id="toast" class="toast"></div>
-		
-		<input type="text" class="search-box" id="domainSearch" placeholder="🔍 Domain suchen..." oninput="filterDomains(this.value)">
 	`)
 
 		latestMetricsMu.RLock()
@@ -1650,7 +1653,7 @@ func createMux() *http.ServeMux {
 		}
 		sort.Strings(keys)
 
-		_, _ = fmt.Fprint(w, `<div id="domainContainer">`)
+		_, _ = fmt.Fprint(w, `<input type="text" class="search-box" id="domainSearch" placeholder="🔍 Domain suchen..." oninput="filterDomains(this.value)"><div id="domainContainer">`)
 		for _, k := range keys {
 			var h DomainHistory
 			b, _ := json.Marshal(data[k])
@@ -1800,18 +1803,12 @@ func createMux() *http.ServeMux {
 	function calcLevelFromMetrics(m) {
 		const total = toNum(m.total_requests, 0);
 		const successRate = toNum(m.success_rate, 100);
-
 		const successAge = toNum(m.last_success_age_secs, -1);
 		const errorAge   = toNum(m.last_error_age_secs,   -1);
-
-		// Fehler bekannt, aber letzter Erfolg ist neuer als letzter Fehler -> erholt
 		const recovered = successAge >= 0 && errorAge >= 0 && successAge < errorAge;
-
-		// Aktiver Fehler: Fehler existiert UND kein neuerer Erfolg danach
 		const hasActiveError = errorAge >= 0 && !recovered;
 
 		if (hasActiveError) {
-			// Fehler aelter als 10min -> nur warn (vermutlich transienter Fehler)
 			if (errorAge > 600) return 'warn';
 			return 'err';
 		}
