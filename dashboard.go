@@ -1686,6 +1686,23 @@ func createMux() *http.ServeMux {
 		sort.Strings(keys)
 
 		_, _ = fmt.Fprint(w, `<input type="text" class="search-box" id="domainSearch" placeholder="🔍 Domain suchen..." oninput="filterDomains(this.value)"><div id="domainContainer">`)
+
+		// Neuestes LastChanged über alle Domains ermitteln – für relativen Vergleich
+		var newestChange time.Time
+		for _, k := range keys {
+			var dh DomainHistory
+			if b, err := json.Marshal(data[k]); err == nil {
+				_ = json.Unmarshal(b, &dh)
+			}
+			if dh.LastChanged != "" {
+				if t, err := time.Parse("02.01.2006 15:04:05", dh.LastChanged); err == nil {
+					if t.After(newestChange) {
+						newestChange = t
+					}
+				}
+			}
+		}
+
 		for _, k := range keys {
 			var h DomainHistory
 			b, _ := json.Marshal(data[k])
@@ -1698,23 +1715,30 @@ func createMux() *http.ServeMux {
 
 			safeID := sanitizeIDWithHash(k)
 
+			// Dot-Logik:
+			//   grau    = noch nie ein Update gesehen
+			//   grün    = aktiv & auf dem Stand der neuesten Domain
+			//   gelb    = aktiv aber älter als das neueste Update (andere Domain wurde seitdem geändert)
+			//   pulsierend grün = in den letzten 15 Min geändert
 			dotClass := "domain-status-dot dot-idle"
-			dotTitle := "Keine kürzliche Änderung"
+			dotTitle := "Noch kein Update gesehen"
 			changedBadge := `<span id="badge-` + safeID + `" class="changed-badge" style="display:none;">🔄 gerade geändert</span>`
 			if h.LastChanged != "" {
 				if t, err := time.Parse("02.01.2006 15:04:05", h.LastChanged); err == nil {
-					age := time.Since(t)
 					switch {
-					case age < 60*time.Minute:
+					case time.Since(t) < 15*time.Minute:
+						// Frisch geändert – pulsierend grün
 						dotClass = "domain-status-dot dot-ok dot-recent"
 						dotTitle = "Gerade geändert: " + h.LastChanged
 						changedBadge = `<span id="badge-` + safeID + `" class="changed-badge">🔄 gerade geändert</span>`
-					case age < time.Hour:
-						dotClass = "domain-status-dot dot-ok"
-						dotTitle = "Zuletzt geändert: " + h.LastChanged
-					case age < 24*time.Hour:
+					case !newestChange.IsZero() && t.Before(newestChange.Add(-time.Minute)):
+						// Eine andere Domain wurde seitdem aktualisiert → IP möglicherweise veraltet
 						dotClass = "domain-status-dot dot-warn"
-						dotTitle = "Letzte Änderung vor mehr als einer Stunde: " + h.LastChanged
+						dotTitle = "Letzte Änderung: " + h.LastChanged + " · Andere Domain wurde seitdem aktualisiert"
+					default:
+						// Aktuell – grün
+						dotClass = "domain-status-dot dot-ok"
+						dotTitle = "Aktiv · Letzte Änderung: " + h.LastChanged
 					}
 				}
 			}
