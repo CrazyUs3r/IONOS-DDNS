@@ -73,7 +73,7 @@ func getPublicIP(url string, want IPVersion) (string, error) {
 		}
 	}
 
-	debugLog("IP-CHECK", "", fmt.Sprintf("✅ %s: %s | %s: %v", T.ReceivedIp, ipStr, T.AvgLatency, duration))
+	debugLog("IP-CHECK", "", fmt.Sprintf("✅ %s: %s | %s: %v", T.ReceivedIP, ipStr, T.AvgLatency, duration))
 	ipLog("", fmt.Sprintf("✅ Öffentliche IP (%v) erkannt via %s: %s | %s: %v", want, url, ipStr, T.AvgLatency, duration))
 
 	return ipStr, nil
@@ -126,7 +126,7 @@ func getIPv6() (string, error) {
 					ipLog("", fmt.Sprintf("✅ IPv6 via Interface %s: %s", cfg.IfaceName, ip.String()))
 					return ip.String(), nil
 				}
-				debugLog("IP-CHECK", "", "⚠️  "+T.NoIpv6OnInterface)
+				debugLog("IP-CHECK", "", "⚠️  "+T.NoIPv6OnInterface)
 			}
 		}
 	}

@@ -161,7 +161,7 @@ func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdate
 	v4Changed, v6Changed := false, false
 
 	if cfg.IPMode != "IPV6" && job.IPv4 != "" {
-		debugLog("DNS-LOGIC", job.Domain, T.CheckingIpv4)
+		debugLog("DNS-LOGIC", job.Domain, T.CheckingIPv4)
 
 		var changed bool
 		var err error
@@ -186,7 +186,7 @@ func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdate
 	}
 
 	if cfg.IPMode != "IPV4" && job.IPv6 != "" {
-		debugLog("DNS-LOGIC", job.Domain, T.CheckingIpv6)
+		debugLog("DNS-LOGIC", job.Domain, T.CheckingIPv6)
 
 		var changed bool
 		var err error

@@ -220,7 +220,7 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 			log(LogContext{
 				Level:   LogError,
 				Action:  ActionError,
-				Message: fmt.Sprintf("🚨 %s: %v", T.CriticalApiError, apiErr),
+				Message: fmt.Sprintf("🚨 %s: %v", T.CriticalAPIError, apiErr),
 			})
 		}
 

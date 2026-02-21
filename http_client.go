@@ -246,7 +246,7 @@ func getHTTPClient() *http.Client {
 
 			debugLog("HTTP", "", fmt.Sprintf(
 				"🔧 %s %d Domains → MaxConns=%d, IdlePerHost=%d",
-				T.HttpPool, domainCount, maxConnsPerHost, maxIdleConnsPerHost,
+				T.HTTPPool, domainCount, maxConnsPerHost, maxIdleConnsPerHost,
 			))
 		}
 
@@ -357,7 +357,7 @@ func getHTTPClient() *http.Client {
 			},
 		}
 
-		debugLog("SYSTEM", "", fmt.Sprintf(T.HttpClientInitialized, len(dnsList)))
+		debugLog("SYSTEM", "", fmt.Sprintf(T.HTTPClientInitialized, len(dnsList)))
 	})
 
 	return httpClient

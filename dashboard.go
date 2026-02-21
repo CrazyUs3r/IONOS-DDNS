@@ -1487,7 +1487,7 @@ func createMux() *http.ServeMux {
 			<div class="card-content">
 				<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px;">
 					<div><strong>`+T.MaxLogLines+`:</strong> %d</div>
-					<div><strong>`+T.MaxApiRetries+`:</strong> %d</div>
+					<div><strong>`+T.MaxAPIRetries+`:</strong> %d</div>
 					<div><strong>`+T.MaxConcurrent+`:</strong> %d</div>
 					<div><strong>`+T.Interval+`:</strong> %ds</div>
 				</div>
@@ -1555,7 +1555,7 @@ func createMux() *http.ServeMux {
 		
 		%s
 		`,
-			T.ApiPerformance,
+			T.APIPerformance,
 			stats["total_requests"],
 			stats["success_rate"],
 			stats["avg_latency"],
@@ -1698,7 +1698,6 @@ func createMux() *http.ServeMux {
 
 			safeID := sanitizeIDWithHash(k)
 
-			// Status dot: green+pulse if changed in last 15min, yellow if last hour, grey otherwise
 			dotClass := "domain-status-dot dot-idle"
 			dotTitle := "Keine kürzliche Änderung"
 			changedBadge := `<span id="badge-` + safeID + `" class="changed-badge" style="display:none;">🔄 gerade geändert</span>`
@@ -1706,7 +1705,7 @@ func createMux() *http.ServeMux {
 				if t, err := time.Parse("02.01.2006 15:04:05", h.LastChanged); err == nil {
 					age := time.Since(t)
 					switch {
-					case age < 15*time.Minute:
+					case age < 60*time.Minute:
 						dotClass = "domain-status-dot dot-ok dot-recent"
 						dotTitle = "Gerade geändert: " + h.LastChanged
 						changedBadge = `<span id="badge-` + safeID + `" class="changed-badge">🔄 gerade geändert</span>`
@@ -1863,18 +1862,12 @@ func createMux() *http.ServeMux {
 	function calcLevelFromMetrics(m) {
 		const total = toNum(m.total_requests, 0);
 		const successRate = toNum(m.success_rate, 100);
-
 		const successAge = toNum(m.last_success_age_secs, -1);
 		const errorAge   = toNum(m.last_error_age_secs,   -1);
-
-		// Fehler bekannt, aber letzter Erfolg ist neuer als letzter Fehler -> erholt
 		const recovered = successAge >= 0 && errorAge >= 0 && successAge < errorAge;
-
-		// Aktiver Fehler: Fehler existiert UND kein neuerer Erfolg danach
 		const hasActiveError = errorAge >= 0 && !recovered;
 
 		if (hasActiveError) {
-			// Fehler aelter als 10min -> nur warn (vermutlich transienter Fehler)
 			if (errorAge > 600) return 'warn';
 			return 'err';
 		}
@@ -2018,25 +2011,22 @@ func createMux() *http.ServeMux {
 	if (ip4El && data.ipv4) ip4El.textContent = data.ipv4;
 	if (ip6El && data.ipv6) ip6El.textContent = data.ipv6;
 
-	// Update status dot → green + pulse (just changed)
 	const dotEl = document.getElementById('dot-' + safeID);
 	if (dotEl) {
 		dotEl.className = 'domain-status-dot dot-ok dot-recent';
 		dotEl.title = 'Gerade geändert: ' + (data.time || new Date().toLocaleTimeString());
-		// After 15min remove pulse
 		setTimeout(() => {
 			if (dotEl) {
 				dotEl.classList.remove('dot-recent');
 				dotEl.title = 'Zuletzt geändert: ' + (data.time || '');
 			}
-		}, 15 * 60 * 1000);
+		}, 60 * 60 * 1000);
 	}
 
-	// Show / hide "gerade geändert" badge
 	const badgeEl = document.getElementById('badge-' + safeID);
 	if (badgeEl) {
 		badgeEl.style.display = '';
-		setTimeout(() => { if (badgeEl) badgeEl.style.display = 'none'; }, 15 * 60 * 1000);
+		setTimeout(() => { if (badgeEl) badgeEl.style.display = 'none'; }, 60 * 60 * 1000);
 	}
 
 	showToast('✓ ' + data.domain + ' updated');

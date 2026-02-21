@@ -293,15 +293,15 @@ type Phrases struct {
 	DashTitle, StatusOk, StatusErr, LastUpdate, InfraHeading, ZoneLabel            string
 	ServiceStarted, ServiceStopped, DashboardStarted, ServerError                  string
 	HealthCheckOK, HealthCheckFailed, SystemEvents, History, EventLog              string
-	DomainStatus, Provider, LastChanged, Ipv4Label, Ipv6Label, CriticalApiError    string
+	DomainStatus, Provider, LastChanged, IPv4Label, IPv6Label, CriticalAPIError    string
 	PanicLoadingLanguage, TryingLoadLanguage, LanguageFileNotFound                 string
-	TryingFallbackEn, UsingBuiltinDefaults, JsonParseError, LanguageLoaded         string
-	MissingTranslationKey, HttpPool, HourlyLimitEst, RequestsLabel, UsageLast60Min string
-	MaxLogLines, MaxApiRetries, MaxConcurrent, Interval                            string
+	TryingFallbackEn, UsingBuiltinDefaults, JSONParseError, LanguageLoaded         string
+	MissingTranslationKey, HTTPPool, HourlyLimitEst, RequestsLabel, UsageLast60Min string
+	MaxLogLines, MaxAPIRetries, MaxConcurrent, Interval                            string
 
 	// Statistiken & Metriken
 	Requests, SuccessRate, LastSuccess, AvgLatency, Errors, HourlyLimit       string
-	RequestHistory, LatencyHistory, ApiPerformance, BasedOnLast60Min          string
+	RequestHistory, LatencyHistory, APIPerformance, BasedOnLast60Min          string
 	UnhealthyStatus, DetailedStats, TotalRequests, ClientErrors, ServerErrors string
 
 	// Validierung & Log
@@ -310,20 +310,20 @@ type Phrases struct {
 
 	// DNS & Netzwerk Logik
 	RecordFound, RecordCurrent, NoRecordFound, RecordUpdateNeeded, WouldSet   string
-	APICall, PayloadSent, ReceivedIp, CheckingInterface, InterfaceNotFound    string
-	AddressesNotReadable, NoIpv6OnInterface, FallbackToExternal               string
+	APICall, PayloadSent, ReceivedIP, CheckingInterface, InterfaceNotFound    string
+	AddressesNotReadable, NoIPv6OnInterface, FallbackToExternal               string
 	Attempt, NetworkError, RetryIn, Success, BodyReadError, NonRetryableError string
 	MaxAttemptsReached, RetryScheduled, ContextCancelled, ContextExpired      string
 
 	// Worker & Status
 	WorkerSlotAcquired, WorkerProcessingComplete, WorkerSlotReleased   string
-	NoZoneFoundForDomain, NoRecordsInCache, CheckingIpv4, CheckingIpv6 string
+	NoZoneFoundForDomain, NoRecordsInCache, CheckingIPv4, CheckingIPv6 string
 	UpdateFailed, CriticalError, ChangesDetected, WritingStatusFile    string
 	NoChangesNeeded, SchedulerStarted, SchedulerCompleted              string
 
 	// Configuration
 	ConfigHeading, ConfigAPIPrefix, ConfigDomains, ConfigInterval string
-	ConfigIpMode, ConfigInterface, ConfigHealthPort, ConfigDryRun string
+	ConfigIPMode, ConfigInterface, ConfigHealthPort, ConfigDryRun string
 	ConfigLogDir, ConfigLanguage                                  string
 
 	// API Fehler & System
@@ -333,7 +333,7 @@ type Phrases struct {
 	ServerShuttingDown, ServerShutdownComplete, ShutdownError              string
 
 	// Sonstiges
-	Mode, NoDNSServer, DNSFailover, HttpClientInitialized                 string
+	Mode, NoDNSServer, DNSFailover, HTTPClientInitialized                 string
 	InvalidPort, UsingDefaultPort, IntervalTooSmall, ShortIntervalWarning string
 	InvalidIPMode, UsingDefaultMode                                       string
 }

@@ -158,7 +158,7 @@ func logHTTPClientStats() {
 	}
 
 	debugLog("CONFIG", "", fmt.Sprintf("%s: %ds", T.ConfigInterval, cfg.Interval))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", T.ConfigIpMode, cfg.IPMode))
+	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", T.ConfigIPMode, cfg.IPMode))
 	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", T.ConfigInterface, cfg.IfaceName))
 	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", T.ConfigHealthPort, cfg.HealthPort))
 	debugLog("CONFIG", "", fmt.Sprintf("%s: %v", T.ConfigDryRun, cfg.DryRun))

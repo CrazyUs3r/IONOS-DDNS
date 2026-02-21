@@ -2,6 +2,7 @@
 package main
 
 import (
+	"strings"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -39,7 +40,7 @@ func loadLanguage(lang string) error {
 
 	var translations map[string]string
 	if err := json.Unmarshal(data, &translations); err != nil {
-		fmt.Printf("[ERROR] %s: %v\n", T.JsonParseError, err)
+		fmt.Printf("[ERROR] %s: %v\n", T.JSONParseError, err)
 
 		if lang != "en" {
 			return loadLanguage("en")
@@ -72,7 +73,24 @@ func loadLanguage(lang string) error {
 	return nil
 }
 
+// knownAcronyms lists uppercase acronyms that must be treated as a single token
+// so that e.g. "HTTPPool" → "http_pool" and not "h_t_t_p_pool".
+// Order matters: longer matches must come first (IPv4/IPv6 before IP).
+var knownAcronyms = []string{
+	"IPv4", "IPv6", "HTTP", "JSON", "API", "DNS", "IP",
+}
+
 func toSnakeCase(s string) string {
+	// Replace each known acronym with a title-cased sentinel so the
+	// normal char-by-char loop produces exactly one underscore boundary.
+	// E.g. "HTTPPool" → "Http_pool" (interim) → "http_pool"
+	for _, acr := range knownAcronyms {
+		// Build replacement: first letter upper, rest lower → treated as one word
+		replacement := string(unicode.ToUpper([]rune(acr)[0])) +
+			strings.ToLower(acr[1:])
+		s = strings.ReplaceAll(s, acr, replacement)
+	}
+
 	var result []rune
 	for i, r := range s {
 		if i > 0 && unicode.IsUpper(r) {
@@ -111,8 +129,8 @@ func setDefaultPhrases() {
 		DomainStatus:             "Domain Status",
 		Provider:                 "Provider",
 		LastChanged:              "Last Changed",
-		Ipv4Label:                "IPv4",
-		Ipv6Label:                "IPv6",
+		IPv4Label:                "IPv4",
+		IPv6Label:                "IPv6",
 		Requests:                 "Requests",
 		SuccessRate:              "Success Rate",
 		LastSuccess:              "Last Success",
@@ -121,7 +139,7 @@ func setDefaultPhrases() {
 		HourlyLimit:              "Hourly Limit",
 		RequestHistory:           "Request History (Last 24h)",
 		LatencyHistory:           "Latency History (Last 24h)",
-		ApiPerformance:           "API Performance",
+		APIPerformance:           "API Performance",
 		BasedOnLast60Min:         "Based on last 60 minutes",
 		UnhealthyStatus:          "Unhealthy",
 		DetailedStats:            "Detailed Statistics",
@@ -143,11 +161,11 @@ func setDefaultPhrases() {
 		WouldSet:                 "Would set",
 		APICall:                  "API call",
 		PayloadSent:              "Payload sent",
-		ReceivedIp:               "Received IP",
+		ReceivedIP:               "Received IP",
 		CheckingInterface:        "Checking interface",
 		InterfaceNotFound:        "Interface not found",
 		AddressesNotReadable:     "Addresses not readable",
-		NoIpv6OnInterface:        "No IPv6 on interface",
+		NoIPv6OnInterface:        "No IPv6 on interface",
 		FallbackToExternal:       "Fallback to external",
 		Attempt:                  "Attempt",
 		NetworkError:             "Network error",
@@ -164,8 +182,8 @@ func setDefaultPhrases() {
 		ContextExpired:           "Context expired",
 		NoZoneFoundForDomain:     "No zone found for domain",
 		NoRecordsInCache:         "No records in cache",
-		CheckingIpv4:             "Checking IPv4",
-		CheckingIpv6:             "Checking IPv6",
+		CheckingIPv4:             "Checking IPv4",
+		CheckingIPv6:             "Checking IPv6",
 		UpdateFailed:             "Update failed",
 		CriticalError:            "Critical error",
 		ChangesDetected:          "Changes detected",
@@ -177,7 +195,7 @@ func setDefaultPhrases() {
 		ConfigAPIPrefix:          "API Prefix",
 		ConfigDomains:            "Domains",
 		ConfigInterval:           "Interval",
-		ConfigIpMode:             "IP Mode",
+		ConfigIPMode:             "IP Mode",
 		ConfigInterface:          "Interface",
 		ConfigHealthPort:         "Health Port",
 		ConfigDryRun:             "Dry Run",
@@ -201,28 +219,28 @@ func setDefaultPhrases() {
 		Mode:                     "Mode",
 		NoDNSServer:              "No DNS server",
 		DNSFailover:              "DNS failover",
-		HttpClientInitialized:    "HTTP client initialized with %d DNS servers",
+		HTTPClientInitialized:    "HTTP client initialized with %d DNS servers",
 		InvalidPort:              "Invalid port: %s",
 		UsingDefaultPort:         "Using default port",
 		IntervalTooSmall:         "Interval too small",
 		ShortIntervalWarning:     "Short interval warning with many domains",
 		InvalidIPMode:            "Invalid IP mode: %s",
 		UsingDefaultMode:         "Using default mode",
-		CriticalApiError:         "CRITICAL API ERROR",
+		CriticalAPIError:         "CRITICAL API ERROR",
 		PanicLoadingLanguage:     "Panic while loading language: %v",
 		TryingLoadLanguage:       "Trying to load language file:",
 		LanguageFileNotFound:     "Language file not found:",
 		TryingFallbackEn:         "Trying fallback to EN...",
 		UsingBuiltinDefaults:     "Using built-in default translations",
-		JsonParseError:           "Error parsing JSON: %v",
+		JSONParseError:           "Error parsing JSON: %v",
 		LanguageLoaded:           "Language file loaded: %s (%d translations)",
 		MissingTranslationKey:    "Missing translation key: %s",
-		HttpPool:                 "HTTP Pool expanded:",
+		HTTPPool:                 "HTTP Pool expanded:",
 		HourlyLimitEst:           "HOURLY LIMIT (EST.)",
 		RequestsLabel:            "Requests",
 		UsageLast60Min:           "Based on requests from the last 60 minutes",
 		MaxLogLines:              "Log Max Lines",
-		MaxApiRetries:            "API Max Retries",
+		MaxAPIRetries:            "API Max Retries",
 		MaxConcurrent:            "Max Concurrent",
 		Interval:                 "Interval",
 	}
