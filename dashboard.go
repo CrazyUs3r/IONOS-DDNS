@@ -1405,6 +1405,38 @@ func createMux() *http.ServeMux {
 			gap: 8px;
 			font-family: 'Courier New', monospace;
 		}
+
+		.domain-status-dot {
+			display: inline-block;
+			width: 10px;
+			height: 10px;
+			border-radius: 50%;
+			margin-right: 6px;
+			flex-shrink: 0;
+		}
+		.dot-ok   { background: #4ade80; box-shadow: 0 0 6px #4ade8099; }
+		.dot-warn { background: #facc15; box-shadow: 0 0 6px #facc1599; }
+		.dot-idle { background: #475569; }
+
+		@keyframes dot-pulse {
+			0%, 100% { opacity: 1; transform: scale(1); }
+			50%       { opacity: 0.5; transform: scale(0.8); }
+		}
+		.dot-recent { animation: dot-pulse 1.4s ease-in-out infinite; }
+
+		.changed-badge {
+			display: inline-block;
+			font-size: 0.65rem;
+			padding: 1px 7px;
+			border-radius: 999px;
+			background: rgba(74,222,128,0.15);
+			border: 1px solid rgba(74,222,128,0.4);
+			color: #4ade80;
+			margin-left: 8px;
+			vertical-align: middle;
+			font-weight: 600;
+			letter-spacing: 0.02em;
+		}
 		</style>
 	</head>
 	<body>
@@ -1666,9 +1698,34 @@ func createMux() *http.ServeMux {
 
 			safeID := sanitizeIDWithHash(k)
 
+			// Status dot: green+pulse if changed in last 15min, yellow if last hour, grey otherwise
+			dotClass := "domain-status-dot dot-idle"
+			dotTitle := "Keine kürzliche Änderung"
+			changedBadge := `<span id="badge-` + safeID + `" class="changed-badge" style="display:none;">🔄 gerade geändert</span>`
+			if h.LastChanged != "" {
+				if t, err := time.Parse("02.01.2006 15:04:05", h.LastChanged); err == nil {
+					age := time.Since(t)
+					switch {
+					case age < 15*time.Minute:
+						dotClass = "domain-status-dot dot-ok dot-recent"
+						dotTitle = "Gerade geändert: " + h.LastChanged
+						changedBadge = `<span id="badge-` + safeID + `" class="changed-badge">🔄 gerade geändert</span>`
+					case age < time.Hour:
+						dotClass = "domain-status-dot dot-ok"
+						dotTitle = "Zuletzt geändert: " + h.LastChanged
+					case age < 24*time.Hour:
+						dotClass = "domain-status-dot dot-warn"
+						dotTitle = "Letzte Änderung vor mehr als einer Stunde: " + h.LastChanged
+					}
+				}
+			}
+
 			_, _ = fmt.Fprintf(w, `
 		<details class="card domain-item" data-domain="%s">
-			<summary>🌐 %s <span style="opacity:0.6; font-size:0.9em;">(%s)</span></summary>
+			<summary style="display:flex; align-items:center;">` +
+				`<span id="dot-` + safeID + `" class="%s" title="%s"></span>` +
+				`🌐 %s <span style="opacity:0.6; font-size:0.9em; margin-left:5px;">(%s)</span>%s` +
+				`</summary>
 			<div class="card-content">
 				<div class="domain-card" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 10px;">
 					<div>
@@ -1698,8 +1755,11 @@ func createMux() *http.ServeMux {
 						</thead>
 						<tbody>`,
 				html.EscapeString(k),
+				dotClass,
+				dotTitle,
 				html.EscapeString(k),
 				html.EscapeString(h.Provider),
+				changedBadge,
 				safeID,
 				html.EscapeString(latest.IPv4),
 				html.EscapeString(latest.IPv4),
@@ -1803,12 +1863,18 @@ func createMux() *http.ServeMux {
 	function calcLevelFromMetrics(m) {
 		const total = toNum(m.total_requests, 0);
 		const successRate = toNum(m.success_rate, 100);
+
 		const successAge = toNum(m.last_success_age_secs, -1);
 		const errorAge   = toNum(m.last_error_age_secs,   -1);
+
+		// Fehler bekannt, aber letzter Erfolg ist neuer als letzter Fehler -> erholt
 		const recovered = successAge >= 0 && errorAge >= 0 && successAge < errorAge;
+
+		// Aktiver Fehler: Fehler existiert UND kein neuerer Erfolg danach
 		const hasActiveError = errorAge >= 0 && !recovered;
 
 		if (hasActiveError) {
+			// Fehler aelter als 10min -> nur warn (vermutlich transienter Fehler)
 			if (errorAge > 600) return 'warn';
 			return 'err';
 		}
@@ -1951,6 +2017,27 @@ func createMux() *http.ServeMux {
 
 	if (ip4El && data.ipv4) ip4El.textContent = data.ipv4;
 	if (ip6El && data.ipv6) ip6El.textContent = data.ipv6;
+
+	// Update status dot → green + pulse (just changed)
+	const dotEl = document.getElementById('dot-' + safeID);
+	if (dotEl) {
+		dotEl.className = 'domain-status-dot dot-ok dot-recent';
+		dotEl.title = 'Gerade geändert: ' + (data.time || new Date().toLocaleTimeString());
+		// After 15min remove pulse
+		setTimeout(() => {
+			if (dotEl) {
+				dotEl.classList.remove('dot-recent');
+				dotEl.title = 'Zuletzt geändert: ' + (data.time || '');
+			}
+		}, 15 * 60 * 1000);
+	}
+
+	// Show / hide "gerade geändert" badge
+	const badgeEl = document.getElementById('badge-' + safeID);
+	if (badgeEl) {
+		badgeEl.style.display = '';
+		setTimeout(() => { if (badgeEl) badgeEl.style.display = 'none'; }, 15 * 60 * 1000);
+	}
 
 	showToast('✓ ' + data.domain + ' updated');
 	}
