@@ -16,7 +16,7 @@ import (
 // GOTIFY NOTIFIER
 // ============================================================================
 type gotifyNotifier struct {
-	url   string // z.B. https://gotify.example.com
+	url   string
 	token string
 }
 
