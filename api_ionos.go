@@ -123,7 +123,6 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 	var lastErr error
 
 	for attempt := 0; attempt < cfg.MaxAPIRetries; attempt++ {
-		start := time.Now().Local()
 		debugLog("HTTP", "", fmt.Sprintf(
 			"🔄 %s %d/%d: %s %s",
 			T.Attempt, attempt+1, cfg.MaxAPIRetries, method, url,
@@ -163,6 +162,7 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 		req.Header.Set("Connection", "keep-alive")
 		req.Header.Set("User-Agent", ManagedComment)
 
+		start := time.Now().Local()
 		res, err := getHTTPClient().Do(req)
 		duration := time.Since(start)
 
