@@ -428,9 +428,7 @@ func loadAllIPv64Domains(ctx context.Context, dc *DomainConfig) error {
 			Records:          make([]IPv64Record, 0),
 		}
 
-		for _, rec := range subdomain.Records {
-			domain.Records = append(domain.Records, rec)
-		}
+		domain.Records = append(domain.Records, subdomain.Records...)
 
 		providerCache.ipv64Records[domainName] = domain
 
