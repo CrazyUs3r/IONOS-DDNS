@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+  "os"
 
 	"github.com/gorilla/websocket"
 	"golang.org/x/sync/singleflight"
@@ -20,6 +21,9 @@ import (
 // ============================================================================
 // GLOBALE VARIABLEN
 // ============================================================================
+func envGet(key string) string {
+       return os.Getenv(key)
+}
 
 var (
 	cfg               Config
@@ -407,6 +411,7 @@ type Config struct {
 	MaxConcurrent   int
 	MaxLogLines     int
 	MaxAPIRetries   int
+  NotifyOn        string
 }
 
 type Zone struct {

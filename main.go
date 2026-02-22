@@ -173,6 +173,8 @@ func run() int {
 		return 1
 	}
 
+  initNotifiers()
+
 	if cfg.DebugEnabled {
 		debugLog("CONFIG", "", fmt.Sprintf("Debug-Modus aktiv. Intervall: %ds, Mode: %s", cfg.Interval, cfg.IPMode))
 		debugLog("CONFIG", "", fmt.Sprintf("Geladene Domains: %d", len(cfg.DomainConfigs)))
