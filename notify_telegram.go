@@ -15,7 +15,6 @@ import (
 // ============================================================================
 // TELEGRAM NOTIFIER
 // ============================================================================
-
 type telegramNotifier struct {
 	token  string
 	chatID string
@@ -57,7 +56,7 @@ func (t *telegramNotifier) Send(msg NotifyMessage) error {
 	if err != nil {
 		return fmt.Errorf("send: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
