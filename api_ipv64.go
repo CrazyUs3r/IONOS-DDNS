@@ -79,7 +79,6 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 
 	var lastErr error
 	for attempt := 0; attempt < cfg.MaxAPIRetries; attempt++ {
-		start := time.Now().Local()
 		debugLog("HTTP", "", fmt.Sprintf("🔄 IPv64 %s %d/%d: %s %s",
 			T.Attempt, attempt+1, cfg.MaxAPIRetries, method, apiURL))
 
@@ -104,6 +103,7 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 		}
 		req.Header.Set("User-Agent", ManagedComment)
 
+		start := time.Now().Local()
 		res, err := getHTTPClient().Do(req)
 		duration := time.Since(start)
 
