@@ -429,9 +429,6 @@ func loadAllIPv64Domains(ctx context.Context, dc *DomainConfig) error {
 		}
 
 		for _, rec := range subdomain.Records {
-			if rec.Deactivated == 1 {
-				continue
-			}
 			domain.Records = append(domain.Records, rec)
 		}
 
@@ -478,18 +475,40 @@ func updateIPv64DNS(
 		return false, fmt.Errorf("ipv64 base domain not found: %s", baseDomain)
 	}
 
-	currentIP := ""
+	var ownIPs []string
+	var cdnIPs []string
 	for _, rec := range domain.Records {
-		if rec.Praefix == praefix && rec.Type == recordType {
-			currentIP = rec.Content
-			break
+		if rec.Praefix != praefix || rec.Type != recordType {
+			continue
+		}
+		isCDN := rec.TTL <= 10 || rec.FailoverPolicy != "0"
+		if isCDN {
+			cdnIPs = append(cdnIPs, rec.Content)
+			continue
+		}
+		ownIPs = append(ownIPs, rec.Content)
+	}
+
+	if len(cdnIPs) > 0 {
+		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf(
+			"ℹ️ CDN-Records ignoriert für %s-Vergleich: %v", recordType, cdnIPs))
+	}
+
+	for _, ip := range ownIPs {
+		if ip == newIP {
+			writeLog("CURRENT", ActionCurrent, fqdn,
+				fmt.Sprintf("%-4s %s %s", recordType, newIP, T.Current))
+			return false, nil
 		}
 	}
 
-	if currentIP == newIP {
-		writeLog("CURRENT", ActionCurrent, fqdn,
-			fmt.Sprintf("%-4s %s %s", recordType, newIP, T.Current))
-		return false, nil
+	currentIP := ""
+	if len(ownIPs) > 0 {
+		currentIP = ownIPs[0]
+	}
+	if currentIP != "" {
+		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf(
+			"🔄 %s: %s → %s", recordType, currentIP, newIP))
 	}
 
 	ipv64Mutex.Lock()
