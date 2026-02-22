@@ -895,6 +895,63 @@ func createMux() *http.ServeMux {
 		serveCachedJSON(w, r, domainsCache)
 	})
 
+	mux.HandleFunc("/api/domain/delete", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !validateTriggerToken(r) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid token"})
+			return
+		}
+		domain := strings.TrimSpace(r.URL.Query().Get("domain"))
+		if domain == "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "domain parameter missing"})
+			return
+		}
+		for _, dc := range cfg.DomainConfigs {
+			if strings.EqualFold(dc.FQDN, domain) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusConflict)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": "domain still active in config"})
+				return
+			}
+		}
+		statusMutex.Lock()
+		defer statusMutex.Unlock()
+		var fileData map[string]interface{}
+		if b, err := os.ReadFile(updatePath); err == nil {
+			_ = json.Unmarshal(b, &fileData)
+		}
+		if fileData == nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "no status file found"})
+			return
+		}
+		if _, exists := fileData[domain]; !exists {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "domain not found in status"})
+			return
+		}
+		delete(fileData, domain)
+		if b, err := json.MarshalIndent(fileData, "", "  "); err == nil {
+			tmp := updatePath + ".tmp"
+			if err := os.WriteFile(tmp, b, 0644); err == nil {
+				_ = os.Rename(tmp, updatePath)
+			}
+		}
+		debugLog("API", getClientIP(r), fmt.Sprintf("🗑️ Domain aus Status gelöscht: %s", domain))
+		broadcastNotification(fmt.Sprintf("🗑️ %s aus Status entfernt", domain), "info")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "deleted", "domain": domain})
+	})
+
 	mux.HandleFunc("/api/trigger", func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, 1024)
 
@@ -1687,7 +1744,11 @@ func createMux() *http.ServeMux {
 
 		_, _ = fmt.Fprint(w, `<input type="text" class="search-box" id="domainSearch" placeholder="🔍 Domain suchen..." oninput="filterDomains(this.value)"><div id="domainContainer">`)
 
-		// Neuestes LastChanged über alle Domains ermitteln – für relativen Vergleich
+		configuredDomains := make(map[string]struct{})
+		for _, dc := range cfg.DomainConfigs {
+			configuredDomains[strings.ToLower(strings.TrimSuffix(dc.FQDN, "."))] = struct{}{}
+		}
+
 		var newestChange time.Time
 		for _, k := range keys {
 			var dh DomainHistory
@@ -1715,11 +1776,9 @@ func createMux() *http.ServeMux {
 
 			safeID := sanitizeIDWithHash(k)
 
-			// Dot-Logik:
-			//   grau    = noch nie ein Update gesehen
-			//   grün    = aktiv & auf dem Stand der neuesten Domain
-			//   gelb    = aktiv aber älter als das neueste Update (andere Domain wurde seitdem geändert)
-			//   pulsierend grün = in den letzten 15 Min geändert
+			_, isActive := configuredDomains[strings.ToLower(strings.TrimSuffix(k, "."))]
+			isOrphan := !isActive
+
 			dotClass := "domain-status-dot dot-idle"
 			dotTitle := "Noch kein Update gesehen"
 			changedBadge := `<span id="badge-` + safeID + `" class="changed-badge" style="display:none;">🔄 gerade geändert</span>`
@@ -1727,27 +1786,33 @@ func createMux() *http.ServeMux {
 				if t, err := time.Parse("02.01.2006 15:04:05", h.LastChanged); err == nil {
 					switch {
 					case time.Since(t) < 15*time.Minute:
-						// Frisch geändert – pulsierend grün
 						dotClass = "domain-status-dot dot-ok dot-recent"
 						dotTitle = "Gerade geändert: " + h.LastChanged
 						changedBadge = `<span id="badge-` + safeID + `" class="changed-badge">🔄 gerade geändert</span>`
 					case !newestChange.IsZero() && t.Before(newestChange.Add(-time.Minute)):
-						// Eine andere Domain wurde seitdem aktualisiert → IP möglicherweise veraltet
 						dotClass = "domain-status-dot dot-warn"
 						dotTitle = "Letzte Änderung: " + h.LastChanged + " · Andere Domain wurde seitdem aktualisiert"
 					default:
-						// Aktuell – grün
 						dotClass = "domain-status-dot dot-ok"
 						dotTitle = "Aktiv · Letzte Änderung: " + h.LastChanged
 					}
 				}
 			}
 
+			orphanStyle := ""
+			orphanLabel := ""
+			deleteBtn := ""
+			if isOrphan {
+				orphanStyle = ` style="border-color: rgba(248,113,113,0.5);"`
+				orphanLabel = `<span style="font-size:0.65rem; padding:1px 7px; border-radius:999px; background:rgba(248,113,113,0.15); border:1px solid rgba(248,113,113,0.4); color:#f87171; margin-left:8px; font-weight:600;">nicht mehr konfiguriert</span>`
+				deleteBtn = `<button class="action-btn" style="background:rgba(248,113,113,0.15); color:#f87171; border-color:rgba(248,113,113,0.5); font-size:0.7rem; padding:3px 10px; margin-left:auto;" onclick="event.preventDefault(); event.stopPropagation(); deleteDomain('` + html.EscapeString(k) + `', this)">🗑️ Entfernen</button>`
+			}
+
 			_, _ = fmt.Fprintf(w, `
-		<details class="card domain-item" data-domain="%s">
+		<details class="card domain-item" data-domain="%s"%s>
 			<summary style="display:flex; align-items:center;">` +
 				`<span id="dot-` + safeID + `" class="%s" title="%s"></span>` +
-				`🌐 %s <span style="opacity:0.6; font-size:0.9em; margin-left:5px;">(%s)</span>%s` +
+				`🌐 %s <span style="opacity:0.6; font-size:0.9em; margin-left:5px;">(%s)</span>%s%s%s` +
 				`</summary>
 			<div class="card-content">
 				<div class="domain-card" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 10px;">
@@ -1778,11 +1843,14 @@ func createMux() *http.ServeMux {
 						</thead>
 						<tbody>`,
 				html.EscapeString(k),
+				orphanStyle,
 				dotClass,
 				dotTitle,
 				html.EscapeString(k),
 				html.EscapeString(h.Provider),
 				changedBadge,
+				orphanLabel,
+				deleteBtn,
 				safeID,
 				html.EscapeString(latest.IPv4),
 				html.EscapeString(latest.IPv4),
@@ -2223,6 +2291,40 @@ func createMux() *http.ServeMux {
 		domains.forEach(domain => {
 			const name = domain.getAttribute('data-domain').toLowerCase();
 			domain.style.display = name.includes(query) ? 'block' : 'none';
+		});
+	}
+
+	function deleteDomain(domain, btn) {
+		if (!confirm('Domain "' + domain + '" wirklich aus dem Status entfernen?\nDie Domain ist nicht mehr in der Konfiguration.')) return;
+
+		const token = localStorage.getItem('triggerToken') || '';
+		btn.disabled = true;
+		btn.textContent = '⏳';
+
+		fetch('/api/domain/delete?domain=' + encodeURIComponent(domain), {
+			method: 'POST',
+			headers: token ? {'X-Trigger-Token': token} : {}
+		})
+		.then(r => r.json().then(j => ({status: r.status, json: j})))
+		.then(({status, json: j}) => {
+			if (status === 200) {
+				const card = btn.closest('.domain-item');
+				if (card) {
+					card.style.transition = 'opacity 0.4s';
+					card.style.opacity = '0';
+					setTimeout(() => card.remove(), 400);
+				}
+				showToast('🗑️ ' + domain + ' entfernt', 'success');
+			} else {
+				btn.disabled = false;
+				btn.textContent = '🗑️ Entfernen';
+				showToast('❌ ' + (j.error || 'Fehler beim Löschen'), 'error');
+			}
+		})
+		.catch(() => {
+			btn.disabled = false;
+			btn.textContent = '🗑️ Entfernen';
+			showToast('❌ Verbindungsfehler', 'error');
 		});
 	}
 
