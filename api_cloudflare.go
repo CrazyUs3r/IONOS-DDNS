@@ -169,7 +169,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 			return nil, fmt.Errorf("no Cloudflare credentials configured")
 		}
 
-		start := time.Now()
+		start := time.Now().Local()
 		res, err := getHTTPClient().Do(req)
 		duration := time.Since(start)
 
