@@ -173,7 +173,7 @@ func run() int {
 		return 1
 	}
 
-  initNotifiers()
+	initNotifiers()
 
 	if cfg.DebugEnabled {
 		debugLog("CONFIG", "", fmt.Sprintf("Debug-Modus aktiv. Intervall: %ds, Mode: %s", cfg.Interval, cfg.IPMode))
