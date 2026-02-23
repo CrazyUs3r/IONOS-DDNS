@@ -158,6 +158,30 @@ domainLoop:
 func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdateJob, cache *ZoneRecordCache) domainUpdateResult {
 	result := domainUpdateResult{Domain: job.Domain}
 
+	// ── IPv64: IPv4 + IPv6 in einem einzigen HTTP-Request ───────────────────
+	if dc.Provider == ProviderIPv64 {
+		ipv4 := ""
+		ipv6 := ""
+		if cfg.IPMode != "IPV6" {
+			ipv4 = job.IPv4
+		}
+		if cfg.IPMode != "IPV4" {
+			ipv6 = job.IPv6
+		}
+
+		changed, err := updateIPv64DNS(ctx, job.Domain, ipv4, ipv6)
+		if err != nil {
+			if isNonRecoverableError(err) {
+				result.Error = fmt.Errorf("non-recoverable IPv64 error: %w", err)
+				return result
+			}
+			debugLog("DNS-LOGIC", job.Domain, fmt.Sprintf("%s IPv64: %v", T.UpdateFailed, err))
+		}
+		result.Changed = changed
+		return result
+	}
+
+	// ── Alle anderen Provider: A und AAAA getrennt ───────────────────────────
 	v4Changed, v6Changed := false, false
 
 	if cfg.IPMode != "IPV6" && job.IPv4 != "" {
@@ -169,8 +193,6 @@ func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdate
 		switch dc.Provider {
 		case ProviderCloudflare:
 			changed, err = updateCloudflareDNS(ctx, dc, job.Domain, "A", job.IPv4, job.Records, job.ZoneID)
-		case ProviderIPv64:
-			changed, err = updateIPv64DNS(ctx, job.Domain, "A", job.IPv4)
 		default:
 			changed, err = updateDNS(ctx, dc, job.Domain, "A", job.IPv4, job.Records, job.ZoneID, job.ZoneName, cache)
 		}
@@ -194,8 +216,6 @@ func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdate
 		switch dc.Provider {
 		case ProviderCloudflare:
 			changed, err = updateCloudflareDNS(ctx, dc, job.Domain, "AAAA", job.IPv6, job.Records, job.ZoneID)
-		case ProviderIPv64:
-			changed, err = updateIPv64DNS(ctx, job.Domain, "AAAA", job.IPv6)
 		default:
 			changed, err = updateDNS(ctx, dc, job.Domain, "AAAA", job.IPv6, job.Records, job.ZoneID, job.ZoneName, cache)
 		}
