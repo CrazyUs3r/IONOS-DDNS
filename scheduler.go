@@ -4,7 +4,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 )
 
@@ -269,14 +268,11 @@ func runCleanupIfNeeded(ctx context.Context, zonesByProvider map[string][]Zone, 
 			cleanupCloudflareRecords(ctx, zones, cache)
 
 		case ProviderIPv64:
-			ipv64Configured := make(map[string]bool)
 			var ipv64Config *DomainConfig
-
 			for i := range cfg.DomainConfigs {
 				if cfg.DomainConfigs[i].Provider == ProviderIPv64 {
-					name := strings.ToLower(strings.TrimSuffix(cfg.DomainConfigs[i].FQDN, "."))
-					ipv64Configured[name] = true
 					ipv64Config = &cfg.DomainConfigs[i]
+					break
 				}
 			}
 			if ipv64Config != nil {
