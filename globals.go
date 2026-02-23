@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -12,7 +13,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-  "os"
 
 	"github.com/gorilla/websocket"
 	"golang.org/x/sync/singleflight"
@@ -21,10 +21,6 @@ import (
 // ============================================================================
 // GLOBALE VARIABLEN
 // ============================================================================
-func envGet(key string) string {
-       return os.Getenv(key)
-}
-
 var (
 	cfg               Config
 	T                 Phrases
@@ -134,6 +130,8 @@ var (
 		"https://ipv6.myip.wtf/text",
 		"https://botwhatismyipaddress.com/",
 	}
+
+	notifyCfg notifyConfig
 )
 
 // ============================================================================
@@ -189,7 +187,6 @@ var persistOnOtherLevels = map[string]struct{}{
 // ============================================================================
 // DEFAULTS
 // ============================================================================
-
 const (
 	DefaultMaxLogLines     = 500
 	DefaultHourlyRateLimit = 1200
@@ -201,7 +198,6 @@ const (
 // ============================================================================
 // TIMEOUTS
 // ============================================================================
-
 const (
 	APITimeout           = 25 * time.Second
 	BaseUpdateTimeout    = 50 * time.Second
@@ -220,7 +216,6 @@ const (
 // ============================================================================
 // HTTP TRANSPORT
 // ============================================================================
-
 const (
 	HTTPMaxIdleConns     = 100
 	HTTPMaxIdleConnsHost = 10
@@ -240,7 +235,6 @@ const (
 // ============================================================================
 // WEBSOCKET
 // ============================================================================
-
 const (
 	WSWriteTimeout = 10 * time.Second
 	WSPongTimeout  = 60 * time.Second
@@ -250,7 +244,6 @@ const (
 // ============================================================================
 // RETRY
 // ============================================================================
-
 const (
 	RetryBaseDelay        = 1 * time.Second
 	RetryMaxDelay         = 60 * time.Second
@@ -267,7 +260,6 @@ const (
 // ============================================================================
 // MISC
 // ============================================================================
-
 const (
 	IPCheckBodyMaxBytes   = 1024
 	MaxStatusHistoryItems = 20
@@ -278,19 +270,17 @@ const (
 // ============================================================================
 // PROVIDER TYPES
 // ============================================================================
-
-type ProviderType string
-
 const (
 	ProviderIONOS      ProviderType = "IONOS"
 	ProviderCloudflare ProviderType = "CLOUDFLARE"
 	ProviderIPv64      ProviderType = "IPV64"
 )
 
+type ProviderType string
+
 // ============================================================================
 // STRUKTUREN
 // ============================================================================
-
 type Phrases struct {
 	// Basis & Dashboard
 	Startup, Shutdown, NoZones, Update, Created, Current, DryRunWarn, ConfigError  string
@@ -411,7 +401,7 @@ type Config struct {
 	MaxConcurrent   int
 	MaxLogLines     int
 	MaxAPIRetries   int
-  NotifyOn        string
+	NotifyOn        string
 }
 
 type Zone struct {
@@ -674,4 +664,59 @@ type httpTimings struct {
 	tlsErr       error
 	wroteRequest time.Time
 	firstByte    time.Time
+}
+
+// ============================================================================
+// NOTIFICATION
+// ============================================================================
+type NotifyEvent string
+
+const (
+	NotifyOnUpdate  NotifyEvent = "UPDATE"
+	NotifyOnCreate  NotifyEvent = "CREATE"
+	NotifyOnError   NotifyEvent = "ERROR"
+	NotifyOnStart   NotifyEvent = "START"
+	NotifyOnStop    NotifyEvent = "STOP"
+	NotifyOnCleanup NotifyEvent = "CLEANUP"
+)
+
+type Notifier interface {
+	Name() string
+	Send(msg NotifyMessage) error
+}
+
+type NotifyMessage struct {
+	Action  string
+	Domain  string
+	Message string
+	Level   LogLevel
+}
+
+type notifyConfig struct {
+	notifiers []Notifier
+	events    map[NotifyEvent]struct{}
+}
+
+// ============================================================================
+// DNS CACHE
+// ============================================================================
+type dnsCache struct {
+	ttl time.Duration
+
+	mu       sync.Mutex
+	entries  map[string]dnsCacheEntry
+	inflight map[string]*dnsInFlight
+
+	resolver *net.Resolver
+}
+
+type dnsCacheEntry struct {
+	ips    []net.IPAddr
+	expiry time.Time
+}
+
+type dnsInFlight struct {
+	done  chan struct{}
+	addrs []net.IPAddr
+	err   error
 }
