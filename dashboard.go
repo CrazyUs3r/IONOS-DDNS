@@ -593,23 +593,23 @@ func (m *APIMetrics) getStatsUnsafe() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"total_requests":         m.TotalRequests,
-		"success_rate":           fmt.Sprintf("%.2f%%", successRate),
-		"avg_latency":            m.AverageLatency.String(),
-		"p50_latency":            p50.String(),
-		"p85_latency":            p85.String(),
-		"p99_latency":            p99.String(),
-		"server_errors":          m.ServerErrors,
-		"client_errors":          m.ClientErrors,
-		"last_success_time":      m.LastSuccessTimestamp.Format("15:04:05"),
-		"last_success_age_secs":  lastSuccessAge,
-		"last_error_age_secs":    lastErrorAge,
-		"usage_count":            currentCount,
-		"usage_percent":          fmt.Sprintf("%.1f", percent),
-		"usage_color":            m.getUsageColor(percent),
-		"hourly_stats":           chronologicalStats,
-		"hourly_latency":         chronologicalLatency,
-		"hourly_limit":           cfg.HourlyRateLimit,
+		"total_requests":        m.TotalRequests,
+		"success_rate":          fmt.Sprintf("%.2f%%", successRate),
+		"avg_latency":           m.AverageLatency.String(),
+		"p50_latency":           p50.String(),
+		"p85_latency":           p85.String(),
+		"p99_latency":           p99.String(),
+		"server_errors":         m.ServerErrors,
+		"client_errors":         m.ClientErrors,
+		"last_success_time":     m.LastSuccessTimestamp.Format("15:04:05"),
+		"last_success_age_secs": lastSuccessAge,
+		"last_error_age_secs":   lastErrorAge,
+		"usage_count":           currentCount,
+		"usage_percent":         fmt.Sprintf("%.1f", percent),
+		"usage_color":           m.getUsageColor(percent),
+		"hourly_stats":          chronologicalStats,
+		"hourly_latency":        chronologicalLatency,
+		"hourly_limit":          cfg.HourlyRateLimit,
 	}
 }
 
@@ -1810,9 +1810,9 @@ func createMux() *http.ServeMux {
 
 			_, _ = fmt.Fprintf(w, `
 		<details class="card domain-item" data-domain="%s"%s>
-			<summary style="display:flex; align-items:center;">` +
-				`<span id="dot-` + safeID + `" class="%s" title="%s"></span>` +
-				`🌐 %s <span style="opacity:0.6; font-size:0.9em; margin-left:5px;">(%s)</span>%s%s%s` +
+			<summary style="display:flex; align-items:center;">`+
+				`<span id="dot-`+safeID+`" class="%s" title="%s"></span>`+
+				`🌐 %s <span style="opacity:0.6; font-size:0.9em; margin-left:5px;">(%s)</span>%s%s%s`+
 				`</summary>
 			<div class="card-content">
 				<div class="domain-card" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 10px;">
