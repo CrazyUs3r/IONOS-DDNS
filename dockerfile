@@ -57,7 +57,7 @@ ENV PROVIDER="IONOS" \
     IPV64_DOMAIN_TOKEN="" \
     IP_MODE="BOTH" \
     INTERVAL=300 \
-    HEALTH_PORT=""\
+    HEALTH_PORT="" \
     LANG="de" \
     CONFIG_DIR="/config" \
     DRY_RUN=false \
@@ -68,7 +68,12 @@ ENV PROVIDER="IONOS" \
     HOURLY_RATE_LIMIT=1200 \
     MAX_CONCURRENT=7 \
     MAX_API_RETRIES=3 \
-    TZ="Europe/Berlin"
+    TZ="Europe/Berlin" \
+    TELEGRAM_BOT_TOKEN="" \
+    RELEGRAM_CHAT_ID="" \
+    GOTIFY_URL="" \
+    GOTIFY_TOKEN="" \
+    NOTIFY_ON="UPDATE,CREATE,ERROR"
 
 WORKDIR /app
 
