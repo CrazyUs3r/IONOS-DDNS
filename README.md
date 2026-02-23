@@ -70,6 +70,11 @@ services:
 | `CLOUDFLARE_ZONE_ID` |Dein Cloudflare Zone Id für CF) | (erforderlich für CF) |
 | `IPV64_TOKEN` |Dein IPV64 Token für IPV64) | (erforderlich für IPV64) |
 | `IPV64_DOMAIN_TOKEN` |Dein IPV64 Domain Token | (erforderlich für IPV64) | (erforderlich) |
+| `TELEGRAM_BOT_TOKEN` |Telegram Token | (erforderlich für Telegram) | (erforderlich) |
+| `RELEGRAM_CHAT_ID` |Erlaubte Chat ID | (erforderlich für Telegram) | (erforderlich) |
+| `GOTIFY_URL` |Gotify Server URL | (erforderlich für Gotify) | (erforderlich) |
+| `GOTIFY_TOKEN` |Gotify Token | (erforderlich für Gotify) | (erforderlich) |
+| `NOTIFY_ON` |Welche Aktionen Gesendet werden | `UPDATE,CREATE,ERROR ` | (erforderlich) |
 
 ## 📊 Dashboard & Monitoring
 ​Das Dashboard ist unter http://server-ip:8080 erreichbar. Es zeigt den aktuellen Status der API-Verbindung, die Performance-Metriken und ein Echtzeit-Log der Systemereignisse.
