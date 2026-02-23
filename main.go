@@ -330,7 +330,6 @@ func run() int {
 			debugLog("SYSTEM", "", "⏳ Warte auf laufende Updates...")
 
 			waitCtx, waitCancel := context.WithTimeout(context.Background(), ShutdownWaitTimeout)
-			defer waitCancel()
 
 			done := make(chan bool, 1)
 			go func() {
@@ -350,6 +349,7 @@ func run() int {
 			case <-waitCtx.Done():
 				debugLog("SYSTEM", "", "⚠️ Timeout beim Warten auf Updates - Force Shutdown")
 			}
+			waitCancel()
 
 			debugLog("SYSTEM", "", "📝 Warte auf Log-Queue...")
 			flushLogQueue(2 * time.Second)
