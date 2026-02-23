@@ -458,8 +458,6 @@ func loadAllIPv64Domains(ctx context.Context, dc *DomainConfig) error {
 // ============================================================================
 // DNS LOGIC - IPV64
 // ============================================================================
-
-// ipv64OwnIPs gibt die eigenen (nicht-CDN) IPs für ein Prefix+Type zurück.
 func ipv64OwnIPs(domain IPv64Domain, praefix, recordType string) (own []string, cdn []string) {
 	for _, rec := range domain.Records {
 		if rec.Praefix != praefix || rec.Type != recordType {
@@ -635,6 +633,11 @@ func updateIPv64DNS(
 
 	apiMetrics.RecordSuccess(duration)
 
+	// ── Cache mit neuen IPs aktualisieren ────────────────────────────────────
+	// Ohne diesen Schritt würde beim nächsten Interval der alte Cache-Wert
+	// gelesen und erneut ein unnötiges Update abgeschickt.
+	updateIPv64Cache(baseDomain, praefix, ipv4, ipv6, needV4, needV6)
+
 	// Log für jeden tatsächlich geänderten Record
 	if needV4 {
 		log(LogContext{
@@ -654,6 +657,45 @@ func updateIPv64DNS(
 	}
 
 	return true, nil
+}
+
+// updateIPv64Cache aktualisiert den In-Memory Cache nach einem erfolgreichen Update.
+// Ohne diesen Schritt würde beim nächsten Interval-Check der alte Wert gelesen
+// und erneut ein HTTP-Request abgeschickt obwohl die IP bereits aktuell ist.
+func updateIPv64Cache(baseDomain, praefix, ipv4, ipv6 string, needV4, needV6 bool) {
+	providerCache.Lock()
+	defer providerCache.Unlock()
+
+	domain, exists := providerCache.ipv64Records[baseDomain]
+	if !exists {
+		return
+	}
+
+	updated := false
+	for i := range domain.Records {
+		rec := &domain.Records[i]
+		if rec.Praefix != praefix {
+			continue
+		}
+		// Nur eigene Records (keine CDN-Records) anpassen
+		isCDN := rec.TTL <= 10 || rec.FailoverPolicy != "0"
+		if isCDN {
+			continue
+		}
+		if needV4 && rec.Type == "A" {
+			rec.Content = ipv4
+			updated = true
+		}
+		if needV6 && rec.Type == "AAAA" {
+			rec.Content = ipv6
+			updated = true
+		}
+	}
+
+	if updated {
+		providerCache.ipv64Records[baseDomain] = domain
+		debugLog("CACHE", baseDomain, fmt.Sprintf("✅ IPv64 Cache aktualisiert: praefix=%q", praefix))
+	}
 }
 
 // ============================================================================
