@@ -7,46 +7,12 @@ import (
 )
 
 // ============================================================================
-// NOTIFICATION
-// ============================================================================
-
-type NotifyEvent string
-
-const (
-	NotifyOnUpdate  NotifyEvent = "UPDATE"
-	NotifyOnCreate  NotifyEvent = "CREATE"
-	NotifyOnError   NotifyEvent = "ERROR"
-	NotifyOnStart   NotifyEvent = "START"
-	NotifyOnStop    NotifyEvent = "STOP"
-	NotifyOnCleanup NotifyEvent = "CLEANUP"
-)
-
-type Notifier interface {
-	Name() string
-	Send(msg NotifyMessage) error
-}
-
-type NotifyMessage struct {
-	Action  string
-	Domain  string
-	Message string
-	Level   LogLevel
-}
-
-type notifyConfig struct {
-	notifiers []Notifier
-	events map[NotifyEvent]struct{}
-}
-
-var notifyCfg notifyConfig
-
-// ============================================================================
 // INIT
 // ============================================================================
 
-//	Telegram: TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID
-//	Gotify:   GOTIFY_URL + GOTIFY_TOKEN
-//	Events:   NOTIFY_ON (Default: UPDATE,CREATE,ERROR)
+// Telegram: TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID
+// Gotify:   GOTIFY_URL + GOTIFY_TOKEN
+// Events:   NOTIFY_ON (Default: UPDATE,CREATE,ERROR)
 func initNotifiers() {
 	notifyCfg = notifyConfig{
 		events: make(map[NotifyEvent]struct{}),
@@ -127,13 +93,6 @@ func notify(ctx LogContext) {
 // ============================================================================
 // HELPERS
 // ============================================================================
-func getEnvOrDefault(key, def string) string {
-	if v := strings.TrimSpace(envGet(key)); v != "" {
-		return v
-	}
-	return def
-}
-
 func levelEmoji(level LogLevel) string {
 	switch level {
 	case LogError:
