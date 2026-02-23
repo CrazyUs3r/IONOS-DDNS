@@ -2,12 +2,12 @@
 package main
 
 import (
-	"strings"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"unicode"
 )
 
