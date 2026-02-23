@@ -14,8 +14,8 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"net/http/httputil"
+	"os"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -465,27 +465,6 @@ func sanitizeIDWithHash(s string) string {
 // ============================================================================
 // DNS CACHE (TTL cache + in-flight dedupe)
 // ============================================================================
-type dnsCache struct {
-	ttl time.Duration
-
-	mu       sync.Mutex
-	entries  map[string]dnsCacheEntry
-	inflight map[string]*dnsInFlight
-
-	resolver *net.Resolver
-}
-
-type dnsCacheEntry struct {
-	ips    []net.IPAddr
-	expiry time.Time
-}
-
-type dnsInFlight struct {
-	done  chan struct{}
-	addrs []net.IPAddr
-	err   error
-}
-
 func newDNSCache(r *net.Resolver, ttl time.Duration) *dnsCache {
 	return &dnsCache{
 		ttl:      ttl,
@@ -570,4 +549,45 @@ func (c *dnsCache) invalidate(host string) {
 	c.mu.Lock()
 	delete(c.entries, host)
 	c.mu.Unlock()
+}
+
+// ============================================================================
+// TRUST_PROXY - Forwarded-For
+// ============================================================================
+
+func getClientIP(r *http.Request) string {
+	trustProxy := true
+
+	if v := strings.TrimSpace(os.Getenv("TRUST_PROXY")); v != "" {
+		trustProxy = strings.ToLower(v) != "false"
+	}
+
+	if trustProxy {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			ips := strings.Split(xff, ",")
+			if len(ips) > 0 {
+				return strings.TrimSpace(ips[0])
+			}
+		}
+		if xri := r.Header.Get("X-Real-IP"); xri != "" {
+			return xri
+		}
+	}
+
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return ip
+}
+
+func validateTriggerToken(r *http.Request) bool {
+	token := r.Header.Get(TriggerTokenHeader)
+
+	expectedToken := os.Getenv("TRIGGER_TOKEN")
+	if expectedToken == "" {
+		return true
+	}
+
+	return token == expectedToken
 }
