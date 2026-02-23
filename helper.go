@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
-	"net/http"
 	"os"
 	"strings"
 
@@ -27,43 +25,6 @@ func (s *SafeErrorMsg) Get() string {
 	s.RLock()
 	defer s.RUnlock()
 	return s.msg
-}
-
-func getClientIP(r *http.Request) string {
-	trustProxy := true
-
-	if v := strings.TrimSpace(os.Getenv("TRUST_PROXY")); v != "" {
-		trustProxy = strings.ToLower(v) != "false"
-	}
-
-	if trustProxy {
-		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			ips := strings.Split(xff, ",")
-			if len(ips) > 0 {
-				return strings.TrimSpace(ips[0])
-			}
-		}
-		if xri := r.Header.Get("X-Real-IP"); xri != "" {
-			return xri
-		}
-	}
-
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return ip
-}
-
-func validateTriggerToken(r *http.Request) bool {
-	token := r.Header.Get(TriggerTokenHeader)
-
-	expectedToken := os.Getenv("TRIGGER_TOKEN")
-	if expectedToken == "" {
-		return true
-	}
-
-	return token == expectedToken
 }
 
 // ============================================================================
@@ -196,4 +157,15 @@ func doSingleflight[T any](
 		}
 		return res.Val.(T), nil
 	}
+}
+
+func envGet(key string) string {
+	return os.Getenv(key)
+}
+
+func getEnvOrDefault(key, def string) string {
+	if v := strings.TrimSpace(envGet(key)); v != "" {
+		return v
+	}
+	return def
 }
