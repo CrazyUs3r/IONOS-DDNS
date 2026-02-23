@@ -92,6 +92,7 @@ func getCategoryIcon(category string) string {
 		"CACHE":        "💾",
 		"DNS-FAILOVER": "🔀",
 		"STATUS":       "📄",
+		"NOTIFY":       "🔔",
 	}
 
 	if icon, ok := icons[category]; ok {
@@ -132,7 +133,7 @@ func persistLog(ctx LogContext) {
 		fmt.Fprintf(os.Stderr, "[WARN] Log queue full, dropped: %s\n", entry.Message)
 	}
 
-  notify(ctx)
+	notify(ctx)
 }
 
 func levelToString(level LogLevel) string {
