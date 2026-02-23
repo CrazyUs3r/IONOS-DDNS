@@ -458,9 +458,30 @@ func loadAllIPv64Domains(ctx context.Context, dc *DomainConfig) error {
 // ============================================================================
 // DNS LOGIC - IPV64
 // ============================================================================
+
+// ipv64OwnIPs gibt die eigenen (nicht-CDN) IPs für ein Prefix+Type zurück.
+func ipv64OwnIPs(domain IPv64Domain, praefix, recordType string) (own []string, cdn []string) {
+	for _, rec := range domain.Records {
+		if rec.Praefix != praefix || rec.Type != recordType {
+			continue
+		}
+		if rec.TTL <= 10 || rec.FailoverPolicy != "0" {
+			cdn = append(cdn, rec.Content)
+		} else {
+			own = append(own, rec.Content)
+		}
+	}
+	return own, cdn
+}
+
+// updateIPv64DNS sendet einen kombinierten Update-Request für IPv4 und/oder IPv6.
+// Beide IPs können in einem einzigen HTTP-Request aktualisiert werden:
+// https://ipv64.net/nic/update?key=…&domain=…&ip=1.2.3.4&ip6=2a01::1
+//
+// Gibt zurück ob sich mindestens ein Record geändert hat.
 func updateIPv64DNS(
 	ctx context.Context,
-	fqdn, recordType, newIP string,
+	fqdn, ipv4, ipv6 string,
 ) (bool, error) {
 
 	baseDomain, praefix := splitIPv64FQDN(fqdn)
@@ -473,42 +494,60 @@ func updateIPv64DNS(
 		return false, fmt.Errorf("ipv64 base domain not found: %s", baseDomain)
 	}
 
-	var ownIPs []string
-	var cdnIPs []string
-	for _, rec := range domain.Records {
-		if rec.Praefix != praefix || rec.Type != recordType {
-			continue
+	// ── Prüfen welche Records wirklich geändert werden müssen ────────────────
+	needV4 := false
+	needV6 := false
+
+	if ipv4 != "" {
+		ownV4, cdnV4 := ipv64OwnIPs(domain, praefix, "A")
+		if len(cdnV4) > 0 {
+			debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("ℹ️ CDN-Records ignoriert für A-Vergleich: %v", cdnV4))
 		}
-		isCDN := rec.TTL <= 10 || rec.FailoverPolicy != "0"
-		if isCDN {
-			cdnIPs = append(cdnIPs, rec.Content)
-			continue
+		alreadyCurrent := false
+		for _, ip := range ownV4 {
+			if ip == ipv4 {
+				alreadyCurrent = true
+				break
+			}
 		}
-		ownIPs = append(ownIPs, rec.Content)
-	}
-
-	if len(cdnIPs) > 0 {
-		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf(
-			"ℹ️ CDN-Records ignoriert für %s-Vergleich: %v", recordType, cdnIPs))
-	}
-
-	for _, ip := range ownIPs {
-		if ip == newIP {
-			writeLog("CURRENT", ActionCurrent, fqdn,
-				fmt.Sprintf("%-4s %s %s", recordType, newIP, T.Current))
-			return false, nil
+		if alreadyCurrent {
+			writeLog("CURRENT", ActionCurrent, fqdn, fmt.Sprintf("%-4s %s %s", "A", ipv4, T.Current))
+		} else {
+			needV4 = true
+			if len(ownV4) > 0 {
+				debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("🔄 A: %s → %s", ownV4[0], ipv4))
+			}
 		}
 	}
 
-	currentIP := ""
-	if len(ownIPs) > 0 {
-		currentIP = ownIPs[0]
-	}
-	if currentIP != "" {
-		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf(
-			"🔄 %s: %s → %s", recordType, currentIP, newIP))
+	if ipv6 != "" {
+		ownV6, cdnV6 := ipv64OwnIPs(domain, praefix, "AAAA")
+		if len(cdnV6) > 0 {
+			debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("ℹ️ CDN-Records ignoriert für AAAA-Vergleich: %v", cdnV6))
+		}
+		alreadyCurrent := false
+		for _, ip := range ownV6 {
+			if ip == ipv6 {
+				alreadyCurrent = true
+				break
+			}
+		}
+		if alreadyCurrent {
+			writeLog("CURRENT", ActionCurrent, fqdn, fmt.Sprintf("%-4s %s %s", "AAAA", ipv6, T.Current))
+		} else {
+			needV6 = true
+			if len(ownV6) > 0 {
+				debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("🔄 AAAA: %s → %s", ownV6[0], ipv6))
+			}
+		}
 	}
 
+	// Nichts zu tun
+	if !needV4 && !needV6 {
+		return false, nil
+	}
+
+	// ── Rate-Limit: IPv64 erlaubt max 1 Request alle 12 Sekunden ────────────
 	ipv64Mutex.Lock()
 	if time.Since(lastIPv64Update) < 12*time.Second {
 		wait := 12*time.Second - time.Since(lastIPv64Update)
@@ -525,28 +564,39 @@ func updateIPv64DNS(
 	lastIPv64Update = time.Now().Local()
 	ipv64Mutex.Unlock()
 
+	// ── Dry-Run ──────────────────────────────────────────────────────────────
 	if cfg.DryRun {
+		msg := ""
+		if needV4 {
+			msg += fmt.Sprintf("A %s ", ipv4)
+		}
+		if needV6 {
+			msg += fmt.Sprintf("AAAA %s", ipv6)
+		}
 		log(LogContext{
 			Level:   LogWarn,
 			Action:  ActionDryRun,
 			Domain:  fqdn,
-			Message: fmt.Sprintf("⚠️ %s %s %s", T.WouldSet, recordType, newIP),
+			Message: fmt.Sprintf("⚠️ %s %s", T.WouldSet, strings.TrimSpace(msg)),
 		})
 		return true, nil
 	}
 
+	// ── Einen kombinierten Request bauen ─────────────────────────────────────
+	// Doku: ?key=…&domain=…&ip=IPv4&ip6=IPv6
+	// Nur die Felder setzen die tatsächlich geändert werden müssen.
 	q := url.Values{}
 	q.Set("key", domain.DomainUpdateHash)
 	q.Set("domain", fqdn)
-
-	switch recordType {
-	case "A":
-		q.Set("ipv4", newIP)
-	case "AAAA":
-		q.Set("ipv6", newIP)
+	if needV4 {
+		q.Set("ip", ipv4)
+	}
+	if needV6 {
+		q.Set("ip6", ipv6)
 	}
 
 	updateURL := "https://ipv64.net/nic/update?" + q.Encode()
+	debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("📡 IPv64 Update: %s", updateURL))
 
 	req, err := http.NewRequestWithContext(ctx, "GET", updateURL, nil)
 	if err != nil {
@@ -579,18 +629,31 @@ func updateIPv64DNS(
 		return false, fmt.Errorf("ipv64 http %d: %s", res.StatusCode, resp)
 	}
 
-	if strings.Contains(resp, "good") || strings.Contains(resp, "nochg") {
-		apiMetrics.RecordSuccess(duration)
+	if !strings.Contains(resp, "good") && !strings.Contains(resp, "nochg") {
+		return false, fmt.Errorf("ipv64 update failed: %s", resp)
+	}
+
+	apiMetrics.RecordSuccess(duration)
+
+	// Log für jeden tatsächlich geänderten Record
+	if needV4 {
 		log(LogContext{
 			Level:   LogInfo,
 			Action:  ActionUpdate,
 			Domain:  fqdn,
-			Message: fmt.Sprintf("🔄 %s -> %s %s", recordType, newIP, T.Update),
+			Message: fmt.Sprintf("🔄 A -> %s %s", ipv4, T.Update),
 		})
-		return true, nil
+	}
+	if needV6 {
+		log(LogContext{
+			Level:   LogInfo,
+			Action:  ActionUpdate,
+			Domain:  fqdn,
+			Message: fmt.Sprintf("🔄 AAAA -> %s %s", ipv6, T.Update),
+		})
 	}
 
-	return false, fmt.Errorf("ipv64 update failed: %s", resp)
+	return true, nil
 }
 
 // ============================================================================
