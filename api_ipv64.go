@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -18,12 +19,38 @@ import (
 // ============================================================================
 // API - IPV64
 // ============================================================================
-func splitIPv64FQDN(fqdn string) (baseDomain, praefix string) {
-	parts := strings.Split(fqdn, ".")
-	if len(parts) < 4 {
-		return fqdn, ""
+func matchIPv64Zone(fqdn string) (zone string, praefix string, ok bool) {
+	fqdn = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(fqdn), "."))
+
+	providerCache.RLock()
+	defer providerCache.RUnlock()
+
+	if len(providerCache.ipv64Records) == 0 {
+		debugLog("CACHE", fqdn, "⚠️ matchIPv64Zone: ipv64Records leer (Cache noch nicht geladen?)")
+		return "", "", false
 	}
-	return strings.Join(parts[1:], "."), parts[0]
+
+	best := ""
+	for z := range providerCache.ipv64Records {
+		zn := strings.ToLower(strings.TrimSuffix(z, "."))
+		if fqdn == zn || strings.HasSuffix(fqdn, "."+zn) {
+			if len(zn) > len(best) {
+				best = zn
+			}
+		}
+	}
+
+	if best == "" {
+		return "", "", false
+	}
+
+	if fqdn == best {
+		return best, "", true
+	}
+
+	suffix := "." + best
+	praefix = strings.TrimSuffix(fqdn, suffix)
+	return best, praefix, true
 }
 
 func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) ([]byte, error) {
@@ -463,20 +490,30 @@ func updateIPv64DNS(
 	fqdn, recordType, newIP string,
 ) (bool, error) {
 
-	baseDomain, praefix := splitIPv64FQDN(fqdn)
+	fqdn = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(fqdn), "."))
+	recordType = strings.ToUpper(strings.TrimSpace(recordType))
+	newIP = strings.TrimSpace(newIP)
+
+	zone, praefix, ok := matchIPv64Zone(fqdn)
+	if !ok {
+		return false, fmt.Errorf("ipv64 zone not found for fqdn: %s", fqdn)
+	}
 
 	providerCache.RLock()
-	domain, exists := providerCache.ipv64Records[baseDomain]
+	domain, exists := providerCache.ipv64Records[zone]
 	providerCache.RUnlock()
 
 	if !exists {
-		return false, fmt.Errorf("ipv64 base domain not found: %s", baseDomain)
+		return false, fmt.Errorf("ipv64 base domain not found: %s", zone)
 	}
 
 	var ownIPs []string
 	var cdnIPs []string
 	for _, rec := range domain.Records {
 		if rec.Praefix != praefix || rec.Type != recordType {
+			continue
+		}
+		if rec.Deactivated == 1 {
 			continue
 		}
 		isCDN := rec.TTL <= 10 || rec.FailoverPolicy != "0"
@@ -492,12 +529,10 @@ func updateIPv64DNS(
 			"ℹ️ CDN-Records ignoriert für %s-Vergleich: %v", recordType, cdnIPs))
 	}
 
-	for _, ip := range ownIPs {
-		if ip == newIP {
-			writeLog("CURRENT", ActionCurrent, fqdn,
-				fmt.Sprintf("%-4s %s %s", recordType, newIP, T.Current))
-			return false, nil
-		}
+	if slices.Contains(ownIPs, newIP) {
+		writeLog("CURRENT", ActionCurrent, fqdn,
+			fmt.Sprintf("%-4s %s %s", recordType, newIP, T.Current))
+		return false, nil
 	}
 
 	currentIP := ""
@@ -532,7 +567,7 @@ func updateIPv64DNS(
 			Domain:  fqdn,
 			Message: fmt.Sprintf("⚠️ %s %s %s", T.WouldSet, recordType, newIP),
 		})
-		return true, nil
+		return false, nil
 	}
 
 	q := url.Values{}
@@ -579,7 +614,42 @@ func updateIPv64DNS(
 		return false, fmt.Errorf("ipv64 http %d: %s", res.StatusCode, resp)
 	}
 
-	if strings.Contains(resp, "good") || strings.Contains(resp, "nochg") {
+	if strings.Contains(resp, "nochg") {
+		apiMetrics.RecordSuccess(duration)
+		writeLog("CURRENT", ActionCurrent, fqdn,
+			fmt.Sprintf("%-4s %s %s (nochg)", recordType, newIP, T.Current))
+		return false, nil
+	}
+
+	if strings.Contains(resp, "good") {
+		providerCache.Lock()
+		d := providerCache.ipv64Records[zone]
+		updated := false
+		for i := range d.Records {
+			rec := &d.Records[i]
+			if rec.Praefix != praefix || rec.Type != recordType {
+				continue
+			}
+			if rec.Deactivated == 1 {
+				continue
+			}
+			isCDN := rec.TTL <= 10 || rec.FailoverPolicy != "0"
+			if isCDN {
+				continue
+			}
+			rec.Content = newIP
+			updated = true
+			break
+		}
+		if !updated {
+			debugLog("CACHE", fqdn, "⚠️ good, aber kein passender non-CDN Record im Cache gefunden")
+		}
+
+		providerCache.ipv64Records[zone] = d
+		providerCache.Unlock()
+
+		_ = saveIPv64Cache()
+
 		apiMetrics.RecordSuccess(duration)
 		log(LogContext{
 			Level:   LogInfo,
