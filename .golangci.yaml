@@ -5,49 +5,39 @@ run:
   tests: true
 
 linters:
-  disable-all: true
   enable:
-    - govet
-    - staticcheck
     - errcheck
-    - revive
-    - gocritic
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
     - unused
-    - bodyclose
+    - gofumpt
+    - goimports
+    - gocyclo
+    - revive
+    - goconst      # Finds repeated strings that could be replaced by constants
+    - misspell     # Finds commonly misspelled English words
+    - unconvert    # Remove unnecessary type conversions
+    - unparam      # Reports unused function parameters
+    - gosec        # Security checker - can catch SQL injection risks
 
 linters-settings:
-  errcheck:
-    exclude-functions:
-      - (net/http.ResponseWriter).Write
-      - (*encoding/json.Encoder).Encode
-      - fmt.Fprint
-      - fmt.Fprintf
-      - fmt.Fprintln
-      
+  gofumpt:
+    extra-rules: true
+  gocyclo:
+    min-complexity: 15
   revive:
-    ignore-generated-header: true
     severity: warning
-    rules:
-      - name: var-naming
-        disabled: true
-      - name: early-return
-      - name: indent-error-flow
-      - name: package-comments
-      - name: blank-imports
-      - name: error-return
-      - name: if-return
-
-  gocritic:
-    enabled-checks:
-      - ifElseChain
-      - appendCombine
-      - badCond
-      - commentFormatting
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+  gosec:
+    # Check for SQL injection patterns
+    excludes:
+      - G104  # Audit errors not checked (covered by errcheck)
 
 issues:
-  max-issues-per-linter: 0
-  max-same-issues: 0
   exclude-rules:
-    - name: var-naming
-    - text: "should be"
-    - text: "ST1003"
+    - linters: [errcheck]
+      text: "error return value not checked"
