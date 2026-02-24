@@ -13,6 +13,7 @@ linters:
     - revive
     - gocritic
     - unused
+    - unparam
     - bodyclose
 
 linters-settings:
