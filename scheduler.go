@@ -117,7 +117,7 @@ func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zo
 
 			zoneCacheMutex.Lock()
 			cachedZones = zonesFromDisk
-			lastZoneLoad = time.Now()
+			lastZoneLoad = time.Now().Local()
 			zoneCacheMutex.Unlock()
 
 			return zonesFromDisk, nil
@@ -143,7 +143,7 @@ func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zo
 
 	zoneCacheMutex.Lock()
 	cachedZones = zonesByProvider
-	lastZoneLoad = time.Now()
+	lastZoneLoad = time.Now().Local()
 	zoneCacheMutex.Unlock()
 
 	return zonesByProvider, nil
@@ -183,7 +183,7 @@ func loadRecordsWithCache(ctx context.Context, zonesByProvider map[string][]Zone
 
 			zoneCacheMutex.Lock()
 			cachedRecords = cacheFromDisk
-			lastRecordLoad = time.Now()
+			lastRecordLoad = time.Now().Local()
 			zoneCacheMutex.Unlock()
 
 			return cacheFromDisk, nil
@@ -209,7 +209,7 @@ func loadRecordsWithCache(ctx context.Context, zonesByProvider map[string][]Zone
 
 	zoneCacheMutex.Lock()
 	cachedRecords = cache
-	lastRecordLoad = time.Now()
+	lastRecordLoad = time.Now().Local()
 	zoneCacheMutex.Unlock()
 
 	return cache, nil
@@ -219,8 +219,26 @@ func loadRecordsWithCache(ctx context.Context, zonesByProvider map[string][]Zone
 // CACHE ZU DISK SPEICHERN
 // ============================================================================
 func saveCachesToDisk(zonesByProvider map[string][]Zone, cache *ZoneRecordCache) {
+	// Beide Timestamps mit demselben Mutex lesen der sie auch schreibt (zoneCacheMutex)
+	zoneCacheMutex.RLock()
+	zoneLoadTs := lastZoneLoad
+	recordLoadTs := lastRecordLoad
+	zoneCacheMutex.RUnlock()
+
+	diskPersistMutex.Lock()
+	needsPersist := zoneLoadTs.After(lastDiskPersistZone) || recordLoadTs.After(lastDiskPersistRecord)
+	if !needsPersist {
+		diskPersistMutex.Unlock()
+		debugLog("CACHE", "", "⏭️ Disk-Cache Persist übersprungen (keine neuen Zones/Records seit letztem Persist)")
+		return
+	}
+	diskPersistMutex.Unlock()
+
 	cacheWriteMutex.Lock()
 	defer cacheWriteMutex.Unlock()
+
+	savedZone := false
+	savedRecord := false
 
 	for providerStr, zones := range zonesByProvider {
 		if len(zones) == 0 || cache == nil {
@@ -233,13 +251,31 @@ func saveCachesToDisk(zonesByProvider map[string][]Zone, cache *ZoneRecordCache)
 		case ProviderCloudflare:
 			if err := saveCloudflareCacheToFile(zones, cache); err != nil {
 				debugLog("CACHE", "", fmt.Sprintf("⚠️ Konnte Cloudflare Cache nicht speichern: %v", err))
+			} else {
+				savedZone = true
+				savedRecord = true
 			}
 
 		case ProviderIONOS:
 			if err := saveIONOSCacheToFile(zones, cache); err != nil {
 				debugLog("CACHE", "", fmt.Sprintf("⚠️ Konnte IONOS Cache nicht speichern: %v", err))
+			} else {
+				savedZone = true
+				savedRecord = true
 			}
 		}
+	}
+
+	// lastDiskPersist nur aktualisieren wenn tatsaechlich erfolgreich gespeichert
+	if savedZone || savedRecord {
+		diskPersistMutex.Lock()
+		if savedZone {
+			lastDiskPersistZone = zoneLoadTs
+		}
+		if savedRecord {
+			lastDiskPersistRecord = recordLoadTs
+		}
+		diskPersistMutex.Unlock()
 	}
 }
 
@@ -255,7 +291,7 @@ func runCleanupIfNeeded(ctx context.Context, zonesByProvider map[string][]Zone, 
 	}
 
 	debugLog("MAINTENANCE", "", fmt.Sprintf("🧹 Starte Cleanup (letzter Lauf vor %v)", timeSinceLastCleanup.Round(time.Minute)))
-	lastCleanup = time.Now()
+	lastCleanup = time.Now().Local()
 
 	for providerStr, zones := range zonesByProvider {
 		pType := ProviderType(providerStr)

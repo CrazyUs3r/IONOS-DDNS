@@ -47,7 +47,7 @@ var (
 
 	domainRegex = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$`)
 	labelRegex  = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
-	rng         = rand.New(rand.NewSource(time.Now().UnixNano()))
+	rng         = rand.New(rand.NewSource(time.Now().Local().UnixNano()))
 
 	secretReplacer     *strings.Replacer
 	secretReplacerOnce sync.Once
@@ -64,7 +64,10 @@ var (
 	cachedZones    map[string][]Zone
 	cachedRecords  *ZoneRecordCache
 	lastCleanup    time.Time
-	zoneCacheMutex sync.RWMutex
+	zoneCacheMutex        sync.RWMutex
+	lastDiskPersistZone   time.Time
+	lastDiskPersistRecord time.Time
+	diskPersistMutex      sync.Mutex
 
 	ipLoadGroup      singleflight.Group
 	zonesLoadGroup   singleflight.Group
@@ -252,10 +255,10 @@ const (
 	RetryExponentBase     = 2.0
 	RateLimitRetryDelay   = 60 * time.Second
 	ServerErrorRetryDelay = 30 * time.Second
-	ZoneCacheTTL          = 30 * time.Minute
-	RecordCacheTTL        = 30 * time.Minute
+	ZoneCacheTTL          = 60 * time.Minute
+	RecordCacheTTL        = 60 * time.Minute
+	ipv64DomainsCacheTTL  = 60 * time.Minute
 	CleanupInterval       = 1 * time.Hour
-	ipv64DomainsCacheTTL  = 45 * time.Minute
 )
 
 // ============================================================================
