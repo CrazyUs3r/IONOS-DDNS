@@ -12,19 +12,24 @@ linters:
     - ineffassign
     - staticcheck
     - unused
-    - gofumpt
-    - goimports
     - gocyclo
     - revive
-    - goconst      # Finds repeated strings that could be replaced by constants
-    - misspell     # Finds commonly misspelled English words
-    - unconvert    # Remove unnecessary type conversions
-    - unparam      # Reports unused function parameters
-    - gosec        # Security checker - can catch SQL injection risks
+    - goconst
+    - misspell
+    - unconvert
+    - unparam
+    - gosec
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    gofumpt:
+      extra-rules: true
+    # optional: goimports hat settings wie local-prefixes (falls du willst)
 
 linters-settings:
-  gofumpt:
-    extra-rules: true
   gocyclo:
     min-complexity: 15
   revive:
@@ -33,9 +38,8 @@ linters-settings:
     min-len: 3
     min-occurrences: 3
   gosec:
-    # Check for SQL injection patterns
     excludes:
-      - G104  # Audit errors not checked (covered by errcheck)
+      - G104
 
 issues:
   exclude-rules:
