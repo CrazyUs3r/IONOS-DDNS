@@ -26,45 +26,45 @@ import (
 func (t *httpTimings) trace() *httptrace.ClientTrace {
 	return &httptrace.ClientTrace{
 		GotConn: func(info httptrace.GotConnInfo) {
-			t.gotConn = time.Now()
+			t.gotConn = time.Now().Local()
 			t.connReused = info.Reused
 			t.connWasIdle = info.WasIdle
 			t.connIdleTime = info.IdleTime
 		},
 		DNSStart: func(httptrace.DNSStartInfo) {
-			t.dnsStart = time.Now()
+			t.dnsStart = time.Now().Local()
 		},
 		DNSDone: func(info httptrace.DNSDoneInfo) {
-			t.dnsDone = time.Now()
+			t.dnsDone = time.Now().Local()
 			t.dnsErr = info.Err
 		},
 		ConnectStart: func(network, addr string) {
 			if t.connectStart.IsZero() {
-				t.connectStart = time.Now()
+				t.connectStart = time.Now().Local()
 				t.connectNet = network
 				t.connectAddr = addr
 			}
 		},
 		ConnectDone: func(_, _ string, err error) {
 			if t.connectDone.IsZero() {
-				t.connectDone = time.Now()
+				t.connectDone = time.Now().Local()
 				t.connectErr = err
 			}
 		},
 		TLSHandshakeStart: func() {
-			t.tlsStart = time.Now()
+			t.tlsStart = time.Now().Local()
 		},
 		TLSHandshakeDone: func(cs tls.ConnectionState, err error) {
-			t.tlsDone = time.Now()
+			t.tlsDone = time.Now().Local()
 			t.tlsState = &cs
 			t.tlsErr = err
 		},
 		WroteRequest: func(httptrace.WroteRequestInfo) {
-			t.wroteRequest = time.Now()
+			t.wroteRequest = time.Now().Local()
 		},
 
 		GotFirstResponseByte: func() {
-			t.firstByte = time.Now()
+			t.firstByte = time.Now().Local()
 		},
 	}
 }
@@ -123,7 +123,7 @@ func (t *httpTimings) String() string {
 func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	var timings *httpTimings
 	if cfg.DebugHTTPRaw {
-		timings = &httpTimings{start: time.Now()}
+		timings = &httpTimings{start: time.Now().Local()}
 		ctx := httptrace.WithClientTrace(req.Context(), timings.trace())
 		req = req.Clone(ctx)
 	}
@@ -179,7 +179,7 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	duration := time.Since(start)
 
 	if timings != nil {
-		timings.end = time.Now()
+		timings.end = time.Now().Local()
 		msg := timings.String()
 		if replacer := getSecretReplacer(); replacer != nil {
 			msg = replacer.Replace(msg)
@@ -475,7 +475,7 @@ func newDNSCache(r *net.Resolver, ttl time.Duration) *dnsCache {
 }
 
 func (c *dnsCache) getIPAddrs(ctx context.Context, host string) ([]net.IPAddr, error) {
-	now := time.Now()
+	now := time.Now().Local()
 
 	c.mu.Lock()
 	if e, ok := c.entries[host]; ok && now.Before(e.expiry) && len(e.ips) > 0 {

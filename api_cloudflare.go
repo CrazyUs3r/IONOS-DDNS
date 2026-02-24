@@ -38,7 +38,7 @@ func saveCloudflareCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error
 		Version:    1,
 		Zones:      zones,
 		Records:    make(map[string][]Record),
-		LastUpdate: time.Now(),
+		LastUpdate: time.Now().Local(),
 	}
 
 	totalRecords := 0
@@ -585,27 +585,6 @@ func cleanupCloudflareRecords(ctx context.Context, zones []Zone, recordCache *Zo
 // ============================================================================
 // Helper - CLOUDFLARE
 // ============================================================================
-func parseRetryAfter(h http.Header) (time.Duration, bool) {
-	ra := strings.TrimSpace(h.Get("Retry-After"))
-	if ra == "" {
-		return 0, false
-	}
-	if secs, err := time.ParseDuration(ra + "s"); err == nil {
-		if secs < 0 {
-			return 0, false
-		}
-		return secs, true
-	}
-	if t, err := http.ParseTime(ra); err == nil {
-		d := time.Until(t)
-		if d < 0 {
-			return 0, false
-		}
-		return d, true
-	}
-	return 0, false
-}
-
 func classifyCloudflareAPIError(
 	statusCode int,
 	method, url string,
@@ -624,52 +603,23 @@ func classifyCloudflareAPIError(
 		msg = http.StatusText(statusCode)
 	}
 
-	apiErr := &APIError{
-		StatusCode: statusCode,
-		Method:     method,
-		URL:        url,
-		Message:    msg,
-		Retryable:  false,
+	effectiveStatus := statusCode
+	if effectiveStatus >= 200 && effectiveStatus < 300 && cfResp != nil && !cfResp.Success {
+		effectiveStatus = 422
 	}
 
-	if statusCode == 401 || statusCode == 403 {
-
-		if msg != "" {
-			apiErr.Message = fmt.Sprintf("%s - %s", http.StatusText(statusCode), msg)
+	apiErr := classifyAPIErrorWithHeaders(effectiveStatus, method, url, msg, headers)
+	if apiErr == nil {
+		apiErr = &APIError{
+			StatusCode: statusCode,
+			Method:     method,
+			URL:        url,
+			Message:    msg,
+			Retryable:  false,
 		}
-
-		log(LogContext{
-			Level:   LogError,
-			Action:  ActionConfig,
-			Message: apiErr.Message,
-		})
-
-		return apiErr
 	}
 
-	if statusCode == http.StatusTooManyRequests {
-		apiErr.Retryable = true
-
-		if d, ok := parseRetryAfter(headers); ok {
-			apiErr.RetryAfter = d
-		} else {
-			apiErr.RetryAfter = RateLimitRetryDelay
-		}
-
-		log(LogContext{
-			Level:   LogWarn,
-			Action:  ActionRetry,
-			Message: T.RateLimitExceeded,
-		})
-
-		return apiErr
-	}
-
-	if statusCode >= 500 {
-		apiErr.Retryable = true
-		apiErr.RetryAfter = ServerErrorRetryDelay
-	}
-
+	apiErr.StatusCode = statusCode
 	return apiErr
 }
 

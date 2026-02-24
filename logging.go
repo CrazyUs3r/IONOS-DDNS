@@ -183,11 +183,10 @@ func debugLog(category, domain, msg string) {
 	})
 }
 
-func ipLog(domain, msg string) {
+func ipLog(msg string) {
 	log(LogContext{
 		Level:    LogInfo,
 		Category: "IP-CHECK",
-		Domain:   domain,
 		Message:  msg,
 	})
 }
@@ -376,7 +375,7 @@ func doLogRotation(path string, maxLines int) {
 	newLines := lines[startIdx:]
 	output := strings.Join(newLines, "\n") + "\n"
 
-	tmpPath := path + ".tmp." + strconv.FormatInt(time.Now().UnixNano(), 10)
+	tmpPath := path + ".tmp." + strconv.FormatInt(time.Now().Local().UnixNano(), 10)
 	if err := os.WriteFile(tmpPath, []byte(output), 0644); err != nil {
 		fmt.Fprintf(os.Stderr, "[WARN] %s: %v\n", T.LogRotationError, err)
 		return

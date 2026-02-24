@@ -29,11 +29,14 @@ func saveIONOSCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error {
 	}
 
 	cachePath := getIONOSCachePath()
+	if err := os.MkdirAll(filepath.Dir(cachePath), 0755); err != nil {
+		return fmt.Errorf("failed to create cache dir: %w", err)
+	}
 
 	cache := IONOSCache{
 		Zones:      zones,
 		Records:    make(map[string][]Record),
-		LastUpdate: time.Now(),
+		LastUpdate: time.Now().Local(),
 	}
 
 	for _, zone := range zones {

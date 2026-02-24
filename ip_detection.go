@@ -74,7 +74,7 @@ func getPublicIP(url string, want IPVersion) (string, error) {
 	}
 
 	debugLog("IP-CHECK", "", fmt.Sprintf("✅ %s: %s | %s: %v", T.ReceivedIP, ipStr, T.AvgLatency, duration))
-	ipLog("", fmt.Sprintf("✅ Öffentliche IP (%v) erkannt via %s: %s | %s: %v", want, url, ipStr, T.AvgLatency, duration))
+	ipLog(fmt.Sprintf("✅ Öffentliche IP (%v) erkannt via %s: %s | %s: %v", want, url, ipStr, T.AvgLatency, duration))
 
 	return ipStr, nil
 }
@@ -123,7 +123,7 @@ func getIPv6() (string, error) {
 						continue
 					}
 
-					ipLog("", fmt.Sprintf("✅ IPv6 via Interface %s: %s", cfg.IfaceName, ip.String()))
+					ipLog(fmt.Sprintf("✅ IPv6 via Interface %s: %s", cfg.IfaceName, ip.String()))
 					return ip.String(), nil
 				}
 				debugLog("IP-CHECK", "", "⚠️  "+T.NoIPv6OnInterface)
@@ -131,7 +131,7 @@ func getIPv6() (string, error) {
 		}
 	}
 
-	ipLog("", "ℹ️ IPv6 nicht lokal gefunden – nutze öffentliche IPv6-Endpunkte (Fallback)")
+	ipLog("ℹ️ IPv6 nicht lokal gefunden – nutze öffentliche IPv6-Endpunkte (Fallback)")
 	debugLog("IP-CHECK", "", "🌐 Fallback auf öffentliche IPv6-Endpunkte")
 
 	return getPublicIPFromAny(DefaultIPv6Endpoints, IPV6)
@@ -141,7 +141,7 @@ func fetchCurrentIPs(_ context.Context) (ipv4, ipv6 string, err error) {
 	var errV4, errV6 error
 
 	if cfg.IPMode != "IPV6" {
-		ipLog("", "🔎 Prüfe öffentliche IPv4 ...")
+		ipLog("🔎 Prüfe öffentliche IPv4 ...")
 
 		ipv4, errV4 = getPublicIPFromAny(DefaultIPv4Endpoints, IPV4)
 		if errV4 != nil {
@@ -155,7 +155,7 @@ func fetchCurrentIPs(_ context.Context) (ipv4, ipv6 string, err error) {
 	}
 
 	if cfg.IPMode != "IPV4" {
-		ipLog("", "🔎 Prüfe IPv6 ...")
+		ipLog("🔎 Prüfe IPv6 ...")
 
 		ipv6, errV6 = getIPv6()
 		if errV6 != nil {
@@ -174,14 +174,14 @@ func fetchCurrentIPs(_ context.Context) (ipv4, ipv6 string, err error) {
 			return "", "", fmt.Errorf("IPv4 required but failed: %w", errV4)
 		}
 		if ipv4 != "" {
-			ipLog("", fmt.Sprintf("✅ IPv4 aktuell: %s", ipv4))
+			ipLog(fmt.Sprintf("✅ IPv4 aktuell: %s", ipv4))
 		}
 	case "IPV6":
 		if errV6 != nil {
 			return "", "", fmt.Errorf("IPv6 required but failed: %w", errV6)
 		}
 		if ipv6 != "" {
-			ipLog("", fmt.Sprintf("✅ IPv6 aktuell: %s", ipv6))
+			ipLog(fmt.Sprintf("✅ IPv6 aktuell: %s", ipv6))
 		}
 	case "BOTH":
 		if errV4 != nil && errV6 != nil {
