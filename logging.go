@@ -320,13 +320,6 @@ func startLogWriter() {
 	}()
 }
 
-// rotationMutex schützt die Log-Rotation gegen parallele Ausfuehrung.
-// Bewusst KEIN logMutex - der LogWriter nutzt logMutex fuer seinen Buffer,
-// doLogRotation arbeitet direkt auf dem File. Ein gemeinsamer Mutex wuerde
-// zu einem Deadlock fuehren wenn der LogWriter locked und gleichzeitig
-// debugLog() aus der Rotation in die volle Queue schreibt.
-var rotationMutex sync.Mutex
-
 func startLogRotationWorker() {
 	go func() {
 		defer func() {
@@ -351,7 +344,6 @@ func startLogRotationWorker() {
 }
 
 func doLogRotation(path string, maxLines int) {
-	// Eigener Mutex — kein logMutex um Deadlock mit LogWriter zu vermeiden
 	rotationMutex.Lock()
 	defer rotationMutex.Unlock()
 
@@ -365,7 +357,7 @@ func doLogRotation(path string, maxLines int) {
 
 	var lines []string
 	scanner := bufio.NewScanner(file)
-	buf := make([]byte, 1024*1024) // 1MB Zeilenpuffer für lange JSON-Zeilen
+	buf := make([]byte, 1024*1024)
 	scanner.Buffer(buf, len(buf))
 	for scanner.Scan() {
 		lines = append(lines, scanner.Text())
@@ -397,7 +389,6 @@ func doLogRotation(path string, maxLines int) {
 		return
 	}
 
-	// fmt.Printf statt debugLog — kein logMutex, kein Queue-Druck
 	fmt.Printf("[%s] [DBG ] 🧹 MAINTENANCE : ✅ %s: %d → %d\n",
 		time.Now().Local().Format("02.01.2006 15:04:05"),
 		T.LogRotated, len(lines), len(newLines))
