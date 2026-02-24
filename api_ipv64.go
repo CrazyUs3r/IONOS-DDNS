@@ -452,7 +452,6 @@ func loadAllIPv64Domains(ctx context.Context, dc *DomainConfig) error {
 	lastIPv64DomainsLoad = time.Now().Local()
 
 	return nil
-
 }
 
 // ============================================================================
@@ -472,16 +471,10 @@ func ipv64OwnIPs(domain IPv64Domain, praefix, recordType string) (own []string, 
 	return own, cdn
 }
 
-// updateIPv64DNS sendet einen kombinierten Update-Request für IPv4 und/oder IPv6.
-// Beide IPs können in einem einzigen HTTP-Request aktualisiert werden:
-// https://ipv64.net/nic/update?key=…&domain=…&ip=1.2.3.4&ip6=2a01::1
-//
-// Gibt zurück ob sich mindestens ein Record geändert hat.
 func updateIPv64DNS(
 	ctx context.Context,
 	fqdn, ipv4, ipv6 string,
 ) (bool, error) {
-
 	baseDomain, praefix := splitIPv64FQDN(fqdn)
 
 	providerCache.RLock()
@@ -492,7 +485,6 @@ func updateIPv64DNS(
 		return false, fmt.Errorf("ipv64 base domain not found: %s", baseDomain)
 	}
 
-	// ── Prüfen welche Records wirklich geändert werden müssen ────────────────
 	needV4 := false
 	needV6 := false
 
@@ -540,12 +532,10 @@ func updateIPv64DNS(
 		}
 	}
 
-	// Nichts zu tun
 	if !needV4 && !needV6 {
 		return false, nil
 	}
 
-	// ── Rate-Limit: IPv64 erlaubt max 1 Request alle 12 Sekunden ────────────
 	ipv64Mutex.Lock()
 	if time.Since(lastIPv64Update) < 12*time.Second {
 		wait := 12*time.Second - time.Since(lastIPv64Update)
@@ -562,7 +552,6 @@ func updateIPv64DNS(
 	lastIPv64Update = time.Now().Local()
 	ipv64Mutex.Unlock()
 
-	// ── Dry-Run ──────────────────────────────────────────────────────────────
 	if cfg.DryRun {
 		msg := ""
 		if needV4 {
@@ -580,9 +569,6 @@ func updateIPv64DNS(
 		return true, nil
 	}
 
-	// ── Einen kombinierten Request bauen ─────────────────────────────────────
-	// Doku: ?key=…&domain=…&ip=IPv4&ip6=IPv6
-	// Nur die Felder setzen die tatsächlich geändert werden müssen.
 	q := url.Values{}
 	q.Set("key", domain.DomainUpdateHash)
 	q.Set("domain", fqdn)
@@ -633,12 +619,8 @@ func updateIPv64DNS(
 
 	apiMetrics.RecordSuccess(duration)
 
-	// ── Cache mit neuen IPs aktualisieren ────────────────────────────────────
-	// Ohne diesen Schritt würde beim nächsten Interval der alte Cache-Wert
-	// gelesen und erneut ein unnötiges Update abgeschickt.
 	updateIPv64Cache(baseDomain, praefix, ipv4, ipv6, needV4, needV6)
 
-	// Log für jeden tatsächlich geänderten Record
 	if needV4 {
 		log(LogContext{
 			Level:   LogInfo,
@@ -659,9 +641,6 @@ func updateIPv64DNS(
 	return true, nil
 }
 
-// updateIPv64Cache aktualisiert den In-Memory Cache nach einem erfolgreichen Update.
-// Ohne diesen Schritt würde beim nächsten Interval-Check der alte Wert gelesen
-// und erneut ein HTTP-Request abgeschickt obwohl die IP bereits aktuell ist.
 func updateIPv64Cache(baseDomain, praefix, ipv4, ipv6 string, needV4, needV6 bool) {
 	providerCache.Lock()
 	defer providerCache.Unlock()
@@ -677,7 +656,6 @@ func updateIPv64Cache(baseDomain, praefix, ipv4, ipv6 string, needV4, needV6 boo
 		if rec.Praefix != praefix {
 			continue
 		}
-		// Nur eigene Records (keine CDN-Records) anpassen
 		isCDN := rec.TTL <= 10 || rec.FailoverPolicy != "0"
 		if isCDN {
 			continue
@@ -778,7 +756,6 @@ func deleteIPv64Record(
 	baseDomain string,
 	record IPv64Record,
 ) error {
-
 	params := map[string]string{
 		"del_record": fmt.Sprintf("%d", record.RecordID),
 	}
