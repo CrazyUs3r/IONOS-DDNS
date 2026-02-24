@@ -73,19 +73,12 @@ func loadLanguage(lang string) error {
 	return nil
 }
 
-// knownAcronyms lists uppercase acronyms that must be treated as a single token
-// so that e.g. "HTTPPool" → "http_pool" and not "h_t_t_p_pool".
-// Order matters: longer matches must come first (IPv4/IPv6 before IP).
 var knownAcronyms = []string{
 	"IPv4", "IPv6", "HTTP", "JSON", "API", "DNS", "IP",
 }
 
 func toSnakeCase(s string) string {
-	// Replace each known acronym with a title-cased sentinel so the
-	// normal char-by-char loop produces exactly one underscore boundary.
-	// E.g. "HTTPPool" → "Http_pool" (interim) → "http_pool"
 	for _, acr := range knownAcronyms {
-		// Build replacement: first letter upper, rest lower → treated as one word
 		replacement := string(unicode.ToUpper([]rune(acr)[0])) +
 			strings.ToLower(acr[1:])
 		s = strings.ReplaceAll(s, acr, replacement)
