@@ -554,7 +554,6 @@ func (c *dnsCache) invalidate(host string) {
 // ============================================================================
 // TRUST_PROXY - Forwarded-For
 // ============================================================================
-
 func getClientIP(r *http.Request) string {
 	trustProxy := true
 
