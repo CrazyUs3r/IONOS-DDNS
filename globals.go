@@ -80,6 +80,7 @@ var (
 	rotationQueue = make(chan rotationJob, 4)
 	logWriteQueue = make(chan LogEntry, 500)
 
+    rotationMutex sync.Mutex
 	activeUpdates atomic.Int32
 
 	lastSuccessfulDNS int32
