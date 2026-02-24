@@ -77,8 +77,8 @@ var (
 
 	metricsPersistPath = ""
 
-	rotationQueue = make(chan rotationJob, 1)
-	logWriteQueue = make(chan LogEntry, 100)
+	rotationQueue = make(chan rotationJob, 4)
+	logWriteQueue = make(chan LogEntry, 500)
 
 	activeUpdates atomic.Int32
 

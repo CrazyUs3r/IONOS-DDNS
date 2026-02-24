@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -319,11 +320,18 @@ func startLogWriter() {
 	}()
 }
 
+// rotationMutex schützt die Log-Rotation gegen parallele Ausfuehrung.
+// Bewusst KEIN logMutex - der LogWriter nutzt logMutex fuer seinen Buffer,
+// doLogRotation arbeitet direkt auf dem File. Ein gemeinsamer Mutex wuerde
+// zu einem Deadlock fuehren wenn der LogWriter locked und gleichzeitig
+// debugLog() aus der Rotation in die volle Queue schreibt.
+var rotationMutex sync.Mutex
+
 func startLogRotationWorker() {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				debugLog("MAINTENANCE", "", fmt.Sprintf("🚨 Rotation worker panic: %v", r))
+				fmt.Fprintf(os.Stderr, "[WARN] Rotation worker panic: %v\n", r)
 			}
 		}()
 
@@ -336,7 +344,6 @@ func startLogRotationWorker() {
 				doLogRotation(job.path, job.maxLines)
 
 			case <-shutdownCtx.Done():
-				debugLog("MAINTENANCE", "", "Log rotation worker stopping...")
 				return
 			}
 		}
@@ -344,24 +351,29 @@ func startLogRotationWorker() {
 }
 
 func doLogRotation(path string, maxLines int) {
-	logMutex.Lock()
-	defer logMutex.Unlock()
+	// Eigener Mutex — kein logMutex um Deadlock mit LogWriter zu vermeiden
+	rotationMutex.Lock()
+	defer rotationMutex.Unlock()
 
 	file, err := os.Open(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			fmt.Printf("[WARN] %s: %v\n", T.LogRotationError, err)
+			fmt.Fprintf(os.Stderr, "[WARN] %s: %v\n", T.LogRotationError, err)
 		}
 		return
 	}
 
 	var lines []string
 	scanner := bufio.NewScanner(file)
+	buf := make([]byte, 1024*1024) // 1MB Zeilenpuffer für lange JSON-Zeilen
+	scanner.Buffer(buf, len(buf))
 	for scanner.Scan() {
 		lines = append(lines, scanner.Text())
 	}
-	closeErr := file.Close()
-	if closeErr != nil {
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "[WARN] Rotation scanner error: %v\n", err)
+	}
+	if closeErr := file.Close(); closeErr != nil {
 		fmt.Fprintf(os.Stderr, "[WARN] Failed to close file: %v\n", closeErr)
 	}
 
@@ -373,19 +385,22 @@ func doLogRotation(path string, maxLines int) {
 	newLines := lines[startIdx:]
 	output := strings.Join(newLines, "\n") + "\n"
 
-	tmpPath := path + ".tmp." + strconv.FormatInt(time.Now().Local().UnixNano(), 10)
+	tmpPath := path + ".tmp." + strconv.FormatInt(time.Now().UnixNano(), 10)
 	if err := os.WriteFile(tmpPath, []byte(output), 0644); err != nil {
-		fmt.Printf("[WARN] %s: %v\n", T.LogRotationError, err)
+		fmt.Fprintf(os.Stderr, "[WARN] %s: %v\n", T.LogRotationError, err)
 		return
 	}
 
 	if err := os.Rename(tmpPath, path); err != nil {
-		fmt.Printf("[WARN] %s: %v\n", T.LogRotationError, err)
+		fmt.Fprintf(os.Stderr, "[WARN] %s: %v\n", T.LogRotationError, err)
 		_ = os.Remove(tmpPath)
 		return
 	}
 
-	debugLog("MAINTENANCE", "", fmt.Sprintf("✅ %s: %d → %d", T.LogRotated, len(lines), len(newLines)))
+	// fmt.Printf statt debugLog — kein logMutex, kein Queue-Druck
+	fmt.Printf("[%s] [DBG ] 🧹 MAINTENANCE : ✅ %s: %d → %d\n",
+		time.Now().Local().Format("02.01.2006 15:04:05"),
+		T.LogRotated, len(lines), len(newLines))
 }
 
 func rotateLogFile(path string, maxLines int) {
