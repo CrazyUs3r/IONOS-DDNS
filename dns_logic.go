@@ -1,4 +1,4 @@
-﻿// Package main
+// Package main
 package main
 
 import (
@@ -14,7 +14,6 @@ func processDomains(
 	cache *ZoneRecordCache,
 	ipv4, ipv6 string,
 ) int {
-
 	var wg sync.WaitGroup
 	results := make(chan domainUpdateResult, len(cfg.DomainConfigs))
 
@@ -157,8 +156,6 @@ domainLoop:
 
 func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdateJob, cache *ZoneRecordCache) domainUpdateResult {
 	result := domainUpdateResult{Domain: job.Domain}
-
-	// ── IPv64: IPv4 + IPv6 in einem einzigen HTTP-Request ───────────────────
 	if dc.Provider == ProviderIPv64 {
 		ipv4 := ""
 		ipv6 := ""
@@ -181,7 +178,6 @@ func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdate
 		return result
 	}
 
-	// ── Alle anderen Provider: A und AAAA getrennt ───────────────────────────
 	v4Changed, v6Changed := false, false
 
 	if cfg.IPMode != "IPV6" && job.IPv4 != "" {
