@@ -5,42 +5,44 @@ run:
   tests: true
 
 linters:
+  disable-all: true
   enable:
-    - errcheck
     - govet
-    - ineffassign
     - staticcheck
-    - unused
-    - gocyclo
+    - errcheck
     - revive
-    - goconst
-    - misspell
-    - unconvert
-    - unparam
-    - gosec
-
-formatters:
-  enable:
-    - gofumpt
-    - goimports
-  settings:
-    gofumpt:
-      extra-rules: true
-    # optional: goimports hat settings wie local-prefixes (falls du willst)
+    - gocritic
+    - unused
+    - bodyclose
 
 linters-settings:
-  gocyclo:
-    min-complexity: 15
+  errcheck:
+    exclude-functions:
+      - (net/http.ResponseWriter).Write
+      - (*encoding/json.Encoder).Encode
+      - fmt.Fprint
+      - fmt.Fprintf
+      - fmt.Fprintln
+      
   revive:
+    ignore-generated-header: true
     severity: warning
-  goconst:
-    min-len: 3
-    min-occurrences: 3
-  gosec:
-    excludes:
-      - G104
+    rules:
+      - name: var-naming
+      - name: early-return
+      - name: indent-error-flow
+      - name: package-comments
+      - name: blank-imports
+      - name: error-return
+      - name: if-return
+
+  gocritic:
+    enabled-checks:
+      - ifElseChain
+      - appendCombine
+      - badCond
+      - commentFormatting
 
 issues:
-  exclude-rules:
-    - linters: [errcheck]
-      text: "error return value not checked"
+  max-issues-per-linter: 0
+  max-same-issues: 0
