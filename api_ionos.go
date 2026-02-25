@@ -292,7 +292,7 @@ func updateDNS(
 		debugLog("DNS-LOGIC", fqdn,
 			fmt.Sprintf("✅ %s: %s = %s",
 				T.RecordCurrent, recordType, newIP))
-		log(LogContext{Level: LogInfo, Action: ActionCurrent, Message: fmt.Sprintf("%s %-4s: %s %s", fqdn, recordType, newIP, T.Current)})
+		log(LogContext{Level: LogInfo, Action: ActionCurrent, Domain: fqdn, Message: fmt.Sprintf("%-4s %s %s", recordType, newIP, T.Current)})
 		return false, nil
 	}
 
