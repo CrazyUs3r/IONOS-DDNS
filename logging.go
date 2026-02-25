@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-  "path/filepath"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -183,23 +183,18 @@ func startLogWriter() {
 		var file *os.File
 		var writer *bufio.Writer
 
-		// Interne Funktion, die NUR aufgerufen wird, wenn wir wirklich schreiben wollen
 		ensureOpen := func() error {
 			if writer != nil && file != nil {
 				return nil // Alles okay
 			}
-
-			// Verzeichnis sicherheitshalber nochmal prüfen
 			dir := filepath.Dir(logPath)
 			if _, err := os.Stat(dir); os.IsNotExist(err) {
 				os.MkdirAll(dir, 0755)
 			}
-
 			f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			if err != nil {
 				return err
 			}
-
 			file = f
 			writer = bufio.NewWriterSize(file, 64*1024)
 			return nil
@@ -223,8 +218,6 @@ func startLogWriter() {
 				}
 
 				logMutex.Lock()
-				
-				// Erst hier versuchen wir die Datei zu öffnen!
 				if err := ensureOpen(); err != nil {
 					fmt.Fprintf(os.Stderr, "[ERROR] Cannot open log file %s: %v\n", logPath, err)
 					logMutex.Unlock()
@@ -236,12 +229,9 @@ func startLogWriter() {
 					logMutex.Unlock()
 					continue
 				}
-
-				// Jetzt ist writer garantiert nicht mehr nil
 				_, err = writer.Write(append(data, '\n'))
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "[ERROR] Write failed: %v\n", err)
-					// Bei Fehler zurücksetzen, damit ensureOpen beim nächsten Mal neu öffnet
 					writer = nil
 					file.Close()
 					file = nil
