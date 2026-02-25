@@ -501,7 +501,7 @@ func updateIPv64DNS(
 			}
 		}
 		if alreadyCurrent {
-			log(LogContext{Level: LogInfo, Action: ActionCurrent, Message: fmt.Sprintf("%s %-1s: %s %s", fqdn, "A", ipv4, T.Current)})
+			log(LogContext{Level: LogInfo, Action: ActionCurrent, Domain: fqdn, Message: fmt.Sprintf("%-1s %s %s", "A", ipv4, T.Current)})
 		} else {
 			needV4 = true
 			if len(ownV4) > 0 {
@@ -523,7 +523,7 @@ func updateIPv64DNS(
 			}
 		}
 		if alreadyCurrent {
-			log(LogContext{Level: LogInfo, Action: ActionCurrent, Message: fmt.Sprintf("%s %-4s:  %s %s", fqdn, "AAAA", ipv6, T.Current)})
+			log(LogContext{Level: LogInfo, Action: ActionCurrent, Domain: fqdn, Message: fmt.Sprintf("%-4s %s %s", "AAAA", ipv6, T.Current)})
 		} else {
 			needV6 = true
 			if len(ownV6) > 0 {
