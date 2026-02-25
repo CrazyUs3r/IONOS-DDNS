@@ -185,16 +185,19 @@ func startLogWriter() {
 
 		ensureOpen := func() error {
 			if writer != nil && file != nil {
-				return nil // Alles okay
+				return nil
 			}
+
 			dir := filepath.Dir(logPath)
-			if _, err := os.Stat(dir); os.IsNotExist(err) {
-				os.MkdirAll(dir, 0755)
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				return err
 			}
+
 			f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			if err != nil {
 				return err
 			}
+
 			file = f
 			writer = bufio.NewWriterSize(file, 64*1024)
 			return nil
@@ -211,8 +214,8 @@ func startLogWriter() {
 			case entry, ok := <-logWriteQueue:
 				if !ok {
 					if writer != nil {
-						writer.Flush()
-						file.Close()
+						_ = writer.Flush()
+						_ = file.Close()
 					}
 					return
 				}
@@ -229,16 +232,17 @@ func startLogWriter() {
 					logMutex.Unlock()
 					continue
 				}
+
 				_, err = writer.Write(append(data, '\n'))
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "[ERROR] Write failed: %v\n", err)
+					_ = file.Close()
 					writer = nil
-					file.Close()
 					file = nil
 				} else {
 					batchCount++
 					if entry.Level == "ERR" || entry.Level == "WARN" || batchCount >= maxBatchSize {
-						writer.Flush()
+						_ = writer.Flush()
 						batchCount = 0
 					}
 				}
@@ -247,7 +251,7 @@ func startLogWriter() {
 			case <-flushTicker.C:
 				logMutex.Lock()
 				if writer != nil && batchCount > 0 {
-					writer.Flush()
+					_ = writer.Flush()
 					batchCount = 0
 				}
 				logMutex.Unlock()
@@ -255,8 +259,8 @@ func startLogWriter() {
 			case <-shutdownCtx.Done():
 				logMutex.Lock()
 				if writer != nil {
-					writer.Flush()
-					file.Close()
+					_ = writer.Flush()
+					_ = file.Close()
 				}
 				logMutex.Unlock()
 				return
