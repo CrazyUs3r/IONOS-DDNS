@@ -219,7 +219,6 @@ func loadRecordsWithCache(ctx context.Context, zonesByProvider map[string][]Zone
 // CACHE ZU DISK SPEICHERN
 // ============================================================================
 func saveCachesToDisk(zonesByProvider map[string][]Zone, cache *ZoneRecordCache) {
-	// Beide Timestamps mit demselben Mutex lesen der sie auch schreibt (zoneCacheMutex)
 	zoneCacheMutex.RLock()
 	zoneLoadTs := lastZoneLoad
 	recordLoadTs := lastRecordLoad
@@ -266,7 +265,6 @@ func saveCachesToDisk(zonesByProvider map[string][]Zone, cache *ZoneRecordCache)
 		}
 	}
 
-	// lastDiskPersist nur aktualisieren wenn tatsaechlich erfolgreich gespeichert
 	if savedZone || savedRecord {
 		diskPersistMutex.Lock()
 		if savedZone {

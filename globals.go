@@ -548,6 +548,20 @@ type APIMetrics struct {
 	LatencySamples       [1000]int64
 	LatencySampleIdx     int
 	LatencySampleCount   int
+	// Taegliche HTTP-Methoden Zaehler (Reset um Mitternacht)
+	DailyGET             int64
+	DailyPOST            int64
+	DailyPUT             int64
+	DailyDELETE          int64
+	DailyReset           time.Time
+	// IP-Check Latenz (getrennt von API-Latenz)
+	IPLatencySum         time.Duration
+	IPLatencyCount       int64
+	IPLatencyAvg         time.Duration
+	IPLatencySamples     [200]int64
+	IPLatencySampleIdx   int
+	IPLatencySampleCount int
+	LastIPCheckTime      time.Time
 }
 
 type SafeErrorMsg struct {

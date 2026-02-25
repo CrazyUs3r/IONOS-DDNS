@@ -175,7 +175,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 
 		if err != nil {
 			debugLog("HTTP", "", fmt.Sprintf("❌ %s: %v | %s: %v", T.NetworkError, err, T.AvgLatency, duration))
-			apiMetrics.RecordError(0, err, duration)
+			apiMetrics.RecordError(method, 0, err, duration)
 			lastErr = fmt.Errorf("network error: %w", err)
 
 			wait := calculateRetryDelay(attempt, true)
@@ -194,7 +194,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 		}
 
 		if readErr != nil {
-			apiMetrics.RecordError(res.StatusCode, readErr, duration)
+			apiMetrics.RecordError(method, res.StatusCode, readErr, duration)
 			lastErr = fmt.Errorf("failed to read response: %w", readErr)
 
 			serverBusy := res.StatusCode == 429 || res.StatusCode >= 500
@@ -209,7 +209,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 
 		if res.StatusCode == http.StatusTooManyRequests {
 			apiErr := classifyCloudflareAPIError(res.StatusCode, method, fullURL, respBody, nil, res.Header)
-			apiMetrics.RecordError(res.StatusCode, apiErr, duration)
+			apiMetrics.RecordError(method, res.StatusCode, apiErr, duration)
 			lastErr = apiErr
 
 			wait := apiErr.RetryAfter
@@ -244,7 +244,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 					Retryable:  res.StatusCode >= 500,
 				}
 			}
-			apiMetrics.RecordError(res.StatusCode, apiErr, duration)
+			apiMetrics.RecordError(method, res.StatusCode, apiErr, duration)
 			lastErr = apiErr
 
 			if res.StatusCode == 401 || res.StatusCode == 403 {
@@ -267,7 +267,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 		if !cfResp.Success {
 			apiErr := classifyCloudflareAPIError(res.StatusCode, method, fullURL, respBody, &cfResp, res.Header)
 
-			apiMetrics.RecordError(res.StatusCode, apiErr, duration)
+			apiMetrics.RecordError(method, res.StatusCode, apiErr, duration)
 			lastErr = apiErr
 
 			if attempt >= cfg.MaxAPIRetries-1 || !apiErr.IsRetryable() {
@@ -287,7 +287,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 			}
 		}
 
-		apiMetrics.RecordSuccess(duration)
+		apiMetrics.RecordSuccess(method, duration)
 		return respBody, nil
 	}
 
@@ -394,8 +394,7 @@ func updateCloudflareDNS(ctx context.Context, dc *DomainConfig, fqdn, recordType
 	if existing != nil && existing.Content == newIP {
 		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("✅ %s: %s = %s",
 			T.RecordCurrent, recordType, newIP))
-		writeLog("CURRENT", ActionCurrent, fqdn,
-			fmt.Sprintf("%-4s %s %s", recordType, newIP, T.Current))
+		log(LogContext{Level: LogInfo, Action: ActionCurrent, Message: fmt.Sprintf("%s %-4s:  %s %s", fqdn, recordType, newIP, T.Current)})
 		return false, nil
 	}
 

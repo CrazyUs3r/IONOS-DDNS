@@ -171,7 +171,7 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 
 		if err != nil {
 			debugLog("HTTP", "", fmt.Sprintf("❌ %s: %v | %s: %v", T.NetworkError, err, T.AvgLatency, duration))
-			apiMetrics.RecordError(0, err, duration)
+			apiMetrics.RecordError(method, 0, err, duration)
 			lastErr = fmt.Errorf("network error: %w", err)
 
 			wait := calculateRetryDelay(attempt, false)
@@ -193,7 +193,7 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 		}
 
 		if err != nil {
-			apiMetrics.RecordError(res.StatusCode, err, duration)
+			apiMetrics.RecordError(method, res.StatusCode, err, duration)
 			debugLog("HTTP", "", fmt.Sprintf("❌ %s: %v", T.BodyReadError, err))
 			lastErr = fmt.Errorf("failed to read response body: %w", err)
 
@@ -207,7 +207,7 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 		}
 
 		if res.StatusCode >= 200 && res.StatusCode < 300 {
-			apiMetrics.RecordSuccess(duration)
+			apiMetrics.RecordSuccess(method, duration)
 
 			if errVal := lastErrorMsg.Get(); errVal != "" {
 				lastErrorMsg.Set("")
@@ -217,7 +217,7 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 		}
 
 		apiErr := classifyAPIError(res.StatusCode, method, url, string(respBody))
-		apiMetrics.RecordError(res.StatusCode, apiErr, duration)
+		apiMetrics.RecordError(method, res.StatusCode, apiErr, duration)
 
 		if res.StatusCode == 401 || res.StatusCode == 403 {
 			log(LogContext{
@@ -292,8 +292,7 @@ func updateDNS(
 		debugLog("DNS-LOGIC", fqdn,
 			fmt.Sprintf("✅ %s: %s = %s",
 				T.RecordCurrent, recordType, newIP))
-		writeLog("CURRENT", ActionCurrent, fqdn,
-			fmt.Sprintf("%-4s %s %s", recordType, newIP, T.Current))
+		log(LogContext{Level: LogInfo, Action: ActionCurrent, Message: fmt.Sprintf("%s %-4s: %s %s", fqdn, recordType, newIP, T.Current)})
 		return false, nil
 	}
 

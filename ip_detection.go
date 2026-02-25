@@ -76,6 +76,8 @@ func getPublicIP(url string, want IPVersion) (string, error) {
 	debugLog("IP-CHECK", "", fmt.Sprintf("✅ %s: %s | %s: %v", T.ReceivedIP, ipStr, T.AvgLatency, duration))
 	ipLog(fmt.Sprintf("✅ Öffentliche IP (%v) erkannt via %s: %s | %s: %v", want, url, ipStr, T.AvgLatency, duration))
 
+	apiMetrics.RecordIPLatency(duration)
+
 	return ipStr, nil
 }
 

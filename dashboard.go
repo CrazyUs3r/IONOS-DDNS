@@ -392,7 +392,7 @@ func toDur24(v any) ([24]time.Duration, bool) {
 // ============================================================================
 // METRICS
 // ============================================================================
-func (m *APIMetrics) RecordSuccess(duration time.Duration) {
+func (m *APIMetrics) RecordSuccess(method string, duration time.Duration) {
 	m.Lock()
 	now := time.Now().Local()
 	m.TotalRequests++
@@ -408,13 +408,15 @@ func (m *APIMetrics) RecordSuccess(duration time.Duration) {
 		m.updateLatency(duration, hour)
 	}
 
+	m.incrementDailyMethod(method, now)
+
 	statsCopy := m.getStatsUnsafe()
 	m.Unlock()
 
 	setLatestMetrics(statsCopy)
 }
 
-func (m *APIMetrics) RecordError(statusCode int, err error, duration time.Duration) {
+func (m *APIMetrics) RecordError(method string, statusCode int, err error, duration time.Duration) {
 	m.Lock()
 	now := time.Now().Local()
 	m.TotalRequests++
@@ -446,6 +448,8 @@ func (m *APIMetrics) RecordError(statusCode int, err error, duration time.Durati
 		m.ClientErrors++
 	}
 
+	m.incrementDailyMethod(method, now)
+
 	statsCopy := m.getStatsUnsafe()
 	m.Unlock()
 
@@ -470,6 +474,41 @@ func (m *APIMetrics) updateLatency(duration time.Duration, hour int) {
 	m.LatencySampleIdx = (m.LatencySampleIdx + 1) % len(m.LatencySamples)
 	if m.LatencySampleCount < len(m.LatencySamples) {
 		m.LatencySampleCount++
+	}
+}
+
+func (m *APIMetrics) incrementDailyMethod(method string, now time.Time) {
+	if !m.DailyReset.IsZero() && now.Day() != m.DailyReset.Day() {
+		m.DailyGET = 0
+		m.DailyPOST = 0
+		m.DailyPUT = 0
+		m.DailyDELETE = 0
+	}
+	m.DailyReset = now
+	switch method {
+	case "GET":
+		m.DailyGET++
+	case "POST":
+		m.DailyPOST++
+	case "PUT":
+		m.DailyPUT++
+	case "DELETE":
+		m.DailyDELETE++
+	}
+}
+
+func (m *APIMetrics) RecordIPLatency(duration time.Duration) {
+	m.Lock()
+	defer m.Unlock()
+	m.IPLatencySum += duration
+	m.IPLatencyCount++
+	m.IPLatencyAvg = (m.IPLatencySum / time.Duration(m.IPLatencyCount)).Round(time.Millisecond)
+	m.LastIPCheckTime = time.Now().Local()
+	ms := duration.Milliseconds()
+	m.IPLatencySamples[m.IPLatencySampleIdx] = ms
+	m.IPLatencySampleIdx = (m.IPLatencySampleIdx + 1) % len(m.IPLatencySamples)
+	if m.IPLatencySampleCount < len(m.IPLatencySamples) {
+		m.IPLatencySampleCount++
 	}
 }
 
@@ -592,6 +631,15 @@ func (m *APIMetrics) getStatsUnsafe() map[string]interface{} {
 		lastErrorAge = time.Since(m.LastErrorTimestamp).Seconds()
 	}
 
+	ipAvg := "-"
+	if m.IPLatencyCount > 0 {
+		ipAvg = m.IPLatencyAvg.String()
+	}
+	lastIPCheck := "-"
+	if !m.LastIPCheckTime.IsZero() {
+		lastIPCheck = m.LastIPCheckTime.Format("15:04:05")
+	}
+
 	return map[string]interface{}{
 		"total_requests":        m.TotalRequests,
 		"success_rate":          fmt.Sprintf("%.2f%%", successRate),
@@ -610,6 +658,13 @@ func (m *APIMetrics) getStatsUnsafe() map[string]interface{} {
 		"hourly_stats":          chronologicalStats,
 		"hourly_latency":        chronologicalLatency,
 		"hourly_limit":          cfg.HourlyRateLimit,
+		"daily_get":             m.DailyGET,
+		"daily_post":            m.DailyPOST,
+		"daily_put":             m.DailyPUT,
+		"daily_delete":          m.DailyDELETE,
+		"ip_latency_avg":        ipAvg,
+		"ip_latency_count":      m.IPLatencyCount,
+		"last_ip_check":         lastIPCheck,
 	}
 }
 
@@ -1605,6 +1660,37 @@ func createMux() *http.ServeMux {
 						`+T.UsageLast60Min+`
 					</div>
 				</div>
+				<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px;">
+					<div style="padding:12px 14px; background:rgba(56,189,248,0.08); border:1px solid rgba(56,189,248,0.2); border-radius:8px;">
+						<div style="font-size:0.68rem; color:#94a3b8; letter-spacing:0.06em; margin-bottom:8px; font-weight:600; text-transform:uppercase;">Heute &middot; HTTP-Methoden</div>
+						<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+							<div style="display:flex; justify-content:space-between; padding:4px 8px; background:rgba(74,222,128,0.08); border-radius:5px;">
+								<span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">GET</span>
+								<span id="mDailyGET" style="font-size:0.95rem; font-weight:700; color:#4ade80; font-family:monospace;">%v</span>
+							</div>
+							<div style="display:flex; justify-content:space-between; padding:4px 8px; background:rgba(96,165,250,0.08); border-radius:5px;">
+								<span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">POST</span>
+								<span id="mDailyPOST" style="font-size:0.95rem; font-weight:700; color:#60a5fa; font-family:monospace;">%v</span>
+							</div>
+							<div style="display:flex; justify-content:space-between; padding:4px 8px; background:rgba(250,204,21,0.08); border-radius:5px;">
+								<span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">PUT</span>
+								<span id="mDailyPUT" style="font-size:0.95rem; font-weight:700; color:#facc15; font-family:monospace;">%v</span>
+							</div>
+							<div style="display:flex; justify-content:space-between; padding:4px 8px; background:rgba(248,113,113,0.08); border-radius:5px;">
+								<span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">DEL</span>
+								<span id="mDailyDELETE" style="font-size:0.95rem; font-weight:700; color:#f87171; font-family:monospace;">%v</span>
+							</div>
+						</div>
+					</div>
+					<div style="padding:12px 14px; background:rgba(167,139,250,0.08); border:1px solid rgba(167,139,250,0.2); border-radius:8px;">
+						<div style="font-size:0.68rem; color:#94a3b8; letter-spacing:0.06em; margin-bottom:8px; font-weight:600; text-transform:uppercase;">IP-Check Latenz</div>
+						<div style="text-align:center; padding:4px 0;">
+							<div id="mIPLatency" style="font-size:1.4rem; font-weight:700; color:#a78bfa; font-family:monospace;">%v</div>
+							<div style="font-size:0.65rem; color:#64748b; margin-top:4px;">&#216; aus <span id="mIPCount">%v</span> Checks</div>
+							<div style="font-size:0.65rem; color:#64748b; margin-top:2px;">Letzter: <span id="mLastIPCheck">%v</span></div>
+						</div>
+					</div>
+				</div>
             </div>
 		</details>
 		
@@ -1625,6 +1711,13 @@ func createMux() *http.ServeMux {
 			stats["hourly_limit"],
 			stats["usage_percent"],
 			stats["usage_color"],
+			stats["daily_get"],
+			stats["daily_post"],
+			stats["daily_put"],
+			stats["daily_delete"],
+			stats["ip_latency_avg"],
+			stats["ip_latency_count"],
+			stats["last_ip_check"],
 			chartSVG,
 			latencySVG)
 
@@ -2166,6 +2259,22 @@ func createMux() *http.ServeMux {
 			bar.style.width = String(isFinite(p) ? p : 0) + "%";
 			if (m.usage_color) bar.style.background = m.usage_color;
 		}
+
+		const elGet = document.getElementById('mDailyGET');
+		if (elGet && m.daily_get != null) elGet.textContent = m.daily_get;
+		const elPost = document.getElementById('mDailyPOST');
+		if (elPost && m.daily_post != null) elPost.textContent = m.daily_post;
+		const elPut = document.getElementById('mDailyPUT');
+		if (elPut && m.daily_put != null) elPut.textContent = m.daily_put;
+		const elDel = document.getElementById('mDailyDELETE');
+		if (elDel && m.daily_delete != null) elDel.textContent = m.daily_delete;
+
+		const elIPLat = document.getElementById('mIPLatency');
+		if (elIPLat && m.ip_latency_avg != null) elIPLat.textContent = m.ip_latency_avg;
+		const elIPCount = document.getElementById('mIPCount');
+		if (elIPCount && m.ip_latency_count != null) elIPCount.textContent = m.ip_latency_count;
+		const elLastIP = document.getElementById('mLastIPCheck');
+		if (elLastIP && m.last_ip_check != null) elLastIP.textContent = m.last_ip_check;
 	}
 
 	function resetMetrics() {

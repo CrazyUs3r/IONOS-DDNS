@@ -151,29 +151,6 @@ func levelToString(level LogLevel) string {
 	}
 }
 
-func writeLog(level, action, domain, msg string) {
-	var logLevel LogLevel
-	switch level {
-	case "DBG":
-		logLevel = LogDebug
-	case "WARN":
-		logLevel = LogWarn
-	case "ERR":
-		logLevel = LogError
-	case "CURRENT":
-		logLevel = LogInfo
-	default:
-		logLevel = LogInfo
-	}
-
-	log(LogContext{
-		Level:   logLevel,
-		Action:  action,
-		Domain:  domain,
-		Message: msg,
-	})
-}
-
 func debugLog(category, domain, msg string) {
 	log(LogContext{
 		Level:    LogDebug,

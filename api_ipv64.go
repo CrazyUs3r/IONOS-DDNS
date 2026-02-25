@@ -109,7 +109,7 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 
 		if err != nil {
 			debugLog("HTTP", "", fmt.Sprintf("❌ %s: %v", T.NetworkError, err))
-			apiMetrics.RecordError(0, err, duration)
+			apiMetrics.RecordError(method, 0, err, duration)
 			lastErr = fmt.Errorf("network error: %w", err)
 
 			wait := calculateRetryDelay(attempt, false)
@@ -128,13 +128,13 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 		}
 
 		if readErr != nil {
-			apiMetrics.RecordError(res.StatusCode, readErr, duration)
+			apiMetrics.RecordError(method, res.StatusCode, readErr, duration)
 			lastErr = fmt.Errorf("failed to read response: %w", readErr)
 			continue
 		}
 
 		if res.StatusCode == 429 {
-			apiMetrics.RecordError(res.StatusCode, fmt.Errorf("rate limit exceeded"), duration)
+			apiMetrics.RecordError(method, res.StatusCode, fmt.Errorf("rate limit exceeded"), duration)
 			retryAfter := res.Header.Get("Retry-After")
 			var waitDuration time.Duration
 
@@ -170,7 +170,7 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 		}
 
 		if apiErr := classifyAPIError(res.StatusCode, method, apiURL, string(respBody)); apiErr != nil {
-			apiMetrics.RecordError(res.StatusCode, apiErr, duration)
+			apiMetrics.RecordError(method, res.StatusCode, apiErr, duration)
 
 			if apiErr.Retryable && attempt < cfg.MaxAPIRetries-1 {
 				wait := calculateRetryDelay(attempt, res.StatusCode >= 500)
@@ -189,7 +189,7 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 
 		var ipv64Resp IPv64Response
 		if err := json.Unmarshal(respBody, &ipv64Resp); err != nil {
-			apiMetrics.RecordError(res.StatusCode, err, duration)
+			apiMetrics.RecordError(method, res.StatusCode, err, duration)
 			if len(respBody) > 0 && respBody[0] == '<' {
 				preview := string(respBody)
 				if len(preview) > 200 {
@@ -213,11 +213,11 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 				Action:  ActionAPI,
 				Message: "IPv64 API Error: " + ipv64Resp.Info,
 			})
-			apiMetrics.RecordError(res.StatusCode, apiErr, duration)
+			apiMetrics.RecordError(method, res.StatusCode, apiErr, duration)
 			return nil, apiErr
 		}
 
-		apiMetrics.RecordSuccess(duration)
+		apiMetrics.RecordSuccess(method, duration)
 		return respBody, nil
 	}
 
@@ -501,7 +501,7 @@ func updateIPv64DNS(
 			}
 		}
 		if alreadyCurrent {
-			writeLog("CURRENT", ActionCurrent, fqdn, fmt.Sprintf("%-4s %s %s", "A", ipv4, T.Current))
+			log(LogContext{Level: LogInfo, Action: ActionCurrent, Message: fmt.Sprintf("%s %-1s: %s %s", fqdn, "A", ipv4, T.Current)})
 		} else {
 			needV4 = true
 			if len(ownV4) > 0 {
@@ -523,7 +523,7 @@ func updateIPv64DNS(
 			}
 		}
 		if alreadyCurrent {
-			writeLog("CURRENT", ActionCurrent, fqdn, fmt.Sprintf("%-4s %s %s", "AAAA", ipv6, T.Current))
+			log(LogContext{Level: LogInfo, Action: ActionCurrent, Message: fmt.Sprintf("%s %-4s:  %s %s", fqdn, "AAAA", ipv6, T.Current)})
 		} else {
 			needV6 = true
 			if len(ownV6) > 0 {
@@ -593,7 +593,7 @@ func updateIPv64DNS(
 	duration := time.Since(start)
 
 	if err != nil {
-		apiMetrics.RecordError(0, err, duration)
+		apiMetrics.RecordError("GET", 0, err, duration)
 		return false, err
 	}
 	defer func() {
@@ -604,7 +604,7 @@ func updateIPv64DNS(
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		apiMetrics.RecordError(res.StatusCode, err, duration)
+		apiMetrics.RecordError("GET", res.StatusCode, err, duration)
 		return false, fmt.Errorf("failed to read ipv64 response: %w", err)
 	}
 	resp := strings.ToLower(strings.TrimSpace(string(body)))
@@ -617,7 +617,7 @@ func updateIPv64DNS(
 		return false, fmt.Errorf("ipv64 update failed: %s", resp)
 	}
 
-	apiMetrics.RecordSuccess(duration)
+	apiMetrics.RecordSuccess("GET", duration)
 
 	updateIPv64Cache(baseDomain, praefix, ipv4, ipv6, needV4, needV6)
 
