@@ -87,10 +87,10 @@ func formatGotifyMessage(msg NotifyMessage) (title, body string) {
 
 	var sb strings.Builder
 	if msg.Domain != "" {
-		sb.WriteString(fmt.Sprintf("Domain: %s\n", msg.Domain))
+		fmt.Fprintf(&sb, "Domain: %s\n", msg.Domain)
 	}
 	sb.WriteString(msg.Message)
-	sb.WriteString(fmt.Sprintf("\n%s", time.Now().Local().Format("02.01.2006 15:04:05")))
+	fmt.Fprintf(&sb, "\n%s", time.Now().Local().Format("02.01.2006 15:04:05"))
 
 	return title, sb.String()
 }
