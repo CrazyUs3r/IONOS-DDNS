@@ -13,6 +13,10 @@ import (
 func runUpdate(firstRun bool) {
 	activeUpdates.Add(1)
 	defer activeUpdates.Add(-1)
+
+	// Manueller Trigger vom Dashboard: Cache-TTL ignorieren, frisch von API laden
+	forced := firstRun || forceNextUpdate.Swap(false)
+
 	debugLog("SCHEDULER", "", fmt.Sprintf(T.SchedulerStarted, firstRun))
 
 	baseTimeout := BaseUpdateTimeout
@@ -43,7 +47,7 @@ func runUpdate(firstRun bool) {
 	}
 	currentIPv4, currentIPv6 := ips.v4, ips.v6
 
-	zonesByProvider, err := loadZonesWithCache(ctx, firstRun)
+	zonesByProvider, err := loadZonesWithCache(ctx, forced)
 	if err != nil {
 		lastOk.Store(false)
 		log(LogContext{
@@ -55,7 +59,7 @@ func runUpdate(firstRun bool) {
 		return
 	}
 
-	cache, err := loadRecordsWithCache(ctx, zonesByProvider, firstRun)
+	cache, err := loadRecordsWithCache(ctx, zonesByProvider, forced)
 	if err != nil {
 		lastOk.Store(false)
 		debugLog("CACHE", "", fmt.Sprintf("❌ Konnte Record-Cache nicht laden: %v", err))
@@ -64,7 +68,7 @@ func runUpdate(firstRun bool) {
 
 	for i := range cfg.DomainConfigs {
 		if cfg.DomainConfigs[i].Provider == ProviderIPv64 {
-			if err := ensureIPv64DomainsFresh(ctx, &cfg.DomainConfigs[i], firstRun); err != nil {
+			if err := ensureIPv64DomainsFresh(ctx, &cfg.DomainConfigs[i], forced); err != nil {
 				debugLog("CACHE", "", fmt.Sprintf("IPv64 Cache-Fehler: %v", err))
 			}
 			break

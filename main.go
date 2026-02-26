@@ -212,6 +212,10 @@ func run() int {
 
 	logPath = filepath.Join(logsDir, "dyndns.json")
 	updatePath = filepath.Join(logsDir, "update.json")
+
+	shutdownCtx, shutdownCancel = context.WithCancel(context.Background())
+	defer shutdownCancel()
+
 	startMetricsAutosave(60 * time.Second)
 	startLogWriter()
 
@@ -239,9 +243,6 @@ func run() int {
 		Action:  ActionStart,
 		Message: fmt.Sprintf("🚀 %s (Providers: %s)", T.Startup, strings.Join(providerNames, ", ")),
 	})
-
-	shutdownCtx, shutdownCancel = context.WithCancel(context.Background())
-	defer shutdownCancel()
 
 	globalTriggerLimiter = NewRateLimiter(10, 1.0/6.0)
 	ipTriggerLimiter = NewIPRateLimiter(5, 0.1)

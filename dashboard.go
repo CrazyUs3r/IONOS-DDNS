@@ -1083,8 +1083,9 @@ func createMux() *http.ServeMux {
 
 		go func() {
 			defer updateInProgress.Store(false)
-			debugLog("API", clientIP, "Manual update triggered")
-			broadcastNotification("🔄 Manuelles Update gestartet", "info")
+			debugLog("API", clientIP, "Manual update triggered (force cache refresh)")
+			broadcastNotification("🔄 Manuelles Update gestartet (Cache wird neu geladen)", "info")
+			forceNextUpdate.Store(true)
 			runUpdate(false)
 		}()
 

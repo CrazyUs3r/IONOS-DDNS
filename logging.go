@@ -132,6 +132,12 @@ func persistLog(ctx LogContext) {
 	case logWriteQueue <- entry:
 	default:
 		fmt.Fprintf(os.Stderr, "[WARN] Log queue full, dropped: %s\n", entry.Message)
+		// Queue voll: direkt notifizieren da der LogWriter haengt
+		go notify(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: "Log queue full, entry dropped: " + entry.Message,
+		})
 	}
 
 	notify(ctx)
@@ -166,6 +172,15 @@ func ipLog(msg string) {
 		Level:    LogInfo,
 		Category: "IP-CHECK",
 		Message:  msg,
+	})
+}
+
+func notifyError(msg string) {
+	fmt.Fprintf(os.Stderr, "[WARN] %s\n", msg)
+	go notify(LogContext{
+		Level:   LogError,
+		Action:  ActionError,
+		Message: msg,
 	})
 }
 
@@ -274,6 +289,11 @@ func startLogRotationWorker() {
 		defer func() {
 			if r := recover(); r != nil {
 				fmt.Fprintf(os.Stderr, "[WARN] Rotation worker panic: %v\n", r)
+				go notify(LogContext{
+					Level:   LogError,
+					Action:  ActionError,
+					Message: fmt.Sprintf("Log rotation worker panic: %v", r),
+				})
 			}
 		}()
 
@@ -299,7 +319,7 @@ func doLogRotation(path string, maxLines int) {
 	file, err := os.Open(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "[WARN] %s: %v\n", T.LogRotationError, err)
+			notifyError(fmt.Sprintf("%s: %v", T.LogRotationError, err))
 		}
 		return
 	}
@@ -312,7 +332,7 @@ func doLogRotation(path string, maxLines int) {
 		lines = append(lines, scanner.Text())
 	}
 	if err := scanner.Err(); err != nil {
-		fmt.Fprintf(os.Stderr, "[WARN] Rotation scanner error: %v\n", err)
+		notifyError(fmt.Sprintf("Rotation scanner error: %v", err))
 	}
 	if closeErr := file.Close(); closeErr != nil {
 		fmt.Fprintf(os.Stderr, "[WARN] Failed to close file: %v\n", closeErr)
@@ -328,12 +348,12 @@ func doLogRotation(path string, maxLines int) {
 
 	tmpPath := path + ".tmp." + strconv.FormatInt(time.Now().Local().UnixNano(), 10)
 	if err := os.WriteFile(tmpPath, []byte(output), 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "[WARN] %s: %v\n", T.LogRotationError, err)
+		notifyError(fmt.Sprintf("%s: %v", T.LogRotationError, err))
 		return
 	}
 
 	if err := os.Rename(tmpPath, path); err != nil {
-		fmt.Fprintf(os.Stderr, "[WARN] %s: %v\n", T.LogRotationError, err)
+		notifyError(fmt.Sprintf("%s (rename): %v", T.LogRotationError, err))
 		_ = os.Remove(tmpPath)
 		return
 	}
