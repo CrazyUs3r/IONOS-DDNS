@@ -132,7 +132,6 @@ func persistLog(ctx LogContext) {
 	case logWriteQueue <- entry:
 	default:
 		fmt.Fprintf(os.Stderr, "[WARN] Log queue full, dropped: %s\n", entry.Message)
-		// Queue voll: direkt notifizieren da der LogWriter haengt
 		go notify(LogContext{
 			Level:   LogError,
 			Action:  ActionError,
