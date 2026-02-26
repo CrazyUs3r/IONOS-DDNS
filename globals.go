@@ -58,7 +58,7 @@ var (
 	globalTriggerLimiter *RateLimiter
 	ipTriggerLimiter     *IPRateLimiter
 	updateInProgress     atomic.Bool
-  forceNextUpdate      atomic.Bool
+	forceNextUpdate      atomic.Bool
 
 	lastZoneLoad   time.Time
 	lastRecordLoad time.Time
