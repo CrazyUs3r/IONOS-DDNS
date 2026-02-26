@@ -209,9 +209,9 @@ func generateSVGChart(data [24]int) string {
 	for _, off := range offsets {
 		h := now.Add(-time.Duration(off) * time.Hour).Hour()
 		if off == 0 {
-			labelsBuilder.WriteString(fmt.Sprintf(`<span style="color:#e5e7eb;">%02dh</span>`, h))
+			fmt.Fprintf(&labelsBuilder, `<span style="color:#e5e7eb;">%02dh</span>`, h)
 		} else {
-			labelsBuilder.WriteString(fmt.Sprintf("<span>%02dh</span>", h))
+			fmt.Fprintf(&labelsBuilder, "<span>%02dh</span>", h)
 		}
 	}
 	timeLabels := labelsBuilder.String()
@@ -275,7 +275,7 @@ func generateLatencyChart(data [24]time.Duration) string {
 	for _, off := range offsets {
 		h := now.Add(-time.Duration(off) * time.Hour).Hour()
 		if off == 0 {
-			labelsBuilder.WriteString(fmt.Sprintf(`<span style="color:#e5e7eb;">%02dh</span>`, h))
+			fmt.Fprintf(&labelsBuilder, `<span style="color:#e5e7eb;">%02dh</span>`, h)
 		} else {
 			fmt.Fprintf(&labelsBuilder, "<span>%02dh</span>", h)
 		}
