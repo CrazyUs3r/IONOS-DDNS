@@ -95,15 +95,15 @@ func formatTelegramMessage(msg NotifyMessage) string {
 		icon = "🧹"
 	}
 
-	sb.WriteString(fmt.Sprintf("<b>%s Go-DynDNS</b>\n", icon))
+	fmt.Fprintf(&sb, "<b>%s Go-DynDNS</b>\n", icon)
 
 	if msg.Domain != "" {
-		sb.WriteString(fmt.Sprintf("🌐 <code>%s</code>\n", msg.Domain))
+		fmt.Fprintf(&sb, "🌐 <code>%s</code>\n", msg.Domain)
 	}
 
-	sb.WriteString(fmt.Sprintf("📋 <b>%s</b>\n", msg.Action))
-	sb.WriteString(fmt.Sprintf("💬 %s\n", msg.Message))
-	sb.WriteString(fmt.Sprintf("🕒 <i>%s</i>", time.Now().Local().Format("02.01.2006 15:04:05")))
+	fmt.Fprintf(&sb, "📋 <b>%s</b>\n", msg.Action)
+	fmt.Fprintf(&sb, "💬 %s\n", msg.Message)
+	fmt.Fprintf(&sb, "🕒 <i>%s</i>", time.Now().Local().Format("02.01.2006 15:04:05"))
 
 	return sb.String()
 }
