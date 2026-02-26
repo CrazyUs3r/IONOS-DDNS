@@ -78,8 +78,6 @@ func (t *telegramNotifier) Send(msg NotifyMessage) error {
 }
 
 func formatTelegramMessage(msg NotifyMessage) string {
-	var sb strings.Builder
-
 	icon := levelEmoji(msg.Level)
 
 	switch msg.Action {
@@ -94,7 +92,7 @@ func formatTelegramMessage(msg NotifyMessage) string {
 	case ActionCleanup:
 		icon = "🧹"
 	}
-
+	var sb strings.Builder
 	fmt.Fprintf(&sb, "<b>%s Go-DynDNS</b>\n", icon)
 
 	if msg.Domain != "" {
