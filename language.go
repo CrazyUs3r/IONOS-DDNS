@@ -236,5 +236,10 @@ func setDefaultPhrases() {
 		MaxAPIRetries:            "API Max Retries",
 		MaxConcurrent:            "Max Concurrent",
 		Interval:                 "Interval",
+		DeleteDomainCheck:        "Really remove from status? The domain is no longer in the configuration.",
+		DeleteButton:             "🗑️ Remove",
+		DeleteSuccess:            "removed",
+		DeleteError:              "Error while deleting",
+		ConnectionError:          "Connection error",
 	}
 }

@@ -60,11 +60,11 @@ var (
 	updateInProgress     atomic.Bool
 	forceNextUpdate      atomic.Bool
 
-	lastZoneLoad   time.Time
-	lastRecordLoad time.Time
-	cachedZones    map[string][]Zone
-	cachedRecords  *ZoneRecordCache
-	lastCleanup    time.Time
+	lastZoneLoad          time.Time
+	lastRecordLoad        time.Time
+	cachedZones           map[string][]Zone
+	cachedRecords         *ZoneRecordCache
+	lastCleanup           time.Time
 	zoneCacheMutex        sync.RWMutex
 	lastDiskPersistZone   time.Time
 	lastDiskPersistRecord time.Time
@@ -296,7 +296,8 @@ type Phrases struct {
 	PanicLoadingLanguage, TryingLoadLanguage, LanguageFileNotFound                 string
 	TryingFallbackEn, UsingBuiltinDefaults, JSONParseError, LanguageLoaded         string
 	MissingTranslationKey, HTTPPool, HourlyLimitEst, RequestsLabel, UsageLast60Min string
-	MaxLogLines, MaxAPIRetries, MaxConcurrent, Interval                            string
+	MaxLogLines, MaxAPIRetries, MaxConcurrent, Interval, DeleteDomainCheck         string
+	DeleteButton, DeleteSuccess, DeleteError, ConnectionError                      string
 
 	// Statistiken & Metriken
 	Requests, SuccessRate, LastSuccess, AvgLatency, Errors, HourlyLimit       string
@@ -550,11 +551,11 @@ type APIMetrics struct {
 	LatencySampleIdx     int
 	LatencySampleCount   int
 	// Taegliche HTTP-Methoden Zaehler (Reset um Mitternacht)
-	DailyGET             int64
-	DailyPOST            int64
-	DailyPUT             int64
-	DailyDELETE          int64
-	DailyReset           time.Time
+	DailyGET    int64
+	DailyPOST   int64
+	DailyPUT    int64
+	DailyDELETE int64
+	DailyReset  time.Time
 	// IP-Check Latenz (getrennt von API-Latenz)
 	IPLatencySum         time.Duration
 	IPLatencyCount       int64

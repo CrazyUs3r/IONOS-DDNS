@@ -2405,7 +2405,7 @@ func createMux() *http.ServeMux {
 	}
 
 	function deleteDomain(domain, btn) {
-		if (!confirm('Domain "' + domain + '" wirklich aus dem Status entfernen?\nDie Domain ist nicht mehr in der Konfiguration.')) return;
+		if (!confirm('Domain "' + domain + '" "`+T.DeleteDomainCheck+`"')) return;
 
 		const token = localStorage.getItem('triggerToken') || '';
 		btn.disabled = true;
@@ -2424,17 +2424,17 @@ func createMux() *http.ServeMux {
 					card.style.opacity = '0';
 					setTimeout(() => card.remove(), 400);
 				}
-				showToast('🗑️ ' + domain + ' entfernt', 'success');
+				showToast('🗑️ ' + domain + ' "`+T.DeleteSuccess+`"', 'success');
 			} else {
 				btn.disabled = false;
-				btn.textContent = '🗑️ Entfernen';
-				showToast('❌ ' + (j.error || 'Fehler beim Löschen'), 'error');
+				btn.textContent = '🗑️ "`+T.DeleteButton+`"';
+				showToast('❌ ' + (j.error || '"`+T.DeleteError+`"'), 'error');
 			}
 		})
 		.catch(() => {
 			btn.disabled = false;
-			btn.textContent = '🗑️ Entfernen';
-			showToast('❌ Verbindungsfehler', 'error');
+			btn.textContent = '🗑️ "`+T.DeleteButton+`"';
+			showToast('❌ "`+T.ConnectionError+`"', 'error');
 		});
 	}
 
