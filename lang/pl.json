@@ -130,7 +130,12 @@
   "max_log_lines": "Maksymalna liczba wierszy dziennika",
   "max_api_retries": "Maksymalna liczba ponownych prób API",
   "max_concurrent": "Maksymalna liczba równoczesnych prób",
-  "interval": "Interwał"
+  "interval": "Interwał",
+  "delete_domain_check": "Czy na pewno usunąć ze statusu? Domena nie znajduje się już w konfiguracji.",
+  "delete_button": "🗑️ Usuń",
+  "delete_success": "usunięto",
+  "delete_error": "Błąd podczas usuwania",
+  "connection_error": "Błąd połączenia"
 }
 
 

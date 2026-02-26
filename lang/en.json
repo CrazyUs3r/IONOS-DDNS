@@ -138,5 +138,10 @@
   "max_log_lines": "Log Max Lines",
   "max_api_retries": "API Max Retries",
   "max_concurrent": "Max Concurrent",
-  "interval": "Interval"
+  "interval": "Interval",
+  "delete_domain_check": "Really remove from status? The domain is no longer in the configuration.",
+  "delete_button": "🗑️ Remove",
+  "delete_success": "removed",
+  "delete_error": "Error while deleting",
+  "connection_error": "Connection error"
 }

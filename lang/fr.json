@@ -130,7 +130,12 @@
   "max_log_lines": "Nombre maximal de lignes enregistrées",
   "max_api_retries": "Nombre maximal de tentatives API",
   "max_concurrent": "Nombre maximal de connexions simultanées",
-  "interval": "Intervalle"
+  "interval": "Intervalle",
+  "delete_domain_check": "Voulez-vous vraiment supprimer du statut ? Le domaine n’est plus dans la configuration.",
+  "delete_button": "🗑️ Supprimer",
+  "delete_success": "supprimé",
+  "delete_error": "Erreur lors de la suppression",
+  "connection_error": "Erreur de connexion"
 }
 
 

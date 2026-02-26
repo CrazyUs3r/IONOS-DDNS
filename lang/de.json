@@ -138,7 +138,12 @@
   "max_log_lines": "Maximale Zeilenanzahl protokollieren",
   "max_api_retries": "Maximale API-Wiederholungsversuche",
   "max_concurrent": "Maximale Anzahl gleichzeitiger Anfragen",
-  "interval": "Intervall"
+  "interval": "Intervall",
+  "delete_domain_check": "wirklich aus dem Status entfernen? Die Domain ist nicht mehr in der Konfiguration.",
+  "delete_button":  "🗑️ Entfernen",    
+  "delete_success":  "entfernt",   
+  "delete_error":     "Fehler beim Löschen",  
+  "connection_error":  "Verbindungsfehler" 
 }
 
 
