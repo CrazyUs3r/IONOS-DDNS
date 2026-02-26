@@ -338,52 +338,17 @@ type Phrases struct {
 	InvalidIPMode, UsingDefaultMode                                       string
 
 	// Dashboard UI – Texte
-	DomainSearchPlaceholder string
-	NoMoreEntries           string
-	NotConfigured           string
-	RecentlyChanged         string
-	LastUpdateShort         string
-	LatencyPercentile       string
-	IPCheckLatency          string
-	ChecksLabel             string
-	LastLabel               string
-	TimeLabel               string
-	IPAddresses             string
-	MetricsResetConfirm     string
-	MetricsResetSuccess     string
-	MetricsResetFailed      string
-	UpdateStarting          string
-	RateLimitGlobal         string
-	RateLimitIP             string
-	UpdateInProgress        string
-	InvalidToken            string
-	UpdateStarted           string
-	RemainingLabel          string
-	NoIPToCopy              string
-	Copied                  string
-	CopyFailed              string
-	ExportStarted           string
-	ExportFailed            string
-	EntriesLabel            string
-	DotNoUpdate             string
-	DotJustChanged          string
-	DotLastChanged          string
-	DotActive               string
-	DotOtherUpdated         string
-	BadgeChanged            string
-	MetricsBroadcast        string
-	FilterAll               string
-	FilterErrors            string
-	FilterWarnings          string
-	FilterUpdates           string
-	FilterStarts            string
-	FilterStop              string
-	FilterCreated           string
-	FilterCleanup           string
-	FilterSkip              string
-	DailyLabel              string
-	AvgFromLabel            string
-	LastCheckLabel          string
+	DomainSearchPlaceholder, NoMoreEntries, NotConfigured ,RecentlyChanged string
+	LastUpdateShort, LatencyPercentile, IPCheckLatency, ChecksLabel        string
+	LastLabel, TimeLabel, IPAddresses, MetricsResetConfirm                 string
+	MetricsResetSuccess, MetricsResetFailed, UpdateStarting                string
+	RateLimitGlobal, RateLimitIP, UpdateInProgress, InvalidToken           string
+	UpdateStarted, RemainingLabel, NoIPToCopy, Copied, CopyFailed          string
+	ExportStarted, ExportFailed, EntriesLabel, DotNoUpdate, DotJustChanged string
+	DotLastChanged, DotActive, DotOtherUpdated, BadgeChanged               string
+	MetricsBroadcast, FilterAll, FilterErrors, FilterWarnings              string
+	FilterUpdates, FilterStarts, FilterStop, FilterCreated, FilterCleanup  string
+	FilterSkip, DailyLabel, AvgFromLabel, LastCheckLabel                   string
 }
 
 type LogLevel int
