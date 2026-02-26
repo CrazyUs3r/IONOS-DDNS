@@ -14,7 +14,6 @@ func runUpdate(firstRun bool) {
 	activeUpdates.Add(1)
 	defer activeUpdates.Add(-1)
 
-	// Manueller Trigger vom Dashboard: Cache-TTL ignorieren, frisch von API laden
 	forced := firstRun || forceNextUpdate.Swap(false)
 
 	debugLog("SCHEDULER", "", fmt.Sprintf(T.SchedulerStarted, firstRun))
