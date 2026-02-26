@@ -8,6 +8,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  checks: write   # nötig für github-pr-check
 
 jobs:
   golangci:
@@ -19,9 +20,10 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-          cache: false
+          cache: true
 
-      - name: Run golangci-lint with reviewdog
+      - name: Run golangci-lint with reviewdog (PR)
+        if: github.event_name == 'pull_request'
         uses: reviewdog/action-golangci-lint@v2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -29,5 +31,15 @@ jobs:
           filter_mode: added
           level: warning
           fail_level: none
-          golangci_lint_version: v2.8.0
-          golangci_lint_flags: "--timeout=5m ./..."
+          golangci_lint_flags: "--config=.golangci.yml --timeout=5m ./..."
+
+      - name: Run golangci-lint with reviewdog (push)
+        if: github.event_name == 'push'
+        uses: reviewdog/action-golangci-lint@v2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          reporter: github-pr-check
+          filter_mode: nofilter
+          level: warning
+          fail_level: warning
+          golangci_lint_flags: "--config=.golangci.yml --timeout=5m ./..."
