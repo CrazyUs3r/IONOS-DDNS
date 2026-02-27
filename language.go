@@ -289,7 +289,7 @@ func setDefaultPhrases() {
 		LastCheckLabel:           "Last:",
 		NoDomainsConfigured:      "No domains configured.",
 		DomainContext:            "Domain %d (%s): %s",
-		IonosApiRequired:         "Domain %s (IONOS): API_PREFIX and API_SECRET required.",
+		IonosAPIRequired:         "Domain %s (IONOS): API_PREFIX and API_SECRET required.",
 		Ipv64TokenRequired:       "Domain %s (IPv64): IPv64Token required.",
 		CloudflareAuthRequired:   "Domain %s (Cloudflare): CFToken or CFEmail+CFSecret required.",
 		UnknownProvider:          "Domain %s: Unknown provider %s",

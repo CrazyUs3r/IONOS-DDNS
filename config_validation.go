@@ -23,7 +23,7 @@ func validateDomainConfigs() error {
 		switch dc.Provider {
 		case ProviderIONOS:
 			if dc.APIPrefix == "" || dc.APISecret == "" {
-				return fmt.Errorf(T.IonosApiRequired, dc.FQDN)
+				return fmt.Errorf(T.IonosAPIRequired, dc.FQDN)
 			}
 		case ProviderIPv64:
 			if dc.IPv64Token == "" {

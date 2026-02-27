@@ -349,7 +349,7 @@ type Phrases struct {
 	MetricsBroadcast, FilterAll, FilterErrors, FilterWarnings              string
 	FilterUpdates, FilterStarts, FilterStop, FilterCreated, FilterCleanup  string
 	FilterSkip, DailyLabel, AvgFromLabel, LastCheckLabel                   string
-	NoDomainsConfigured, DomainContext, IonosApiRequired                   string
+	NoDomainsConfigured, DomainContext, IonosAPIRequired                   string
 	Ipv64TokenRequired, CloudflareAuthRequired, UnknownProvider            string
 	ConfigErrorPrefix, DomainIsEmpty, DomainTooLong, InvalidDomainFormat   string
 	LabelTooLong, InvalidLabel                                             string
