@@ -1,4 +1,4 @@
-﻿// Package main
+// Package main
 package main
 
 import (
@@ -336,19 +336,6 @@ type Phrases struct {
 	Mode, NoDNSServer, DNSFailover, HTTPClientInitialized                 string
 	InvalidPort, UsingDefaultPort, IntervalTooSmall, ShortIntervalWarning string
 	InvalidIPMode, UsingDefaultMode                                       string
-
-	// Dashboard UI – Texte
-	DomainSearchPlaceholder, NoMoreEntries, NotConfigured ,RecentlyChanged string
-	LastUpdateShort, LatencyPercentile, IPCheckLatency, ChecksLabel        string
-	LastLabel, TimeLabel, IPAddresses, MetricsResetConfirm                 string
-	MetricsResetSuccess, MetricsResetFailed, UpdateStarting                string
-	RateLimitGlobal, RateLimitIP, UpdateInProgress, InvalidToken           string
-	UpdateStarted, RemainingLabel, NoIPToCopy, Copied, CopyFailed          string
-	ExportStarted, ExportFailed, EntriesLabel, DotNoUpdate, DotJustChanged string
-	DotLastChanged, DotActive, DotOtherUpdated, BadgeChanged               string
-	MetricsBroadcast, FilterAll, FilterErrors, FilterWarnings              string
-	FilterUpdates, FilterStarts, FilterStop, FilterCreated, FilterCleanup  string
-	FilterSkip, DailyLabel, AvgFromLabel, LastCheckLabel                   string
 }
 
 type LogLevel int

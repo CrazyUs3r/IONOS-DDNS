@@ -858,7 +858,7 @@ func handleMetricsReset(w http.ResponseWriter, r *http.Request) {
 	}
 
 	setLatestMetrics(statsCopy)
-	broadcastNotification(T.MetricsBroadcast, "info")
+	broadcastNotification("📊 Metriken wurden zurückgesetzt", "info")
 
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(map[string]string{"status": "reset_success"}); err != nil {
@@ -1001,8 +1001,8 @@ func createMux() *http.ServeMux {
 				_ = os.Rename(tmp, updatePath)
 			}
 		}
-		debugLog("API", getClientIP(r), fmt.Sprintf("🗑️ %s %s: %s", T.DeleteButton, T.DeleteSuccess, domain))
-		broadcastNotification(fmt.Sprintf("🗑️ %s %s", domain, T.DeleteSuccess), "info")
+		debugLog("API", getClientIP(r), fmt.Sprintf("🗑️ Domain aus Status gelöscht: %s", domain))
+		broadcastNotification(fmt.Sprintf("🗑️ %s aus Status entfernt", domain), "info")
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "deleted", "domain": domain})
 	})
@@ -1042,7 +1042,7 @@ func createMux() *http.ServeMux {
 				return
 			}
 			debugLog("API", clientIP, "Trigger blocked: Global rate limit")
-			broadcastNotification("⚠️ "+T.RateLimitGlobal, "warning")
+			broadcastNotification("⚠️ Update Rate Limit erreicht - bitte warten", "warning")
 			return
 		}
 
@@ -1062,7 +1062,7 @@ func createMux() *http.ServeMux {
 				return
 			}
 			debugLog("API", clientIP, "Trigger blocked: IP rate limit")
-			broadcastNotification("⚠️ "+T.RateLimitIP, "warning")
+			broadcastNotification("⚠️ Zu viele Update-Requests - bitte 10s warten", "warning")
 			return
 		}
 
@@ -1624,7 +1624,7 @@ func createMux() *http.ServeMux {
 					<div title="Client Errors (inkl. Netzwerk) / Server Errors"><strong>`+T.Errors+`:</strong> <span id="mErrors">%v / %v</span></div>
 				</div>
 				<div style="margin-top: 14px; padding: 12px 14px; background: rgba(139,92,246,0.08); border: 1px solid rgba(139,92,246,0.2); border-radius: 8px;">
-					<div style="font-size: 0.68rem; color: #94a3b8; letter-spacing: 0.06em; margin-bottom: 8px; font-weight: 600; text-transform: uppercase;">`+T.LatencyPercentile+`</div>
+					<div style="font-size: 0.68rem; color: #94a3b8; letter-spacing: 0.06em; margin-bottom: 8px; font-weight: 600; text-transform: uppercase;">Latenz Percentile</div>
 					<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center;">
 						<div style="padding: 8px; background: rgba(74,222,128,0.08); border-radius: 6px; border: 1px solid rgba(74,222,128,0.2);">
 							<div style="font-size: 0.65rem; color: #94a3b8; margin-bottom: 3px; letter-spacing: 0.05em;">P50</div>
@@ -1663,7 +1663,7 @@ func createMux() *http.ServeMux {
 				</div>
 				<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px;">
 					<div style="padding:12px 14px; background:rgba(56,189,248,0.08); border:1px solid rgba(56,189,248,0.2); border-radius:8px;">
-						<div style="font-size:0.68rem; color:#94a3b8; letter-spacing:0.06em; margin-bottom:8px; font-weight:600; text-transform:uppercase;">`+T.DailyLabel+` &middot; HTTP-Methoden</div>
+						<div style="font-size:0.68rem; color:#94a3b8; letter-spacing:0.06em; margin-bottom:8px; font-weight:600; text-transform:uppercase;">Heute &middot; HTTP-Methoden</div>
 						<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
 							<div style="display:flex; justify-content:space-between; padding:4px 8px; background:rgba(74,222,128,0.08); border-radius:5px;">
 								<span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">GET</span>
@@ -1684,11 +1684,11 @@ func createMux() *http.ServeMux {
 						</div>
 					</div>
 					<div style="padding:12px 14px; background:rgba(167,139,250,0.08); border:1px solid rgba(167,139,250,0.2); border-radius:8px;">
-						<div style="font-size:0.68rem; color:#94a3b8; letter-spacing:0.06em; margin-bottom:8px; font-weight:600; text-transform:uppercase;">`+T.IPCheckLatency+`</div>
+						<div style="font-size:0.68rem; color:#94a3b8; letter-spacing:0.06em; margin-bottom:8px; font-weight:600; text-transform:uppercase;">IP-Check Latenz</div>
 						<div style="text-align:center; padding:4px 0;">
 							<div id="mIPLatency" style="font-size:1.4rem; font-weight:700; color:#a78bfa; font-family:monospace;">%v</div>
-							<div style="font-size:0.65rem; color:#64748b; margin-top:4px;">`+T.AvgFromLabel+` <span id="mIPCount">%v</span> `+T.ChecksLabel+`</div>
-							<div style="font-size:0.65rem; color:#64748b; margin-top:2px;">`+T.LastCheckLabel+` <span id="mLastIPCheck">%v</span></div>
+							<div style="font-size:0.65rem; color:#64748b; margin-top:4px;">&#216; aus <span id="mIPCount">%v</span> Checks</div>
+							<div style="font-size:0.65rem; color:#64748b; margin-top:2px;">Letzter: <span id="mLastIPCheck">%v</span></div>
 						</div>
 					</div>
 				</div>
@@ -1736,15 +1736,15 @@ func createMux() *http.ServeMux {
                        </summary>
                    <div class="card-content">
                         <div class="log-filters">
-                               <button class="filter-btn active" data-filter="all" onclick="filterLogs('all')">`+T.FilterAll+`</button>
-                               <button class="filter-btn" data-filter="ERR" onclick="filterLogs('ERR')">`+T.FilterErrors+`</button>
-                               <button class="filter-btn" data-filter="WARN" onclick="filterLogs('WARN')">`+T.FilterWarnings+`</button>
-                               <button class="filter-btn" data-filter="UPDATE" onclick="filterLogs('UPDATE')">`+T.FilterUpdates+`</button>
-                               <button class="filter-btn" data-filter="START" onclick="filterLogs('START')">`+T.FilterStarts+`</button>
-                               <button class="filter-btn" data-filter="STOP" onclick="filterLogs('STOP')">`+T.FilterStop+`</button>
-                               <button class="filter-btn" data-filter="CREATE" onclick="filterLogs('CREATE')">`+T.FilterCreated+`</button>
-                               <button class="filter-btn" data-filter="CLEANUP" onclick="filterLogs('CLEANUP')">`+T.FilterCleanup+`</button>
-                               <button class="filter-btn" data-filter="SKIP" onclick="filterLogs('SKIP')">`+T.FilterSkip+`</button>
+                               <button class="filter-btn active" data-filter="all" onclick="filterLogs('all')">All</button>
+                               <button class="filter-btn" data-filter="ERR" onclick="filterLogs('ERR')">Errors</button>
+                               <button class="filter-btn" data-filter="WARN" onclick="filterLogs('WARN')">Warnings</button>
+                               <button class="filter-btn" data-filter="UPDATE" onclick="filterLogs('UPDATE')">Updates</button>
+                               <button class="filter-btn" data-filter="START" onclick="filterLogs('START')">Starts</button>
+                               <button class="filter-btn" data-filter="STOP" onclick="filterLogs('STOP')">Stop</button>
+                               <button class="filter-btn" data-filter="CREATE" onclick="filterLogs('CREATE')">Created</button>
+                               <button class="filter-btn" data-filter="CLEANUP" onclick="filterLogs('CLEANUP')">Cleanup</button>
+                               <button class="filter-btn" data-filter="SKIP" onclick="filterLogs('SKIP')">Skip</button>
                            </div>
                        <div id="logContainer" style="max-height: 300px; overflow-y: auto; font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 13px; padding-right: 5px;">
                        `, T.SystemEvents, len(logs), logTimeRange)
@@ -1836,7 +1836,7 @@ func createMux() *http.ServeMux {
 		}
 		sort.Strings(keys)
 
-		_, _ = fmt.Fprint(w, `<input type="text" class="search-box" id="domainSearch" placeholder="`+html.EscapeString(T.DomainSearchPlaceholder)+`" oninput="filterDomains(this.value)"><div id="domainContainer">`)
+		_, _ = fmt.Fprint(w, `<input type="text" class="search-box" id="domainSearch" placeholder="🔍 Domain suchen..." oninput="filterDomains(this.value)"><div id="domainContainer">`)
 
 		configuredDomains := make(map[string]struct{})
 		for _, dc := range cfg.DomainConfigs {
@@ -1874,21 +1874,21 @@ func createMux() *http.ServeMux {
 			isOrphan := !isActive
 
 			dotClass := "domain-status-dot dot-idle"
-			dotTitle := T.DotNoUpdate
-			changedBadge := `<span id="badge-` + safeID + `" class="changed-badge" style="display:none;">` + T.BadgeChanged + `</span>`
+			dotTitle := "Noch kein Update gesehen"
+			changedBadge := `<span id="badge-` + safeID + `" class="changed-badge" style="display:none;">🔄 gerade geändert</span>`
 			if h.LastChanged != "" {
 				if t, err := time.Parse("02.01.2006 15:04:05", h.LastChanged); err == nil {
 					switch {
 					case time.Since(t) < 15*time.Minute:
 						dotClass = "domain-status-dot dot-ok dot-recent"
-						dotTitle = T.DotJustChanged + h.LastChanged
-						changedBadge = `<span id="badge-` + safeID + `" class="changed-badge">` + T.BadgeChanged + `</span>`
+						dotTitle = "Gerade geändert: " + h.LastChanged
+						changedBadge = `<span id="badge-` + safeID + `" class="changed-badge">🔄 gerade geändert</span>`
 					case !newestChange.IsZero() && t.Before(newestChange.Add(-time.Minute)):
 						dotClass = "domain-status-dot dot-warn"
-						dotTitle = T.DotLastChanged + h.LastChanged + " " + T.DotOtherUpdated
+						dotTitle = "Letzte Änderung: " + h.LastChanged + " · Andere Domain wurde seitdem aktualisiert"
 					default:
 						dotClass = "domain-status-dot dot-ok"
-						dotTitle = T.DotActive + h.LastChanged
+						dotTitle = "Aktiv · Letzte Änderung: " + h.LastChanged
 					}
 				}
 			}
@@ -1898,8 +1898,8 @@ func createMux() *http.ServeMux {
 			deleteBtn := ""
 			if isOrphan {
 				orphanStyle = ` style="border-color: rgba(248,113,113,0.5);"`
-				orphanLabel = `<span style="font-size:0.65rem; padding:1px 7px; border-radius:999px; background:rgba(248,113,113,0.15); border:1px solid rgba(248,113,113,0.4); color:#f87171; margin-left:8px; font-weight:600;">` + html.EscapeString(T.NotConfigured) + `</span>`
-				deleteBtn = `<button class="action-btn" style="background:rgba(248,113,113,0.15); color:#f87171; border-color:rgba(248,113,113,0.5); font-size:0.7rem; padding:3px 10px; margin-left:auto;" onclick="event.preventDefault(); event.stopPropagation(); deleteDomain('` + html.EscapeString(k) + `', this)">` + html.EscapeString(T.DeleteButton) + `</button>`
+				orphanLabel = `<span style="font-size:0.65rem; padding:1px 7px; border-radius:999px; background:rgba(248,113,113,0.15); border:1px solid rgba(248,113,113,0.4); color:#f87171; margin-left:8px; font-weight:600;">nicht mehr konfiguriert</span>`
+				deleteBtn = `<button class="action-btn" style="background:rgba(248,113,113,0.15); color:#f87171; border-color:rgba(248,113,113,0.5); font-size:0.7rem; padding:3px 10px; margin-left:auto;" onclick="event.preventDefault(); event.stopPropagation(); deleteDomain('` + html.EscapeString(k) + `', this)">🗑️ Entfernen</button>`
 			}
 
 			_, _ = fmt.Fprintf(w, `
@@ -1923,7 +1923,7 @@ func createMux() *http.ServeMux {
 						</div>
 					</div>
 					<div style="text-align: right; opacity: 0.7;">
-						<small>`+T.LastUpdateShort+` %s</small>
+						<small>Zuletzt: %s</small>
 					</div>
 				</div>
 
@@ -1931,8 +1931,8 @@ func createMux() *http.ServeMux {
 					<table style="width: 100%%; font-size: 0.85em; border-collapse: collapse;">
 						<thead style="text-align: left; opacity: 0.5; font-size: 0.7rem;">
 							<tr>
-								<th style="padding-bottom: 5px;">`+T.TimeLabel+`</th>
-								<th style="padding-bottom: 5px;">`+T.IPAddresses+`</th>
+								<th style="padding-bottom: 5px;">Zeitpunkt</th>
+								<th style="padding-bottom: 5px;">IP Adressen</th>
 							</tr>
 						</thead>
 						<tbody>`,
@@ -1977,7 +1977,7 @@ func createMux() *http.ServeMux {
 			}
 
 			if len(h.IPs) < 2 {
-				_, _ = fmt.Fprint(w, `<tr><td colspan="2" style="text-align:center; opacity:0.5; padding: 10px;">`+html.EscapeString(T.NoMoreEntries)+`</td></tr>`)
+				_, _ = fmt.Fprint(w, `<tr><td colspan="2" style="text-align:center; opacity:0.5; padding: 10px;">Keine weiteren Einträge</td></tr>`)
 			}
 
 			_, _ = fmt.Fprint(w, `
@@ -2279,7 +2279,7 @@ func createMux() *http.ServeMux {
 	}
 
 	function resetMetrics() {
-    	if (!confirm('`+T.MetricsResetConfirm+`')) return;
+    	if (!confirm('Möchtest du wirklich alle Metriken (Statistiken) löschen?')) return;
 
     	const token = localStorage.getItem('triggerToken') || '';
     
@@ -2289,12 +2289,12 @@ func createMux() *http.ServeMux {
     	})
     	.then(r => {
         	if (r.ok) {
-            	showToast('✅ `+T.MetricsResetSuccess+`', 'success');
+            	showToast('✅ Metriken zurückgesetzt', 'success');
        	 } else {
-           		showToast('❌ `+T.MetricsResetFailed+`', 'error');
+           		showToast('❌ Reset fehlgeschlagen', 'error');
        	 }
     	})
-    	.catch(() => showToast('❌ `+T.ConnectionError+`', 'error'));
+    	.catch(() => showToast('❌ Verbindungsfehler', 'error'));
 	}
 
 	function filterLogs(filter) {
@@ -2332,13 +2332,13 @@ func createMux() *http.ServeMux {
 
 	function copyIP(text) {
 		if (!text || text === 'N/A' || text === '-') {
-			showToast('❌ `+T.NoIPToCopy+`', 'error');
+			showToast('❌ Keine IP zum Kopieren', 'error');
 			return;
 		}
 		
 		if (navigator.clipboard && window.isSecureContext) {
 			navigator.clipboard.writeText(text)
-				.then(() => showToast('✓ `+T.Copied+`: ' + text, 'success'))
+				.then(() => showToast('✓ Kopiert: ' + text, 'success'))
 				.catch(() => fallbackCopy(text));
 		} else {
 			fallbackCopy(text);
@@ -2357,9 +2357,9 @@ func createMux() *http.ServeMux {
 		
 		try {
 			document.execCommand('copy');
-			showToast('✓ `+T.Copied+`: ' + text, 'success');
+			showToast('✓ Kopiert: ' + text, 'success');
 		} catch (err) {
-			showToast('❌ `+T.CopyFailed+`', 'error');
+			showToast('❌ Kopieren fehlgeschlagen', 'error');
 		}
 		document.body.removeChild(textArea);
 	}
@@ -2447,14 +2447,14 @@ func createMux() *http.ServeMux {
 				a.href = url;
 				a.download = 'dyndns-export-' + new Date().toISOString().split('T')[0] + '.json';
 				a.click();
-				showToast('✓ `+T.ExportStarted+`');
+				showToast('✓ Export started');
 			})
-			.catch(() => showToast('`+T.ExportFailed+`', 'error'));
+			.catch(() => showToast('Export failed', 'error'));
 	}
 
 	function triggerUpdate() {
 		const token = localStorage.getItem('triggerToken') || '';
-		showToast('⏳ `+T.UpdateStarting+`', 'info');
+		showToast('⏳ Update wird gestartet...', 'info');
 		
 		fetch('/api/trigger', {
 			method: 'POST',
@@ -2467,26 +2467,26 @@ func createMux() *http.ServeMux {
 		.then(({status, json: j}) => {
 			if (j && j.error) {
 				if (j.error === 'global rate limit exceeded') {
-					showToast('⚠️ `+T.RateLimitGlobal+` ' + (j.retry_after_seconds || 10) + 's', 'warning');
+					showToast('⚠️ Rate Limit erreicht - bitte ' + (j.retry_after_seconds || 10) + 's warten', 'warning');
 				} else if (j.error === 'IP rate limit exceeded') {
-					showToast('⚠️ `+T.RateLimitIP+` ' + (j.retry_after_seconds || 10) + 's', 'warning');
+					showToast('⚠️ Zu viele Requests - bitte ' + (j.retry_after_seconds || 10) + 's warten', 'warning');
 				} else if (j.error === 'update already in progress') {
-					showToast('ℹ️ `+T.UpdateInProgress+`', 'info');
+					showToast('ℹ️ Update läuft bereits', 'info');
 				} else if (j.error === 'invalid or missing trigger token') {
-					showToast('🔒 `+T.InvalidToken+`', 'error');
+					showToast('🔒 Ungültiger oder fehlender Token', 'error');
 				} else {
 					showToast('❌ ' + j.error, 'error');
 				}
 			} else if (j && j.status === 'triggered') {
 				const remaining = j.rate_limit_remaining || '?';
-				showToast('✅ `+T.UpdateStarted+` (`+T.RemainingLabel+`: ' + remaining + ')', 'success');
+				showToast('✅ Update gestartet (Verbleibend: ' + remaining + ')', 'success');
 			} else {
-				showToast('✓ `+T.UpdateStarted+`', 'success');
+				showToast('✓ Update triggered', 'success');
 			}
 		})
 		.catch(err => {
 			console.error('Trigger error:', err);
-			showToast('❌ `+T.ConnectionError+`', 'error');
+			showToast('❌ Verbindungsfehler', 'error');
 		});
 	}
 
