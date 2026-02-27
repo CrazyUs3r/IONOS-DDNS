@@ -1,4 +1,4 @@
-﻿{
+{
   "startup": "Usługa uruchomiona",
   "shutdown": "Usługa zakończona",
   "no_zones": "nie znaleziono żadnej strefy",
@@ -123,6 +123,14 @@
   "invalid_ip_mode": "Nieprawidłowy tryb IP: %s",
   "using_default_mode": "Używam domyślnego trybu",
   "critical_api_error": "KRYTYCZNY BŁĄD API",
+  "panic_loading_language": "Krytyczny błąd podczas ładowania języka: %v",
+  "trying_load_language": "Próba załadowania pliku językowego: %s",
+  "language_file_not_Found": "Nie znaleziono pliku językowego: %v",
+  "trying_fallback_en": "Próba użycia EN jako języka zapasowego...",
+  "using_builtin_defaults": "Używanie wbudowanych domyślnych tłumaczeń",
+  "json_parse_error": "Błąd podczas parsowania JSON: %v",
+  "language_loaded": "Plik językowy załadowany: %s (%d tłumaczeń)",
+  "missing_translation_key": "Brakujący klucz tłumaczenia: %s",
   "http_pool": "Rozszerzono pulę HTTP:",
   "hourly_limit_est": "LIMIT GODZINOWY (SZAC.)",
   "requests_label": "Upraszanie",
