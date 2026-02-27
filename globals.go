@@ -336,6 +336,23 @@ type Phrases struct {
 	Mode, NoDNSServer, DNSFailover, HTTPClientInitialized                 string
 	InvalidPort, UsingDefaultPort, IntervalTooSmall, ShortIntervalWarning string
 	InvalidIPMode, UsingDefaultMode                                       string
+
+	// Dashboard UI – Texte
+	DomainSearchPlaceholder, NoMoreEntries, NotConfigured, RecentlyChanged string
+	LastUpdateShort, LatencyPercentile, IPCheckLatency, ChecksLabel        string
+	LastLabel, TimeLabel, IPAddresses, MetricsResetConfirm                 string
+	MetricsResetSuccess, MetricsResetFailed, UpdateStarting                string
+	RateLimitGlobal, RateLimitIP, UpdateInProgress, InvalidToken           string
+	UpdateStarted, RemainingLabel, NoIPToCopy, Copied, CopyFailed          string
+	ExportStarted, ExportFailed, EntriesLabel, DotNoUpdate, DotJustChanged string
+	DotLastChanged, DotActive, DotOtherUpdated, BadgeChanged               string
+	MetricsBroadcast, FilterAll, FilterErrors, FilterWarnings              string
+	FilterUpdates, FilterStarts, FilterStop, FilterCreated, FilterCleanup  string
+	FilterSkip, DailyLabel, AvgFromLabel, LastCheckLabel                   string
+	NoDomainsConfigured, DomainContext, IonosApiRequired                   string
+	Ipv64TokenRequired, CloudflareAuthRequired, UnknownProvider            string
+	ConfigErrorPrefix, DomainIsEmpty, DomainTooLong, InvalidDomainFormat   string
+	LabelTooLong, InvalidLabel                                             string
 }
 
 type LogLevel int
@@ -377,18 +394,15 @@ type DomainHistory struct {
 }
 
 type DomainConfig struct {
-	FQDN     string       `json:"fqdn"`
-	Provider ProviderType `json:"provider"`
-
-	APIPrefix string `json:"api_prefix,omitempty"`
-	APISecret string `json:"api_secret,omitempty"`
-
-	CFToken  string `json:"cf_token,omitempty"`
-	CFEmail  string `json:"cf_email,omitempty"`
-	CFSecret string `json:"cf_secret,omitempty"`
-	CFZoneID string `json:"cf_zone_id,omitempty"`
-
-	IPv64Token string `json:"ipv64_token,omitempty"`
+	FQDN       string       `json:"fqdn"`
+	Provider   ProviderType `json:"provider"`
+	APIPrefix  string       `json:"api_prefix,omitempty"`
+	APISecret  string       `json:"api_secret,omitempty"`
+	CFToken    string       `json:"cf_token,omitempty"`
+	CFEmail    string       `json:"cf_email,omitempty"`
+	CFSecret   string       `json:"cf_secret,omitempty"`
+	CFZoneID   string       `json:"cf_zone_id,omitempty"`
+	IPv64Token string       `json:"ipv64_token,omitempty"`
 }
 
 type Config struct {
@@ -550,13 +564,11 @@ type APIMetrics struct {
 	LatencySamples       [1000]int64
 	LatencySampleIdx     int
 	LatencySampleCount   int
-	// Taegliche HTTP-Methoden Zaehler (Reset um Mitternacht)
-	DailyGET    int64
-	DailyPOST   int64
-	DailyPUT    int64
-	DailyDELETE int64
-	DailyReset  time.Time
-	// IP-Check Latenz (getrennt von API-Latenz)
+	DailyGET             int64
+	DailyPOST            int64
+	DailyPUT             int64
+	DailyDELETE          int64
+	DailyReset           time.Time
 	IPLatencySum         time.Duration
 	IPLatencyCount       int64
 	IPLatencyAvg         time.Duration

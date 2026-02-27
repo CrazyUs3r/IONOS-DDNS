@@ -12,29 +12,29 @@ import (
 // ============================================================================
 func validateDomainConfigs() error {
 	if len(cfg.DomainConfigs) == 0 {
-		return fmt.Errorf("no domains configured")
+		return fmt.Errorf("%s", T.NoDomainsConfigured)
 	}
 
 	for i, dc := range cfg.DomainConfigs {
 		if err := validateDomain(dc.FQDN); err != nil {
-			return fmt.Errorf("domain %d (%s): %w", i, dc.FQDN, err)
+			return fmt.Errorf(T.DomainContext, i, dc.FQDN, err.Error())
 		}
 
 		switch dc.Provider {
 		case ProviderIONOS:
 			if dc.APIPrefix == "" || dc.APISecret == "" {
-				return fmt.Errorf("domain %s (IONOS): API_PREFIX and API_SECRET required", dc.FQDN)
+				return fmt.Errorf(T.IonosApiRequired, dc.FQDN)
 			}
 		case ProviderIPv64:
 			if dc.IPv64Token == "" {
-				return fmt.Errorf("domain %s (IPv64): IPv64Token required", dc.FQDN)
+				return fmt.Errorf(T.Ipv64TokenRequired, dc.FQDN)
 			}
 		case ProviderCloudflare:
 			if dc.CFToken == "" && (dc.CFEmail == "" || dc.CFSecret == "") {
-				return fmt.Errorf("domain %s (Cloudflare): CFToken or CFEmail+CFSecret required", dc.FQDN)
+				return fmt.Errorf(T.CloudflareAuthRequired, dc.FQDN)
 			}
 		default:
-			return fmt.Errorf("domain %s: unknown provider %s", dc.FQDN, dc.Provider)
+			return fmt.Errorf(T.UnknownProvider, dc.FQDN, dc.Provider)
 		}
 	}
 
@@ -45,7 +45,7 @@ func validateConfig() error {
 	var errs []string
 
 	if len(cfg.DomainConfigs) == 0 {
-		errs = append(errs, T.NoDomains)
+		errs = append(errs, T.NoDomainsConfigured)
 	}
 
 	port, err := strconv.Atoi(cfg.HealthPort)
@@ -86,7 +86,7 @@ func validateConfig() error {
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("Config-Fehler: %s", strings.Join(errs, ", "))
+		return fmt.Errorf(T.ConfigErrorPrefix, strings.Join(errs, ", "))
 	}
 
 	return nil
@@ -94,24 +94,23 @@ func validateConfig() error {
 
 func validateDomain(domain string) error {
 	if domain == "" {
-		return fmt.Errorf("domain is empty")
+		return fmt.Errorf("%s", T.DomainIsEmpty)
 	}
 
 	if len(domain) > 253 {
-		return fmt.Errorf("domain too long: %d chars (max 253)", len(domain))
+		return fmt.Errorf(T.DomainTooLong, len(domain))
 	}
 
 	if !domainRegex.MatchString(domain) {
-		return fmt.Errorf("invalid domain format: %s", domain)
+		return fmt.Errorf(T.InvalidDomainFormat, domain)
 	}
 
-	labels := strings.Split(domain, ".")
-	for _, label := range labels {
+	for label := range strings.SplitSeq(domain, ".") {
 		if len(label) > 63 {
-			return fmt.Errorf("label '%s' too long: %d chars (max 63)", label, len(label))
+			return fmt.Errorf(T.LabelTooLong, label, len(label))
 		}
 		if !labelRegex.MatchString(label) {
-			return fmt.Errorf("invalid label: %s", label)
+			return fmt.Errorf(T.InvalidLabel, label)
 		}
 	}
 
