@@ -76,6 +76,12 @@ services:
 | `GOTIFY_TOKEN` |Gotify Token | (erforderlich für Gotify) | (erforderlich) |
 | `NOTIFY_ON` |Welche Aktionen Gesendet werden | `UPDATE,CREATE,ERROR ` | (erforderlich) |
 
+
+## Example DOMAINS_CONFIG Multi-Provider
+```bash
+DOMAINS_CONFIG=[{"fqdn": "domainA, subdomainA,domainB","provider": "IPV64","ipv64_token": "${IPV64_TOKEN}"},{"fqdn": "domainA, subdomainA,domainB","provider": "IONOS","API_PREFIX": "${API_PREFIX}", "API_SECRET": "${API_SECRET}"}]
+```
+
 ## 📊 Dashboard & Monitoring
 ​Das Dashboard ist unter http://server-ip:8080 erreichbar. Es zeigt den aktuellen Status der API-Verbindung, die Performance-Metriken und ein Echtzeit-Log der Systemereignisse.
 
