@@ -79,7 +79,7 @@ services:
 
 ## Example DOMAINS_CONFIG Multi-Provider
 ```bash
-DOMAINS_CONFIG=[{"fqdn": "domainA, subdomainA,domainB","provider": "IPV64","ipv64_token": "${IPV64_TOKEN}"},{"fqdn": "domainA, subdomainA,domainB","provider": "IONOS","API_PREFIX": "${API_PREFIX}", "API_SECRET": "${API_SECRET}"}]
+DOMAINS_CONFIG=[{"fqdn": "domainA, subdomainA, domainB","provider": "IPV64","ipv64_token": "${IPV64_TOKEN}"},{"fqdn": "domainA, subdomainA, domainB","provider": "IONOS","API_PREFIX": "${API_PREFIX}", "API_SECRET": "${API_SECRET}"}]
 ```
 
 ## 📊 Dashboard & Monitoring
