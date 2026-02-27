@@ -16,12 +16,13 @@ func initProviderConfig() error {
 	if configJSON != "" {
 		debugLog("CONFIG", "", "📦 Loading multi-provider config from DOMAINS_CONFIG")
 
-		var configs []DomainConfig
-		if err := json.Unmarshal([]byte(configJSON), &configs); err != nil {
+		var raw []DomainConfig
+		if err := json.Unmarshal([]byte(configJSON), &raw); err != nil {
 			return fmt.Errorf("invalid DOMAINS_CONFIG JSON: %w", err)
 		}
 
-		cfg.DomainConfigs = configs
+		cfg.DomainConfigs = expandDomainConfigs(raw)
+
 		return validateDomainConfigs()
 	}
 
@@ -29,6 +30,51 @@ func initProviderConfig() error {
 	return initLegacyConfig()
 }
 
+func expandDomainConfigs(in []DomainConfig) []DomainConfig {
+	out := make([]DomainConfig, 0, len(in))
+	for _, c := range in {
+		fqdn := strings.TrimSpace(c.FQDN)
+		if fqdn == "" {
+			continue
+		}
+
+		parts := splitDomains(fqdn)
+		if len(parts) <= 1 {
+			c.FQDN = normalizeDomain(fqdn)
+			out = append(out, c)
+			continue
+		}
+
+		for _, d := range parts {
+			d = normalizeDomain(d)
+			if d == "" {
+				continue
+			}
+			nc := c
+			nc.FQDN = d
+			out = append(out, nc)
+		}
+	}
+	return out
+}
+
+func splitDomains(s string) []string {
+	raw := strings.Split(s, ",")
+	out := make([]string, 0, len(raw))
+	for _, p := range raw {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func normalizeDomain(d string) string {
+	return strings.TrimSpace(strings.ToLower(d))
+}
+
+// ============================================================================
 func initLegacyConfig() error {
 	providerEnv := strings.ToUpper(os.Getenv("PROVIDER"))
 	if providerEnv == "" {
