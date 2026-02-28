@@ -70,7 +70,7 @@ ENV PROVIDER="IONOS" \
     MAX_API_RETRIES=3 \
     TZ="Europe/Berlin" \
     TELEGRAM_BOT_TOKEN="" \
-    RELEGRAM_CHAT_ID="" \
+    TELEGRAM_CHAT_ID="" \
     GOTIFY_URL="" \
     GOTIFY_TOKEN="" \
     NOTIFY_ON="UPDATE,CREATE,ERROR"
@@ -97,3 +97,4 @@ HEALTHCHECK --interval=300s --timeout=5s --start-period=10s --retries=3 \
 
 ENTRYPOINT ["/sbin/tini", "--", "/app/docker-entrypoint.sh"]
 CMD ["./dyndns"]
+
