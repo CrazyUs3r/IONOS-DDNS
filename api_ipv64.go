@@ -679,17 +679,6 @@ func updateIPv64Cache(baseDomain, praefix, ipv4, ipv6 string, needV4, needV6 boo
 // ============================================================================
 // CLEANUP - IPV64
 // ============================================================================
-//
-// Cleanup-Strategie:
-//
-//	Nur Records löschen die ALLE folgenden Bedingungen erfüllen:
-//	  1. Die baseDomain gehört zu einer unserer konfigurierten IPv64-Domains
-//	     (fremde Domains/Accounts werden nie angefasst).
-//	  2. Der FQDN (Praefix + baseDomain) steht NICHT mehr in der Config
-//	     (d.h. er war mal konfiguriert und wurde entfernt).
-//	  3. Kein CDN-/Failover-Record (TTL > 10 UND FailoverPolicy == "0").
-//	  4. Nicht deaktiviert (Deactivated == 0) – deaktivierte Records
-//	     werden von IPv64 intern verwaltet (z.B. Failover-Switchover).
 func cleanupIPv64Records(ctx context.Context) {
 	var ipv64DC *DomainConfig
 	for i := range cfg.DomainConfigs {
@@ -704,9 +693,7 @@ func cleanupIPv64Records(ctx context.Context) {
 
 	debugLog("MAINTENANCE", "", T.CleanupStartIPv64)
 
-	// Alle konfigurierten FQDNs (lowercase, kein trailing dot)
 	configuredFQDNs := make(map[string]struct{})
-	// Alle baseDomains für die dieser Service zuständig ist
 	ourBaseDomains := make(map[string]struct{})
 
 	for _, dc := range cfg.DomainConfigs {
@@ -727,7 +714,6 @@ func cleanupIPv64Records(ctx context.Context) {
 	defer providerCache.RUnlock()
 
 	for baseDomain, domain := range providerCache.ipv64Records {
-		// Fremde baseDomains (nicht in unserer Config) komplett ignorieren
 		if _, ours := ourBaseDomains[baseDomain]; !ours {
 			debugLog("MAINTENANCE", baseDomain, T.CleanupSkipForeignBase)
 			continue
@@ -737,16 +723,11 @@ func cleanupIPv64Records(ctx context.Context) {
 			if rec.Type != "A" && rec.Type != "AAAA" {
 				continue
 			}
-
-			// CDN- und Failover-Records nie löschen
 			if rec.TTL <= 10 || rec.FailoverPolicy != "0" {
 				debugLog("MAINTENANCE", baseDomain,
 					fmt.Sprintf(T.CleanupSkipCDN, rec.RecordID, rec.TTL, rec.FailoverPolicy))
 				continue
 			}
-
-			// Deaktivierte Records überspringen – IPv64 verwaltet den
-			// Zustand selbst (Failover-Switchover etc.)
 			if rec.Deactivated != 0 {
 				debugLog("MAINTENANCE", baseDomain,
 					fmt.Sprintf(T.CleanupSkipDeactivated, rec.RecordID))
@@ -759,7 +740,6 @@ func cleanupIPv64Records(ctx context.Context) {
 			}
 			fqdn = strings.ToLower(strings.TrimSuffix(fqdn, "."))
 
-			// FQDN ist (noch) konfiguriert → nicht löschen
 			if _, ok := configuredFQDNs[fqdn]; ok {
 				continue
 			}

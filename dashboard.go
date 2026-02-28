@@ -1171,7 +1171,6 @@ func createMux() *http.ServeMux {
 		healthReason := ""
 		degradedMode := false
 
-		// Noch kein Scheduler-Lauf abgeschlossen → optimistisch healthy zurückgeben
 		if !hasRun {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -1197,7 +1196,6 @@ func createMux() *http.ServeMux {
 			}
 		}
 
-		// lastOk=false nach einem Lauf → reason befüllen falls noch leer
 		if !isHealthy && healthReason == "" {
 			healthReason = "last scheduler run failed (IP fetch, zone load or record update error)"
 		}

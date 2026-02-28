@@ -461,7 +461,7 @@ type rawEntry struct {
 	FQDN     string `json:"fqdn"`
 	Provider string `json:"provider"`
 
-	// IONOS – canonical lowercase and env-var uppercase
+	// IONOS
 	APIPrefix  string `json:"api_prefix"`
 	APISecret  string `json:"api_secret"`
 	APIPrefix2 string `json:"API_PREFIX"`
