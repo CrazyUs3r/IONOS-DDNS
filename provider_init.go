@@ -16,13 +16,12 @@ func initProviderConfig() error {
 	if configJSON != "" {
 		debugLog("CONFIG", "", "📦 Loading multi-provider config from DOMAINS_CONFIG")
 
-		var raw []DomainConfig
+		var raw []rawEntry
 		if err := json.Unmarshal([]byte(configJSON), &raw); err != nil {
 			return fmt.Errorf("invalid DOMAINS_CONFIG JSON: %w", err)
 		}
 
 		cfg.DomainConfigs = expandDomainConfigs(raw)
-
 		return validateDomainConfigs()
 	}
 
@@ -30,29 +29,37 @@ func initProviderConfig() error {
 	return initLegacyConfig()
 }
 
-func expandDomainConfigs(in []DomainConfig) []DomainConfig {
-	out := make([]DomainConfig, 0, len(in))
-	for _, c := range in {
-		fqdn := strings.TrimSpace(c.FQDN)
-		if fqdn == "" {
-			continue
+func (r rawEntry) toDomainConfig() DomainConfig {
+	pick := func(a, b string) string {
+		if a != "" {
+			return a
 		}
+		return b
+	}
+	return DomainConfig{
+		Provider:   ProviderType(strings.ToUpper(r.Provider)),
+		APIPrefix:  pick(r.APIPrefix, r.APIPrefix2),
+		APISecret:  pick(r.APISecret, r.APISecret2),
+		CFToken:    pick(r.CFToken, r.CFToken2),
+		CFEmail:    pick(r.CFEmail, r.CFEmail2),
+		CFSecret:   pick(r.CFSecret, r.CFSecret2),
+		CFZoneID:   r.CFZoneID,
+		IPv64Token: pick(r.IPv64Token, r.IPv64Token2),
+	}
+}
 
-		parts := splitDomains(fqdn)
-		if len(parts) <= 1 {
-			c.FQDN = normalizeDomain(fqdn)
-			out = append(out, c)
-			continue
-		}
-
-		for _, d := range parts {
-			d = normalizeDomain(d)
-			if d == "" {
+func expandDomainConfigs(raw []rawEntry) []DomainConfig {
+	out := make([]DomainConfig, 0, len(raw))
+	for _, r := range raw {
+		base := r.toDomainConfig()
+		for _, fqdn := range splitDomains(r.FQDN) {
+			fqdn = normalizeDomain(fqdn)
+			if fqdn == "" {
 				continue
 			}
-			nc := c
-			nc.FQDN = d
-			out = append(out, nc)
+			dc := base
+			dc.FQDN = fqdn
+			out = append(out, dc)
 		}
 	}
 	return out
@@ -74,7 +81,6 @@ func normalizeDomain(d string) string {
 	return strings.TrimSpace(strings.ToLower(d))
 }
 
-// ============================================================================
 func initLegacyConfig() error {
 	providerEnv := strings.ToUpper(os.Getenv("PROVIDER"))
 	if providerEnv == "" {

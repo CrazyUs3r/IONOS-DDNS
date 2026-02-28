@@ -25,12 +25,12 @@ func getIONOSCachePath() string {
 
 func saveIONOSCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error {
 	if recordCache == nil {
-		return fmt.Errorf("recordCache is nil")
+		return fmt.Errorf("%s", T.ErrRecordCacheNil)
 	}
 
 	cachePath := getIONOSCachePath()
 	if err := os.MkdirAll(filepath.Dir(cachePath), 0755); err != nil {
-		return fmt.Errorf("failed to create cache dir: %w", err)
+		return fmt.Errorf("%s: %w", T.ErrCacheDirCreate, err)
 	}
 
 	cache := IONOSCache{
@@ -47,20 +47,19 @@ func saveIONOSCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error {
 
 	jsonData, err := json.MarshalIndent(cache, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to marshal cache: %w", err)
+		return fmt.Errorf("%s: %w", T.ErrCacheMarshal, err)
 	}
 
 	tmpPath := cachePath + ".tmp"
 	if err := os.WriteFile(tmpPath, jsonData, 0644); err != nil {
-		return fmt.Errorf("failed to write cache: %w", err)
+		return fmt.Errorf("%s: %w", T.ErrCacheWrite, err)
 	}
 
 	if err := os.Rename(tmpPath, cachePath); err != nil {
-		return fmt.Errorf("failed to rename cache: %w", err)
+		return fmt.Errorf("%s: %w", T.ErrCacheRename, err)
 	}
 
-	debugLog("CACHE", "", fmt.Sprintf("💾 IONOS Cache gespeichert (%d zones, %d records)",
-		len(zones), len(cache.Records)))
+	debugLog("CACHE", "", fmt.Sprintf(T.CacheSavedZones, "IONOS", len(zones), len(cache.Records)))
 	return nil
 }
 
@@ -70,7 +69,7 @@ func loadIONOSCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
 	data, err := os.ReadFile(cachePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			debugLog("CACHE", "", "ℹ️ Keine IONOS Cache-Datei gefunden (erster Start)")
+			debugLog("CACHE", "", fmt.Sprintf(T.CacheFileNotFound, "IONOS"))
 			return nil, nil, nil
 		}
 		return nil, nil, fmt.Errorf("failed to read cache: %w", err)
@@ -87,8 +86,7 @@ func loadIONOSCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
 	}
 
 	age := time.Since(cache.LastUpdate)
-	debugLog("CACHE", "", fmt.Sprintf("📂 IONOS Cache von Disk geladen (%d zones, Alter: %v)",
-		len(cache.Zones), age.Round(time.Second)))
+	debugLog("CACHE", "", fmt.Sprintf(T.CacheLoadedZones, "IONOS", len(cache.Zones), age.Round(time.Second)))
 
 	return cache.Zones, recordCache, nil
 }
@@ -120,14 +118,14 @@ func calculateRetryDelay(attempt int, isServerError bool) time.Duration {
 
 func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body interface{}) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("context error: %w", err)
+		return nil, fmt.Errorf("%s: %w", T.ErrContextError, err)
 	}
 
 	var lastErr error
 
 	for attempt := 0; attempt < cfg.MaxAPIRetries; attempt++ {
 		debugLog("HTTP", "", fmt.Sprintf(
-			"🔄 %s %d/%d: %s %s",
+			T.IonosAttempt,
 			T.Attempt, attempt+1, cfg.MaxAPIRetries, method, url,
 		))
 
@@ -137,7 +135,7 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 		if body != nil {
 			bodyBytes, err = json.Marshal(body)
 			if err != nil {
-				return nil, fmt.Errorf("json marshal failed: %w", err)
+				return nil, fmt.Errorf("%s: %w", T.ErrJSONMarshal, err)
 			}
 			debugLog("HTTP", "", fmt.Sprintf("📤 %s: %s", T.PayloadSent, string(bodyBytes)))
 		}
@@ -149,7 +147,7 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 			bytes.NewReader(bodyBytes),
 		)
 		if err != nil {
-			return nil, fmt.Errorf("request creation failed: %w", err)
+			return nil, fmt.Errorf("%s: %w", T.ErrRequestCreate, err)
 		}
 
 		if body != nil {
@@ -172,7 +170,7 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 		if err != nil {
 			debugLog("HTTP", "", fmt.Sprintf("❌ %s: %v | %s: %v", T.NetworkError, err, T.AvgLatency, duration))
 			apiMetrics.RecordError(method, 0, err, duration)
-			lastErr = fmt.Errorf("network error: %w", err)
+			lastErr = fmt.Errorf("%s: %w", T.ErrNetworkError, err)
 
 			wait := calculateRetryDelay(attempt, false)
 			debugLog("HTTP", "", fmt.Sprintf("⏱️  %s %v", T.RetryIn, wait))
@@ -180,7 +178,7 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 			select {
 			case <-time.After(wait):
 			case <-ctx.Done():
-				return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
+				return nil, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
 			}
 			continue
 		}
@@ -189,19 +187,19 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 		respBody, err := io.ReadAll(res.Body)
 		closeErr := res.Body.Close()
 		if closeErr != nil {
-			debugLog("HTTP", "", fmt.Sprintf("Warning: failed to close response body: %v", closeErr))
+			debugLog("HTTP", "", fmt.Sprintf(T.ErrBodyClose+": %v", closeErr))
 		}
 
 		if err != nil {
 			apiMetrics.RecordError(method, res.StatusCode, err, duration)
 			debugLog("HTTP", "", fmt.Sprintf("❌ %s: %v", T.BodyReadError, err))
-			lastErr = fmt.Errorf("failed to read response body: %w", err)
+			lastErr = fmt.Errorf("%s: %w", T.ErrBodyRead, err)
 
 			wait := calculateRetryDelay(attempt, false)
 			select {
 			case <-time.After(wait):
 			case <-ctx.Done():
-				return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
+				return nil, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
 			}
 			continue
 		}
@@ -227,7 +225,7 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 			})
 		}
 
-		debugLog("HTTP", "", fmt.Sprintf("⚠️  %s (Retryable: %v)", apiErr.Message, apiErr.Retryable))
+		debugLog("HTTP", "", fmt.Sprintf(T.IonosRetryable, apiErr.Message, apiErr.Retryable))
 		lastErr = apiErr
 		lastErrorMsg.Set(sanitizeError(lastErr))
 
@@ -238,7 +236,7 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 
 		if attempt >= cfg.MaxAPIRetries-1 {
 			debugLog("HTTP", "", fmt.Sprintf("❌ %s (%d)", T.MaxAttemptsReached, cfg.MaxAPIRetries))
-			return nil, fmt.Errorf("maximale Versuche erreicht: %w", apiErr)
+			return nil, fmt.Errorf("%s: %w", T.IonosMaxAttempts, apiErr)
 		}
 
 		var wait time.Duration
@@ -254,11 +252,11 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 		case <-time.After(wait):
 		case <-ctx.Done():
 			debugLog("HTTP", "", "❌ "+T.ContextCancelled)
-			return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
+			return nil, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
 		}
 	}
 
-	return nil, fmt.Errorf("API fehlgeschlagen nach %d Versuchen: %w", cfg.MaxAPIRetries, lastErr)
+	return nil, fmt.Errorf(T.IonosAPIFailed+": %w", cfg.MaxAPIRetries, lastErr)
 }
 
 // ============================================================================
@@ -352,8 +350,7 @@ func updateDNS(
 		fmt.Sprintf("📡 %s: %s %s", T.APICall, method, url))
 
 	debugLog("DNS-LOGIC", fqdn,
-		fmt.Sprintf("📦 Payload: zone=%s name=%s type=%s",
-			zoneName, fqdn, recordType))
+		fmt.Sprintf(T.IonosPayload, zoneName, fqdn, recordType))
 
 	_, err := ionosAPI(ctx, dc, method, url, payload)
 	if err != nil {
@@ -367,7 +364,7 @@ func updateDNS(
 					Domain:  fqdn,
 					Message: fmt.Sprintf("%s: %s!", recordType, T.Forbidden),
 				})
-				return false, fmt.Errorf("authorization failed: %w", err)
+				return false, fmt.Errorf("%s: %w", T.ErrAuthFailed, err)
 
 			case 404:
 				log(LogContext{
@@ -376,7 +373,7 @@ func updateDNS(
 					Domain:  fqdn,
 					Message: fmt.Sprintf("%s: %s!", recordType, T.NotFound),
 				})
-				return false, fmt.Errorf("resource not found: %w", err)
+				return false, fmt.Errorf("%s: %w", T.ErrResourceNotFound, err)
 
 			case 422:
 				log(LogContext{
@@ -386,7 +383,7 @@ func updateDNS(
 					Message: fmt.Sprintf("%s: %s (IP: %s)",
 						recordType, T.UnprocessableEntity, newIP),
 				})
-				return false, fmt.Errorf("validation failed: %w", err)
+				return false, fmt.Errorf("%s: %w", T.ErrValidationFailed, err)
 
 			case 429:
 				log(LogContext{
@@ -407,7 +404,7 @@ func updateDNS(
 						recordType, apiErrPtr.StatusCode),
 				})
 
-				debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("❌ err=%T %v", err, err))
+				debugLog("DNS-LOGIC", fqdn, fmt.Sprintf(T.IonosErrDetail, err, err))
 
 				return false, err
 			}
@@ -419,8 +416,7 @@ func updateDNS(
 	}
 
 	debugLog("DNS-LOGIC", fqdn,
-		fmt.Sprintf("🔄 %s: %s -> %s",
-			T.Success, recordType, newIP))
+		fmt.Sprintf(T.IonosRecordArrow, T.Success, recordType, newIP))
 
 	log(LogContext{
 		Level:  LogInfo,
@@ -431,7 +427,7 @@ func updateDNS(
 	})
 
 	if zoneName == "" {
-		return false, fmt.Errorf("zoneName is empty for fqdn %s", fqdn)
+		return false, fmt.Errorf(T.ErrZoneNameEmpty, fqdn)
 	}
 
 	updateIONOSCache(cache, zoneID, recordName, fqdn, recordType, newIP, existing)
@@ -449,7 +445,7 @@ func updateIONOSCache(cache *ZoneRecordCache, zoneID, recordName, fqdn, recordTy
 
 	records, exists := cache.Get(zoneID)
 	if !exists {
-		debugLog("CACHE", fqdn, "⚠️ Zone nicht im Cache gefunden")
+		debugLog("CACHE", fqdn, T.IonosCacheZoneNotFound)
 		return
 	}
 
@@ -460,7 +456,7 @@ func updateIONOSCache(cache *ZoneRecordCache, zoneID, recordName, fqdn, recordTy
 			if records[i].ID == existing.ID {
 				records[i].Content = newIP
 				updated = true
-				debugLog("CACHE", fqdn, fmt.Sprintf("✅ Cache aktualisiert: %s -> %s", recordType, newIP))
+				debugLog("CACHE", fqdn, fmt.Sprintf(T.IonosCacheUpdated, recordType, newIP))
 				break
 			}
 		}
@@ -473,7 +469,7 @@ func updateIONOSCache(cache *ZoneRecordCache, zoneID, recordName, fqdn, recordTy
 		}
 		records = append(records, newRecord)
 		updated = true
-		debugLog("CACHE", fqdn, fmt.Sprintf("✅ Cache: Neuer %s Record hinzugefügt: %s", recordType, newIP))
+		debugLog("CACHE", fqdn, fmt.Sprintf(T.IonosCacheRecordAdded, recordType, newIP))
 	}
 
 	if updated {
@@ -497,7 +493,7 @@ func cleanupIONOSRecords(ctx context.Context, zones []Zone, recordCache *ZoneRec
 		return
 	}
 
-	debugLog("MAINTENANCE", "", "🧹 Starte Bereinigung verwaister DNS-Records...")
+	debugLog("MAINTENANCE", "", T.CleanupStartIonos)
 
 	configDomains := make(map[string]struct{})
 	for _, dc := range cfg.DomainConfigs {
@@ -541,7 +537,7 @@ func cleanupIONOSRecords(ctx context.Context, zones []Zone, recordCache *ZoneRec
 			debugLog(
 				"MAINTENANCE",
 				fqdn,
-				fmt.Sprintf("🗑️ Entferne verwaisten %s Record (ID: %s)", rec.Type, rec.ID),
+				fmt.Sprintf(T.CleanupOrphanedIonos, rec.Type, rec.ID),
 			)
 
 			if cfg.DryRun {
@@ -549,7 +545,7 @@ func cleanupIONOSRecords(ctx context.Context, zones []Zone, recordCache *ZoneRec
 					Level:   LogInfo,
 					Action:  ActionCleanup,
 					Domain:  fqdn,
-					Message: "⚠️ Dry-Run: Record wäre gelöscht worden",
+					Message: T.CleanupDryRun,
 				})
 				continue
 			}
@@ -557,13 +553,13 @@ func cleanupIONOSRecords(ctx context.Context, zones []Zone, recordCache *ZoneRec
 			url := fmt.Sprintf("%s/%s/records/%s", ionosBaseURL, zone.ID, rec.ID)
 
 			if _, err := ionosAPI(ctx, ionosDC, "DELETE", url, nil); err != nil {
-				debugLog("MAINTENANCE", fqdn, fmt.Sprintf("❌ Fehler beim Löschen: %v", err))
+				debugLog("MAINTENANCE", fqdn, fmt.Sprintf(T.CleanupDeleteError, err))
 			} else {
 				log(LogContext{
 					Level:   LogInfo,
 					Action:  ActionCleanup,
 					Domain:  fqdn,
-					Message: fmt.Sprintf("✅ %s Record entfernt (nicht mehr konfiguriert)", rec.Type),
+					Message: fmt.Sprintf(T.CleanupRecordRemoved, rec.Type),
 				})
 			}
 		}

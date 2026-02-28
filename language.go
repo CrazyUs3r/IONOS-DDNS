@@ -74,8 +74,7 @@ func loadLanguage(lang string) error {
 }
 
 var knownAcronyms = []string{
-	"IPv4", "IPv6", "HTTP", "JSON", "API", "DNS", "IP",
-}
+	"IPv4", "IPv6", "HTTP", "JSON", "API", "DNS", "IP", "CF"}
 
 func toSnakeCase(s string) string {
 	for _, acr := range knownAcronyms {
@@ -299,5 +298,92 @@ func setDefaultPhrases() {
 		InvalidDomainFormat:      "Invalid domain format: %s",
 		LabelTooLong:             "Label '%s' is too long: %d characters (max 63).",
 		InvalidLabel:             "Invalid label: %s",
+
+		// Cache & persistence
+		ErrRecordCacheNil:  "record cache is nil",
+		ErrCacheDirCreate:  "failed to create cache directory",
+		ErrCacheMarshal:    "failed to marshal cache",
+		ErrCacheWrite:      "failed to write cache",
+		ErrCacheRename:     "failed to rename cache",
+		CacheSavedZones:    "💾 %s cache saved (%d zones, %d records)",
+		CacheSavedDomains:  "💾 %s cache saved (%d domains)",
+		CacheFileNotFound:  "ℹ️ No %s cache file found (first start)",
+		CacheLoadedZones:   "📂 %s cache loaded from disk (%d zones, age: %v)",
+		CacheLoadedDomains: "📂 %s cache loaded from disk (%d domains)",
+
+		// Generic API errors
+		ErrContextError:     "context error",
+		ErrJSONMarshal:      "json marshal failed",
+		ErrRequestCreate:    "request creation failed",
+		ErrNetworkError:     "network error",
+		ErrBodyClose:        "failed to close response body",
+		ErrBodyRead:         "failed to read response",
+		ErrRateLimit:        "rate limit exceeded (429)",
+		ErrAuthFailed:       "authorization failed",
+		ErrResourceNotFound: "resource not found",
+		ErrValidationFailed: "validation failed",
+		ErrZoneNotInCache:   "zone not found in cache",
+		ErrZoneNameEmpty:    "zone name is empty for domain %s",
+		ErrAPIGeneric:       "API error %d",
+		ErrContextCancelled: "context cancelled: %w",
+
+		// Maintenance / Cleanup
+		CleanupStartIonos:    "🧹 starting cleanup of orphaned DNS records...",
+		CleanupStartCF:       "🧹 starting cleanup of orphaned Cloudflare DNS records...",
+		CleanupStartIPv64:    "🧹 starting cleanup of orphaned IPv64 records...",
+		CleanupDryRun:        "⚠️ Dry-Run: record would have been deleted",
+		CleanupDeleteError:   "❌ error while deleting: %v",
+		CleanupRecordRemoved: "✅ %s record removed (no longer configured)",
+
+		// IONOS specific
+		IonosAPIFailed:         "API failed after %d attempts",
+		IonosMaxAttempts:       "maximum attempts reached",
+		IonosCacheZoneNotFound: "⚠️ zone not found in cache",
+		IonosCacheUpdated:      "✅ cache updated: %s -> %s",
+		IonosCacheRecordAdded:  "✅ cache: new %s record added: %s",
+
+		// Cloudflare specific
+		CFNoCredentials:     "no Cloudflare credentials configured",
+		CFTokenEmpty:        "CFToken is set but empty after sanitizing",
+		CFHTMLResponse:      "Cloudflare API returned HTML (status %d): %s",
+		CFInvalidJSON:       "invalid JSON response from Cloudflare API",
+		CFApiFailed:         "Cloudflare API failed after %d attempts",
+		CFZoneLoadError:     "failed to load Cloudflare zones",
+		CFZoneParseError:    "failed to parse Cloudflare zones",
+		CFRecordsParseError: "failed to parse DNS records",
+
+		// IPv64 specific
+		IPv64BaseDomainNotFound: "IPv64 base domain not found: %s",
+		IPv64CDNIgnoredV4:       "ℹ️ CDN records ignored for A comparison: %v",
+		IPv64CDNIgnoredV6:       "ℹ️ CDN records ignored for AAAA comparison: %v",
+		IPv64UpdateURL:          "📡 IPv64 update: %s",
+		IPv64HTMLResponse:       "IPv64 API returned HTML instead of JSON: %s",
+		IPv64ParseError:         "failed to parse IPv64 response",
+		IPv64APIError:           "IPv64 API error: %s",
+		IPv64ApiFailed:          "IPv64 API failed after %d attempts",
+		IPv64HTTPError:          "IPv64 HTTP %d: %s",
+		IPv64UpdateFailed:       "IPv64 update failed: %s",
+		IPv64RateLimitHeader:    "⌛ rate limit: waiting %ds (Retry-After header)",
+		IPv64RateLimitBackoff:   "⌛ rate limit: waiting %s (exponential backoff)",
+		IPv64RetriableWait:      "⏳ retriable error, waiting %s...",
+		IPv64CacheBuilt:         "✅ IPv64 zones built from provider cache (%d domains, no API call)",
+		IPv64CacheUsed:          "✅ using IPv64 cache (age: %s)",
+		IPv64CacheLoadDisk:      "⚠️ no IPv64 cache in RAM - trying to load from disk",
+		IPv64CacheLoadedDisk:    "✅ IPv64 cache loaded from disk (no API call needed)",
+		IPv64CacheAPIError:      "⚠️ IPv64 API error, keeping old cache: %v",
+		IPv64CacheDiskError:     "⚠️ could not load cache from disk either: %v",
+		IPv64CacheFallback:      "✅ fallback to persisted cache successful",
+		IPv64ParseHTMLCache:     "⚠️ IPv64 parse error (likely HTML instead of JSON), keeping old cache: %v",
+		IPv64CacheSaveError:     "⚠️ could not save cache: %v",
+
+		// Health
+		HealthStarting:         "waiting for first scheduler run",
+		HealthLastRunFailed:    "last scheduler run failed (IP fetch, zone load or record update error)",
+		IPv64CachedDomain:      "✅ cached IPv64 domain (%d records, hash %s***)",
+		CleanupSkipForeignBase: "⏭️ not our base domain - skipped",
+		CleanupSkipCDN:         "⏭️ CDN/Failover record skipped (ID: %d, TTL: %d, policy: %s)",
+		CleanupSkipDeactivated: "⏭️ deactivated record skipped (ID: %d)",
+		CleanupSkipOrphaned:    "🗑️ removing orphaned %s record (ID: %d) - no longer configured",
+		CleanupDryRunID:        "⚠️ Dry-Run: %s record ID %d would have been deleted",
 	}
 }

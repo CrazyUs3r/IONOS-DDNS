@@ -151,6 +151,7 @@ domainLoop:
 	}
 
 	lastOk.Store(!hasErrors)
+	schedulerRanOnce.Store(true)
 	return successCount
 }
 

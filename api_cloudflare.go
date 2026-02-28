@@ -25,11 +25,11 @@ func getCloudflareCachePath() string {
 
 func saveCloudflareCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error {
 	if recordCache == nil {
-		return fmt.Errorf("recordCache is nil")
+		return fmt.Errorf("%s", T.ErrRecordCacheNil)
 	}
 
 	if err := os.MkdirAll(cfg.LogDir, 0755); err != nil {
-		return fmt.Errorf("failed to create log dir: %w", err)
+		return fmt.Errorf("%s: %w", T.ErrCacheDirCreate, err)
 	}
 
 	cachePath := getCloudflareCachePath()
@@ -51,21 +51,20 @@ func saveCloudflareCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error
 
 	jsonData, err := json.MarshalIndent(cache, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to marshal cache: %w", err)
+		return fmt.Errorf("%s: %w", T.ErrCacheMarshal, err)
 	}
 
 	tmpPath := cachePath + ".tmp"
 	if err := os.WriteFile(tmpPath, jsonData, 0644); err != nil {
-		return fmt.Errorf("failed to write cache: %w", err)
+		return fmt.Errorf("%s: %w", T.ErrCacheWrite, err)
 	}
 
 	if err := os.Rename(tmpPath, cachePath); err != nil {
 		_ = os.Remove(tmpPath)
-		return fmt.Errorf("failed to rename cache: %w", err)
+		return fmt.Errorf("%s: %w", T.ErrCacheRename, err)
 	}
 
-	debugLog("CACHE", "", fmt.Sprintf("💾 Cloudflare Cache gespeichert (%d zones, %d records)",
-		len(zones), totalRecords))
+	debugLog("CACHE", "", fmt.Sprintf(T.CacheSavedZones, "Cloudflare", len(zones), totalRecords))
 	return nil
 }
 
@@ -75,15 +74,15 @@ func loadCloudflareCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
 	data, err := os.ReadFile(cachePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			debugLog("CACHE", "", "ℹ️ Keine Cloudflare Cache-Datei gefunden (erster Start)")
+			debugLog("CACHE", "", fmt.Sprintf(T.CacheFileNotFound, "Cloudflare"))
 			return nil, nil, nil
 		}
-		return nil, nil, fmt.Errorf("failed to read cache: %w", err)
+		return nil, nil, fmt.Errorf("%s: %w", T.ErrBodyRead, err)
 	}
 
 	var cache CloudflareCache
 	if err := json.Unmarshal(data, &cache); err != nil {
-		return nil, nil, fmt.Errorf("failed to unmarshal cache: %w", err)
+		return nil, nil, fmt.Errorf("%s: %w", T.ErrCacheMarshal, err)
 	}
 
 	if cache.Version == 0 {
@@ -91,7 +90,7 @@ func loadCloudflareCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
 	}
 
 	if cache.Version != 1 {
-		return nil, nil, fmt.Errorf("unsupported cache version: %d", cache.Version)
+		return nil, nil, fmt.Errorf(T.ErrAPIGeneric+": unsupported version %d", cache.Version)
 	}
 
 	recordCache := NewZoneRecordCache()
@@ -100,8 +99,7 @@ func loadCloudflareCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
 	}
 
 	age := time.Since(cache.LastUpdate)
-	debugLog("CACHE", "", fmt.Sprintf("📂 Cloudflare Cache von Disk geladen (%d zones, Alter: %v)",
-		len(cache.Zones), age.Round(time.Second)))
+	debugLog("CACHE", "", fmt.Sprintf(T.CacheLoadedZones, "Cloudflare", len(cache.Zones), age.Round(time.Second)))
 
 	return cache.Zones, recordCache, nil
 }
@@ -111,7 +109,7 @@ func loadCloudflareCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
 // ============================================================================
 func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint string, body interface{}) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("context error: %w", err)
+		return nil, fmt.Errorf("%s: %w", T.ErrContextError, err)
 	}
 
 	fullURL := cloudflareAPIBase + endpoint
@@ -119,21 +117,21 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 	var lastErr error
 	for attempt := 0; attempt < cfg.MaxAPIRetries; attempt++ {
 
-		debugLog("HTTP", "", fmt.Sprintf("🔄 Cloudflare %s %d/%d: %s %s",
+		debugLog("HTTP", "", fmt.Sprintf(T.CFAttempt,
 			T.Attempt, attempt+1, cfg.MaxAPIRetries, method, fullURL))
 
 		var bodyReader io.Reader
 		if body != nil {
 			bodyBytes, err := json.Marshal(body)
 			if err != nil {
-				return nil, fmt.Errorf("json marshal failed: %w", err)
+				return nil, fmt.Errorf("%s: %w", T.ErrJSONMarshal, err)
 			}
 			bodyReader = bytes.NewReader(bodyBytes)
 		}
 
 		req, err := http.NewRequestWithContext(ctx, method, fullURL, bodyReader)
 		if err != nil {
-			return nil, fmt.Errorf("request creation failed: %w", err)
+			return nil, fmt.Errorf("%s: %w", T.ErrRequestCreate, err)
 		}
 
 		req.Header.Set("User-Agent", ManagedComment)
@@ -156,7 +154,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 			}, token)
 
 			if token == "" {
-				return nil, fmt.Errorf("CFToken is set but empty after sanitizing")
+				return nil, fmt.Errorf("%s", T.CFTokenEmpty)
 			}
 
 			req.Header.Set("Authorization", "Bearer "+token)
@@ -166,7 +164,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 			req.Header.Set("X-Auth-Key", strings.TrimSpace(dc.CFSecret))
 
 		default:
-			return nil, fmt.Errorf("no Cloudflare credentials configured")
+			return nil, fmt.Errorf("%s", T.CFNoCredentials)
 		}
 
 		start := time.Now().Local()
@@ -176,26 +174,26 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 		if err != nil {
 			debugLog("HTTP", "", fmt.Sprintf("❌ %s: %v | %s: %v", T.NetworkError, err, T.AvgLatency, duration))
 			apiMetrics.RecordError(method, 0, err, duration)
-			lastErr = fmt.Errorf("network error: %w", err)
+			lastErr = fmt.Errorf("%s: %w", T.ErrNetworkError, err)
 
 			wait := calculateRetryDelay(attempt, true)
 			select {
 			case <-time.After(wait):
 				continue
 			case <-ctx.Done():
-				return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
+				return nil, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
 			}
 		}
 
 		respBody, readErr := io.ReadAll(res.Body)
 		closeErr := res.Body.Close()
 		if closeErr != nil {
-			debugLog("HTTP", "", fmt.Sprintf("Warning: failed to close response body: %v", closeErr))
+			debugLog("HTTP", "", fmt.Sprintf(T.ErrBodyClose+": %v", closeErr))
 		}
 
 		if readErr != nil {
 			apiMetrics.RecordError(method, res.StatusCode, readErr, duration)
-			lastErr = fmt.Errorf("failed to read response: %w", readErr)
+			lastErr = fmt.Errorf("%s: %w", T.ErrBodyRead, readErr)
 
 			serverBusy := res.StatusCode == 429 || res.StatusCode >= 500
 			wait := calculateRetryDelay(attempt, serverBusy)
@@ -203,7 +201,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 			case <-time.After(wait):
 				continue
 			case <-ctx.Done():
-				return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
+				return nil, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
 			}
 		}
 
@@ -220,7 +218,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 			case <-time.After(wait):
 				continue
 			case <-ctx.Done():
-				return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
+				return nil, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
 			}
 		}
 
@@ -231,7 +229,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 				if len(preview) > 200 {
 					preview = preview[:200] + "..."
 				}
-				debugLog("HTTP", "", fmt.Sprintf("Cloudflare API returned HTML (status %d): %s", res.StatusCode, preview))
+				debugLog("HTTP", "", fmt.Sprintf(T.CFHTMLResponse, res.StatusCode, preview))
 			}
 
 			apiErr := classifyAPIError(res.StatusCode, method, fullURL, string(respBody))
@@ -240,7 +238,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 					StatusCode: res.StatusCode,
 					Method:     method,
 					URL:        fullURL,
-					Message:    "invalid json response",
+					Message:    T.CFInvalidJSON,
 					Retryable:  res.StatusCode >= 500,
 				}
 			}
@@ -260,7 +258,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 			case <-time.After(wait):
 				continue
 			case <-ctx.Done():
-				return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
+				return nil, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
 			}
 		}
 
@@ -283,7 +281,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 			case <-time.After(wait):
 				continue
 			case <-ctx.Done():
-				return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
+				return nil, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
 			}
 		}
 
@@ -291,7 +289,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 		return respBody, nil
 	}
 
-	return nil, fmt.Errorf("cloudflare api failed after %d attempts: %w", cfg.MaxAPIRetries, lastErr)
+	return nil, fmt.Errorf(T.CFApiFailed+": %w", cfg.MaxAPIRetries, lastErr)
 }
 
 func loadCloudflareZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
@@ -303,8 +301,8 @@ func loadCloudflareZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) 
 		endpoint := fmt.Sprintf("/zones?page=%d&per_page=%d", page, perPage)
 		data, err := cloudflareAPI(ctx, dc, "GET", endpoint, nil)
 		if err != nil {
-			debugLog("CACHE", "", fmt.Sprintf("⚠️ Cloudflare API-Fehler beim Laden von Zones: %v", err))
-			return nil, fmt.Errorf("failed to load cloudflare zones: %w", err)
+			debugLog("CACHE", "", fmt.Sprintf(T.CFZoneLoadError+": %v", err))
+			return nil, fmt.Errorf("%s: %w", T.CFZoneLoadError, err)
 		}
 
 		var resp struct {
@@ -316,8 +314,8 @@ func loadCloudflareZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) 
 			} `json:"result_info"`
 		}
 		if err := json.Unmarshal(data, &resp); err != nil {
-			debugLog("CACHE", "", fmt.Sprintf("⚠️ Cloudflare Parse-Fehler: %v", err))
-			return nil, fmt.Errorf("failed to parse zones: %w", err)
+			debugLog("CACHE", "", fmt.Sprintf(T.CFZoneParseError+": %v", err))
+			return nil, fmt.Errorf("%s: %w", T.CFZoneParseError, err)
 		}
 
 		for _, z := range resp.Result {
@@ -342,7 +340,7 @@ func loadCloudflareRecords(ctx context.Context, dc *DomainConfig, zoneID string)
 		endpoint := fmt.Sprintf("/zones/%s/dns_records?page=%d&per_page=%d", zoneID, page, perPage)
 		data, err := cloudflareAPI(ctx, dc, "GET", endpoint, nil)
 		if err != nil {
-			return nil, fmt.Errorf("failed: %w", err)
+			return nil, fmt.Errorf("%s: %w", T.ErrBodyRead, err)
 		}
 
 		var resp struct {
@@ -354,7 +352,7 @@ func loadCloudflareRecords(ctx context.Context, dc *DomainConfig, zoneID string)
 			} `json:"result_info"`
 		}
 		if err := json.Unmarshal(data, &resp); err != nil {
-			return nil, fmt.Errorf("failed: %w", err)
+			return nil, fmt.Errorf("%s: %w", T.ErrBodyRead, err)
 		}
 
 		for _, r := range resp.Result {
@@ -399,7 +397,7 @@ func updateCloudflareDNS(ctx context.Context, dc *DomainConfig, fqdn, recordType
 	}
 
 	if existing != nil && strings.TrimSpace(existing.Comment) != ManagedComment {
-		msg := fmt.Sprintf("⚠️ Cloudflare %s-Record existiert, aber ist nicht 'managed' (comment=%q). Überspringe Update.",
+		msg := fmt.Sprintf(T.CFUnmanagedRecord,
 			recordType, strings.TrimSpace(existing.Comment))
 
 		debugLog("DNS-LOGIC", fqdn, msg)
@@ -503,7 +501,7 @@ func cloudflareDCForZone(zoneName string) *DomainConfig {
 }
 
 func cleanupCloudflareRecords(ctx context.Context, zones []Zone, recordCache *ZoneRecordCache) {
-	debugLog("MAINTENANCE", "", "🧹 Starte Bereinigung verwaister Cloudflare DNS-Records...")
+	debugLog("MAINTENANCE", "", T.CleanupStartCF)
 	configDomains := make(map[string]struct{})
 	for _, dc := range cfg.DomainConfigs {
 		if dc.Provider != ProviderCloudflare {
@@ -553,7 +551,7 @@ func cleanupCloudflareRecords(ctx context.Context, zones []Zone, recordCache *Zo
 			debugLog(
 				"MAINTENANCE",
 				fqdn,
-				fmt.Sprintf("🗑️ Entferne verwaisten %s Record (ID: %s) in Zone %s", rec.Type, rec.ID, zone.Name),
+				fmt.Sprintf(T.CleanupOrphanedCF, rec.Type, rec.ID, zone.Name),
 			)
 
 			if cfg.DryRun {
@@ -561,20 +559,20 @@ func cleanupCloudflareRecords(ctx context.Context, zones []Zone, recordCache *Zo
 					Level:   LogInfo,
 					Action:  ActionCleanup,
 					Domain:  fqdn,
-					Message: "⚠️ Dry-Run: Record wäre gelöscht worden",
+					Message: T.CleanupDryRun,
 				})
 				continue
 			}
 
 			endpoint := fmt.Sprintf("/zones/%s/dns_records/%s", zone.ID, rec.ID)
 			if _, err := cloudflareAPI(ctx, cfDC, "DELETE", endpoint, nil); err != nil {
-				debugLog("MAINTENANCE", fqdn, fmt.Sprintf("❌ Fehler beim Löschen: %v", err))
+				debugLog("MAINTENANCE", fqdn, fmt.Sprintf(T.CleanupDeleteError, err))
 			} else {
 				log(LogContext{
 					Level:   LogInfo,
 					Action:  ActionCleanup,
 					Domain:  fqdn,
-					Message: fmt.Sprintf("✅ %s Record entfernt (nicht mehr konfiguriert)", rec.Type),
+					Message: fmt.Sprintf(T.CleanupRecordRemoved, rec.Type),
 				})
 			}
 		}
@@ -660,7 +658,7 @@ func findCloudflareRecord(ctx context.Context, dc *DomainConfig, zoneID, fqdn, r
 
 		data, err := cloudflareAPI(ctx, dc, "GET", endpoint, nil)
 		if err != nil {
-			return nil, fmt.Errorf("failed: %w", err)
+			return nil, fmt.Errorf("%s: %w", T.ErrBodyRead, err)
 		}
 
 		var resp struct {
@@ -672,7 +670,7 @@ func findCloudflareRecord(ctx context.Context, dc *DomainConfig, zoneID, fqdn, r
 			} `json:"result_info"`
 		}
 		if err := json.Unmarshal(data, &resp); err != nil {
-			return nil, fmt.Errorf("failed to parse dns_records: %w", err)
+			return nil, fmt.Errorf("%s: %w", T.CFRecordsParseError, err)
 		}
 
 		for _, r := range resp.Result {

@@ -45,6 +45,7 @@ RUN apk add --no-cache \
 LABEL org.opencontainers.image.title="Go-DynDNS" \
       org.opencontainers.image.description="Multi-Provider DynDNS-Client (IONOS, Cloudflare, IPv64)" \
       org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.source="https://github.com/crazyus3r/ionos-ddns" \
       org.opencontainers.image.created="${BUILD_DATE}"
 
 ENV PROVIDER="IONOS" \
@@ -93,8 +94,7 @@ VOLUME ["/config"]
 EXPOSE ${HEALTH_PORT}
 
 HEALTHCHECK --interval=300s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f -s http://localhost:${HEALTH_PORT}/health || exit 1
+    CMD sh -c 'BODY=$(curl -s http://localhost:${HEALTH_PORT}/health); CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${HEALTH_PORT}/health); echo "HTTP $CODE: $BODY"; [ "$CODE" = "200" ]'  || exit 1
 
 ENTRYPOINT ["/sbin/tini", "--", "/app/docker-entrypoint.sh"]
 CMD ["./dyndns"]
-

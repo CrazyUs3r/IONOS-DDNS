@@ -32,10 +32,11 @@ var (
 	cloudflareAPIBase = "https://api.cloudflare.com/client/v4"
 	ipv64APIBase      = "https://ipv64.net/api.php"
 
-	lastOk       atomic.Bool
-	logMutex     sync.Mutex
-	statusMutex  sync.Mutex
-	lastErrorMsg = &SafeErrorMsg{}
+	lastOk           atomic.Bool
+	schedulerRanOnce atomic.Bool
+	logMutex         sync.Mutex
+	statusMutex      sync.Mutex
+	lastErrorMsg     = &SafeErrorMsg{}
 
 	httpClient      *http.Client
 	clientOnce      sync.Once
@@ -353,6 +354,58 @@ type Phrases struct {
 	Ipv64TokenRequired, CloudflareAuthRequired, UnknownProvider            string
 	ConfigErrorPrefix, DomainIsEmpty, DomainTooLong, InvalidDomainFormat   string
 	LabelTooLong, InvalidLabel                                             string
+
+	// Cache & persistence
+	ErrRecordCacheNil, ErrCacheDirCreate, ErrCacheMarshal   string
+	ErrCacheWrite, ErrCacheRename                           string
+	CacheSavedZones, CacheSavedDomains                      string
+	CacheFileNotFound, CacheLoadedZones, CacheLoadedDomains string
+
+	// Generic API errors
+	ErrContextError, ErrJSONMarshal, ErrRequestCreate, ErrNetworkError string
+	ErrBodyClose, ErrBodyRead, ErrRateLimit, ErrContextCancelled       string
+	ErrAuthFailed, ErrResourceNotFound, ErrValidationFailed            string
+	ErrZoneNotInCache, ErrZoneNameEmpty, ErrAPIGeneric                 string
+
+	// Maintenance / Cleanup
+	CleanupStartIonos, CleanupStartCF, CleanupStartIPv64    string
+	CleanupDryRun, CleanupDeleteError, CleanupRecordRemoved string
+
+	// Ionos specific
+	IonosAPIFailed, IonosMaxAttempts                                 string
+	IonosCacheZoneNotFound, IonosCacheUpdated, IonosCacheRecordAdded string
+
+	// Cloudflare specific
+	CFNoCredentials, CFTokenEmpty, CFHTMLResponse string
+	CFInvalidJSON, CFApiFailed, CFZoneLoadError   string
+	CFZoneParseError, CFRecordsParseError         string
+
+	// IPv64 specific
+	IPv64BaseDomainNotFound, IPv64CDNIgnoredV4, IPv64CDNIgnoredV6    string
+	IPv64UpdateURL, IPv64HTMLResponse, IPv64ParseError               string
+	IPv64APIError, IPv64ApiFailed, IPv64HTTPError, IPv64UpdateFailed string
+	IPv64RateLimitHeader, IPv64RateLimitBackoff, IPv64RetriableWait  string
+	IPv64CacheBuilt, IPv64CacheUsed, IPv64CacheLoadDisk              string
+	IPv64CacheLoadedDisk, IPv64CacheAPIError, IPv64CacheDiskError    string
+	IPv64CacheFallback, IPv64ParseHTMLCache, IPv64CacheSaveError     string
+	IPv64CachedDomain                                                string
+	CleanupSkipForeignBase, CleanupSkipCDN, CleanupSkipDeactivated   string
+	CleanupSkipOrphaned, CleanupDryRunID                             string
+
+	// Health
+	HealthStarting, HealthLastRunFailed string
+
+	// API retry attempts
+	CFAttempt, IPv64Attempt, IonosAttempt string
+
+	// DNS record operations
+	CFUnmanagedRecord                        string
+	CleanupOrphanedCF, CleanupOrphanedIonos  string
+	IPv64RecordUpdated, IPv64RecordUpdatedV6 string
+	IPv64CacheUpdated, IPv64DeleteResponse   string
+	IonosPayload, IonosRecordArrow           string
+	IonosRetryable                           string
+	IonosErrDetail                           string
 }
 
 type LogLevel int
@@ -403,6 +456,29 @@ type DomainConfig struct {
 	CFSecret   string       `json:"cf_secret,omitempty"`
 	CFZoneID   string       `json:"cf_zone_id,omitempty"`
 	IPv64Token string       `json:"ipv64_token,omitempty"`
+}
+type rawEntry struct {
+	FQDN     string `json:"fqdn"`
+	Provider string `json:"provider"`
+
+	// IONOS – canonical lowercase and env-var uppercase
+	APIPrefix  string `json:"api_prefix"`
+	APISecret  string `json:"api_secret"`
+	APIPrefix2 string `json:"API_PREFIX"`
+	APISecret2 string `json:"API_SECRET"`
+
+	// Cloudflare
+	CFToken   string `json:"cf_token"`
+	CFEmail   string `json:"cf_email"`
+	CFSecret  string `json:"cf_secret"`
+	CFZoneID  string `json:"cf_zone_id"`
+	CFToken2  string `json:"CLOUDFLARE_TOKEN"`
+	CFEmail2  string `json:"CLOUDFLARE_EMAIL"`
+	CFSecret2 string `json:"CLOUDFLARE_API_SECRET"`
+
+	// IPv64
+	IPv64Token  string `json:"ipv64_token"`
+	IPv64Token2 string `json:"IPV64_TOKEN"`
 }
 
 type Config struct {
