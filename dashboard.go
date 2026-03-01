@@ -483,6 +483,7 @@ func (m *APIMetrics) incrementDailyMethod(method string, now time.Time) {
 		m.DailyPOST = 0
 		m.DailyPUT = 0
 		m.DailyDELETE = 0
+		m.DailyNIC = 0
 	}
 	m.DailyReset = now
 	switch method {
@@ -494,6 +495,8 @@ func (m *APIMetrics) incrementDailyMethod(method string, now time.Time) {
 		m.DailyPUT++
 	case "DELETE":
 		m.DailyDELETE++
+	case "NIC":
+		m.DailyNIC++
 	}
 }
 
@@ -662,6 +665,7 @@ func (m *APIMetrics) getStatsUnsafe() map[string]interface{} {
 		"daily_post":            m.DailyPOST,
 		"daily_put":             m.DailyPUT,
 		"daily_delete":          m.DailyDELETE,
+		"daily_nic":             m.DailyNIC,
 		"ip_latency_avg":        ipAvg,
 		"ip_latency_count":      m.IPLatencyCount,
 		"last_ip_check":         lastIPCheck,
@@ -1171,6 +1175,7 @@ func createMux() *http.ServeMux {
 		healthReason := ""
 		degradedMode := false
 
+		// Noch kein Scheduler-Lauf abgeschlossen → optimistisch healthy zurückgeben
 		if !hasRun {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -1196,6 +1201,7 @@ func createMux() *http.ServeMux {
 			}
 		}
 
+		// lastOk=false nach einem Lauf → reason befüllen falls noch leer
 		if !isHealthy && healthReason == "" {
 			healthReason = "last scheduler run failed (IP fetch, zone load or record update error)"
 		}
@@ -1609,6 +1615,22 @@ func createMux() *http.ServeMux {
 		chartSVG := generateSVGChart(hourlyStats)
 		latencySVG := generateLatencyChart(hourlyLat)
 
+		hasIPv64 := false
+		for _, dc := range cfg.DomainConfigs {
+			if dc.Provider == ProviderIPv64 {
+				hasIPv64 = true
+				break
+			}
+		}
+		nicHTML := ""
+		if hasIPv64 {
+			nicHTML = `<div style="display:flex; justify-content:space-between; padding:4px 8px; background:rgba(251,191,36,0.08); border-radius:5px; grid-column:1/-1;">` +
+				`<span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">NIC <span style="font-weight:400; opacity:0.6;">(IPv64 Updates)</span></span>` +
+				`<span id="mDailyNIC" style="font-size:0.95rem; font-weight:700; color:#fbbf24; font-family:monospace;">` +
+				fmt.Sprintf("%v", stats["daily_nic"]) +
+				`</span></div>`
+		}
+
 		_, _ = fmt.Fprintf(w, `
 		<details class="card">
 			<summary>⚙️ `+T.ConfigHeading+`</summary>
@@ -1696,6 +1718,7 @@ func createMux() *http.ServeMux {
 								<span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">DEL</span>
 								<span id="mDailyDELETE" style="font-size:0.95rem; font-weight:700; color:#f87171; font-family:monospace;">%v</span>
 							</div>
+							%s
 						</div>
 					</div>
 					<div style="padding:12px 14px; background:rgba(167,139,250,0.08); border:1px solid rgba(167,139,250,0.2); border-radius:8px;">
@@ -1731,6 +1754,7 @@ func createMux() *http.ServeMux {
 			stats["daily_post"],
 			stats["daily_put"],
 			stats["daily_delete"],
+			nicHTML,
 			stats["ip_latency_avg"],
 			stats["ip_latency_count"],
 			stats["last_ip_check"],
@@ -2284,6 +2308,8 @@ func createMux() *http.ServeMux {
 		if (elPut && m.daily_put != null) elPut.textContent = m.daily_put;
 		const elDel = document.getElementById('mDailyDELETE');
 		if (elDel && m.daily_delete != null) elDel.textContent = m.daily_delete;
+		const elNic = document.getElementById('mDailyNIC');
+		if (elNic && m.daily_nic != null) elNic.textContent = m.daily_nic;
 
 		const elIPLat = document.getElementById('mIPLatency');
 		if (elIPLat && m.ip_latency_avg != null) elIPLat.textContent = m.ip_latency_avg;

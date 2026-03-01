@@ -461,7 +461,7 @@ type rawEntry struct {
 	FQDN     string `json:"fqdn"`
 	Provider string `json:"provider"`
 
-	// IONOS
+	// IONOS – canonical lowercase and env-var uppercase
 	APIPrefix  string `json:"api_prefix"`
 	APISecret  string `json:"api_secret"`
 	APIPrefix2 string `json:"API_PREFIX"`
@@ -644,6 +644,7 @@ type APIMetrics struct {
 	DailyPOST            int64
 	DailyPUT             int64
 	DailyDELETE          int64
+	DailyNIC             int64
 	DailyReset           time.Time
 	IPLatencySum         time.Duration
 	IPLatencyCount       int64
