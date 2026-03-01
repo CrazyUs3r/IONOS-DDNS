@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release-Version (z.B. 2.3.1)"
+        description: "Release-Version (z.B. 2.3.3)"
         required: true
-        default: "2.3.1"
+        default: "2.3.3"
 
       prerelease:
         description: "Als Prerelease veröffentlichen?"
@@ -119,7 +119,6 @@ jobs:
       - name: Build Binaries
         run: |
           GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${{ env.VERSION }}" -o ionos-ddns-linux-amd64 .
-          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${{ env.VERSION }}" -o ionos-ddns-windows-amd64.exe .
           GOOS=linux   GOARCH=arm64 go build -ldflags="-s -w -X main.Version=${{ env.VERSION }}" -o ionos-ddns-linux-arm64 .
 
       - name: Generate checksums
@@ -161,12 +160,10 @@ jobs:
             |-------|-----------|
             | `ionos-ddns-linux-amd64` | Linux x86_64 |
             | `ionos-ddns-linux-arm64` | Linux ARM64 (Raspberry Pi etc.) |
-            | `ionos-ddns-windows-amd64.exe` | Windows x86_64 |
 
             > SHA256-Checksums in `checksums.txt`
           files: |
             ionos-ddns-linux-amd64
-            ionos-ddns-windows-amd64.exe
             ionos-ddns-linux-arm64
             checksums.txt
         env:
