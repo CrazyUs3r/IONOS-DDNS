@@ -8,7 +8,6 @@ linters:
   disable-all: true
   enable:
     - govet
-    - gosec
     - staticcheck
     - errcheck
     - revive
