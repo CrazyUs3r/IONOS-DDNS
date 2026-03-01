@@ -733,20 +733,36 @@ type rotationJob struct {
 }
 
 type apiMetricsSnapshot struct {
-	TotalRequests     int64       `json:"total_requests"`
-	SuccessRequests   int64       `json:"success_requests"`
-	FailedRequests    int64       `json:"failed_requests"`
-	RateLimitHits     int64       `json:"rate_limit_hits"`
-	ServerErrors      int64       `json:"server_errors"`
-	ClientErrors      int64       `json:"client_errors"`
-	AverageLatencyMs  int64       `json:"avg_latency_ms"`
-	HourlyStats       [24]int     `json:"hourly_stats"`
-	HourlyLatencyMs   [24]int64   `json:"hourly_latency_ms"`
-	RequestTimestamps []time.Time `json:"request_timestamps"`
-	LastSuccessTime   time.Time   `json:"last_success_at"`
-	LastError         string      `json:"last_error"`
-	LastErrorTime     time.Time   `json:"last_error_at"`
-	SavedAt           time.Time   `json:"saved_at"`
+	TotalRequests        int64       `json:"total_requests"`
+	SuccessRequests      int64       `json:"success_requests"`
+	FailedRequests       int64       `json:"failed_requests"`
+	RateLimitHits        int64       `json:"rate_limit_hits"`
+	ServerErrors         int64       `json:"server_errors"`
+	ClientErrors         int64       `json:"client_errors"`
+	AverageLatencyMs     int64       `json:"avg_latency_ms"`
+	HourlyStats          [24]int     `json:"hourly_stats"`
+	HourlyLatencyMs      [24]int64   `json:"hourly_latency_ms"`
+	RequestTimestamps    []time.Time `json:"request_timestamps"`
+	LastSuccessTime      time.Time   `json:"last_success_at"`
+	LastError            string      `json:"last_error"`
+	LastErrorTime        time.Time   `json:"last_error_at"`
+	SavedAt              time.Time   `json:"saved_at"`
+	DailyGET             int64       `json:"daily_get"`
+	DailyPOST            int64       `json:"daily_post"`
+	DailyPUT             int64       `json:"daily_put"`
+	DailyDELETE          int64       `json:"daily_delete"`
+	DailyNIC             int64       `json:"daily_nic"`
+	DailyReset           time.Time   `json:"daily_reset"`
+	LatencySamples       [1000]int64 `json:"latency_samples"`
+	LatencySampleIdx     int         `json:"latency_sample_idx"`
+	LatencySampleCount   int         `json:"latency_sample_count"`
+	IPLatencySum         int64       `json:"ip_latency_sum_ms"`
+	IPLatencyCount       int64       `json:"ip_latency_count"`
+	IPLatencyAvgMs       int64       `json:"ip_latency_avg_ms"`
+	IPLatencySamples     [200]int64  `json:"ip_latency_samples"`
+	IPLatencySampleIdx   int         `json:"ip_latency_sample_idx"`
+	IPLatencySampleCount int         `json:"ip_latency_sample_count"`
+	LastIPCheckTime      time.Time   `json:"last_ip_check_at"`
 }
 
 // ============================================================================
@@ -810,12 +826,10 @@ type notifyConfig struct {
 // DNS CACHE
 // ============================================================================
 type dnsCache struct {
-	ttl time.Duration
-
+	ttl      time.Duration
 	mu       sync.Mutex
 	entries  map[string]dnsCacheEntry
 	inflight map[string]*dnsInFlight
-
 	resolver *net.Resolver
 }
 
