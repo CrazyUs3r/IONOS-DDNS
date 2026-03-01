@@ -711,6 +711,25 @@ func (m *APIMetrics) SaveToFile(path string) error {
 		LastErrorTime:     m.LastErrorTimestamp,
 		SavedAt:           time.Now().Local(),
 		RequestTimestamps: make([]time.Time, len(m.RequestTimestamps)),
+		// Daily counters
+		DailyGET:    m.DailyGET,
+		DailyPOST:   m.DailyPOST,
+		DailyPUT:    m.DailyPUT,
+		DailyDELETE: m.DailyDELETE,
+		DailyNIC:    m.DailyNIC,
+		DailyReset:  m.DailyReset,
+		// Latency percentile samples
+		LatencySamples:     m.LatencySamples,
+		LatencySampleIdx:   m.LatencySampleIdx,
+		LatencySampleCount: m.LatencySampleCount,
+		// IP latency
+		IPLatencySum:         m.IPLatencySum.Milliseconds(),
+		IPLatencyCount:       m.IPLatencyCount,
+		IPLatencyAvgMs:       m.IPLatencyAvg.Milliseconds(),
+		IPLatencySamples:     m.IPLatencySamples,
+		IPLatencySampleIdx:   m.IPLatencySampleIdx,
+		IPLatencySampleCount: m.IPLatencySampleCount,
+		LastIPCheckTime:      m.LastIPCheckTime,
 	}
 	copy(snap.RequestTimestamps, m.RequestTimestamps)
 
@@ -766,6 +785,30 @@ func (m *APIMetrics) LoadFromFile(path string) error {
 	m.LastSuccessTimestamp = snap.LastSuccessTime
 	m.LastError = snap.LastError
 	m.LastErrorTimestamp = snap.LastErrorTime
+
+	// Daily counters — nur übernehmen wenn noch gleicher Tag
+	if !snap.DailyReset.IsZero() && snap.DailyReset.Day() == time.Now().Local().Day() {
+		m.DailyGET = snap.DailyGET
+		m.DailyPOST = snap.DailyPOST
+		m.DailyPUT = snap.DailyPUT
+		m.DailyDELETE = snap.DailyDELETE
+		m.DailyNIC = snap.DailyNIC
+		m.DailyReset = snap.DailyReset
+	}
+
+	// Latency percentile samples
+	m.LatencySamples = snap.LatencySamples
+	m.LatencySampleIdx = snap.LatencySampleIdx
+	m.LatencySampleCount = snap.LatencySampleCount
+
+	// IP latency
+	m.IPLatencySum = time.Duration(snap.IPLatencySum) * time.Millisecond
+	m.IPLatencyCount = snap.IPLatencyCount
+	m.IPLatencyAvg = time.Duration(snap.IPLatencyAvgMs) * time.Millisecond
+	m.IPLatencySamples = snap.IPLatencySamples
+	m.IPLatencySampleIdx = snap.IPLatencySampleIdx
+	m.IPLatencySampleCount = snap.IPLatencySampleCount
+	m.LastIPCheckTime = snap.LastIPCheckTime
 
 	m.RequestTimestamps = nil
 	if len(snap.RequestTimestamps) > 0 {
