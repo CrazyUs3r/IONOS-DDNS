@@ -123,7 +123,7 @@ jobs:
 
       - name: Generate checksums
         run: |
-          sha256sum ionos-ddns-linux-amd64 ionos-ddns-windows-amd64.exe ionos-ddns-linux-arm64 > checksums.txt
+          sha256sum ionos-ddns-linux-amd64 ionos-ddns-linux-arm64 > checksums.txt
           echo "📋 Checksums:"
           cat checksums.txt
 
