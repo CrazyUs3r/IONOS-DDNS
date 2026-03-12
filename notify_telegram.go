@@ -3,6 +3,7 @@ package main
 
 import (
 	"bytes"
+	"math/rand"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -12,22 +13,34 @@ import (
 	"time"
 )
 
+var instanceEmojis = []string{
+	"🔵", "🟢", "🟡", "🟠", "🔴", "🟣", "⚫", "⚪",
+	"🐶", "🐱", "🦊", "🐻", "🐼", "🐨", "🐯", "🦁",
+	"🚀", "🌍", "⚡", "🔥", "❄️", "🌊", "🌈", "☀️",
+}
+
 // ============================================================================
 // TELEGRAM NOTIFIER
 // ============================================================================
 type telegramNotifier struct {
-	token  string
-	chatID string
+	token       string
+	chatID      string
+	instanceTag string
 }
 
 func newTelegramNotifier(token, chatID string) *telegramNotifier {
-	return &telegramNotifier{token: token, chatID: chatID}
+	t := &telegramNotifier{
+		token:       token,
+		chatID:      chatID,
+		instanceTag: generateInstanceTag(),
+	}
+	return t
 }
 
 func (t *telegramNotifier) Name() string { return "Telegram" }
 
 func (t *telegramNotifier) Send(msg NotifyMessage) error {
-	text := formatTelegramMessage(msg)
+	text := formatTelegramMessage(msg, t.instanceTag)
 
 	payload := map[string]interface{}{
 		"chat_id":    t.chatID,
@@ -77,7 +90,17 @@ func (t *telegramNotifier) Send(msg NotifyMessage) error {
 	return nil
 }
 
-func formatTelegramMessage(msg NotifyMessage) string {
+func generateInstanceTag() string {
+	pool := instanceEmojis
+	a := pool[rand.Intn(len(pool))]
+	b := pool[rand.Intn(len(pool))]
+	if a == b {
+		b = pool[rand.Intn(len(pool))]
+	}
+	return a + b
+}
+
+func formatTelegramMessage(msg NotifyMessage, instanceTag string) string {
 	icon := levelEmoji(msg.Level)
 
 	switch msg.Action {
@@ -92,8 +115,9 @@ func formatTelegramMessage(msg NotifyMessage) string {
 	case ActionCleanup:
 		icon = "🧹"
 	}
+
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "<b>%s Go-DynDNS</b>\n", icon)
+	fmt.Fprintf(&sb, "<b>%s Go-DynDNS</b>  <code>%s</code>\n", icon, instanceTag)
 
 	if msg.Domain != "" {
 		fmt.Fprintf(&sb, "🌐 <code>%s</code>\n", msg.Domain)
@@ -102,6 +126,5 @@ func formatTelegramMessage(msg NotifyMessage) string {
 	fmt.Fprintf(&sb, "📋 <b>%s</b>\n", msg.Action)
 	fmt.Fprintf(&sb, "💬 %s\n", msg.Message)
 	fmt.Fprintf(&sb, "🕒 <i>%s</i>", time.Now().Local().Format("02.01.2006 15:04:05"))
-
 	return sb.String()
 }

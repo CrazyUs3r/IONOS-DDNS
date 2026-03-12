@@ -325,56 +325,43 @@ func runCleanupIfNeeded(ctx context.Context, zonesByProvider map[string][]Zone, 
 // ============================================================================
 func loadZonesFromDiskCache() (map[string][]Zone, error) {
 	zonesByProvider := make(map[string][]Zone)
-	loadedAny := false
+	seen := make(map[ProviderType]bool)
 
 	for i := range cfg.DomainConfigs {
-		if cfg.DomainConfigs[i].Provider == ProviderIPv64 {
+		provider := cfg.DomainConfigs[i].Provider
+		if seen[provider] {
+			continue
+		}
+		seen[provider] = true
+
+		switch provider {
+		case ProviderIPv64:
 			if err := loadIPv64CacheFromDisk(); err == nil {
 				providerCache.RLock()
 				zones := make([]Zone, 0, len(providerCache.ipv64Records))
 				for domainName := range providerCache.ipv64Records {
-					zones = append(zones, Zone{
-						ID:   domainName,
-						Name: domainName,
-					})
+					zones = append(zones, Zone{ID: domainName, Name: domainName})
 				}
 				providerCache.RUnlock()
-
 				if len(zones) > 0 {
 					zonesByProvider[string(ProviderIPv64)] = zones
-					loadedAny = true
 					debugLog("CACHE", "", fmt.Sprintf("📂 IPv64: %d zones von Disk geladen", len(zones)))
 				}
 			}
-			break
-		}
-	}
-
-	for i := range cfg.DomainConfigs {
-		if cfg.DomainConfigs[i].Provider == ProviderCloudflare {
-			zones, _, err := loadCloudflareCacheFromFile()
-			if err == nil && len(zones) > 0 {
+		case ProviderCloudflare:
+			if zones, _, err := loadCloudflareCacheFromFile(); err == nil && len(zones) > 0 {
 				zonesByProvider[string(ProviderCloudflare)] = zones
-				loadedAny = true
 				debugLog("CACHE", "", fmt.Sprintf("📂 Cloudflare: %d zones von Disk geladen", len(zones)))
 			}
-			break
-		}
-	}
-
-	for i := range cfg.DomainConfigs {
-		if cfg.DomainConfigs[i].Provider == ProviderIONOS {
-			zones, _, err := loadIONOSCacheFromFile()
-			if err == nil && len(zones) > 0 {
+		case ProviderIONOS:
+			if zones, _, err := loadIONOSCacheFromFile(); err == nil && len(zones) > 0 {
 				zonesByProvider[string(ProviderIONOS)] = zones
-				loadedAny = true
 				debugLog("CACHE", "", fmt.Sprintf("📂 IONOS: %d zones von Disk geladen", len(zones)))
 			}
-			break
 		}
 	}
 
-	if !loadedAny {
+	if len(zonesByProvider) == 0 {
 		return nil, fmt.Errorf("kein Provider-Cache auf Disk gefunden")
 	}
 

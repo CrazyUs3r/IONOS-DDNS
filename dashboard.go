@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -425,10 +426,6 @@ func (m *APIMetrics) RecordError(method string, statusCode int, err error, durat
 	m.LastErrorTimestamp = now
 
 	m.cleanupOldTimestamps(now)
-	if len(m.RequestTimestamps) >= 5000 {
-		m.RequestTimestamps = m.RequestTimestamps[len(m.RequestTimestamps)-3600:]
-	}
-
 	m.RequestTimestamps = append(m.RequestTimestamps, now)
 
 	hour := now.Hour()
@@ -1312,31 +1309,87 @@ func createMux() *http.ServeMux {
 		var logs []LogEntry
 		var logTimeRange string
 
-		if b, err := os.ReadFile(logPath); err == nil {
-			lines := strings.Split(string(b), "\n")
-			formatTs := func(ts string) string {
-				t, err := time.Parse("2006-01-02T15:04:05", ts)
-				if err != nil {
-					return ts
+		// Disk-based cache: compare mtime of dyndns.json vs log_cache.json.
+		// Cache hit  → read log_cache.json (already parsed, small).
+		// Cache miss → parse dyndns.json with ring-buffer, write log_cache.json.
+		// Zero RAM held between requests.
+		type logCachePayload struct {
+			Logs         []LogEntry `json:"logs"`
+			LogTimeRange string     `json:"log_time_range"`
+		}
+
+		loadFromDiskCache := func() bool {
+			logStat, err := os.Stat(logPath)
+			if err != nil {
+				return false
+			}
+			cacheStat, err := os.Stat(logCachePath)
+			if err != nil {
+				return false
+			}
+			if logStat.ModTime().After(cacheStat.ModTime()) {
+				return false // log newer than cache → stale
+			}
+			b, err := os.ReadFile(logCachePath)
+			if err != nil {
+				return false
+			}
+			var payload logCachePayload
+			if err := json.Unmarshal(b, &payload); err != nil {
+				return false
+			}
+			logs = payload.Logs
+			logTimeRange = payload.LogTimeRange
+			return true
+		}
+
+		if !loadFromDiskCache() {
+			if f, err := os.Open(logPath); err == nil {
+				// Ring-buffer: avoids giant string alloc from ReadFile+Split
+				limit := cfg.MaxLogLines
+				ring := make([]string, limit)
+				head, count := 0, 0
+
+				scanner := bufio.NewScanner(f)
+				scanner.Buffer(make([]byte, 64*1024), 64*1024)
+				for scanner.Scan() {
+					if line := strings.TrimSpace(scanner.Text()); line != "" {
+						ring[head%limit] = line
+						head++
+						count++
+					}
 				}
-				return t.Format("02.01.2006 15:04:05")
+				_ = f.Close()
+
+				formatTs := func(ts string) string {
+					t, err := time.Parse("2006-01-02T15:04:05", ts)
+					if err != nil {
+						return ts
+					}
+					return t.Format("02.01.2006 15:04:05")
+				}
+
+				if count > limit {
+					count = limit
+				}
+				for i := 1; i <= count; i++ {
+					line := ring[(head-i+limit)%limit]
+					var e LogEntry
+					if json.Unmarshal([]byte(line), &e) == nil {
+						e.Timestamp = formatTs(e.Timestamp)
+						logs = append(logs, e)
+					}
+				}
+				if len(logs) > 0 {
+					latest := logs[0].Timestamp
+					oldest := logs[len(logs)-1].Timestamp
+					logTimeRange = fmt.Sprintf("%s — %s", oldest, latest)
+				}
 			}
 
-			for i := len(lines) - 1; i >= 0 && len(logs) < cfg.MaxLogLines; i-- {
-				line := strings.TrimSpace(lines[i])
-				if line == "" {
-					continue
-				}
-				var e LogEntry
-				if json.Unmarshal([]byte(line), &e) == nil {
-					e.Timestamp = formatTs(e.Timestamp)
-					logs = append(logs, e)
-				}
-			}
-			if len(logs) > 0 {
-				latest := logs[0].Timestamp
-				oldest := logs[len(logs)-1].Timestamp
-				logTimeRange = fmt.Sprintf("%s — %s", oldest, latest)
+			// Write to disk cache — next request reads this instead
+			if payload, err := json.Marshal(logCachePayload{Logs: logs, LogTimeRange: logTimeRange}); err == nil {
+				_ = os.WriteFile(logCachePath, payload, 0644)
 			}
 		}
 

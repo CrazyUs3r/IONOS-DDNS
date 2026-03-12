@@ -132,11 +132,6 @@ func persistLog(ctx LogContext) {
 	case logWriteQueue <- entry:
 	default:
 		fmt.Fprintf(os.Stderr, "[WARN] Log queue full, dropped: %s\n", entry.Message)
-		go notify(LogContext{
-			Level:   LogError,
-			Action:  ActionError,
-			Message: "Log queue full, entry dropped: " + entry.Message,
-		})
 	}
 
 	notify(ctx)
@@ -357,9 +352,7 @@ func doLogRotation(path string, maxLines int) {
 		return
 	}
 
-	fmt.Printf("[%s] [DBG ] 🧹 MAINTENANCE : ✅ %s: %d → %d\n",
-		time.Now().Local().Format("02.01.2006 15:04:05"),
-		T.LogRotated, len(lines), len(newLines))
+	debugLog("MAINTENANCE", "", fmt.Sprintf("✅ %s: %d → %d", T.LogRotated, len(lines), len(newLines)))
 }
 
 func rotateLogFile(path string, maxLines int) {
@@ -375,14 +368,24 @@ func rotateLogFile(path string, maxLines int) {
 // LOG QUEUE FLUSH
 // ============================================================================
 func flushLogQueue(timeout time.Duration) {
-	deadline := time.Now().Local().Add(timeout)
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
 
-	for time.Now().Local().Before(deadline) {
-		if len(logWriteQueue) == 0 {
-			time.Sleep(10 * time.Millisecond)
+	for {
+		select {
+		case <-timer.C:
+			if n := len(logWriteQueue); n > 0 {
+				fmt.Fprintf(os.Stderr, "[WARN] Log-Queue nicht vollständig geleert (%d verbleibend)\n", n)
+			}
 			return
+		default:
+			if len(logWriteQueue) == 0 {
+				time.Sleep(10 * time.Millisecond) // kurz warten: Writer könnte noch am Schreiben sein
+				if len(logWriteQueue) == 0 {
+					return
+				}
+			}
+			time.Sleep(10 * time.Millisecond)
 		}
-		time.Sleep(50 * time.Millisecond)
 	}
-	debugLog("SYSTEM", "", fmt.Sprintf("⚠️ Log-Queue nicht vollständig geleert (%d verbleibend)", len(logWriteQueue)))
 }

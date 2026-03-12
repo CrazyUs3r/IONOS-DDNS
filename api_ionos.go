@@ -10,6 +10,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+  "math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -103,7 +104,7 @@ func calculateRetryDelay(attempt int, isServerError bool) time.Duration {
 		baseWait = RetryMaxDelay
 	}
 
-	jitter := time.Duration(rng.Intn(RetryJitterMaxMs)) * time.Millisecond
+	jitter := time.Duration(rand.Intn(RetryJitterMaxMs)) * time.Millisecond
 	wait := baseWait + jitter
 
 	if isServerError {

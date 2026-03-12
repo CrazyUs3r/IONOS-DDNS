@@ -32,6 +32,7 @@ func getPublicIP(url string, want IPVersion) (string, error) {
 
 	if err != nil {
 		debugLog("IP-CHECK", "", fmt.Sprintf("❌ HTTP: %v", err))
+		apiMetrics.RecordError("IP", 0, err, duration)
 		return "", fmt.Errorf("http error: %w", err)
 	}
 	defer func() {
@@ -46,12 +47,14 @@ func getPublicIP(url string, want IPVersion) (string, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		debugLog("IP-CHECK", "", fmt.Sprintf("❌ Status Code: %d", resp.StatusCode))
+		apiMetrics.RecordError("IP", resp.StatusCode, fmt.Errorf("bad status: %d", resp.StatusCode), duration)
 		return "", fmt.Errorf("bad status: %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, IPCheckBodyMaxBytes))
 	if err != nil {
 		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", T.BodyReadError, err))
+		apiMetrics.RecordError("IP", resp.StatusCode, err, duration)
 		return "", fmt.Errorf("read error: %w", err)
 	}
 
@@ -59,23 +62,29 @@ func getPublicIP(url string, want IPVersion) (string, error) {
 	parsed := net.ParseIP(ipStr)
 	if parsed == nil {
 		debugLog("IP-CHECK", "", fmt.Sprintf("❌ Ungültige IP: '%s'", ipStr))
+		apiMetrics.RecordError("IP", resp.StatusCode, fmt.Errorf("invalid ip: %s", ipStr), duration)
 		return "", fmt.Errorf("invalid ip: %s", ipStr)
 	}
 
 	switch want {
 	case IPV4:
 		if parsed.To4() == nil {
-			return "", fmt.Errorf("expected IPv4 but got: %s", ipStr)
+			err := fmt.Errorf("expected IPv4 but got: %s", ipStr)
+			apiMetrics.RecordError("IP", resp.StatusCode, err, duration)
+			return "", err
 		}
 	case IPV6:
 		if parsed.To4() != nil {
-			return "", fmt.Errorf("expected IPv6 but got: %s", ipStr)
+			err := fmt.Errorf("expected IPv6 but got: %s", ipStr)
+			apiMetrics.RecordError("IP", resp.StatusCode, err, duration)
+			return "", err
 		}
 	}
 
 	debugLog("IP-CHECK", "", fmt.Sprintf("✅ %s: %s | %s: %v", T.ReceivedIP, ipStr, T.AvgLatency, duration))
 	ipLog(fmt.Sprintf("✅ Öffentliche IP (%v) erkannt via %s: %s | %s: %v", want, url, ipStr, T.AvgLatency, duration))
 
+	apiMetrics.RecordSuccess("IP", duration)
 	apiMetrics.RecordIPLatency(duration)
 
 	return ipStr, nil

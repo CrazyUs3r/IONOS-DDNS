@@ -52,6 +52,10 @@ func run() int {
 			lang = "en"
 		} else if strings.HasPrefix(envLang, "fr") {
 			lang = "fr"
+		} else if strings.HasPrefix(envLang, "es") {
+			lang = "es"
+		} else if strings.HasPrefix(envLang, "pl") {
+			lang = "pl"
 		}
 	}
 
@@ -210,8 +214,11 @@ func run() int {
 		return 1
 	}
 
-	logPath = filepath.Join(logsDir, "dyndns.json")
-	updatePath = filepath.Join(logsDir, "update.json")
+  copyEmbeddedLangFiles(langDir)
+
+	logPath      = filepath.Join(logsDir, "dyndns.json")
+	updatePath   = filepath.Join(logsDir, "update.json")
+	logCachePath = filepath.Join(logsDir, "log_cache.json")
 
 	shutdownCtx, shutdownCancel = context.WithCancel(context.Background())
 	defer shutdownCancel()

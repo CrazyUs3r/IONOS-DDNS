@@ -4,7 +4,6 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
@@ -28,6 +27,7 @@ var (
 	langDir           string
 	logPath           string
 	updatePath        string
+	logCachePath      string // parsed log cache: logs/log_cache.json
 	ionosBaseURL      = "https://api.hosting.ionos.com/dns/v1/zones"
 	cloudflareAPIBase = "https://api.cloudflare.com/client/v4"
 	ipv64APIBase      = "https://ipv64.net/api.php"
@@ -48,7 +48,6 @@ var (
 
 	domainRegex = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$`)
 	labelRegex  = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
-	rng         = rand.New(rand.NewSource(time.Now().Local().UnixNano()))
 
 	secretReplacer     *strings.Replacer
 	secretReplacerOnce sync.Once

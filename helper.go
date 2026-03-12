@@ -159,12 +159,8 @@ func doSingleflight[T any](
 	}
 }
 
-func envGet(key string) string {
-	return os.Getenv(key)
-}
-
 func getEnvOrDefault(key, def string) string {
-	if v := strings.TrimSpace(envGet(key)); v != "" {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
 		return v
 	}
 	return def

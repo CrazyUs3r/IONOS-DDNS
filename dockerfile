@@ -1,7 +1,7 @@
 # =============================================================================
 # Builder Stage
 # =============================================================================
-FROM --platform=${BUILDPLATFORM} golang:1.26-alpine AS builder
+FROM --platform=${BUILDPLATFORM} golang:1.26.1-alpine AS builder
 
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
@@ -13,15 +13,20 @@ ARG VCS_REF
 
 WORKDIR /app
 
+# Minimale passwd/group für scratch-Image erstellen
+RUN echo "dyndns:x:1000:1000::/:" > /etc/passwd && \
+    echo "dyndns:x:1000:" > /etc/group
+
 RUN apk add --no-cache git ca-certificates
 
 COPY go.mod go.sum ./
 RUN go mod download
 
-COPY *.go .
+COPY *.go /lang/*.json .
 
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build \
+    -tags timetzdata \
     -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildDate=${BUILD_DATE}" \
     -trimpath \
     -o dyndns .
@@ -29,18 +34,11 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
 # =============================================================================
 # Runtime Stage
 # =============================================================================
-FROM alpine:3.23
+FROM scratch
 
 ARG VERSION=2.3.0
 ARG BUILD_DATE
 ARG VCS_REF
-
-RUN apk add --no-cache \
-    ca-certificates \
-    tzdata \
-    curl \
-    tini && \
-    apk upgrade --no-cache
 
 LABEL org.opencontainers.image.title="Go-DynDNS" \
       org.opencontainers.image.description="Multi-Provider DynDNS-Client (IONOS, Cloudflare, IPv64)" \
@@ -78,23 +76,15 @@ ENV PROVIDER="IONOS" \
 
 WORKDIR /app
 
-RUN addgroup -S -g 1000 dyndns && \
-    adduser -S -u 1000 -G dyndns -h /home/dyndns dyndns && \
-    mkdir -p /config/logs /config/lang && \
-    chown -R dyndns:dyndns /config /app
+# Minimale System-Dateien aus Builder kopieren
+COPY --from=builder /etc/passwd /etc/passwd
+COPY --from=builder /etc/group /etc/group
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder --chown=1000:1000 /app/dyndns /app/
 
-COPY --from=builder --chown=dyndns:dyndns /app/dyndns /app/
-COPY --chown=dyndns:dyndns lang/*.json /app/lang/
-COPY --chown=dyndns:dyndns docker-entrypoint.sh /app/
-
-RUN chmod +x /app/dyndns /app/docker-entrypoint.sh
-
-USER dyndns
+USER 1000:1000
 VOLUME ["/config"]
 EXPOSE ${HEALTH_PORT}
 
-HEALTHCHECK --interval=300s --timeout=5s --start-period=10s --retries=3 \
-    CMD sh -c 'BODY=$(curl -s http://localhost:${HEALTH_PORT}/health); CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${HEALTH_PORT}/health); echo "HTTP $CODE: $BODY"; [ "$CODE" = "200" ]'  || exit 1
-
-ENTRYPOINT ["/sbin/tini", "--", "/app/docker-entrypoint.sh"]
-CMD ["./dyndns"]
+HEALTHCHECK NONE
+ENTRYPOINT ["/app/dyndns"]
