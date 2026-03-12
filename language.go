@@ -12,7 +12,6 @@ import (
 	"unicode"
 )
 
-//go:embed de.json en.json fr.json es.json pl.json
 var embeddedLang embed.FS
 
 // ============================================================================
@@ -30,7 +29,6 @@ func loadLanguage(lang string) error {
 
 	data, err := os.ReadFile(langFile)
 	if err != nil {
-		// Disk file missing — try embedded fallback (allows user overrides via volume)
 		embedName := lang + ".json"
 		if embedded, embedErr := embeddedLang.ReadFile(embedName); embedErr == nil {
 			fmt.Printf("[INFO] %s (embedded)\n", T.TryingLoadLanguage)
@@ -398,13 +396,11 @@ func setDefaultPhrases() {
 	}
 }
 
-// copyEmbeddedLangFiles schreibt alle eingebetteten Sprachdateien in dir,
-// sofern die Datei dort noch nicht existiert. So bleiben User-Overrides erhalten.
 func copyEmbeddedLangFiles(dir string) {
 	for _, name := range []string{"de.json", "en.json", "fr.json", "es.json", "pl.json"} {
 		dst := filepath.Join(dir, name)
 		if _, err := os.Stat(dst); err == nil {
-			continue // bereits vorhanden — nicht überschreiben
+			continue
 		}
 		data, err := embeddedLang.ReadFile(name)
 		if err != nil {
