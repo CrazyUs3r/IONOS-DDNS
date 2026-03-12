@@ -783,7 +783,6 @@ func (m *APIMetrics) LoadFromFile(path string) error {
 	m.LastError = snap.LastError
 	m.LastErrorTimestamp = snap.LastErrorTime
 
-	// Daily counters — nur übernehmen wenn noch gleicher Tag
 	if !snap.DailyReset.IsZero() && snap.DailyReset.Day() == time.Now().Local().Day() {
 		m.DailyGET = snap.DailyGET
 		m.DailyPOST = snap.DailyPOST
@@ -793,12 +792,9 @@ func (m *APIMetrics) LoadFromFile(path string) error {
 		m.DailyReset = snap.DailyReset
 	}
 
-	// Latency percentile samples
 	m.LatencySamples = snap.LatencySamples
 	m.LatencySampleIdx = snap.LatencySampleIdx
 	m.LatencySampleCount = snap.LatencySampleCount
-
-	// IP latency
 	m.IPLatencySum = time.Duration(snap.IPLatencySum) * time.Millisecond
 	m.IPLatencyCount = snap.IPLatencyCount
 	m.IPLatencyAvg = time.Duration(snap.IPLatencyAvgMs) * time.Millisecond
@@ -1308,11 +1304,6 @@ func createMux() *http.ServeMux {
 
 		var logs []LogEntry
 		var logTimeRange string
-
-		// Disk-based cache: compare mtime of dyndns.json vs log_cache.json.
-		// Cache hit  → read log_cache.json (already parsed, small).
-		// Cache miss → parse dyndns.json with ring-buffer, write log_cache.json.
-		// Zero RAM held between requests.
 		type logCachePayload struct {
 			Logs         []LogEntry `json:"logs"`
 			LogTimeRange string     `json:"log_time_range"`
@@ -1328,7 +1319,7 @@ func createMux() *http.ServeMux {
 				return false
 			}
 			if logStat.ModTime().After(cacheStat.ModTime()) {
-				return false // log newer than cache → stale
+				return false
 			}
 			b, err := os.ReadFile(logCachePath)
 			if err != nil {
@@ -1345,7 +1336,6 @@ func createMux() *http.ServeMux {
 
 		if !loadFromDiskCache() {
 			if f, err := os.Open(logPath); err == nil {
-				// Ring-buffer: avoids giant string alloc from ReadFile+Split
 				limit := cfg.MaxLogLines
 				ring := make([]string, limit)
 				head, count := 0, 0
@@ -1387,7 +1377,6 @@ func createMux() *http.ServeMux {
 				}
 			}
 
-			// Write to disk cache — next request reads this instead
 			if payload, err := json.Marshal(logCachePayload{Logs: logs, LogTimeRange: logTimeRange}); err == nil {
 				_ = os.WriteFile(logCachePath, payload, 0644)
 			}
