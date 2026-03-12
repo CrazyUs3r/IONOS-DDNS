@@ -27,7 +27,7 @@ var (
 	langDir           string
 	logPath           string
 	updatePath        string
-	logCachePath      string // parsed log cache: logs/log_cache.json
+	logCachePath      string
 	ionosBaseURL      = "https://api.hosting.ionos.com/dns/v1/zones"
 	cloudflareAPIBase = "https://api.cloudflare.com/client/v4"
 	ipv64APIBase      = "https://ipv64.net/api.php"
