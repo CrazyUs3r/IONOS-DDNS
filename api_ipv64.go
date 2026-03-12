@@ -692,7 +692,6 @@ func cleanupIPv64Records(ctx context.Context) {
 	}
 
 	debugLog("MAINTENANCE", "", T.CleanupStartIPv64)
-
 	configuredFQDNs := make(map[string]struct{})
 	ourBaseDomains := make(map[string]struct{})
 
@@ -742,7 +741,7 @@ func cleanupIPv64Records(ctx context.Context) {
 			}
 			fqdn = strings.ToLower(strings.TrimSuffix(fqdn, "."))
 
-		    ok := configuredFQDNs[fqdn]; ok {
+			if _, ok := configuredFQDNs[fqdn]; ok {
 				continue
 			}
 
