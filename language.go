@@ -33,7 +33,6 @@ func loadLanguage(lang string) error {
 		if embedded, embedErr := embeddedLang.ReadFile(embedName); embedErr == nil {
 			fmt.Printf("[INFO] %s (embedded)\n", T.TryingLoadLanguage)
 			data = embedded
-			err = nil
 		} else {
 			fmt.Printf("[WARN] %s %v\n", T.LanguageFileNotFound, err)
 			if lang != "en" {
@@ -400,7 +399,7 @@ func copyEmbeddedLangFiles(dir string) {
 	for _, name := range []string{"de.json", "en.json", "fr.json", "es.json", "pl.json"} {
 		dst := filepath.Join(dir, name)
 		if _, err := os.Stat(dst); err == nil {
-			continue
+			continue // bereits vorhanden — nicht überschreiben
 		}
 		data, err := embeddedLang.ReadFile(name)
 		if err != nil {

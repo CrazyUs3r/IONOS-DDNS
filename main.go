@@ -47,16 +47,15 @@ func run() int {
 
 	lang := "de"
 	envLang := strings.ToLower(os.Getenv("LANG"))
-	if envLang != "" {
-		if strings.HasPrefix(envLang, "en") {
-			lang = "en"
-		} else if strings.HasPrefix(envLang, "fr") {
-			lang = "fr"
-		} else if strings.HasPrefix(envLang, "es") {
-			lang = "es"
-		} else if strings.HasPrefix(envLang, "pl") {
-			lang = "pl"
-		}
+	switch {
+	case strings.HasPrefix(envLang, "en"):
+		lang = "en"
+	case strings.HasPrefix(envLang, "fr"):
+		lang = "fr"
+	case strings.HasPrefix(envLang, "es"):
+		lang = "es"
+	case strings.HasPrefix(envLang, "pl"):
+		lang = "pl"
 	}
 
 	if err := loadLanguage(lang); err != nil {
