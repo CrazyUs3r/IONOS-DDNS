@@ -13,7 +13,6 @@ ARG VCS_REF
 
 WORKDIR /app
 
-# Minimale passwd/group für scratch-Image erstellen
 RUN echo "dyndns:x:1000:1000::/:" > /etc/passwd && \
     echo "dyndns:x:1000:" > /etc/group
 
@@ -76,7 +75,6 @@ ENV PROVIDER="IONOS" \
 
 WORKDIR /app
 
-# Minimale System-Dateien aus Builder kopieren
 COPY --from=builder /etc/passwd /etc/passwd
 COPY --from=builder /etc/group /etc/group
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
@@ -87,4 +85,5 @@ VOLUME ["/config"]
 EXPOSE ${HEALTH_PORT}
 
 HEALTHCHECK NONE
+
 ENTRYPOINT ["/app/dyndns"]
