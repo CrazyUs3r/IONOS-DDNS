@@ -399,7 +399,7 @@ func copyEmbeddedLangFiles(dir string) {
 	for _, name := range []string{"de.json", "en.json", "fr.json", "es.json", "pl.json"} {
 		dst := filepath.Join(dir, name)
 		if _, err := os.Stat(dst); err == nil {
-			continue // bereits vorhanden — nicht überschreiben
+			continue
 		}
 		data, err := embeddedLang.ReadFile(name)
 		if err != nil {
