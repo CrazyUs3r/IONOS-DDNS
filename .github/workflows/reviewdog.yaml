@@ -8,22 +8,28 @@ on:
 permissions:
   contents: read
   pull-requests: write
-  checks: write   # nötig für github-pr-check
+  checks: write
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   golangci:
+    name: runner / golangci-lint
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - name: Check out code
+        uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v6
+      - name: Set up Go
+        uses: actions/setup-go@v6
         with:
+          go-version: 'stable'
           cache: false
 
       - name: Run golangci-lint with reviewdog (PR)
         if: github.event_name == 'pull_request'
-        uses: reviewdog/action-golangci-lint@v2
+        uses: reviewdog/action-golangci-lint@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           reporter: github-pr-review
@@ -34,7 +40,7 @@ jobs:
 
       - name: Run golangci-lint with reviewdog (push)
         if: github.event_name == 'push'
-        uses: reviewdog/action-golangci-lint@v2
+        uses: reviewdog/action-golangci-lint@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           reporter: github-pr-check
