@@ -29,7 +29,7 @@ jobs:
 
       - name: Run golangci-lint with reviewdog (PR)
         if: github.event_name == 'pull_request'
-        uses: reviewdog/action-golangci-lint@v3
+        uses: reviewdog/action-golangci-lint@v2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           reporter: github-pr-review
@@ -40,7 +40,7 @@ jobs:
 
       - name: Run golangci-lint with reviewdog (push)
         if: github.event_name == 'push'
-        uses: reviewdog/action-golangci-lint@v3
+        uses: reviewdog/action-golangci-lint@v2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           reporter: github-pr-check
