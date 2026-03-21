@@ -542,7 +542,7 @@ func (t *telegramNotifier) sendHealth(chatID string) {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "<b>❤️ Health-Check</b>  <code>%s</code>\n\n", t.instanceTag)
 
-	switch cmd {
+	switch {
 	case !schedulerRanOnce.Load():
 		fmt.Fprintf(&sb, "⏳ Status: <b>Startet...</b>\n")
 		sb.WriteString("Wartet auf ersten Scheduler-Lauf.\n")
