@@ -332,18 +332,18 @@ func (t *telegramNotifier) handleCommand(msg *tgMessage) {
 	}
 	cmd := strings.ToLower(text)
 
-	switch {
-	case cmd == "/start" || cmd == "/help":
+	switch cmd {
+	case "/start", "/help":
 		t.sendMainMenu(chatID)
-	case cmd == "/status":
+	case "/status":
 		t.sendStatus(chatID)
-	case cmd == "/metrics":
+	case "/metrics":
 		t.sendMetrics(chatID)
-	case cmd == "/domains":
+	case "/domains":
 		t.sendDomains(chatID)
-	case cmd == "/update":
+	case "/update":
 		t.triggerUpdate(chatID)
-	case cmd == "/health":
+	case "/health":
 		t.sendHealth(chatID)
 	default:
 		if strings.HasPrefix(cmd, "/") {
@@ -542,7 +542,7 @@ func (t *telegramNotifier) sendHealth(chatID string) {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "<b>❤️ Health-Check</b>  <code>%s</code>\n\n", t.instanceTag)
 
-	switch {
+	switch cmd {
 	case !schedulerRanOnce.Load():
 		fmt.Fprintf(&sb, "⏳ Status: <b>Startet...</b>\n")
 		sb.WriteString("Wartet auf ersten Scheduler-Lauf.\n")
