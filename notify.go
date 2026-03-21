@@ -84,8 +84,6 @@ func notify(ctx LogContext) {
 	}
 }
 
-// notifySync sends to all notifiers synchronously and waits for all to finish.
-// Use this for shutdown/critical events where the process is about to exit.
 func notifySync(ctx LogContext) {
 	if len(notifyCfg.notifiers) == 0 {
 		return

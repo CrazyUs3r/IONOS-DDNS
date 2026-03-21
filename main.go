@@ -320,12 +320,6 @@ func run() int {
 
 		case sig := <-stop:
 			debugLog("SYSTEM", "", fmt.Sprintf("Shutdown Signal empfangen: %v", sig))
-
-			// Send STOP notification synchronously BEFORE shutdownCancel(),
-			// otherwise the process exits before the HTTP request completes.
-			// notifySync blocks until all notifiers have sent the message,
-			// so it must run before shutdownCancel() exits the process.
-			// SkipNotify=true on the log() call prevents a second send.
 			stopCtx := LogContext{
 				Level:   LogInfo,
 				Action:  ActionStop,

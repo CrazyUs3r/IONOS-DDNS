@@ -17,62 +17,8 @@ import (
 )
 
 // ============================================================================
-// TELEGRAM TYPES
-// ============================================================================
-
-type tgMessage struct {
-	MessageID int    `json:"message_id"`
-	Text      string `json:"text"`
-	Chat      tgChat `json:"chat"`
-	From      tgUser `json:"from"`
-	Date      int64  `json:"date"`
-}
-
-type tgChat struct {
-	ID int64 `json:"id"`
-}
-
-type tgUser struct {
-	ID        int64  `json:"id"`
-	FirstName string `json:"first_name"`
-	Username  string `json:"username"`
-}
-
-type tgInlineKeyboard struct {
-	InlineKeyboard [][]tgInlineButton `json:"inline_keyboard"`
-}
-
-type tgInlineButton struct {
-	Text         string `json:"text"`
-	CallbackData string `json:"callback_data"`
-}
-
-type tgCallbackQuery struct {
-	ID      string    `json:"id"`
-	From    tgUser    `json:"from"`
-	Message tgMessage `json:"message"`
-	Data    string    `json:"data"`
-}
-
-type tgUpdateFull struct {
-	UpdateID      int              `json:"update_id"`
-	Message       *tgMessage       `json:"message,omitempty"`
-	CallbackQuery *tgCallbackQuery `json:"callback_query,omitempty"`
-}
-
-// ============================================================================
 // TELEGRAM NOTIFIER
 // ============================================================================
-
-type telegramNotifier struct {
-	token       string
-	chatID      string
-	instanceTag string
-
-	pollOnce   sync.Once
-	lastOffset atomic.Int32
-}
-
 func newTelegramNotifier(token, chatID string) *telegramNotifier {
 	return &telegramNotifier{
 		token:       token,
@@ -86,7 +32,6 @@ func (t *telegramNotifier) Name() string { return "Telegram" }
 // ============================================================================
 // SEND (outbound notifications)
 // ============================================================================
-
 func (t *telegramNotifier) Send(msg NotifyMessage) error {
 	text := formatTelegramMessage(msg, t.instanceTag)
 	return t.sendText(t.chatID, text, nil)
@@ -186,7 +131,6 @@ func (t *telegramNotifier) answerCallback(callbackID string) {
 // ============================================================================
 // POLLING LOOP
 // ============================================================================
-
 func (t *telegramNotifier) StartPolling() {
 	t.pollOnce.Do(func() {
 		go t.pollingLoop()
@@ -305,7 +249,6 @@ func (t *telegramNotifier) registerCommands() {
 // ============================================================================
 // AUTH
 // ============================================================================
-
 func (t *telegramNotifier) isAuthorized(chatID string) bool {
 	return strings.TrimSpace(chatID) == strings.TrimSpace(t.chatID)
 }
@@ -317,7 +260,6 @@ func chatIDStr(id int64) string {
 // ============================================================================
 // COMMAND HANDLER
 // ============================================================================
-
 func (t *telegramNotifier) handleCommand(msg *tgMessage) {
 	chatID := chatIDStr(msg.Chat.ID)
 	if !t.isAuthorized(chatID) {
@@ -326,7 +268,6 @@ func (t *telegramNotifier) handleCommand(msg *tgMessage) {
 	}
 
 	text := strings.TrimSpace(msg.Text)
-	// Strip @BotName suffix: /cmd@MyBot → /cmd
 	if idx := strings.Index(text, "@"); idx > 0 && strings.HasPrefix(text, "/") {
 		text = text[:idx]
 	}
@@ -355,7 +296,6 @@ func (t *telegramNotifier) handleCommand(msg *tgMessage) {
 // ============================================================================
 // CALLBACK HANDLER
 // ============================================================================
-
 func (t *telegramNotifier) handleCallback(cb *tgCallbackQuery) {
 	chatID := chatIDStr(cb.Message.Chat.ID)
 	t.answerCallback(cb.ID)
@@ -384,7 +324,6 @@ func (t *telegramNotifier) handleCallback(cb *tgCallbackQuery) {
 // ============================================================================
 // KEYBOARDS
 // ============================================================================
-
 func mainKeyboard() *tgInlineKeyboard {
 	return &tgInlineKeyboard{
 		InlineKeyboard: [][]tgInlineButton{
@@ -423,7 +362,6 @@ func backKeyboard() *tgInlineKeyboard {
 // ============================================================================
 // VIEWS
 // ============================================================================
-
 func (t *telegramNotifier) sendMainMenu(chatID string) {
 	text := fmt.Sprintf(
 		"<b>🌐 Go-DynDNS</b>  <code>%s</code>\n\nWas möchtest du tun?",
@@ -585,9 +523,8 @@ func (t *telegramNotifier) triggerUpdate(chatID string) {
 }
 
 // ============================================================================
-// HELPERS
+// TELEGRAM SEND
 // ============================================================================
-
 var instanceEmojis = []string{
 	"🔵", "🟢", "🟡", "🟠", "🔴", "🟣", "⚫", "⚪",
 	"🐶", "🐱", "🦊", "🐻", "🐼", "🐨", "🐯", "🦁",

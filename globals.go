@@ -843,3 +843,56 @@ type dnsInFlight struct {
 	addrs []net.IPAddr
 	err   error
 }
+
+// ============================================================================
+// TELEGRAM TYPES
+// ============================================================================
+
+type tgMessage struct {
+	MessageID int    `json:"message_id"`
+	Text      string `json:"text"`
+	Chat      tgChat `json:"chat"`
+	From      tgUser `json:"from"`
+	Date      int64  `json:"date"`
+}
+
+type tgChat struct {
+	ID int64 `json:"id"`
+}
+
+type tgUser struct {
+	ID        int64  `json:"id"`
+	FirstName string `json:"first_name"`
+	Username  string `json:"username"`
+}
+
+type tgInlineKeyboard struct {
+	InlineKeyboard [][]tgInlineButton `json:"inline_keyboard"`
+}
+
+type tgInlineButton struct {
+	Text         string `json:"text"`
+	CallbackData string `json:"callback_data"`
+}
+
+type tgCallbackQuery struct {
+	ID      string    `json:"id"`
+	From    tgUser    `json:"from"`
+	Message tgMessage `json:"message"`
+	Data    string    `json:"data"`
+}
+
+type tgUpdateFull struct {
+	UpdateID      int              `json:"update_id"`
+	Message       *tgMessage       `json:"message,omitempty"`
+	CallbackQuery *tgCallbackQuery `json:"callback_query,omitempty"`
+}
+
+type telegramNotifier struct {
+	token       string
+	chatID      string
+	instanceTag string
+
+	pollOnce   sync.Once
+	lastOffset atomic.Int32
+}
