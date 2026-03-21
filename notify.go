@@ -35,8 +35,11 @@ func initNotifiers() {
 	tgToken := getEnvOrDefault("TELEGRAM_BOT_TOKEN", "")
 	tgChat := getEnvOrDefault("TELEGRAM_CHAT_ID", "")
 	if tgToken != "" && tgChat != "" {
-		notifyCfg.notifiers = append(notifyCfg.notifiers, newTelegramNotifier(tgToken, tgChat))
-		debugLog("NOTIFY", "", "✅ Telegram Notifier aktiviert")
+		tgNotifier := newTelegramNotifier(tgToken, tgChat)
+		notifyCfg.notifiers = append(notifyCfg.notifiers, tgNotifier)
+		// Start the bot command polling loop
+		tgNotifier.StartPolling()
+		debugLog("NOTIFY", "", "✅ Telegram Notifier aktiviert (inkl. Bot-Commands)")
 	}
 
 	// ── Gotify ──────────────────────────────────────────────────────────────
