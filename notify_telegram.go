@@ -11,8 +11,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 )
 
