@@ -4,6 +4,7 @@ package main
 import (
 	"fmt"
 	"strings"
+	"sync"
 )
 
 // ============================================================================
@@ -37,7 +38,6 @@ func initNotifiers() {
 	if tgToken != "" && tgChat != "" {
 		tgNotifier := newTelegramNotifier(tgToken, tgChat)
 		notifyCfg.notifiers = append(notifyCfg.notifiers, tgNotifier)
-		// Start the bot command polling loop
 		tgNotifier.StartPolling()
 		debugLog("NOTIFY", "", "✅ Telegram Notifier aktiviert (inkl. Bot-Commands)")
 	}
@@ -59,8 +59,9 @@ func initNotifiers() {
 }
 
 // ============================================================================
-// DISPATCH
+// DISPATCH — async (normal log path)
 // ============================================================================
+
 func notify(ctx LogContext) {
 	if len(notifyCfg.notifiers) == 0 {
 		return
@@ -71,17 +72,7 @@ func notify(ctx LogContext) {
 		return
 	}
 
-	msg := ctx.Message
-	if ctx.Error != nil {
-		msg = fmt.Sprintf("%s: %v", ctx.Message, ctx.Error)
-	}
-
-	nm := NotifyMessage{
-		Action:  ctx.Action,
-		Domain:  ctx.Domain,
-		Message: msg,
-		Level:   ctx.Level,
-	}
+	nm := buildNotifyMessage(ctx)
 
 	for _, n := range notifyCfg.notifiers {
 		n := n
@@ -93,9 +84,51 @@ func notify(ctx LogContext) {
 	}
 }
 
+// notifySync sends to all notifiers synchronously and waits for all to finish.
+// Use this for shutdown/critical events where the process is about to exit.
+func notifySync(ctx LogContext) {
+	if len(notifyCfg.notifiers) == 0 {
+		return
+	}
+
+	event := NotifyEvent(strings.ToUpper(ctx.Action))
+	if _, ok := notifyCfg.events[event]; !ok {
+		return
+	}
+
+	nm := buildNotifyMessage(ctx)
+
+	var wg sync.WaitGroup
+	for _, n := range notifyCfg.notifiers {
+		n := n
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := n.Send(nm); err != nil {
+				fmt.Printf("[WARN] Notify %s fehlgeschlagen: %v\n", n.Name(), err)
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+func buildNotifyMessage(ctx LogContext) NotifyMessage {
+	msg := ctx.Message
+	if ctx.Error != nil {
+		msg = fmt.Sprintf("%s: %v", ctx.Message, ctx.Error)
+	}
+	return NotifyMessage{
+		Action:  ctx.Action,
+		Domain:  ctx.Domain,
+		Message: msg,
+		Level:   ctx.Level,
+	}
+}
+
 // ============================================================================
 // HELPERS
 // ============================================================================
+
 func levelEmoji(level LogLevel) string {
 	switch level {
 	case LogError:

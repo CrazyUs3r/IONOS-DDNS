@@ -134,7 +134,9 @@ func persistLog(ctx LogContext) {
 		fmt.Fprintf(os.Stderr, "[WARN] Log queue full, dropped: %s\n", entry.Message)
 	}
 
-	notify(ctx)
+	if !ctx.SkipNotify {
+		notify(ctx)
+	}
 }
 
 func levelToString(level LogLevel) string {

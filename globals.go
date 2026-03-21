@@ -27,7 +27,7 @@ var (
 	langDir           string
 	logPath           string
 	updatePath        string
-	logCachePath      string
+	logCachePath      string // parsed log cache: logs/log_cache.json
 	ionosBaseURL      = "https://api.hosting.ionos.com/dns/v1/zones"
 	cloudflareAPIBase = "https://api.cloudflare.com/client/v4"
 	ipv64APIBase      = "https://ipv64.net/api.php"
@@ -417,12 +417,13 @@ const (
 )
 
 type LogContext struct {
-	Level    LogLevel
-	Action   string
-	Domain   string
-	Category string
-	Message  string
-	Error    error
+	Level      LogLevel
+	Action     string
+	Domain     string
+	Category   string
+	Message    string
+	Error      error
+	SkipNotify bool // set true if notification was already sent (e.g. notifySync)
 }
 
 type LogEntry struct {
