@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -395,7 +396,9 @@ func mainKeyboard() *tgInlineKeyboard {
 				{Text: "🌐 Domains", CallbackData: "domains"},
 				{Text: "❤️ Health", CallbackData: "health"},
 			},
-			{Text: "🔄 Update starten", CallbackData: "update"},
+			{
+				{Text: "🔄 Update starten", CallbackData: "update"},
+			},
 			{
 				{Text: "✖ Schließen", CallbackData: "close"},
 			},
