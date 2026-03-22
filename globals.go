@@ -844,6 +844,7 @@ type dnsInFlight struct {
 	err   error
 }
 
+
 // ============================================================================
 // TELEGRAM TYPES
 // ============================================================================
@@ -887,12 +888,13 @@ type tgUpdateFull struct {
 	Message       *tgMessage       `json:"message,omitempty"`
 	CallbackQuery *tgCallbackQuery `json:"callback_query,omitempty"`
 }
-
 type telegramNotifier struct {
 	token       string
 	chatID      string
 	instanceTag string
 
-	pollOnce   sync.Once
-	lastOffset atomic.Int32
+	pollOnce       sync.Once
+	pollClientOnce sync.Once
+	pollClient     *http.Client
+	lastOffset     atomic.Int32
 }
