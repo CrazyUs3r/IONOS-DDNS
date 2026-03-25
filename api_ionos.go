@@ -10,7 +10,7 @@ import (
 	"io"
 	"math"
 	"net/http"
-    "math/rand"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"

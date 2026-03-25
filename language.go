@@ -83,7 +83,25 @@ func loadLanguage(lang string) error {
 var knownAcronyms = []string{
 	"IPv4", "IPv6", "HTTP", "JSON", "API", "DNS", "IP", "CF"}
 
+var snakeCaseOverrides = map[string]string{
+	"HealthCheckOK":      "health_check_ok",
+	"LanguageFileNotFound": "language_file_not_Found",
+	"BasedOnLast60Min":   "based_on_last_60_min",
+	"CleanupStartIonos":  "cleanup_start_ionos",
+	"CleanupStartCF":     "cleanup_start_c_f",
+	"CleanupStartIPv64":  "cleanup_start_i_pv64",
+	"IPv64APIError":      "ipv64_a_p_i_error",
+	"IPv64HTTPError":     "ipv64_h_t_t_p_error",
+	"IPv64CacheAPIError": "ipv64_cache_a_p_i_error",
+	"IonosRetryable":     "ionos_retryable",
+	"IonosErrDetail":     "ionos_err_detail",
+}
+
 func toSnakeCase(s string) string {
+	if key, ok := snakeCaseOverrides[s]; ok {
+		return key
+	}
+
 	for _, acr := range knownAcronyms {
 		replacement := string(unicode.ToUpper([]rune(acr)[0])) +
 			strings.ToLower(acr[1:])
