@@ -125,7 +125,7 @@
   "critical_api_error": "ERREUR CRITIQUE DE L'API",
   "panic_loading_language": "Erreur critique lors du chargement de la langue : %v",
   "trying_load_language": "Tentative de chargement du fichier de langue : %s",
-  "language_file_not_Found": "Fichier de langue introuvable : %v",
+  "language_file_not_found": "Fichier de langue introuvable : %v",
   "trying_fallback_en": "Tentative d'utilisation de l'anglais (EN) comme solution de secours...",
   "using_builtin_defaults": "Utilisation des traductions par défaut intégrées",
   "json_parse_error": "Erreur lors de l'analyse du JSON : %v",
@@ -286,5 +286,7 @@
   "ipv64_cache_updated": "✅ IPv64 cache updated: praefix=%q",
   "ipv64_delete_response": "🔥 IPv64 delete response: %s",
   "ionos_payload": "📦 Payload: zone=%s name=%s type=%s",
-  "ionos_record_arrow": "🔄 %s: %s -> %s"
+  "ionos_record_arrow": "🔄 %s: %s -> %s",
+  "ionos_retryable": "Récupérable: %s (%v)",
+  "ionos_err_detail": "Détail erreur: %v (%v)"
 }

@@ -125,7 +125,7 @@
   "critical_api_error": "KRITISCHER API-FEHLER",
   "panic_loading_language": "Panic beim Laden der Sprache: %v",
   "trying_load_language": "Versuche Sprachdatei zu laden: %s",
-  "language_file_not_Found": "Sprachdatei nicht gefunden: %v",
+  "language_file_not_found": "Sprachdatei nicht gefunden: %v",
   "trying_fallback_en": "Versuche Fallback zu EN...",
   "using_builtin_defaults": "Nutze eingebaute Default-Übersetzungen",
   "json_parse_error": "Fehler beim Parsen der JSON: %v",
@@ -140,10 +140,10 @@
   "max_concurrent": "Maximale Anzahl gleichzeitiger Anfragen",
   "interval": "Intervall",
   "delete_domain_check": "wirklich aus dem Status entfernen? Die Domain ist nicht mehr in der Konfiguration.",
-  "delete_button":  "🗑️ Entfernen",    
-  "delete_success":  "entfernt",   
-  "delete_error":     "Fehler beim Löschen",  
-  "connection_error":  "Verbindungsfehler",
+  "delete_button": "🗑️ Entfernen",
+  "delete_success": "entfernt",
+  "delete_error": "Fehler beim Löschen",
+  "connection_error": "Verbindungsfehler",
   "domain_search_placeholder": "🔍 Domain suchen...",
   "no_more_entries": "Keine weiteren Einträge",
   "not_configured": "nicht mehr konfiguriert",
@@ -286,5 +286,7 @@
   "ipv64_cache_updated": "✅ IPv64 Cache aktualisiert: praefix=%q",
   "ipv64_delete_response": "🔥 IPv64 Lösch-Antwort: %s",
   "ionos_payload": "📦 Payload: zone=%s name=%s type=%s",
-  "ionos_record_arrow": "🔄 %s: %s -> %s"
+  "ionos_record_arrow": "🔄 %s: %s -> %s",
+  "ionos_retryable": "Wiederholbar: %s (%v)",
+  "ionos_err_detail": "Fehler-Detail: %v (%v)"
 }

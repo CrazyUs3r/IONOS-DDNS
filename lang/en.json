@@ -125,7 +125,7 @@
   "critical_api_error": "CRITICAL API ERROR",
   "panic_loading_language": "Panic while loading language: %v",
   "trying_load_language": "Trying to load language file: %s",
-  "language_file_not_Found": "Language file not found: %v",
+  "language_file_not_found": "Language file not found: %v",
   "trying_fallback_en": "Trying fallback to EN...",
   "using_builtin_defaults": "Using built-in default translations",
   "json_parse_error": "Error parsing JSON: %v",
@@ -286,5 +286,8 @@
   "ipv64_cache_updated": "✅ IPv64 cache updated: praefix=%q",
   "ipv64_delete_response": "🔥 IPv64 delete response: %s",
   "ionos_payload": "📦 Payload: zone=%s name=%s type=%s",
-  "ionos_record_arrow": "🔄 %s: %s -> %s"
+  "ionos_record_arrow": "🔄 %s: %s -> %s",
+  "ionos_retryable": "Retryable: %s (%v)",
+  "ionos_err_detail": "Error detail: %v (%v)",
+  "cleanup_start_ionos": "🧹 starting cleanup of orphaned DNS records..."
 }

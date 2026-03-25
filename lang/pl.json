@@ -1,4 +1,4 @@
-﻿{
+{
   "startup": "Usługa uruchomiona",
   "shutdown": "Usługa zakończona",
   "no_zones": "nie znaleziono żadnej strefy",
@@ -125,7 +125,7 @@
   "critical_api_error": "KRYTYCZNY BŁĄD API",
   "panic_loading_language": "Krytyczny błąd podczas ładowania języka: %v",
   "trying_load_language": "Próba załadowania pliku językowego: %s",
-  "language_file_not_Found": "Nie znaleziono pliku językowego: %v",
+  "language_file_not_found": "Nie znaleziono pliku językowego: %v",
   "trying_fallback_en": "Próba użycia EN jako języka zapasowego...",
   "using_builtin_defaults": "Używanie wbudowanych domyślnych tłumaczeń",
   "json_parse_error": "Błąd podczas parsowania JSON: %v",
@@ -286,5 +286,7 @@
   "ipv64_cache_updated": "✅ IPv64 cache updated: praefix=%q",
   "ipv64_delete_response": "🔥 IPv64 delete response: %s",
   "ionos_payload": "📦 Payload: zone=%s name=%s type=%s",
-  "ionos_record_arrow": "🔄 %s: %s -> %s"
+  "ionos_record_arrow": "🔄 %s: %s -> %s",
+  "ionos_retryable": "Ponawialny: %s (%v)",
+  "ionos_err_detail": "Szczegóły błędu: %v (%v)"
 }

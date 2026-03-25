@@ -125,7 +125,7 @@
   "critical_api_error": "ERROR CRÍTICO DE API",
   "panic_loading_language": "Error crítico al cargar el idioma: %v",
   "trying_load_language": "Intentando cargar el archivo de idioma: %s",
-  "language_file_not_Found": "Archivo de idioma no encontrado: %v",
+  "language_file_not_found": "Archivo de idioma no encontrado: %v",
   "trying_fallback_en": "Intentando usar EN como alternativa...",
   "using_builtin_defaults": "Usando traducciones predeterminadas integradas",
   "json_parse_error": "Error al analizar el JSON: %v",
@@ -286,5 +286,8 @@
   "ipv64_cache_updated": "✅ IPv64 cache updated: praefix=%q",
   "ipv64_delete_response": "🔥 IPv64 delete response: %s",
   "ionos_payload": "📦 Payload: zone=%s name=%s type=%s",
-  "ionos_record_arrow": "🔄 %s: %s -> %s"
+  "ionos_record_arrow": "🔄 %s: %s -> %s",
+  "ionos_retryable": "Reintentable: %s (%v)",
+  "ionos_err_detail": "Detalle de error: %v (%v)",
+  "cf_h_t_m_l_response": "Cloudflare API devolvió HTML (estado %d): %s"
 }
