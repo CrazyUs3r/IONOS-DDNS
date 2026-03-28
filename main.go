@@ -43,8 +43,6 @@ func run() int {
 	fmt.Printf("[INFO] → Sprachen: %s\n", langDir)
 	fmt.Printf("[INFO] → Logs: %s\n", logsDir)
 
-	setDefaultPhrases()
-
 	lang := "de"
 	envLang := strings.ToLower(os.Getenv("LANG"))
 	switch {
@@ -56,7 +54,19 @@ func run() int {
 		lang = "es"
 	case strings.HasPrefix(envLang, "pl"):
 		lang = "pl"
+	case strings.HasPrefix(envLang, "da"):
+		lang = "da"
+	case strings.HasPrefix(envLang, "it"):
+		lang = "it"
+	case strings.HasPrefix(envLang, "sv"):
+		lang = "sv"
+	case strings.HasPrefix(envLang, "nö"):
+		lang = "nl"
 	}
+
+  setDefaultPhrases()
+
+  copyEmbeddedLangFiles(langDir)
 
 	if err := loadLanguage(lang); err != nil {
 		fmt.Printf("[FATAL] Sprachdatei konnte nicht geladen werden: %v\n", err)
@@ -212,8 +222,6 @@ func run() int {
 		})
 		return 1
 	}
-
-  copyEmbeddedLangFiles(langDir)
 
 	logPath      = filepath.Join(logsDir, "dyndns.json")
 	updatePath   = filepath.Join(logsDir, "update.json")

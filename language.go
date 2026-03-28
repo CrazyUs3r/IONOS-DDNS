@@ -12,6 +12,7 @@ import (
 	"unicode"
 )
 
+//go:embed lang/*.json
 var embeddedLang embed.FS
 
 // ============================================================================
@@ -414,20 +415,30 @@ func setDefaultPhrases() {
 }
 
 func copyEmbeddedLangFiles(dir string) {
-	for _, name := range []string{"de.json", "en.json", "fr.json", "es.json", "pl.json"} {
+	entries, err := embeddedLang.ReadDir("lang")
+	if err != nil {
+		fmt.Println("[ERROR] cannot read embedded lang dir:", err)
+		return
+	}
+
+	for _, e := range entries {
+		name := e.Name()
 		dst := filepath.Join(dir, name)
+
 		if _, err := os.Stat(dst); err == nil {
 			continue
 		}
-		data, err := embeddedLang.ReadFile(name)
+
+		data, err := embeddedLang.ReadFile("lang/" + name)
 		if err != nil {
-			fmt.Printf("[WARN] Embedded Sprachdatei nicht lesbar: %s: %v\n", name, err)
+			fmt.Printf("[WARN] Embedded file unreadable: %s: %v\n", name, err)
 			continue
 		}
+
 		if err := os.WriteFile(dst, data, 0644); err != nil {
-			fmt.Printf("[WARN] Sprachdatei konnte nicht geschrieben werden: %s: %v\n", dst, err)
+			fmt.Printf("[WARN] write failed: %s: %v\n", dst, err)
 		} else {
-			fmt.Printf("[INFO] Sprachdatei kopiert: %s\n", dst)
+			fmt.Printf("[INFO] copied: %s\n", dst)
 		}
 	}
 }

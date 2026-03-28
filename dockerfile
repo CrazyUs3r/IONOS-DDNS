@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 # Builder Stage
 # =============================================================================
 FROM --platform=${BUILDPLATFORM} golang:1.26.1-alpine AS builder
@@ -21,7 +21,8 @@ RUN apk add --no-cache git ca-certificates
 COPY go.mod go.sum ./
 RUN go mod download
 
-COPY *.go /lang/*.json .
+COPY *.go ./
+COPY lang/*.json ./lang/
 
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build \
@@ -33,7 +34,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
 # =============================================================================
 # Runtime Stage
 # =============================================================================
-FROM scratch
+FROM busybox:stable-musl
 
 ARG VERSION=2.3.0
 ARG BUILD_DATE
@@ -55,7 +56,7 @@ ENV PROVIDER="IONOS" \
     IPV64_DOMAIN_TOKEN="" \
     IP_MODE="BOTH" \
     INTERVAL=300 \
-    HEALTH_PORT="" \
+    HEALTH_PORT="8080" \
     LANG="de" \
     CONFIG_DIR="/config" \
     DRY_RUN=false \
@@ -75,15 +76,17 @@ ENV PROVIDER="IONOS" \
 
 WORKDIR /app
 
-COPY --from=builder /etc/passwd /etc/passwd
-COPY --from=builder /etc/group /etc/group
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=builder --chown=1000:1000 /app/dyndns /app/
+RUN adduser -D -H -u 1000 -s /sbin/nologin dyndns
 
-USER 1000:1000
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder --chown=dyndns:dyndns /app/dyndns /app/
+
+USER dyndns
+
 VOLUME ["/config"]
 EXPOSE ${HEALTH_PORT}
 
-HEALTHCHECK NONE
+HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
+    CMD wget -qO- "http://localhost:${HEALTH_PORT}/health" || exit 1
 
 ENTRYPOINT ["/app/dyndns"]
