@@ -86,7 +86,7 @@ var knownAcronyms = []string{
 
 var snakeCaseOverrides = map[string]string{
 	"HealthCheckOK":      "health_check_ok",
-	"LanguageFileNotFound": "language_file_not_Found",
+	"LanguageFileNotFound": "language_file_not_found",
 	"BasedOnLast60Min":   "based_on_last_60_min",
 	"CleanupStartIonos":  "cleanup_start_ionos",
 	"CleanupStartCF":     "cleanup_start_c_f",
