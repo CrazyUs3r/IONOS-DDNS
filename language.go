@@ -30,7 +30,7 @@ func loadLanguage(lang string) error {
 
 	data, err := os.ReadFile(langFile)
 	if err != nil {
-		embedName := lang + ".json"
+		embedName := "lang/" + lang + ".json"
 		if embedded, embedErr := embeddedLang.ReadFile(embedName); embedErr == nil {
 			fmt.Printf("[INFO] %s (embedded)\n", T.TryingLoadLanguage)
 			data = embedded

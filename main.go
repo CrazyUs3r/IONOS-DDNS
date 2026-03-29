@@ -64,9 +64,14 @@ func run() int {
 		lang = "nl"
 	}
 
-  setDefaultPhrases()
+	setDefaultPhrases()
 
-  copyEmbeddedLangFiles(langDir)
+	if err := os.MkdirAll(langDir, 0755); err != nil {
+		fmt.Printf("[FATAL] Lang-Verzeichnis konnte nicht erstellt werden: %v\n", err)
+		return 1
+	}
+
+	copyEmbeddedLangFiles(langDir)
 
 	if err := loadLanguage(lang); err != nil {
 		fmt.Printf("[FATAL] Sprachdatei konnte nicht geladen werden: %v\n", err)
