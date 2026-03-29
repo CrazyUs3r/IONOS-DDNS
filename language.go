@@ -50,8 +50,6 @@ func loadLanguage(lang string) error {
 		if lang != "en" {
 			return loadLanguage("en")
 		}
-		setDefaultPhrases()
-		return nil
 	}
 
 	fmt.Printf("[INFO] ✓ "+T.LanguageLoaded+"\n", lang, len(translations))
