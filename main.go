@@ -64,8 +64,6 @@ func run() int {
 		lang = "nl"
 	}
 
-	setDefaultPhrases()
-
 	if err := os.MkdirAll(langDir, 0755); err != nil {
 		fmt.Printf("[FATAL] Lang-Verzeichnis konnte nicht erstellt werden: %v\n", err)
 		return 1
