@@ -40,7 +40,14 @@ func loadLanguage(lang string) error {
 				fmt.Printf("[INFO] %s\n", T.TryingFallbackEn)
 				return loadLanguage("en")
 			}
+			fmt.Printf("[WARN] %s\n", T.UsingBuiltinDefaults)
+			return nil
 		}
+	}
+
+	if len(data) == 0 {
+		fmt.Printf("[WARN] %s\n", T.UsingBuiltinDefaults)
+		return nil
 	}
 
 	var translations map[string]string
@@ -50,6 +57,7 @@ func loadLanguage(lang string) error {
 		if lang != "en" {
 			return loadLanguage("en")
 		}
+		return nil
 	}
 
 	fmt.Printf("[INFO] ✓ "+T.LanguageLoaded+"\n", lang, len(translations))
