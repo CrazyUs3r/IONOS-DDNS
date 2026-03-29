@@ -60,7 +60,7 @@ func run() int {
 		lang = "it"
 	case strings.HasPrefix(envLang, "sv"):
 		lang = "sv"
-	case strings.HasPrefix(envLang, "nö"):
+	case strings.HasPrefix(envLang, "nl"):
 		lang = "nl"
 	}
 
