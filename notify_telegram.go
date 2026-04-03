@@ -37,7 +37,7 @@ func (t *telegramNotifier) getPollClient() *http.Client {
 
 func newTelegramPollClient() *http.Client {
 	return &http.Client{
-		Timeout: 45 * time.Second, 
+		Timeout: 45 * time.Second,
 		Transport: &http.Transport{
 			DialContext: (&net.Dialer{
 				Timeout:   10 * time.Second,

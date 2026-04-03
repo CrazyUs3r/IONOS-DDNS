@@ -38,6 +38,9 @@ func run() int {
 	langDir = filepath.Join(configDir, "lang")
 	logsDir := filepath.Join(configDir, "logs")
 	metricsPersistPath = filepath.Join(logsDir, "metrics.json")
+	if configPath == "" {
+		configPath = filepath.Join(logsDir, "config.json")
+	}
 
 	fmt.Printf("[INFO] Config-Verzeichnis: %s\n", configDir)
 	fmt.Printf("[INFO] → Sprachen: %s\n", langDir)
@@ -226,8 +229,8 @@ func run() int {
 		return 1
 	}
 
-	logPath      = filepath.Join(logsDir, "dyndns.json")
-	updatePath   = filepath.Join(logsDir, "update.json")
+	logPath = filepath.Join(logsDir, "dyndns.json")
+	updatePath = filepath.Join(logsDir, "update.json")
 	logCachePath = filepath.Join(logsDir, "log_cache.json")
 
 	shutdownCtx, shutdownCancel = context.WithCancel(context.Background())

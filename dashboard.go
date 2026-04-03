@@ -4,12 +4,10 @@ package main
 import (
 	"bufio"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"html"
 	"net/http"
 	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -391,524 +389,148 @@ func toDur24(v any) ([24]time.Duration, bool) {
 }
 
 // ============================================================================
-// METRICS
-// ============================================================================
-func (m *APIMetrics) RecordSuccess(method string, duration time.Duration) {
-	m.Lock()
-	now := time.Now().Local()
-	m.TotalRequests++
-	m.SuccessRequests++
-	m.LastSuccessTimestamp = now
-
-	m.cleanupOldTimestamps(now)
-	m.RequestTimestamps = append(m.RequestTimestamps, now)
-
-	hour := now.Hour()
-	if hour >= 0 && hour < 24 {
-		m.HourlyStats[hour]++
-		m.updateLatency(duration, hour)
-	}
-
-	m.incrementDailyMethod(method, now)
-
-	statsCopy := m.getStatsUnsafe()
-	m.Unlock()
-
-	setLatestMetrics(statsCopy)
-}
-
-func (m *APIMetrics) RecordError(method string, statusCode int, err error, duration time.Duration) {
-	m.Lock()
-	now := time.Now().Local()
-	m.TotalRequests++
-	m.FailedRequests++
-	m.LastError = err.Error()
-	m.LastErrorTimestamp = now
-
-	m.cleanupOldTimestamps(now)
-	m.RequestTimestamps = append(m.RequestTimestamps, now)
-
-	hour := now.Hour()
-	if hour >= 0 && hour < 24 {
-		m.HourlyStats[hour]++
-		m.updateLatency(duration, hour)
-	}
-
-	switch {
-	case statusCode == 429:
-		m.RateLimitHits++
-	case statusCode >= 500:
-		m.ServerErrors++
-	case statusCode >= 400:
-		m.ClientErrors++
-	case statusCode == 0:
-		m.ClientErrors++
-	}
-
-	m.incrementDailyMethod(method, now)
-
-	statsCopy := m.getStatsUnsafe()
-	m.Unlock()
-
-	setLatestMetrics(statsCopy)
-}
-
-func (m *APIMetrics) updateLatency(duration time.Duration, hour int) {
-	m.LatencySum += duration
-	m.LatencyCount++
-	if m.LatencyCount > 0 {
-		m.AverageLatency = (m.LatencySum / time.Duration(m.LatencyCount)).Round(time.Millisecond)
-	}
-
-	m.HourlyLatencySum[hour] += duration
-	m.HourlyLatencyCount[hour]++
-	if m.HourlyLatencyCount[hour] > 0 {
-		m.HourlyLatency[hour] = (m.HourlyLatencySum[hour] / time.Duration(m.HourlyLatencyCount[hour])).Round(time.Millisecond)
-	}
-
-	ms := duration.Milliseconds()
-	m.LatencySamples[m.LatencySampleIdx] = ms
-	m.LatencySampleIdx = (m.LatencySampleIdx + 1) % len(m.LatencySamples)
-	if m.LatencySampleCount < len(m.LatencySamples) {
-		m.LatencySampleCount++
-	}
-}
-
-func (m *APIMetrics) incrementDailyMethod(method string, now time.Time) {
-	if !m.DailyReset.IsZero() && now.Day() != m.DailyReset.Day() {
-		m.DailyGET = 0
-		m.DailyPOST = 0
-		m.DailyPUT = 0
-		m.DailyDELETE = 0
-		m.DailyNIC = 0
-	}
-	m.DailyReset = now
-	switch method {
-	case "GET":
-		m.DailyGET++
-	case "POST":
-		m.DailyPOST++
-	case "PUT":
-		m.DailyPUT++
-	case "DELETE":
-		m.DailyDELETE++
-	case "NIC":
-		m.DailyNIC++
-	}
-}
-
-func (m *APIMetrics) RecordIPLatency(duration time.Duration) {
-	m.Lock()
-	defer m.Unlock()
-	m.IPLatencySum += duration
-	m.IPLatencyCount++
-	m.IPLatencyAvg = (m.IPLatencySum / time.Duration(m.IPLatencyCount)).Round(time.Millisecond)
-	m.LastIPCheckTime = time.Now().Local()
-	ms := duration.Milliseconds()
-	m.IPLatencySamples[m.IPLatencySampleIdx] = ms
-	m.IPLatencySampleIdx = (m.IPLatencySampleIdx + 1) % len(m.IPLatencySamples)
-	if m.IPLatencySampleCount < len(m.IPLatencySamples) {
-		m.IPLatencySampleCount++
-	}
-}
-
-func (m *APIMetrics) calcPercentile(p float64) time.Duration {
-	if m.LatencySampleCount == 0 {
-		return 0
-	}
-	count := m.LatencySampleCount
-	samples := make([]int64, count)
-	copy(samples, m.LatencySamples[:count])
-
-	for i := 1; i < len(samples); i++ {
-		key := samples[i]
-		j := i - 1
-		for j >= 0 && samples[j] > key {
-			samples[j+1] = samples[j]
-			j--
-		}
-		samples[j+1] = key
-	}
-
-	idx := int(float64(count-1) * p)
-	if idx < 0 {
-		idx = 0
-	}
-	if idx >= count {
-		idx = count - 1
-	}
-	return time.Duration(samples[idx]) * time.Millisecond
-}
-
-func (m *APIMetrics) cleanupOldTimestamps(now time.Time) {
-	threshold := now.Add(-1 * time.Hour)
-	validIdx := len(m.RequestTimestamps)
-	for i, t := range m.RequestTimestamps {
-		if t.After(threshold) {
-			validIdx = i
-			break
-		}
-	}
-
-	if validIdx > 0 && validIdx <= len(m.RequestTimestamps) {
-		m.RequestTimestamps = append([]time.Time(nil), m.RequestTimestamps[validIdx:]...)
-	}
-
-	const maxTimestamps = 3600
-	if len(m.RequestTimestamps) > maxTimestamps {
-		m.RequestTimestamps = append([]time.Time(nil), m.RequestTimestamps[len(m.RequestTimestamps)-maxTimestamps:]...)
-	}
-}
-
-func (m *APIMetrics) GetStats() map[string]interface{} {
-	m.Lock()
-	defer m.Unlock()
-	return m.getStatsUnsafe()
-}
-
-func (m *APIMetrics) getUsageColor(p float64) string {
-	if p > 90 {
-		return "#f87171"
-	}
-	if p > 70 {
-		return "#facc15"
-	}
-	return "#4ade80"
-}
-
-func reorderHourlyStatsToChronological(hourlyData [24]int) [24]int {
-	now := time.Now().Local()
-	currentHour := now.Hour()
-
-	var chronological [24]int
-	for i := 0; i < 24; i++ {
-		hourIndex := (currentHour - 23 + i + 24) % 24
-		chronological[i] = hourlyData[hourIndex]
-	}
-	return chronological
-}
-
-func reorderHourlyLatencyToChronological(hourlyData [24]time.Duration) [24]time.Duration {
-	now := time.Now().Local()
-	currentHour := now.Hour()
-
-	var chronological [24]time.Duration
-	for i := 0; i < 24; i++ {
-		hourIndex := (currentHour - 23 + i + 24) % 24
-		chronological[i] = hourlyData[hourIndex]
-	}
-	return chronological
-}
-
-func (m *APIMetrics) getStatsUnsafe() map[string]interface{} {
-	currentCount := len(m.RequestTimestamps)
-
-	limit := float64(cfg.HourlyRateLimit)
-	percent := (float64(currentCount) / limit) * 100
-	if percent > 100 {
-		percent = 100
-	}
-
-	successRate := 0.0
-	if m.TotalRequests > 0 {
-		successRate = float64(m.SuccessRequests) / float64(m.TotalRequests) * 100
-	}
-
-	chronologicalStats := reorderHourlyStatsToChronological(m.HourlyStats)
-	chronologicalLatency := reorderHourlyLatencyToChronological(m.HourlyLatency)
-
-	p50 := m.calcPercentile(0.50)
-	p85 := m.calcPercentile(0.85)
-	p99 := m.calcPercentile(0.99)
-
-	lastSuccessAge := -1.0
-	if !m.LastSuccessTimestamp.IsZero() {
-		lastSuccessAge = time.Since(m.LastSuccessTimestamp).Seconds()
-	}
-
-	lastErrorAge := -1.0
-	if !m.LastErrorTimestamp.IsZero() {
-		lastErrorAge = time.Since(m.LastErrorTimestamp).Seconds()
-	}
-
-	ipAvg := "-"
-	if m.IPLatencyCount > 0 {
-		ipAvg = m.IPLatencyAvg.String()
-	}
-	lastIPCheck := "-"
-	if !m.LastIPCheckTime.IsZero() {
-		lastIPCheck = m.LastIPCheckTime.Format("15:04:05")
-	}
-
-	return map[string]interface{}{
-		"total_requests":        m.TotalRequests,
-		"success_rate":          fmt.Sprintf("%.2f%%", successRate),
-		"avg_latency":           m.AverageLatency.String(),
-		"p50_latency":           p50.String(),
-		"p85_latency":           p85.String(),
-		"p99_latency":           p99.String(),
-		"server_errors":         m.ServerErrors,
-		"client_errors":         m.ClientErrors,
-		"last_success_time":     m.LastSuccessTimestamp.Format("15:04:05"),
-		"last_success_age_secs": lastSuccessAge,
-		"last_error_age_secs":   lastErrorAge,
-		"usage_count":           currentCount,
-		"usage_percent":         fmt.Sprintf("%.1f", percent),
-		"usage_color":           m.getUsageColor(percent),
-		"hourly_stats":          chronologicalStats,
-		"hourly_latency":        chronologicalLatency,
-		"hourly_limit":          cfg.HourlyRateLimit,
-		"daily_get":             m.DailyGET,
-		"daily_post":            m.DailyPOST,
-		"daily_put":             m.DailyPUT,
-		"daily_delete":          m.DailyDELETE,
-		"daily_nic":             m.DailyNIC,
-		"ip_latency_avg":        ipAvg,
-		"ip_latency_count":      m.IPLatencyCount,
-		"last_ip_check":         lastIPCheck,
-	}
-}
-
-func ensureMetricsFile(path string) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
-	}
-
-	_, err := os.Stat(path)
-	if err == nil {
-		return nil
-	}
-	if !os.IsNotExist(err) {
-		return err
-	}
-
-	empty := apiMetricsSnapshot{SavedAt: time.Now().Local()}
-	b, _ := json.MarshalIndent(empty, "", "  ")
-	return os.WriteFile(path, b, 0644)
-}
-
-func (m *APIMetrics) SaveToFile(path string) error {
-	if err := ensureMetricsFile(path); err != nil {
-		return err
-	}
-
-	m.Lock()
-	snap := apiMetricsSnapshot{
-		TotalRequests:     m.TotalRequests,
-		SuccessRequests:   m.SuccessRequests,
-		FailedRequests:    m.FailedRequests,
-		RateLimitHits:     m.RateLimitHits,
-		ServerErrors:      m.ServerErrors,
-		ClientErrors:      m.ClientErrors,
-		AverageLatencyMs:  m.AverageLatency.Milliseconds(),
-		HourlyStats:       m.HourlyStats,
-		LastError:         m.LastError,
-		LastSuccessTime:   m.LastSuccessTimestamp,
-		LastErrorTime:     m.LastErrorTimestamp,
-		SavedAt:           time.Now().Local(),
-		RequestTimestamps: make([]time.Time, len(m.RequestTimestamps)),
-		// Daily counters
-		DailyGET:    m.DailyGET,
-		DailyPOST:   m.DailyPOST,
-		DailyPUT:    m.DailyPUT,
-		DailyDELETE: m.DailyDELETE,
-		DailyNIC:    m.DailyNIC,
-		DailyReset:  m.DailyReset,
-		// Latency percentile samples
-		LatencySamples:     m.LatencySamples,
-		LatencySampleIdx:   m.LatencySampleIdx,
-		LatencySampleCount: m.LatencySampleCount,
-		// IP latency
-		IPLatencySum:         m.IPLatencySum.Milliseconds(),
-		IPLatencyCount:       m.IPLatencyCount,
-		IPLatencyAvgMs:       m.IPLatencyAvg.Milliseconds(),
-		IPLatencySamples:     m.IPLatencySamples,
-		IPLatencySampleIdx:   m.IPLatencySampleIdx,
-		IPLatencySampleCount: m.IPLatencySampleCount,
-		LastIPCheckTime:      m.LastIPCheckTime,
-	}
-	copy(snap.RequestTimestamps, m.RequestTimestamps)
-
-	for i := 0; i < 24; i++ {
-		snap.HourlyLatencyMs[i] = m.HourlyLatency[i].Milliseconds()
-	}
-	m.Unlock()
-
-	b, err := json.MarshalIndent(snap, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
-}
-
-func (m *APIMetrics) LoadFromFile(path string) error {
-	if err := ensureMetricsFile(path); err != nil {
-		return err
-	}
-
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	if len(b) == 0 {
-		return nil
-	}
-
-	var snap apiMetricsSnapshot
-	if err := json.Unmarshal(b, &snap); err != nil {
-		return errors.New("metrics.json konnte nicht gelesen werden (invalid JSON)")
-	}
-
-	m.Lock()
-	m.TotalRequests = snap.TotalRequests
-	m.SuccessRequests = snap.SuccessRequests
-	m.FailedRequests = snap.FailedRequests
-	m.RateLimitHits = snap.RateLimitHits
-	m.ServerErrors = snap.ServerErrors
-	m.ClientErrors = snap.ClientErrors
-	m.AverageLatency = time.Duration(snap.AverageLatencyMs) * time.Millisecond
-	m.HourlyStats = snap.HourlyStats
-
-	for i := 0; i < 24; i++ {
-		m.HourlyLatency[i] = time.Duration(snap.HourlyLatencyMs[i]) * time.Millisecond
-	}
-
-	m.LastSuccessTimestamp = snap.LastSuccessTime
-	m.LastError = snap.LastError
-	m.LastErrorTimestamp = snap.LastErrorTime
-
-	if !snap.DailyReset.IsZero() && snap.DailyReset.Day() == time.Now().Local().Day() {
-		m.DailyGET = snap.DailyGET
-		m.DailyPOST = snap.DailyPOST
-		m.DailyPUT = snap.DailyPUT
-		m.DailyDELETE = snap.DailyDELETE
-		m.DailyNIC = snap.DailyNIC
-		m.DailyReset = snap.DailyReset
-	}
-
-	m.LatencySamples = snap.LatencySamples
-	m.LatencySampleIdx = snap.LatencySampleIdx
-	m.LatencySampleCount = snap.LatencySampleCount
-	m.IPLatencySum = time.Duration(snap.IPLatencySum) * time.Millisecond
-	m.IPLatencyCount = snap.IPLatencyCount
-	m.IPLatencyAvg = time.Duration(snap.IPLatencyAvgMs) * time.Millisecond
-	m.IPLatencySamples = snap.IPLatencySamples
-	m.IPLatencySampleIdx = snap.IPLatencySampleIdx
-	m.IPLatencySampleCount = snap.IPLatencySampleCount
-	m.LastIPCheckTime = snap.LastIPCheckTime
-
-	m.RequestTimestamps = nil
-	if len(snap.RequestTimestamps) > 0 {
-		now := time.Now().Local()
-		threshold := now.Add(-1 * time.Hour)
-
-		for _, t := range snap.RequestTimestamps {
-			if t.After(threshold) && t.Before(now.Add(5*time.Minute)) {
-				m.RequestTimestamps = append(m.RequestTimestamps, t)
-			}
-		}
-	}
-
-	m.lastHour = time.Now().Local().Unix() / 3600
-	m.Unlock()
-
-	return nil
-}
-
-func startMetricsAutosave(interval time.Duration) {
-	go func() {
-		t := time.NewTicker(interval)
-		defer t.Stop()
-		for range t.C {
-			_ = apiMetrics.SaveToFile(metricsPersistPath)
-		}
-	}()
-}
-
-func setLatestMetrics(stats map[string]interface{}) {
-	latestMetricsMu.Lock()
-	latestMetrics = stats
-	latestMetricsMu.Unlock()
-	select {
-	case metricsSignal <- struct{}{}:
-	default:
-	}
-}
-
-func metricsBroadcasterLoop() {
-	go func() {
-		for range metricsSignal {
-			latestMetricsMu.RLock()
-			stats := latestMetrics
-			latestMetricsMu.RUnlock()
-			if stats != nil {
-				broadcastUpdate("metrics", stats)
-			}
-		}
-	}()
-}
-
-func handleMetricsReset(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	if !validateTriggerToken(r) {
-		w.WriteHeader(http.StatusUnauthorized)
-		if err := json.NewEncoder(w).Encode(map[string]string{"error": "invalid token"}); err != nil {
-			debugLog("API", "", fmt.Sprintf("Failed to encode error response: %v", err))
-		}
-		return
-	}
-
-	apiMetrics.Lock()
-	apiMetrics.TotalRequests = 0
-	apiMetrics.SuccessRequests = 0
-	apiMetrics.FailedRequests = 0
-	apiMetrics.RateLimitHits = 0
-	apiMetrics.ServerErrors = 0
-	apiMetrics.ClientErrors = 0
-	apiMetrics.LatencySum = 0
-	apiMetrics.LatencyCount = 0
-	apiMetrics.AverageLatency = 0
-	apiMetrics.HourlyStats = [24]int{}
-	apiMetrics.HourlyLatency = [24]time.Duration{}
-	apiMetrics.HourlyLatencySum = [24]time.Duration{}
-	apiMetrics.HourlyLatencyCount = [24]int64{}
-	apiMetrics.RequestTimestamps = nil
-	apiMetrics.LastError = ""
-	apiMetrics.LastErrorTimestamp = time.Time{}
-	apiMetrics.LastSuccessTimestamp = time.Time{}
-	apiMetrics.LatencySamples = [1000]int64{}
-	apiMetrics.LatencySampleIdx = 0
-	apiMetrics.LatencySampleCount = 0
-
-	statsCopy := apiMetrics.getStatsUnsafe()
-	apiMetrics.Unlock()
-
-	if err := apiMetrics.SaveToFile(metricsPersistPath); err != nil {
-		debugLog("API", getClientIP(r), "Failed to save empty metrics: "+err.Error())
-	}
-
-	setLatestMetrics(statsCopy)
-	broadcastNotification("📊 Metriken wurden zurückgesetzt", "info")
-
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(map[string]string{"status": "reset_success"}); err != nil {
-		debugLog("API", "", fmt.Sprintf("Failed to encode reset response: %v", err))
-	}
-}
-
-// ============================================================================
 // DASHBOARD HTTP HANDLER
 // ============================================================================
+func buildSettingsModal(c Config) string {
+	dnsStr := strings.Join(c.DNSServers, ", ")
+	if dnsStr == "" {
+		dnsStr = "–"
+	}
+
+	dryStr := "Nein"
+	if c.DryRun {
+		dryStr = "Ja ⚠️"
+	}
+
+	return `<div id="settingsOverlay" class="modal-overlay" onclick="closeSettingsOutside(event)">` +
+		`<div class="modal">` +
+		`<div class="modal-header">` +
+		`<h2>⚙️ Einstellungen</h2>` +
+		`<button class="modal-close" onclick="closeSettings()">✕</button>` +
+		`</div>` +
+		`<div class="modal-body">` +
+
+		`<div class="s-section">` +
+		`<h3>🔐 Sicherheit</h3>` +
+		`<div class="s-row" style="flex-direction:column;align-items:stretch;gap:8px;">` +
+		`<span class="s-label">Trigger Token (lokal im Browser)</span>` +
+		`<input type="password" id="s-token" class="s-input" placeholder="Token eingeben..." autocomplete="off">` +
+		`<button class="s-btn" onclick="saveToken()">💾 Token speichern</button>` +
+		`</div></div>` +
+
+		`<div class="s-section">` +
+		`<h3>🌐 Domains verwalten</h3>` +
+		`<div id="settings-domain-list" style="margin-bottom: 15px; display: flex; flex-direction: column; gap: 8px;">` +
+		`` +
+		`</div>` +
+
+		`<div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; border: 1px dashed var(--border);">` +
+		`<h4 style="font-size: 0.75rem; margin-bottom: 8px; opacity: 0.8; text-transform: uppercase;">Neue Domain hinzufügen</h4>` +
+		`<input type="text" id="new-domain-fqdn" class="s-input" placeholder="z.B. home.example.com" style="margin-bottom: 8px;">` +
+		`<select id="new-domain-provider" class="s-input" style="margin-bottom: 8px;" onchange="toggleProviderFields()">` +
+		`<option value="IONOS">IONOS</option>` +
+		`<option value="CLOUDFLARE">Cloudflare</option>` +
+		`<option value="IPV64">IPv64</option>` +
+		`</select>` +
+
+		`<div id="fields-ionos">` +
+		`<input type="text" id="new-ionos-prefix" class="s-input" placeholder="API Prefix" style="margin-bottom: 8px;">` +
+		`<input type="password" id="new-ionos-secret" class="s-input" placeholder="API Secret">` +
+		`</div>` +
+		`<div id="fields-cloudflare" style="display:none;">` +
+		`<input type="text" id="new-cf-token" class="s-input" placeholder="API Token (empfohlen)" style="margin-bottom: 8px;">` +
+		`<div style="font-size: 0.65rem; text-align: center; margin: 4px 0; opacity: 0.4;">— ODER —</div>` +
+		`<input type="text" id="new-cf-email" class="s-input" placeholder="Cloudflare Email" style="margin-bottom: 8px;">` +
+		`<input type="password" id="new-cf-secret" class="s-input" placeholder="Global API Key">` +
+		`</div>` +
+		`<div id="fields-ipv64" style="display:none;">` +
+		`<input type="password" id="new-ipv64-token" class="s-input" placeholder="IPv64 API Token">` +
+		`</div>` +
+
+		`<button class="s-btn" onclick="addDomainToList()" style="margin-top: 12px; background: var(--success); color: white; border: none; width: 100%;">` +
+		`➕ Zur Liste hinzufügen` +
+		`</button>` +
+		`</div>` +
+		`</div>` +
+
+		`<div class="s-section">` +
+		`<h3>🖥️ System-Status</h3>` +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">IP-Modus</span><span class="s-val">%s</span></div>`, html.EscapeString(c.IPMode)) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Intervall</span><span class="s-val">%ds</span></div>`, c.Interval) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Health Port</span><span class="s-val">%s</span></div>`, html.EscapeString(c.HealthPort)) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">DNS Server</span><span class="s-val">%s</span></div>`, html.EscapeString(dnsStr)) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Dry-Run</span><span class="s-val">%s</span></div>`, dryStr) +
+		`</div>` +
+
+		`<div style="margin-top: 20px; padding: 15px; background: rgba(var(--success-rgb), 0.1); border-radius: 8px; border: 1px solid var(--success);">` +
+		`<p style="font-size: 0.75rem; margin-bottom: 10px; opacity: 0.8; text-align: center;">Änderungen an den Domains erfordern einen Neustart der Validierung.</p>` +
+		`<button class="action-btn" style="width: 100%; margin: 0;" onclick="saveFullConfig()">💾 Alles Speichern & Übernehmen</button>` +
+		`</div>` +
+
+		`</div></div></div>`
+}
+
+func providerStyle(p ProviderType) (color, bg string) {
+	switch p {
+	case ProviderCloudflare:
+		return "#fff", "rgba(246,130,31,0.8)"
+	case ProviderIPv64:
+		return "#0f172a", "rgba(74,222,128,0.8)"
+	default: // IONOS
+		return "#fff", "rgba(0,100,220,0.8)"
+	}
+}
+
+func maskCred(dc DomainConfig) string {
+	switch dc.Provider {
+	case ProviderIONOS:
+		if dc.APIPrefix != "" {
+			return "Prefix: " + maskStr(dc.APIPrefix)
+		}
+	case ProviderCloudflare:
+		if dc.CFToken != "" {
+			return "Token: " + maskStr(dc.CFToken)
+		}
+		if dc.CFEmail != "" {
+			return "Email: " + dc.CFEmail
+		}
+	case ProviderIPv64:
+		if dc.IPv64Token != "" {
+			return "Token: " + maskStr(dc.IPv64Token)
+		}
+	}
+	return ""
+}
+
+func maskStr(s string) string {
+	if len(s) <= 6 {
+		return "●●●●"
+	}
+	return s[:3] + "●●●●" + s[len(s)-2:]
+}
+
+type safeDomainConfig struct {
+	FQDN       string `json:"fqdn"`
+	Provider   string `json:"provider"`
+	APIPrefix  string `json:"api_prefix,omitempty"`
+	APISecret  string `json:"api_secret,omitempty"`
+	CFToken    string `json:"cf_token,omitempty"`
+	CFEmail    string `json:"cf_email,omitempty"`
+	CFSecret   string `json:"cf_secret,omitempty"`
+	IPv64Token string `json:"ipv64_token,omitempty"`
+}
+
+func safeDomainConfigs(dcs []DomainConfig) []safeDomainConfig {
+	out := make([]safeDomainConfig, len(dcs))
+	for i, dc := range dcs {
+		out[i] = safeDomainConfig{
+			FQDN:     dc.FQDN,
+			Provider: string(dc.Provider),
+		}
+	}
+	return out
+}
+
 func createMux() *http.ServeMux {
 	mux := http.NewServeMux()
 
@@ -988,6 +610,69 @@ func createMux() *http.ServeMux {
 
 	mux.HandleFunc("/api/domains", func(w http.ResponseWriter, r *http.Request) {
 		serveCachedJSON(w, r, domainsCache)
+	})
+
+	mux.HandleFunc("/api/save-config", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !validateTriggerToken(r) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		var payload struct {
+			DomainConfigs []safeDomainConfig `json:"domain_configs"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		existing := make(map[string]DomainConfig)
+		for _, dc := range cfg.DomainConfigs {
+			existing[strings.ToLower(dc.FQDN)] = dc
+		}
+
+		newConfigs := make([]DomainConfig, 0, len(payload.DomainConfigs))
+		for _, sc := range payload.DomainConfigs {
+			fqdn := strings.ToLower(strings.TrimSpace(sc.FQDN))
+			if fqdn == "" {
+				continue
+			}
+			if found, ok := existing[fqdn]; ok {
+				newConfigs = append(newConfigs, found)
+			} else {
+				newConfigs = append(newConfigs, DomainConfig{
+					FQDN:       fqdn,
+					Provider:   ProviderType(strings.ToUpper(sc.Provider)),
+					APIPrefix:  sc.APIPrefix,
+					APISecret:  sc.APISecret,
+					CFToken:    sc.CFToken,
+					CFEmail:    sc.CFEmail,
+					CFSecret:   sc.CFSecret,
+					IPv64Token: sc.IPv64Token,
+				})
+			}
+		}
+
+		cfg.DomainConfigs = newConfigs
+		if err := validateDomainConfigs(); err != nil {
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			return
+		}
+
+		if err := saveConfigToFile(); err != nil {
+			http.Error(w, "Save failed", http.StatusInternalServerError)
+			return
+		}
+
+		forceNextUpdate.Store(true)
+
+		debugLog("API", getClientIP(r), "✅ Konfiguration via Dashboard aktualisiert")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "saved"})
 	})
 
 	mux.HandleFunc("/api/domain/delete", func(w http.ResponseWriter, r *http.Request) {
@@ -1304,6 +989,7 @@ func createMux() *http.ServeMux {
 
 		var logs []LogEntry
 		var logTimeRange string
+
 		type logCachePayload struct {
 			Logs         []LogEntry `json:"logs"`
 			LogTimeRange string     `json:"log_time_range"`
@@ -1381,15 +1067,24 @@ func createMux() *http.ServeMux {
 				_ = os.WriteFile(logCachePath, payload, 0644)
 			}
 		}
+		jsConfigSafe, _ := json.Marshal(safeDomainConfigs(cfg.DomainConfigs))
+		if jsConfigSafe == nil {
+			jsConfigSafe = []byte("[]")
+		}
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = fmt.Fprint(w, `<!DOCTYPE html><html><head>
-		<meta charset="utf-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1">
-		<title>`+html.EscapeString(T.DashTitle)+`</title>
-		<link id="favicon" rel="icon" type="image/svg+xml" href="/favicon.svg?theme=dark">
-		<style>
+		_, _ = fmt.Fprintf(w, "<!DOCTYPE html><html><head>\n"+
+			"<meta charset=\"utf-8\">\n"+
+			"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"+
+			"<title>%s</title>\n"+
+			"<link id=\"favicon\" rel=\"icon\" type=\"image/svg+xml\" href=\"/favicon.svg?theme=dark\">\n"+
+			"<script>const initialConfig = %s;</script>\n",
+			html.EscapeString(T.DashTitle),
+			string(jsConfigSafe),
+		)
+		_, _ = fmt.Fprint(w, `<style>
 		* {box-sizing: border-box; margin: 0; padding: 0;}
+
 
 		:root {
 			--bg: #0f172a; --card: #1e293b; --text: #f8fafc; --border: #334155;
@@ -1654,6 +1349,92 @@ func createMux() *http.ServeMux {
 			font-weight: 600;
 			letter-spacing: 0.02em;
 		}
+
+		.menu-btn {
+			background: var(--border); border: none;
+			padding: 8px 13px; border-radius: 8px;
+			cursor: pointer; color: var(--text);
+			font-size: 1.2rem; line-height: 1;
+			transition: background 0.15s;
+		}
+		.menu-btn:hover { background: var(--btn-border); color: #fff; }
+
+		.modal-overlay {
+			position: fixed; inset: 0;
+			background: rgba(0,0,0,0.6);
+			z-index: 2000;
+			display: flex; align-items: center; justify-content: center;
+			opacity: 0; pointer-events: none;
+			transition: opacity 0.2s;
+		}
+		.modal-overlay.open { opacity: 1; pointer-events: all; }
+		.modal {
+			background: var(--card);
+			border: 1px solid var(--border);
+			border-radius: 14px;
+			width: min(560px, 96vw);
+			max-height: 88vh;
+			overflow-y: auto;
+			box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+			transform: translateY(-16px);
+			transition: transform 0.2s;
+		}
+		.modal-overlay.open .modal { transform: translateY(0); }
+		.modal-header {
+			display: flex; justify-content: space-between; align-items: center;
+			padding: 16px 20px 14px;
+			border-bottom: 1px solid var(--border);
+			position: sticky; top: 0; background: var(--card); z-index: 1;
+			border-radius: 14px 14px 0 0;
+		}
+		.modal-header h2 { font-size: 1rem; font-weight: 700; }
+		.modal-close {
+			background: none; border: none; cursor: pointer;
+			color: var(--text); opacity: 0.45; font-size: 1.3rem;
+			transition: opacity 0.15s; padding: 2px 6px;
+		}
+		.modal-close:hover { opacity: 1; }
+		.modal-body { padding: 18px 20px 22px; }
+		.s-section { margin-bottom: 20px; }
+		.s-section h3 {
+			font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em;
+			text-transform: uppercase; color: #64748b; margin-bottom: 10px;
+		}
+		.s-row {
+			display: flex; justify-content: space-between; align-items: center;
+			padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+			font-size: 0.85rem; gap: 12px;
+		}
+		.s-row:last-child { border-bottom: none; }
+		.s-label { opacity: 0.65; white-space: nowrap; }
+		.s-val { font-family: monospace; color: var(--btn-text); text-align: right; word-break: break-all; }
+		.s-input {
+			width: 100%; padding: 8px 11px;
+			background: rgba(255,255,255,0.05);
+			border: 1px solid var(--border); border-radius: 7px;
+			color: var(--text); font-size: 0.875rem;
+		}
+		.s-input:focus { outline: none; border-color: var(--btn-border); }
+		.s-btn {
+			width: 100%; padding: 9px;
+			background: var(--btn-bg); color: var(--btn-text);
+			border: 1px solid var(--btn-border); border-radius: 7px;
+			cursor: pointer; font-weight: 600; font-size: 0.85rem;
+			transition: background 0.2s; margin-top: 6px;
+		}
+		.s-btn:hover { background: var(--btn-hover); }
+		.domain-pill {
+			display: flex; align-items: center; justify-content: space-between;
+			padding: 8px 10px; border-radius: 8px;
+			background: rgba(255,255,255,0.03);
+			border: 1px solid var(--border); margin-bottom: 6px;
+			font-size: 0.85rem;
+		}
+		.domain-pill code { font-size: 0.82rem; }
+		.provider-badge {
+			font-size: 0.65rem; padding: 1px 7px; border-radius: 999px;
+			font-weight: 700; white-space: nowrap;
+		}
 		</style>
 	</head>
 	<body>
@@ -1664,6 +1445,7 @@ func createMux() *http.ServeMux {
 				<button class="action-btn" onclick="triggerUpdate()">🔄 Update</button>
 				<button class="action-btn" onclick="exportData()">📥 Export</button>
 				<button class="theme-toggle" onclick="toggleTheme()">🌓</button>
+				<button class="menu-btn" onclick="openSettings()" title="Einstellungen">⋮</button>
 			</div>
 		</div>
 		
@@ -1678,6 +1460,8 @@ func createMux() *http.ServeMux {
 		
 		<div id="toast" class="toast"></div>
 	`)
+
+		_, _ = fmt.Fprintf(w, "%s", buildSettingsModal(cfg))
 
 		latestMetricsMu.RLock()
 		stats := latestMetrics
@@ -2115,48 +1899,94 @@ func createMux() *http.ServeMux {
 	<script>
 	let blinkTimer = null;
 	let currentLevel = 'ok';
+	let ws = null;
+	let reconnectTimer = null;
+	let reconnectDelay = 1000;
+	const reconnectDelayMax = 10000;
+
+   let tempDomainConfigs = [];
+
+   if (typeof initialConfig !== 'undefined' && initialConfig !== null) {
+       tempDomainConfigs = Array.isArray(initialConfig) ? [...initialConfig] : [];
+   }
+
+	document.addEventListener('DOMContentLoaded', () => {
+		const savedTheme = localStorage.getItem('theme') || 'dark';
+		document.documentElement.setAttribute('data-theme', savedTheme);
+
+		renderSettingsDomainList();
+
+		const initialMetrics = {
+			avg_latency: (document.getElementById('mLatency')?.textContent || '').trim(),
+			success_rate: (document.getElementById('mSuccess')?.textContent || '').trim(),
+			total_requests: (document.getElementById('mTotal')?.textContent || '0').trim(),
+		};
+		currentLevel = calcLevelFromMetrics(initialMetrics);
+		applyFavicon(savedTheme, currentLevel, false);
+		setBlinking(savedTheme, currentLevel);
+
+		document.querySelectorAll('details.card').forEach(details => {
+			const id = details.id;
+			const saved = id ? localStorage.getItem('collapse-' + id) : null;
+			if (saved === 'open') details.setAttribute('open', '');
+			else if (saved === 'closed') details.removeAttribute('open');
+			
+			if (id) {
+				details.addEventListener('toggle', () => {
+					localStorage.setItem('collapse-' + id, details.open ? 'open' : 'closed');
+				});
+			}
+		});
+
+		startClock();
+		connectWS();
+		document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSettings(); });
+	});
 
 	function faviconHref(theme, level, blink) {
-	return '/favicon.svg?theme=' + encodeURIComponent(theme) +
-			'&level=' + encodeURIComponent(level) +
-			'&blink=' + (blink ? '1' : '0') +
-			'&v=' + Date.now();
+		return '/favicon.svg?theme=' + encodeURIComponent(theme) +
+				'&level=' + encodeURIComponent(level) +
+				'&blink=' + (blink ? '1' : '0') +
+				'&v=' + Date.now();
 	}
 
 	function applyFavicon(theme, level, blink) {
-	const fav = document.getElementById('favicon');
-	if (!fav) return;
-	fav.href = faviconHref(theme, level, blink);
+		const fav = document.getElementById('favicon');
+		if (!fav) return;
+		fav.href = faviconHref(theme, level, blink);
 	}
 
 	function setBlinking(theme, level) {
-	if (blinkTimer) {
-		clearInterval(blinkTimer);
-		blinkTimer = null;
+		if (blinkTimer) { clearInterval(blinkTimer); blinkTimer = null; }
+		if (level !== 'err') return;
+		let on = false;
+		blinkTimer = setInterval(() => {
+			on = !on;
+			applyFavicon(theme, 'err', on);
+		}, 700);
 	}
-	if (level !== 'err') return;
 
-	let on = false;
-	blinkTimer = setInterval(() => {
-		on = !on;
-		applyFavicon(theme, 'err', on);
-	}, 700);
+	function toggleTheme() {
+		const html = document.documentElement;
+		const current = html.getAttribute('data-theme') || 'dark';
+		const next = current === 'dark' ? 'light' : 'dark';
+		html.setAttribute('data-theme', next);
+		localStorage.setItem('theme', next);
+		applyFavicon(next, currentLevel, false);
+		setBlinking(next, currentLevel);
+		showToast('Theme: ' + next);
 	}
 
 	function parseDurationToMs(s) {
-	s = (s || '').trim().toLowerCase();
-	s = s.replace('µs', 'us');
-
-	const m = s.match(/^([0-9]+(?:\.[0-9]+)?)(ms|s|us)$/);
-	if (!m) return NaN;
-
-	const val = parseFloat(m[1]);
-	const unit = m[2];
-
-	if (unit === 'ms') return val;
-	if (unit === 's') return val * 1000;
-	if (unit === 'us') return val / 1000;
-	return NaN;
+		s = (s || '').trim().toLowerCase().replace('µs', 'us');
+		const m = s.match(/^([0-9]+(?:\.[0-9]+)?)(ms|s|us)$/);
+		if (!m) return NaN;
+		const val = parseFloat(m[1]);
+		const unit = m[2];
+		if (unit === 'ms') return val;
+		if (unit === 's') return val * 1000;
+		if (unit === 'us') return val / 1000;
+		return NaN;
 	}
 
 	function toNum(v, fallback = 0) {
@@ -2175,11 +2005,7 @@ func createMux() *http.ServeMux {
 		const recovered = successAge >= 0 && errorAge >= 0 && successAge < errorAge;
 		const hasActiveError = errorAge >= 0 && !recovered;
 
-		if (hasActiveError) {
-			if (errorAge > 600) return 'warn';
-			return 'err';
-		}
-
+		if (hasActiveError) return errorAge > 600 ? 'warn' : 'err';
 		if (total >= 5 && successRate <= 0) return 'err';
 		if (total >= 10 && successRate < 50) return 'err';
 
@@ -2188,194 +2014,21 @@ func createMux() *http.ServeMux {
 			if (ms >= 1000) return 'err';
 			if (ms >= 300) return 'warn';
 		}
-
 		if (total >= 10 && successRate < 90) return 'warn';
-
 		return 'ok';
 	}
 
-	function toggleTheme() {
-	const html = document.documentElement;
-	const current = html.getAttribute('data-theme') || 'dark';
-	const next = current === 'dark' ? 'light' : 'dark';
-	html.setAttribute('data-theme', next);
-	localStorage.setItem('theme', next);
-
-	applyFavicon(next, currentLevel, false);
-	setBlinking(next, currentLevel);
-
-	showToast('Theme: ' + next);
-	}
-
-	const savedTheme = localStorage.getItem('theme') || 'dark';
-	document.documentElement.setAttribute('data-theme', savedTheme);
-
-	let ws = null;
-	let reconnectTimer = null;
-	let reconnectDelay = 1000;
-	const reconnectDelayMax = 10000;
-
-	function connectWS() {
-	const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
-	ws = new WebSocket(proto + location.host + '/ws');
-
-	ws.onmessage = (e) => {
-		const msg = JSON.parse(e.data);
-
-		if (msg.type === 'initial' || msg.type === 'metrics') {
-		updateMetrics(msg.data);
-
-		const theme = localStorage.getItem('theme') || 'dark';
-		const level = calcLevelFromMetrics(msg.data);
-
-		currentLevel = level;
-		applyFavicon(theme, currentLevel, false);
-		setBlinking(theme, currentLevel);
-		return;
-		}
-
-		if (msg.type === 'domain_update') {
-		updateDomainDisplay(msg.data);
-		return;
-		}
-
-		if (msg.type === 'notification') {
-		const notif = msg.data;
-		if (notif && notif.message) {
-			showToast(notif.message, notif.level || 'info');
-		}
-		return;
-		}
-	};
-
-	ws.onerror = (err) => {
-		console.error('WebSocket error:', err);
-		showToast('WebSocket connection lost', 'error');
-	};
-
-	ws.onclose = () => {
-		console.log('WebSocket closed, reconnecting...');
-		scheduleReconnect();
-	};
-	
-	ws.onopen = () => {
-		reconnectDelay = 1000;
-		if (reconnectTimer) {
-		clearTimeout(reconnectTimer);
-		reconnectTimer = null;
-		}
-	};
-	}
-
-	function scheduleReconnect() {
-	if (reconnectTimer) return;
-
-	reconnectTimer = setTimeout(() => {
-		reconnectTimer = null;
-		connectWS();
-	}, reconnectDelay);
-
-	reconnectDelay = Math.min(reconnectDelay * 2, reconnectDelayMax);
-	}
-
-	function sanitizeBase(s) {
-	s = (s || '').toLowerCase();
-	let out = '';
-	for (const ch of s) {
-		const code = ch.charCodeAt(0);
-		const isAZ = code >= 97 && code <= 122;
-		const is09 = code >= 48 && code <= 57;
-		if (isAZ || is09 || ch === '-' || ch === '_') out += ch;
-		else if (ch === '.') out += '-';
-	}
-	return out || 'x';
-	}
-
-	async function shortHash8(str) {
-	const s = str || '';
-	if (!(window.crypto && crypto.subtle && window.TextEncoder)) {
-		return '00000000';
-	}
-	const data = new TextEncoder().encode(s);
-	const buf = await crypto.subtle.digest('SHA-1', data);
-	const bytes = new Uint8Array(buf);
-	let hex = '';
-	for (const b of bytes) hex += b.toString(16).padStart(2, '0');
-	return hex.slice(0, 8);
-	}
-
-	async function makeSafeID(domain) {
-	const base = sanitizeBase(domain);
-	const sfx = await shortHash8(domain);
-	if (!base || base === 'x') return 'd-' + sfx;
-	return base + '-' + sfx;
-	}
-
-	async function updateDomainDisplay(data) {
-	const safeID = await makeSafeID(data.domain);
-	const ip4El = document.getElementById('ip4-' + safeID);
-	const ip6El = document.getElementById('ip6-' + safeID);
-
-	if (ip4El && data.ipv4) ip4El.textContent = data.ipv4;
-	if (ip6El && data.ipv6) ip6El.textContent = data.ipv6;
-
-	const dotEl = document.getElementById('dot-' + safeID);
-	if (dotEl) {
-		dotEl.className = 'domain-status-dot dot-ok dot-recent';
-		dotEl.title = 'Gerade geändert: ' + (data.time || new Date().toLocaleTimeString());
-		setTimeout(() => {
-			if (dotEl) {
-				dotEl.classList.remove('dot-recent');
-				dotEl.title = 'Zuletzt geändert: ' + (data.time || '');
-			}
-		}, 60 * 60 * 1000);
-	}
-
-	const badgeEl = document.getElementById('badge-' + safeID);
-	if (badgeEl) {
-		badgeEl.style.display = '';
-		setTimeout(() => { if (badgeEl) badgeEl.style.display = 'none'; }, 60 * 60 * 1000);
-	}
-
-	showToast('✓ ' + data.domain + ' updated');
-	}
-
 	function updateMetrics(m) {
-		const last = document.getElementById('lastUpdate');
-		if (last) last.textContent = new Date().toLocaleTimeString();
-
-		const elTotal = document.getElementById('mTotal');
-		if (elTotal && m.total_requests != null) elTotal.textContent = m.total_requests;
-
-		const elSuccess = document.getElementById('mSuccess');
-		if (elSuccess && m.success_rate != null) elSuccess.textContent = m.success_rate;
-
-		const elLatency = document.getElementById('mLatency');
-		if (elLatency && m.avg_latency != null) elLatency.textContent = m.avg_latency;
-
-		const elErrors = document.getElementById('mErrors');
-		if (elErrors) {
-			const c = m.client_errors != null ? m.client_errors : "?";
-			const s = m.server_errors != null ? m.server_errors : "?";
-			elErrors.textContent = String(c) + " / " + String(s);
-		}
-
-		const elP50 = document.getElementById('mP50');
-		if (elP50 && m.p50_latency != null) elP50.textContent = m.p50_latency;
-
-		const elP85 = document.getElementById('mP85');
-		if (elP85 && m.p85_latency != null) elP85.textContent = m.p85_latency;
-
-		const elP99 = document.getElementById('mP99');
-		if (elP99 && m.p99_latency != null) elP99.textContent = m.p99_latency;
-
-		const elUsage = document.getElementById('mUsage');
-		if (elUsage) {
-			const used = m.usage_count != null ? m.usage_count : "?";
-			const lim = m.hourly_limit != null ? m.hourly_limit : "?";
-      		elUsage.textContent = String(used) + " / " + String(lim) + " `+T.RequestsLabel+`";
-		}
-
+		const setTxt = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+		setTxt('lastUpdate', new Date().toLocaleTimeString());
+		setTxt('mTotal', m.total_requests);
+		setTxt('mSuccess', m.success_rate);
+		setTxt('mLatency', m.avg_latency);
+		setTxt('mErrors', (m.client_errors || 0) + " / " + (m.server_errors || 0));
+		setTxt('mP50', m.p50_latency);
+		setTxt('mP85', m.p85_latency);
+		setTxt('mP99', m.p99_latency);
+		
 		const bar = document.getElementById('mUsageBar');
 		if (bar) {
 			const p = (m.usage_percent != null) ? Number(m.usage_percent) : 0;
@@ -2383,284 +2036,301 @@ func createMux() *http.ServeMux {
 			if (m.usage_color) bar.style.background = m.usage_color;
 		}
 
-		const elGet = document.getElementById('mDailyGET');
-		if (elGet && m.daily_get != null) elGet.textContent = m.daily_get;
-		const elPost = document.getElementById('mDailyPOST');
-		if (elPost && m.daily_post != null) elPost.textContent = m.daily_post;
-		const elPut = document.getElementById('mDailyPUT');
-		if (elPut && m.daily_put != null) elPut.textContent = m.daily_put;
-		const elDel = document.getElementById('mDailyDELETE');
-		if (elDel && m.daily_delete != null) elDel.textContent = m.daily_delete;
-		const elNic = document.getElementById('mDailyNIC');
-		if (elNic && m.daily_nic != null) elNic.textContent = m.daily_nic;
-
-		const elIPLat = document.getElementById('mIPLatency');
-		if (elIPLat && m.ip_latency_avg != null) elIPLat.textContent = m.ip_latency_avg;
-		const elIPCount = document.getElementById('mIPCount');
-		if (elIPCount && m.ip_latency_count != null) elIPCount.textContent = m.ip_latency_count;
-		const elLastIP = document.getElementById('mLastIPCheck');
-		if (elLastIP && m.last_ip_check != null) elLastIP.textContent = m.last_ip_check;
+		setTxt('mDailyGET', m.daily_get);
+		setTxt('mDailyPOST', m.daily_post);
+		setTxt('mDailyPUT', m.daily_put);
+		setTxt('mDailyDELETE', m.daily_delete);
+		setTxt('mDailyNIC', m.daily_nic);
+		setTxt('mIPLatency', m.ip_latency_avg);
+		setTxt('mIPCount', m.ip_latency_count);
+		setTxt('mLastIPCheck', m.last_ip_check);
 	}
 
-	function resetMetrics() {
-    	if (!confirm('Möchtest du wirklich alle Metriken (Statistiken) löschen?')) return;
-
-    	const token = localStorage.getItem('triggerToken') || '';
-    
-    	fetch('/api/metrics/reset', {
-        	method: 'POST',
-        	headers: token ? {'X-Trigger-Token': token} : {}
-    	})
-    	.then(r => {
-        	if (r.ok) {
-            	showToast('✅ Metriken zurückgesetzt', 'success');
-       	 } else {
-           		showToast('❌ Reset fehlgeschlagen', 'error');
-       	 }
-    	})
-    	.catch(() => showToast('❌ Verbindungsfehler', 'error'));
+	function connectWS() {
+		const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+		ws = new WebSocket(proto + location.host + '/ws');
+		ws.onmessage = (e) => {
+			const msg = JSON.parse(e.data);
+			if (msg.type === 'initial' || msg.type === 'metrics') {
+				updateMetrics(msg.data);
+				const theme = localStorage.getItem('theme') || 'dark';
+				currentLevel = calcLevelFromMetrics(msg.data);
+				applyFavicon(theme, currentLevel, false);
+				setBlinking(theme, currentLevel);
+			} else if (msg.type === 'domain_update') {
+				updateDomainDisplay(msg.data);
+			} else if (msg.type === 'notification') {
+				showToast(msg.data.message, msg.data.level || 'info');
+			}
+		};
+		ws.onclose = () => scheduleReconnect();
+		ws.onopen = () => { reconnectDelay = 1000; if(reconnectTimer) clearTimeout(reconnectTimer); };
 	}
 
-	function filterLogs(filter) {
-		document.querySelectorAll('.filter-btn').forEach(btn => {
-        if (btn.dataset.filter === filter) {
-            btn.classList.add('active');
-        } else {
-            btn.classList.remove('active');
-        }
-    });
+	function scheduleReconnect() {
+		if (reconnectTimer) return;
+		reconnectTimer = setTimeout(() => { reconnectTimer = null; connectWS(); }, reconnectDelay);
+		reconnectDelay = Math.min(reconnectDelay * 2, reconnectDelayMax);
+	}
 
-    document.querySelectorAll('.log-entry').forEach(entry => {
-        const action = (entry.dataset.action || '').toUpperCase();
-        const level = (entry.dataset.level || '').toUpperCase();
-        const filterUpper = filter.toUpperCase();
-
-        if (filter === 'all') {
-            entry.style.display = '';
-            return;
-        }
-
-        let shouldShow = false;
-        
-        if (filterUpper === 'ERR' && level === 'ERR') {
-            shouldShow = true;
-        } else if (filterUpper === 'WARN' && level === 'WARN') {
-            shouldShow = true;
-        } else if (action === filterUpper) {
-            shouldShow = true;
-        }
-
-        entry.style.display = shouldShow ? '' : 'none';
-      });
-    }
+	function showToast(message, type = 'success') {
+		const toast = document.getElementById('toast');
+		if(!toast) return;
+		toast.textContent = message;
+		let borderColor = 'var(--success)';
+		let duration = 3000;
+		if(type === 'error') { borderColor = 'var(--error)'; duration = 5000; }
+		else if(type === 'warning') { borderColor = '#facc15'; duration = 4000; }
+		else if(type === 'info') { borderColor = '#3b82f6'; duration = 2500; }
+		toast.style.borderLeft = '4px solid ' + borderColor;
+		toast.classList.add('show');
+		setTimeout(() => toast.classList.remove('show'), duration);
+	}
 
 	function copyIP(text) {
 		if (!text || text === 'N/A' || text === '-') {
 			showToast('❌ Keine IP zum Kopieren', 'error');
 			return;
 		}
-		
+		const fallback = (t) => {
+			const ta = document.createElement("textarea"); ta.value = t;
+			ta.style.position = "fixed"; ta.style.left = "-9999px";
+			document.body.appendChild(ta); ta.focus(); ta.select();
+			try { document.execCommand('copy'); showToast('✓ Kopiert: ' + t); } 
+			catch (err) { showToast('❌ Fehler', 'error'); }
+			document.body.removeChild(ta);
+		};
 		if (navigator.clipboard && window.isSecureContext) {
-			navigator.clipboard.writeText(text)
-				.then(() => showToast('✓ Kopiert: ' + text, 'success'))
-				.catch(() => fallbackCopy(text));
-		} else {
-			fallbackCopy(text);
-		}
+			navigator.clipboard.writeText(text).then(() => showToast('✓ Kopiert: ' + text)).catch(() => fallback(text));
+		} else fallback(text);
 	}
 
-	function fallbackCopy(text) {
-		const textArea = document.createElement("textarea");
-		textArea.value = text;
-		textArea.style.position = "fixed";
-		textArea.style.left = "-9999px";
-		textArea.style.top = "0";
-		document.body.appendChild(textArea);
-		textArea.focus();
-		textArea.select();
-		
-		try {
-			document.execCommand('copy');
-			showToast('✓ Kopiert: ' + text, 'success');
-		} catch (err) {
-			showToast('❌ Kopieren fehlgeschlagen', 'error');
-		}
-		document.body.removeChild(textArea);
-	}
-
-	function showToast(message, type = 'success') {
-		const toast = document.getElementById('toast');
-		toast.textContent = message;
-
-		let borderColor = 'var(--success)';
-		let duration = 3000;
-		
-		switch(type) {
-			case 'error':
-				borderColor = 'var(--error)';
-				duration = 5000;
-				break;
-			case 'warning':
-				borderColor = '#facc15';
-				duration = 4000;
-				break;
-			case 'info':
-				borderColor = '#3b82f6';
-				duration = 2500;
-				break;
-			case 'success':
-			default:
-				borderColor = 'var(--success)';
-				duration = 3000;
-		}
-		
-		toast.style.borderLeft = '4px solid ' + borderColor;
-		toast.classList.add('show');
-		setTimeout(() => toast.classList.remove('show'), duration);
-	}
-
-	function filterDomains(query) {
-		const domains = document.querySelectorAll('.domain-item');
-		query = query.toLowerCase();
-		domains.forEach(domain => {
-			const name = domain.getAttribute('data-domain').toLowerCase();
-			domain.style.display = name.includes(query) ? 'block' : 'none';
+	function filterLogs(filter) {
+		document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.filter === filter));
+		document.querySelectorAll('.log-entry').forEach(entry => {
+			const action = (entry.dataset.action || '').toUpperCase();
+			const level = (entry.dataset.level || '').toUpperCase();
+			if (filter === 'all') { entry.style.display = ''; return; }
+			const shouldShow = (filter.toUpperCase() === 'ERR' && level === 'ERR') || 
+							   (filter.toUpperCase() === 'WARN' && level === 'WARN') || 
+							   (action === filter.toUpperCase());
+			entry.style.display = shouldShow ? '' : 'none';
 		});
-	}
-
-	function deleteDomain(domain, btn) {
-		if (!confirm('Domain "' + domain + '" "`+T.DeleteDomainCheck+`"')) return;
-
-		const token = localStorage.getItem('triggerToken') || '';
-		btn.disabled = true;
-		btn.textContent = '⏳';
-
-		fetch('/api/domain/delete?domain=' + encodeURIComponent(domain), {
-			method: 'POST',
-			headers: token ? {'X-Trigger-Token': token} : {}
-		})
-		.then(r => r.json().then(j => ({status: r.status, json: j})))
-		.then(({status, json: j}) => {
-			if (status === 200) {
-				const card = btn.closest('.domain-item');
-				if (card) {
-					card.style.transition = 'opacity 0.4s';
-					card.style.opacity = '0';
-					setTimeout(() => card.remove(), 400);
-				}
-				showToast('🗑️ ' + domain + ' "`+T.DeleteSuccess+`"', 'success');
-			} else {
-				btn.disabled = false;
-				btn.textContent = '🗑️ "`+T.DeleteButton+`"';
-				showToast('❌ ' + (j.error || '"`+T.DeleteError+`"'), 'error');
-			}
-		})
-		.catch(() => {
-			btn.disabled = false;
-			btn.textContent = '🗑️ "`+T.DeleteButton+`"';
-			showToast('❌ "`+T.ConnectionError+`"', 'error');
-		});
-	}
-
-	function exportData() {
-		fetch('/api/export')
-			.then(r => r.blob())
-			.then(blob => {
-				const url = URL.createObjectURL(blob);
-				const a = document.createElement('a');
-				a.href = url;
-				a.download = 'dyndns-export-' + new Date().toISOString().split('T')[0] + '.json';
-				a.click();
-				showToast('✓ Export started');
-			})
-			.catch(() => showToast('Export failed', 'error'));
 	}
 
 	function triggerUpdate() {
 		const token = localStorage.getItem('triggerToken') || '';
 		showToast('⏳ Update wird gestartet...', 'info');
-		
-		fetch('/api/trigger', {
+		fetch('/api/trigger', { method: 'POST', headers: token ? {'X-Trigger-Token': token} : {} })
+		.then(r => r.json().then(j => {
+			if (j.error) showToast('⚠️ ' + j.error, 'warning');
+			else showToast('✅ Update gestartet', 'success');
+		})).catch(() => showToast('❌ Verbindungsfehler', 'error'));
+	}
+
+	function exportData() {
+		fetch('/api/export').then(r => r.blob()).then(blob => {
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url; a.download = 'dyndns-export-' + new Date().toISOString().split('T')[0] + '.json';
+			a.click(); showToast('✓ Export gestartet');
+		}).catch(() => showToast('Export fehlgeschlagen', 'error'));
+	}
+
+	function sanitizeBase(s) {
+		s = (s || '').toLowerCase();
+		let out = '';
+		for (const ch of s) {
+			const code = ch.charCodeAt(0);
+			if ((code >= 97 && code <= 122) || (code >= 48 && code <= 57) || ch === '-' || ch === '_') out += ch;
+			else if (ch === '.') out += '-';
+		}
+		return out || 'x';
+	}
+
+	async function shortHash8(str) {
+		if (!(window.crypto && crypto.subtle)) return '00000000';
+		const data = new TextEncoder().encode(str || '');
+		const buf = await crypto.subtle.digest('SHA-1', data);
+		return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 8);
+	}
+
+	async function makeSafeID(domain) {
+		const base = sanitizeBase(domain);
+		const sfx = await shortHash8(domain);
+		return (base === 'x' ? 'd-' : base + '-') + sfx;
+	}
+
+	async function updateDomainDisplay(data) {
+		const safeID = await makeSafeID(data.domain);
+		const ip4El = document.getElementById('ip4-' + safeID);
+		const ip6El = document.getElementById('ip6-' + safeID);
+		if (ip4El && data.ipv4) ip4El.textContent = data.ipv4;
+		if (ip6El && data.ipv6) ip6El.textContent = data.ipv6;
+		const dotEl = document.getElementById('dot-' + safeID);
+		if (dotEl) {
+			dotEl.className = 'domain-status-dot dot-ok dot-recent';
+			setTimeout(() => { if(dotEl) dotEl.classList.remove('dot-recent'); }, 3600000);
+		}
+		showToast('✓ ' + data.domain + ' updated');
+	}
+
+	function openSettings() {
+		document.getElementById('settingsOverlay').classList.add('open');
+		const saved = localStorage.getItem('triggerToken') || '';
+		const inp = document.getElementById('s-token');
+		if (inp) inp.placeholder = saved ? '●●●●●● (gespeichert)' : 'Token eingeben...';
+		renderSettingsDomainList();
+	}
+
+	function closeSettings() { 
+		const el = document.getElementById('settingsOverlay');
+		if(el) el.classList.remove('open'); 
+	}
+	
+	function closeSettingsOutside(e) { if (e.target.id === 'settingsOverlay') closeSettings(); }
+
+	function saveToken() {
+		const val = (document.getElementById('s-token').value || '').trim();
+		if (val) {
+			localStorage.setItem('triggerToken', val);
+			document.getElementById('s-token').value = '';
+			document.getElementById('s-token').placeholder = '●●●●●● (gespeichert)';
+			showToast('✅ Token gespeichert', 'success');
+		} else {
+			localStorage.removeItem('triggerToken');
+			document.getElementById('s-token').placeholder = 'Token eingeben...';
+			showToast('🗑️ Token gelöscht', 'info');
+		}
+	}
+
+	function renderSettingsDomainList() {
+		const container = document.getElementById('settings-domain-list');
+		if (!container) return;
+		container.innerHTML = '';
+		tempDomainConfigs.forEach((d, index) => {
+			const div = document.createElement('div');
+			div.className = 'domain-pill';
+			div.innerHTML = '<span><strong>' + d.fqdn + '</strong> <small>(' + d.provider + ')</small></span>' +
+			                '<button onclick="removeDomainFromList(' + index + ')" style="background:none; border:none; color:var(--error); cursor:pointer; font-weight:bold;">✕</button>';
+			container.appendChild(div);
+		});
+	}
+
+	function toggleProviderFields() {
+		const p = document.getElementById('new-domain-provider').value;
+		document.getElementById('fields-ionos').style.display = p === 'IONOS' ? 'block' : 'none';
+		document.getElementById('fields-cloudflare').style.display = p === 'CLOUDFLARE' ? 'block' : 'none';
+		document.getElementById('fields-ipv64').style.display = p === 'IPV64' ? 'block' : 'none';
+	}
+
+	function addDomainToList() {
+		const fqdn = document.getElementById('new-domain-fqdn').value.trim();
+		const provider = document.getElementById('new-domain-provider').value;
+		if(!fqdn) return showToast('FQDN fehlt', 'error');
+
+		let entry = { fqdn: fqdn, provider: provider };
+		if(provider === 'IONOS') {
+			entry.api_prefix = document.getElementById('new-ionos-prefix').value;
+			entry.api_secret = document.getElementById('new-ionos-secret').value;
+		} else if(provider === 'CLOUDFLARE') {
+			entry.cf_token = document.getElementById('new-cf-token').value;
+			entry.cf_email = document.getElementById('new-cf-email').value;
+			entry.cf_secret = document.getElementById('new-cf-secret').value;
+		} else if(provider === 'IPV64') {
+			entry.ipv64_token = document.getElementById('new-ipv64-token').value;
+		}
+		tempDomainConfigs.push(entry);
+		renderSettingsDomainList();
+		document.getElementById('new-domain-fqdn').value = '';
+	}
+
+	function removeDomainFromList(index) {
+		tempDomainConfigs.splice(index, 1);
+		renderSettingsDomainList();
+	}
+
+	async function saveFullConfig() {
+		if(!confirm("Konfiguration speichern?")) return;
+		const token = localStorage.getItem('triggerToken') || '';
+		try {
+			const r = await fetch('/api/save-config', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', 'X-Trigger-Token': token },
+				body: JSON.stringify({ domain_configs: tempDomainConfigs })
+			});
+			if (r.ok) {
+				showToast('✅ Gespeichert!', 'success');
+				setTimeout(() => location.reload(), 1200);
+			} else {
+				const txt = await r.text();
+				showToast('❌ Fehler: ' + txt, 'error');
+			}
+		} catch (e) { showToast('❌ Netzwerkfehler', 'error'); }
+	}
+
+	function resetMetrics() {
+		if (!confirm('Möchtest du wirklich alle Metriken (Statistiken) löschen?')) return;
+		const token = localStorage.getItem('triggerToken') || '';
+		fetch('/api/metrics/reset', {
 			method: 'POST',
 			headers: token ? {'X-Trigger-Token': token} : {}
 		})
 		.then(r => {
-			const status = r.status;
-			return r.json().then(j => ({status, json: j}));
+			if (r.ok) { showToast('✅ Metriken zurückgesetzt', 'success'); }
+			else { showToast('❌ Reset fehlgeschlagen', 'error'); }
 		})
-		.then(({status, json: j}) => {
-			if (j && j.error) {
-				if (j.error === 'global rate limit exceeded') {
-					showToast('⚠️ Rate Limit erreicht - bitte ' + (j.retry_after_seconds || 10) + 's warten', 'warning');
-				} else if (j.error === 'IP rate limit exceeded') {
-					showToast('⚠️ Zu viele Requests - bitte ' + (j.retry_after_seconds || 10) + 's warten', 'warning');
-				} else if (j.error === 'update already in progress') {
-					showToast('ℹ️ Update läuft bereits', 'info');
-				} else if (j.error === 'invalid or missing trigger token') {
-					showToast('🔒 Ungültiger oder fehlender Token', 'error');
-				} else {
-					showToast('❌ ' + j.error, 'error');
-				}
-			} else if (j && j.status === 'triggered') {
-				const remaining = j.rate_limit_remaining || '?';
-				showToast('✅ Update gestartet (Verbleibend: ' + remaining + ')', 'success');
-			} else {
-				showToast('✓ Update triggered', 'success');
-			}
-		})
-		.catch(err => {
-			console.error('Trigger error:', err);
-			showToast('❌ Verbindungsfehler', 'error');
+		.catch(() => showToast('❌ Verbindungsfehler', 'error'));
+	}
+
+	function filterDomains(query) {
+		document.querySelectorAll('.domain-item').forEach(d => {
+			const name = (d.getAttribute('data-domain') || '').toLowerCase();
+			d.style.display = name.includes(query.toLowerCase()) ? '' : 'none';
 		});
 	}
 
-	document.querySelectorAll('details.card').forEach(details => {
-	  const id = details.id;
-	  const saved = id ? localStorage.getItem('collapse-' + id) : null;
+	function deleteDomain(domain, btn) {
+		if (!confirm('Domain "' + domain + '" wirklich aus dem Status entfernen?')) return;
+		const token = localStorage.getItem('triggerToken') || '';
+		btn.disabled = true;
+		btn.textContent = '⏳';
+		fetch('/api/domain/delete?domain=' + encodeURIComponent(domain), {
+			method: 'POST',
+			headers: token ? {'X-Trigger-Token': token} : {}
+		})
+		.then(r => r.json().then(j => ({ status: r.status, json: j })))
+		.then(({ status, json: j }) => {
+			if (status === 200) {
+				const card = btn.closest('.domain-item');
+				if (card) { card.style.transition = 'opacity 0.4s'; card.style.opacity = '0'; setTimeout(() => card.remove(), 400); }
+				showToast('🗑️ ' + domain + ' entfernt', 'success');
+			} else {
+				btn.disabled = false; btn.textContent = '🗑️ Entfernen';
+				showToast('❌ ' + (j.error || 'Fehler beim Löschen'), 'error');
+			}
+		})
+		.catch(() => { btn.disabled = false; btn.textContent = '🗑️ Entfernen'; showToast('❌ Verbindungsfehler', 'error'); });
+	}
 
-	  if (saved === 'open') {
-		details.setAttribute('open', '');
-	  } else if (saved === 'closed') {
-		details.removeAttribute('open');
-	  } else {
-		if (id === 'metrics-card') details.setAttribute('open', '');
-		else details.removeAttribute('open');
-	  }
+	function fallbackCopy(text) {
+		const ta = document.createElement('textarea');
+		ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+		document.body.appendChild(ta); ta.focus(); ta.select();
+		try { document.execCommand('copy'); showToast('✓ Kopiert: ' + text, 'success'); }
+		catch { showToast('❌ Kopieren fehlgeschlagen', 'error'); }
+		document.body.removeChild(ta);
+	}
 
-	  if (id) {
-		details.addEventListener('toggle', () => {
-		  localStorage.setItem('collapse-' + id, details.open ? 'open' : 'closed');
-		});
-	  }
-	});
-	const theme = localStorage.getItem('theme') || 'dark';
-	const initialMetrics = {
-	avg_latency: (document.getElementById('mLatency')?.textContent || '').trim(),
-	success_rate: (document.getElementById('mSuccess')?.textContent || '').trim(),
-	client_errors: (document.getElementById('mErrors')?.textContent || '0 / 0').split('/')[0],
-	server_errors: (document.getElementById('mErrors')?.textContent || '0 / 0').split('/')[1],
-	total_requests: (document.getElementById('mTotal')?.textContent || '0').trim(),
-	};
-	currentLevel = calcLevelFromMetrics(initialMetrics);
-	applyFavicon(theme, currentLevel, false);
-	setBlinking(theme, currentLevel);
-    function pad2(n) { return String(n).padStart(2, '0'); }
-    
-    function formatClock(d) {
-      return pad2(d.getHours()) + ":" + pad2(d.getMinutes()) + ":" + pad2(d.getSeconds());
-    }
-    
-    function startClock() {
-      const el = document.getElementById('clock');
-      if (!el) return;
-    
-      const tick = () => { el.textContent = formatClock(new Date()); };
-    
-      tick();
-      setInterval(tick, 1000);
-    }
-    startClock();
-	connectWS();
+	function startClock() {
+		const el = document.getElementById('clock');
+		if (!el) return;
+		const tick = () => { 
+			const d = new Date();
+			el.textContent = [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, '0')).join(':');
+		};
+		tick(); setInterval(tick, 1000);
+	}
 	</script>
 	</div>
 	</body>

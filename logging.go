@@ -382,7 +382,7 @@ func flushLogQueue(timeout time.Duration) {
 			return
 		default:
 			if len(logWriteQueue) == 0 {
-				time.Sleep(10 * time.Millisecond)
+				time.Sleep(10 * time.Millisecond) // kurz warten: Writer könnte noch am Schreiben sein
 				if len(logWriteQueue) == 0 {
 					return
 				}

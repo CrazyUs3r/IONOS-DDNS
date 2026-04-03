@@ -26,8 +26,9 @@ var (
 	configDir         string
 	langDir           string
 	logPath           string
+	configPath        string
 	updatePath        string
-	logCachePath      string // parsed log cache: logs/log_cache.json
+	logCachePath      string
 	ionosBaseURL      = "https://api.hosting.ionos.com/dns/v1/zones"
 	cloudflareAPIBase = "https://api.cloudflare.com/client/v4"
 	ipv64APIBase      = "https://ipv64.net/api.php"
@@ -423,7 +424,7 @@ type LogContext struct {
 	Category   string
 	Message    string
 	Error      error
-	SkipNotify bool // set true if notification was already sent (e.g. notifySync)
+	SkipNotify bool
 }
 
 type LogEntry struct {
@@ -457,6 +458,7 @@ type DomainConfig struct {
 	CFZoneID   string       `json:"cf_zone_id,omitempty"`
 	IPv64Token string       `json:"ipv64_token,omitempty"`
 }
+
 type rawEntry struct {
 	FQDN     string `json:"fqdn"`
 	Provider string `json:"provider"`
@@ -482,22 +484,34 @@ type rawEntry struct {
 }
 
 type Config struct {
-	DomainConfigs   []DomainConfig
-	IPMode          string
-	IfaceName       string
-	HealthPort      string
-	LogDir          string
-	Lang            string
-	DNSServers      []string
-	Interval        int
-	DryRun          bool
-	DebugEnabled    bool
-	DebugHTTPRaw    bool
-	HourlyRateLimit int
-	MaxConcurrent   int
-	MaxLogLines     int
-	MaxAPIRetries   int
-	NotifyOn        string
+	DomainConfigs   []DomainConfig `json:"DomainConfigs"`
+	IPMode          string         `json:"ip_mode"`
+	IfaceName       string         `json:"iface_name"`
+	HealthPort      string         `json:"health_port"`
+	LogDir          string         `json:"log_dir"`
+	Lang            string         `json:"lang"`
+	DNSServers      []string       `json:"dns_servers"`
+	Interval        int            `json:"interval"`
+	DryRun          bool           `json:"dry_run"`
+	DebugEnabled    bool           `json:"debug_enabled"`
+	DebugHTTPRaw    bool           `json:"debug_http_raw"`
+	HourlyRateLimit int            `json:"hourly_rate_limit"`
+	MaxConcurrent   int            `json:"max_concurrent"`
+	MaxLogLines     int            `json:"max_log_lines"`
+	MaxAPIRetries   int            `json:"max_api_retries"`
+	NotifyOn        string         `json:"notify_on"`
+	Notifications struct {
+		Enabled bool     `json:"enabled"`
+		Events  []string `json:"events"`
+		Telegram struct {
+			Token  string `json:"token"`
+			ChatID string `json:"chat_id"`
+		} `json:"telegram"`
+		Gotify struct {
+			URL   string `json:"url"`
+			Token string `json:"token"`
+		} `json:"gotify"`
+	} `json:"notifications"`
 }
 
 type Zone struct {
@@ -843,7 +857,6 @@ type dnsInFlight struct {
 	addrs []net.IPAddr
 	err   error
 }
-
 
 // ============================================================================
 // TELEGRAM TYPES

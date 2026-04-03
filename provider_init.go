@@ -5,29 +5,92 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
 // ============================================================================
 // PROVIDER INITIALIZATION
 // ============================================================================
-func initProviderConfig() error {
-	configJSON := os.Getenv("DOMAINS_CONFIG")
-	if configJSON != "" {
-		debugLog("CONFIG", "", "📦 Loading multi-provider config from DOMAINS_CONFIG")
-
-		var raw []rawEntry
-		if err := json.Unmarshal([]byte(configJSON), &raw); err != nil {
-			return fmt.Errorf("invalid DOMAINS_CONFIG JSON: %w", err)
-		}
-
-		cfg.DomainConfigs = expandDomainConfigs(raw)
-		return validateDomainConfigs()
+func saveConfigToFile() error {
+	dir := filepath.Dir(configPath)
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		_ = os.MkdirAll(dir, 0755)
 	}
 
-	debugLog("CONFIG", "", "📦 Using legacy single-provider mode")
-	return initLegacyConfig()
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(configPath, data, 0644)
 }
+
+func initProviderConfig() error {
+	// Flag, um zu tracken, ob wir überhaupt irgendwoher Daten bekommen haben
+	fileFound := false
+
+	// 1. SCHRITT: config.json laden
+	if _, err := os.Stat(configPath); err == nil {
+		debugLog("CONFIG", "", "📂 config.json gefunden. Lade Konfiguration...")
+		data, err := os.ReadFile(configPath)
+		if err == nil {
+			if err := json.Unmarshal(data, &cfg); err == nil {
+				debugLog("CONFIG", "", fmt.Sprintf("✅ config.json geladen (%d Domains gefunden).", len(cfg.DomainConfigs)))
+				fileFound = true
+			} else {
+				debugLog("CONFIG", "", "⚠️ Fehler beim Parsen der config.json (Format ungültig).")
+			}
+		}
+	} else {
+		debugLog("CONFIG", "", "ℹ️ Keine config.json vorhanden, überspringe Dateimodus.")
+	}
+
+	// 2. SCHRITT: DOMAINS_CONFIG (Umgebungsvariable) prüfen
+	configJSON := os.Getenv("DOMAINS_CONFIG")
+	if configJSON != "" {
+		debugLog("CONFIG", "", "📦 Suche in DOMAINS_CONFIG Umgebungsvariable...")
+		var raw []rawEntry
+		if err := json.Unmarshal([]byte(configJSON), &raw); err == nil {
+			envConfigs := expandDomainConfigs(raw)
+			// Wir hängen diese an, falls in der config.json schon was stand
+			cfg.DomainConfigs = append(cfg.DomainConfigs, envConfigs...)
+			debugLog("CONFIG", "", fmt.Sprintf("✅ %d Domains aus DOMAINS_CONFIG hinzugefügt.", len(envConfigs)))
+		} else {
+			debugLog("CONFIG", "", "⚠️ Ungültiges JSON in DOMAINS_CONFIG.")
+		}
+	}
+
+	// 3. SCHRITT: Legacy-Mode (nur wenn bisher KEINE Domains gefunden wurden)
+	// Das verhindert, dass wir die Legacy-Variablen laden, wenn die config.json absichtlich leer ist
+	// oder bereits Domains aus der config.json/DOMAINS_CONFIG vorhanden sind.
+	if len(cfg.DomainConfigs) == 0 {
+		debugLog("CONFIG", "", "🔍 Bisher keine Domains konfiguriert. Prüfe Legacy-Umgebungsvariablen (DOMAINS, PROVIDER...)...")
+		// Wir rufen initLegacyConfig auf, aber ignorieren den Fehler hier kurzzeitig, 
+		// da wir am Ende sowieso global validieren.
+		_ = initLegacyConfig() 
+	}
+
+	// 4. SCHRITT: Globale Validierung
+	// Erst jetzt prüfen wir, ob die Summe aller Quellen gültig ist.
+	if err := validateDomainConfigs(); err != nil {
+		debugLog("CONFIG", "", "❌ Validierung fehlgeschlagen: "+err.Error())
+		return err
+	}
+
+	// 5. SCHRITT: Speichern (Optional)
+	// Falls wir Daten aus ENVs geladen haben, schreiben wir sie in die config.json für das nächste Mal
+	if !fileFound && len(cfg.DomainConfigs) > 0 {
+		debugLog("CONFIG", "", "💾 Speichere gefundene Konfiguration in config.json...")
+		if err := saveConfigToFile(); err != nil {
+			debugLog("CONFIG", "", "⚠️ Konnte config.json nicht automatisch erstellen: "+err.Error())
+		}
+	}
+
+	debugLog("CONFIG", "", "🚀 Provider-Initialisierung erfolgreich abgeschlossen.")
+	return nil
+}
+
+
 
 func (r rawEntry) toDomainConfig() DomainConfig {
 	pick := func(a, b string) string {
