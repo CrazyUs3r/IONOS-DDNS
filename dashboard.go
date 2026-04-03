@@ -470,45 +470,6 @@ func buildSettingsModal(c Config) string {
 		`</div></div></div>`
 }
 
-func providerStyle(p ProviderType) (color, bg string) {
-	switch p {
-	case ProviderCloudflare:
-		return "#fff", "rgba(246,130,31,0.8)"
-	case ProviderIPv64:
-		return "#0f172a", "rgba(74,222,128,0.8)"
-	default: // IONOS
-		return "#fff", "rgba(0,100,220,0.8)"
-	}
-}
-
-func maskCred(dc DomainConfig) string {
-	switch dc.Provider {
-	case ProviderIONOS:
-		if dc.APIPrefix != "" {
-			return "Prefix: " + maskStr(dc.APIPrefix)
-		}
-	case ProviderCloudflare:
-		if dc.CFToken != "" {
-			return "Token: " + maskStr(dc.CFToken)
-		}
-		if dc.CFEmail != "" {
-			return "Email: " + dc.CFEmail
-		}
-	case ProviderIPv64:
-		if dc.IPv64Token != "" {
-			return "Token: " + maskStr(dc.IPv64Token)
-		}
-	}
-	return ""
-}
-
-func maskStr(s string) string {
-	if len(s) <= 6 {
-		return "●●●●"
-	}
-	return s[:3] + "●●●●" + s[len(s)-2:]
-}
-
 type safeDomainConfig struct {
 	FQDN       string `json:"fqdn"`
 	Provider   string `json:"provider"`
@@ -670,7 +631,7 @@ func createMux() *http.ServeMux {
 
 		forceNextUpdate.Store(true)
 
-		debugLog("API", getClientIP(r), "✅ Konfiguration via Dashboard aktualisiert")
+		debugLog("API", getClientIP(r), "✅ Configuration via Dashboard aktualisiert")
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "saved"})
 	})
@@ -2251,7 +2212,7 @@ func createMux() *http.ServeMux {
 	}
 
 	async function saveFullConfig() {
-		if(!confirm("Konfiguration speichern?")) return;
+		if(!confirm("Configuration speichern?")) return;
 		const token = localStorage.getItem('triggerToken') || '';
 		try {
 			const r = await fetch('/api/save-config', {

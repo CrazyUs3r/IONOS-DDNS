@@ -31,7 +31,7 @@ func initProviderConfig() error {
 
 	// 1. SCHRITT: config.json laden
 	if _, err := os.Stat(configPath); err == nil {
-		debugLog("CONFIG", "", "📂 config.json gefunden. Lade Konfiguration...")
+		debugLog("CONFIG", "", "📂 config.json gefunden. Lade Configuration...")
 		data, err := os.ReadFile(configPath)
 		if err == nil {
 			if err := json.Unmarshal(data, &cfg); err == nil {
@@ -80,7 +80,7 @@ func initProviderConfig() error {
 	// 5. SCHRITT: Speichern (Optional)
 	// Falls wir Daten aus ENVs geladen haben, schreiben wir sie in die config.json für das nächste Mal
 	if !fileFound && len(cfg.DomainConfigs) > 0 {
-		debugLog("CONFIG", "", "💾 Speichere gefundene Konfiguration in config.json...")
+		debugLog("CONFIG", "", "💾 Speichere gefundene Configuration in config.json...")
 		if err := saveConfigToFile(); err != nil {
 			debugLog("CONFIG", "", "⚠️ Konnte config.json nicht automatisch erstellen: "+err.Error())
 		}
