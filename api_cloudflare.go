@@ -289,7 +289,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 		return respBody, nil
 	}
 
-	return nil, fmt.Errorf(T.CFApiFailed+": %w", cfg.MaxAPIRetries, lastErr)
+	return nil, fmt.Errorf("%s: %w", fmt.Sprintf(T.CFApiFailed, cfg.MaxAPIRetries), lastErr)
 }
 
 func loadCloudflareZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {

@@ -43,13 +43,21 @@ func loadLanguage(lang string) error {
 		}
 	}
 
+	if len(data) == 0 {
+		fmt.Printf("[ERROR] Keine Sprachdaten geladen für: %s\n", lang)
+		if lang != "en" {
+			return loadLanguage("en")
+		}
+		return fmt.Errorf("keine Sprachdaten verfügbar")
+	}
+
 	var translations map[string]string
 	if err := json.Unmarshal(data, &translations); err != nil {
 		fmt.Printf("[ERROR] JSON parse error: %v\n", err)
 		if lang != "en" {
 			return loadLanguage("en")
 		}
-		return nil
+		return fmt.Errorf("JSON parse error: %w", err)
 	}
 
 	v := reflect.ValueOf(&T).Elem()
@@ -78,17 +86,21 @@ var knownAcronyms = []string{
 	"IPv4", "IPv6", "HTTP", "JSON", "API", "DNS", "IP", "CF"}
 
 var snakeCaseOverrides = map[string]string{
-	"HealthCheckOK":        "health_check_ok",
-	"LanguageFileNotFound": "language_file_not_found",
-	"BasedOnLast60Min":     "based_on_last_60_min",
-	"CleanupStartIonos":    "cleanup_start_ionos",
-	"CleanupStartCF":       "cleanup_start_c_f",
-	"CleanupStartIPv64":    "cleanup_start_i_pv64",
-	"IPv64APIError":        "ipv64_a_p_i_error",
-	"IPv64HTTPError":       "ipv64_h_t_t_p_error",
-	"IPv64CacheAPIError":   "ipv64_cache_a_p_i_error",
-	"IonosRetryable":       "ionos_retryable",
-	"IonosErrDetail":       "ionos_err_detail",
+	"HealthCheckOK":             "health_check_ok",
+	"LanguageFileNotFound":      "language_file_not_found",
+	"BasedOnLast60Min":          "based_on_last_60_min",
+	"CleanupStartIonos":         "cleanup_start_ionos",
+	"CleanupStartCF":            "cleanup_start_c_f",
+	"CleanupStartIPv64":         "cleanup_start_i_pv64",
+	"IPv64APIError":             "ipv64_a_p_i_error",
+	"IPv64HTTPError":            "ipv64_h_t_t_p_error",
+	"IPv64CacheAPIError":        "ipv64_cache_a_p_i_error",
+	"IonosRetryable":            "ionos_retryable",
+	"IonosErrDetail":            "ionos_err_detail",
+	"SettingsTGToken":           "settings_tg_token",
+	"SettingsTGChatID":          "settings_tg_chatid",
+	"SettingsGotifyURL":         "settings_gotify_url",
+	"SettingsTGChatPlaceholder": "settings_tg_chat_placeholder",
 }
 
 func toSnakeCase(s string) string {

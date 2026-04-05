@@ -150,7 +150,7 @@ domainLoop:
 		}
 	}
 
-	lastOk.Store(!hasErrors)
+	lastOk.Store(successCount > 0 || !hasErrors)
 	schedulerRanOnce.Store(true)
 	return successCount
 }

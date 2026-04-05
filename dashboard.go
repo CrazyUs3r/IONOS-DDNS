@@ -3,6 +3,7 @@ package main
 
 import (
 	"bufio"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -12,159 +13,13 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/gorilla/websocket"
 )
 
-// ============================================================================
-// WEBSOCKET
-// ============================================================================
-func (h *WSHub) run() {
-	for {
-		select {
-		case c := <-h.register:
-			h.mu.Lock()
-			h.clients[c] = true
-			n := len(h.clients)
-			h.mu.Unlock()
+//go:embed statics/dashboard.css
+var cssData string
 
-			go c.writePump()
-			go c.readPump(h)
-
-			debugLog("WS", "", fmt.Sprintf("Client connected (total: %d)", n))
-
-		case c := <-h.unregister:
-			removed := false
-			n := 0
-
-			h.mu.Lock()
-			if _, ok := h.clients[c]; ok {
-				delete(h.clients, c)
-				removed = true
-				n = len(h.clients)
-
-				func() {
-					defer func() { _ = recover() }()
-					c.closeSend()
-				}()
-			}
-			h.mu.Unlock()
-
-			if removed {
-				debugLog("WS", "", fmt.Sprintf("Client disconnected (total: %d)", n))
-				_ = c.conn.Close()
-			}
-
-		case msg := <-h.broadcast:
-			h.mu.RLock()
-			clients := make([]*WSClient, 0, len(h.clients))
-			for c := range h.clients {
-				clients = append(clients, c)
-			}
-			h.mu.RUnlock()
-
-			for _, c := range clients {
-				select {
-				case c.send <- msg:
-				default:
-					debugLog("WS", "", "client send queue full - disconnecting")
-					select {
-					case h.unregister <- c:
-					default:
-						h.forceRemoveClient(c)
-					}
-				}
-			}
-		}
-	}
-}
-
-func (c *WSClient) writePump() {
-	ticker := time.NewTicker(WSPingInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-shutdownCtx.Done():
-			return
-
-		case msg, ok := <-c.send:
-			if !ok {
-				return
-			}
-			_ = c.conn.SetWriteDeadline(time.Now().Local().Add(WSWriteTimeout))
-			if err := c.conn.WriteJSON(msg); err != nil {
-				return
-			}
-
-		case <-ticker.C:
-			_ = c.conn.SetWriteDeadline(time.Now().Local().Add(WSWriteTimeout))
-			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				return
-			}
-		}
-	}
-}
-
-func (c *WSClient) readPump(h *WSHub) {
-	defer func() {
-		select {
-		case h.unregister <- c:
-		default:
-			h.forceRemoveClient(c)
-		}
-	}()
-
-	_ = c.conn.SetReadDeadline(time.Now().Local().Add(WSPongTimeout))
-	c.conn.SetPongHandler(func(string) error {
-		_ = c.conn.SetReadDeadline(time.Now().Local().Add(WSPongTimeout))
-		return nil
-	})
-
-	for {
-		if _, _, err := c.conn.ReadMessage(); err != nil {
-			return
-		}
-	}
-}
-
-func (c *WSClient) closeSend() {
-	c.closeOnce.Do(func() {
-		close(c.send)
-	})
-}
-
-func broadcastUpdate(updateType string, data interface{}) {
-	msg := WSMessage{Type: updateType, Data: data}
-	select {
-	case wsHub.broadcast <- msg:
-	default:
-		debugLog("WS", "", "broadcast queue full - dropping message")
-	}
-}
-
-func broadcastNotification(message string, level string) {
-	if level == "" {
-		level = "info"
-	}
-	broadcastUpdate("notification", map[string]string{
-		"message": message,
-		"level":   level,
-	})
-}
-
-func (h *WSHub) forceRemoveClient(c *WSClient) {
-	h.mu.Lock()
-	if _, ok := h.clients[c]; ok {
-		delete(h.clients, c)
-		func() {
-			defer func() { _ = recover() }()
-			c.closeSend()
-		}()
-	}
-	h.mu.Unlock()
-	_ = c.conn.Close()
-}
+//go:embed statics/dashboard.js
+var jsData string
 
 // ============================================================================
 // SVG CHARTS
@@ -393,81 +248,234 @@ func toDur24(v any) ([24]time.Duration, bool) {
 // ============================================================================
 func buildSettingsModal(c Config) string {
 	dnsStr := strings.Join(c.DNSServers, ", ")
-	if dnsStr == "" {
-		dnsStr = "–"
+
+	ipModeOptions := func(current string) string {
+		out := ""
+		for _, m := range []string{"BOTH", "IPV4", "IPV6"} {
+			sel := ""
+			if m == current {
+				sel = ` selected`
+			}
+			out += fmt.Sprintf(`<option value="%s"%s>%s</option>`, m, sel, m)
+		}
+		return out
 	}
 
-	dryStr := "Nein"
+	langOptions := func(current string) string {
+		langs := []struct{ code, label string }{
+			{"de", "🇩🇪 Deutsch"},
+			{"en", "🇬🇧 English"},
+			{"fr", "🇫🇷 Français"},
+			{"es", "🇪🇸 Español"},
+			{"it", "🇮🇹 Italiano"},
+			{"nl", "🇳🇱 Nederlands"},
+			{"pl", "🇵🇱 Polski"},
+			{"sv", "🇸🇪 Svenska"},
+			{"da", "🇩🇰 Dansk"},
+		}
+		out := ""
+		for _, l := range langs {
+			sel := ""
+			if l.code == current {
+				sel = ` selected`
+			}
+			out += fmt.Sprintf(`<option value="%s"%s>%s</option>`, l.code, sel, l.label)
+		}
+		return out
+	}
+
+	notifyEventCheckboxes := func(current []string) string {
+		active := make(map[string]bool)
+		for _, e := range current {
+			active[strings.ToUpper(strings.TrimSpace(e))] = true
+		}
+		events := []struct{ code, label, desc string }{
+			{"UPDATE", "🔄 Update", "DNS-Record wurde aktualisiert"},
+			{"CREATE", "🆕 Create", "Neuer DNS-Record angelegt"},
+			{"ERROR", "❌ Error", "API- oder Netzwerkfehler"},
+			{"START", "🚀 Start", "Service gestartet"},
+			{"STOP", "🛑 Stop", "Service beendet"},
+			{"CLEANUP", "🧹 Cleanup", "Verwaiste Records entfernt"},
+		}
+		out := `<div style="display:flex;flex-direction:column;gap:6px;margin-top:4px;">`
+		for _, ev := range events {
+			chk := ""
+			if active[ev.code] {
+				chk = ` checked`
+			}
+			out += fmt.Sprintf(
+				`<label style="display:flex;align-items:center;gap:10px;padding:6px 8px;`+
+					`background:rgba(255,255,255,0.03);border-radius:6px;cursor:pointer;">`+
+					`<input type="checkbox" name="notify-event" value="%s"%s `+
+					`style="width:16px;height:16px;cursor:pointer;flex-shrink:0;">`+
+					`<span style="display:flex;flex-direction:column;gap:1px;">`+
+					`<span style="font-size:0.85rem;font-weight:600;">%s</span>`+
+					`<span style="font-size:0.7rem;opacity:0.5;">%s</span>`+
+					`</span></label>`,
+				ev.code, chk, ev.label, ev.desc,
+			)
+		}
+		out += `</div>`
+		return out
+	}
+
+	dryRunChecked := ""
 	if c.DryRun {
-		dryStr = "Ja ⚠️"
+		dryRunChecked = ` checked`
 	}
 
 	return `<div id="settingsOverlay" class="modal-overlay" onclick="closeSettingsOutside(event)">` +
 		`<div class="modal">` +
 		`<div class="modal-header">` +
-		`<h2>⚙️ Einstellungen</h2>` +
+		`<h2>⚙️ ` + T.SettingsTitle + `</h2>` +
 		`<button class="modal-close" onclick="closeSettings()">✕</button>` +
 		`</div>` +
 		`<div class="modal-body">` +
 
 		`<div class="s-section">` +
-		`<h3>🔐 Sicherheit</h3>` +
+		`<h3>` + T.SettingsSecurity + `</h3>` +
 		`<div class="s-row" style="flex-direction:column;align-items:stretch;gap:8px;">` +
-		`<span class="s-label">Trigger Token (lokal im Browser)</span>` +
-		`<input type="password" id="s-token" class="s-input" placeholder="Token eingeben..." autocomplete="off">` +
-		`<button class="s-btn" onclick="saveToken()">💾 Token speichern</button>` +
+		`<span class="s-label">` + T.SettingsTriggerToken + `</span>` +
+		`<input type="password" id="s-token" class="s-input" placeholder="` + T.SettingsTokenPlaceholder + `" autocomplete="off">` +
+		`<button class="s-btn" onclick="saveToken()">` + T.SettingsTokenSave + `</button>` +
 		`</div></div>` +
 
 		`<div class="s-section">` +
-		`<h3>🌐 Domains verwalten</h3>` +
-		`<div id="settings-domain-list" style="margin-bottom: 15px; display: flex; flex-direction: column; gap: 8px;">` +
-		`` +
+		`<h3>` + T.SettingsSystem + `</h3>` +
+
+		`<div class="s-row">` +
+		`<span class="s-label">` + T.SettingsIPMode + `</span>` +
+		`<select id="cfg-ip-mode" class="s-input" style="width:auto;min-width:110px;">` +
+		ipModeOptions(c.IPMode) +
+		`</select>` +
 		`</div>` +
 
-		`<div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; border: 1px dashed var(--border);">` +
-		`<h4 style="font-size: 0.75rem; margin-bottom: 8px; opacity: 0.8; text-transform: uppercase;">Neue Domain hinzufügen</h4>` +
-		`<input type="text" id="new-domain-fqdn" class="s-input" placeholder="z.B. home.example.com" style="margin-bottom: 8px;">` +
-		`<select id="new-domain-provider" class="s-input" style="margin-bottom: 8px;" onchange="toggleProviderFields()">` +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsInterval+`</span>`+
+			`<input type="number" id="cfg-interval" class="s-input" style="width:90px;text-align:right;" min="30" max="86400" value="%d"></div>`, c.Interval) +
+
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsHealthPort+`</span>`+
+			`<input type="text" id="cfg-health-port" class="s-input" style="width:90px;text-align:right;" value="%s"></div>`, html.EscapeString(c.HealthPort)) +
+
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsIface+` <small style="opacity:.5">`+T.SettingsIfaceHint+`</small></span>`+
+			`<input type="text" id="cfg-iface" class="s-input" style="width:150px;" placeholder="`+T.SettingsIfacePlaceholder+` value="%s"></div>`, html.EscapeString(c.IfaceName)) +
+
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsDNS+` <small style="opacity:.5">(kommagetrennt)</small></span>`+
+			`<input type="text" id="cfg-dns" class="s-input" style="width:220px;" placeholder="1.1.1.1:53, 8.8.8.8:53" value="%s"></div>`, html.EscapeString(dnsStr)) +
+
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsMaxLog+`</span>`+
+			`<input type="number" id="cfg-max-log" class="s-input" style="width:90px;text-align:right;" min="100" max="50000" value="%d"></div>`, c.MaxLogLines) +
+
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsMaxRetries+`</span>`+
+			`<input type="number" id="cfg-max-retries" class="s-input" style="width:90px;text-align:right;" min="0" max="20" value="%d"></div>`, c.MaxAPIRetries) +
+
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsMaxConcurrent+`</span>`+
+			`<input type="number" id="cfg-max-concurrent" class="s-input" style="width:90px;text-align:right;" min="1" max="20" value="%d"></div>`, c.MaxConcurrent) +
+
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsHourlyLimit+`</span>`+
+			`<input type="number" id="cfg-hourly-limit" class="s-input" style="width:90px;text-align:right;" min="100" max="100000" value="%d"></div>`, c.HourlyRateLimit) +
+
+		`<div class="s-row"><span class="s-label">` + T.SettingsLang + `</span>` +
+		`<select id="cfg-lang" class="s-input" style="width:auto;min-width:160px;">` +
+		langOptions(c.Lang) +
+		`</select></div>` +
+
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsDryRun+` <small style="opacity:.5">`+T.SettingsDryRunHint+`</small></span>`+
+			`<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">`+
+			`<input type="checkbox" id="cfg-dry-run" style="width:18px;height:18px;cursor:pointer;"%s>`+
+			`<span style="font-size:0.8rem;opacity:0.7;">`+T.SettingsDryRunActive+`</span></label></div>`, dryRunChecked) +
+
+		`</div>` +
+
+		`<div class="s-section">` +
+		`<h3>` + T.SettingsDomains + `</h3>` +
+		`<div id="settings-domain-list" style="margin-bottom:15px;display:flex;flex-direction:column;gap:8px;"></div>` +
+
+		`<div style="background:rgba(255,255,255,0.05);padding:12px;border-radius:8px;border:1px dashed var(--border);">` +
+		`<h4 style="font-size:0.75rem;margin-bottom:8px;opacity:0.8;text-transform:uppercase;">` + T.SettingsAddDomain + `</h4>` +
+		`<input type="text" id="new-domain-fqdn" class="s-input" placeholder="` + T.SettingsCFTokenPlaceholder + `" style="margin-bottom:8px;">` +
+		`<select id="new-domain-provider" class="s-input" style="margin-bottom:8px;" onchange="toggleProviderFields()">` +
 		`<option value="IONOS">IONOS</option>` +
 		`<option value="CLOUDFLARE">Cloudflare</option>` +
 		`<option value="IPV64">IPv64</option>` +
 		`</select>` +
-
 		`<div id="fields-ionos">` +
-		`<input type="text" id="new-ionos-prefix" class="s-input" placeholder="API Prefix" style="margin-bottom: 8px;">` +
-		`<input type="password" id="new-ionos-secret" class="s-input" placeholder="API Secret">` +
+		`<input type="text" id="new-ionos-prefix" class="s-input" placeholder="` + T.SettingsAPIPrefix + `" style="margin-bottom:8px;">` +
+		`<input type="password" id="new-ionos-secret" class="s-input" placeholder="` + T.SettingsAPISecret + `">` +
 		`</div>` +
 		`<div id="fields-cloudflare" style="display:none;">` +
-		`<input type="text" id="new-cf-token" class="s-input" placeholder="API Token (empfohlen)" style="margin-bottom: 8px;">` +
-		`<div style="font-size: 0.65rem; text-align: center; margin: 4px 0; opacity: 0.4;">— ODER —</div>` +
-		`<input type="text" id="new-cf-email" class="s-input" placeholder="Cloudflare Email" style="margin-bottom: 8px;">` +
-		`<input type="password" id="new-cf-secret" class="s-input" placeholder="Global API Key">` +
+		`<input type="text" id="new-cf-token" class="s-input" placeholder="API Token (empfohlen)" style="margin-bottom:8px;">` +
+		`<div style="font-size:0.65rem;text-align:center;margin:4px 0;opacity:0.4;">` + T.SettingsCFOr + `</div>` +
+		`<input type="text" id="new-cf-email" class="s-input" placeholder="` + T.SettingsCFEmail + `" style="margin-bottom:8px;">` +
+		`<input type="password" id="new-cf-secret" class="s-input" placeholder="` + T.SettingsCFGlobalKey + `">` +
 		`</div>` +
 		`<div id="fields-ipv64" style="display:none;">` +
-		`<input type="password" id="new-ipv64-token" class="s-input" placeholder="IPv64 API Token">` +
+		`<input type="password" id="new-ipv64-token" class="s-input" placeholder="` + T.SettingsIPv64Token + `">` +
 		`</div>` +
-
-		`<button class="s-btn" onclick="addDomainToList()" style="margin-top: 12px; background: var(--success); color: white; border: none; width: 100%;">` +
-		`➕ Zur Liste hinzufügen` +
+		`<button class="s-btn" onclick="addDomainToList()" style="margin-top:12px;background:var(--success);color:white;border:none;width:100%;">` +
+		T.SettingsAddBtn +
 		`</button>` +
 		`</div>` +
 		`</div>` +
 
 		`<div class="s-section">` +
-		`<h3>🖥️ System-Status</h3>` +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">IP-Modus</span><span class="s-val">%s</span></div>`, html.EscapeString(c.IPMode)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">Intervall</span><span class="s-val">%ds</span></div>`, c.Interval) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">Health Port</span><span class="s-val">%s</span></div>`, html.EscapeString(c.HealthPort)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">DNS Server</span><span class="s-val">%s</span></div>`, html.EscapeString(dnsStr)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">Dry-Run</span><span class="s-val">%s</span></div>`, dryStr) +
+		`<h3>` + T.SettingsNotify + `</h3>` +
+
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsNotifyEnabled+`</span>`+
+			`<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">`+
+			`<input type="checkbox" id="cfg-notify-enabled" style="width:18px;height:18px;cursor:pointer;"%s>`+
+			`<span style="font-size:0.8rem;opacity:0.7;">`+T.SettingsNotifyOn+`</span></label></div>`,
+			func() string {
+				if c.Notifications.Enabled {
+					return ` checked`
+				}
+				return ""
+			}()) +
+
+		`<div class="s-row" style="flex-direction:column;align-items:stretch;gap:6px;">` +
+		`<span class="s-label">` + T.SettingsNotifyEvents + `</span>` +
+		notifyEventCheckboxes(c.Notifications.Events) +
 		`</div>` +
 
-		`<div style="margin-top: 20px; padding: 15px; background: rgba(var(--success-rgb), 0.1); border-radius: 8px; border: 1px solid var(--success);">` +
-		`<p style="font-size: 0.75rem; margin-bottom: 10px; opacity: 0.8; text-align: center;">Änderungen an den Domains erfordern einen Neustart der Validierung.</p>` +
-		`<button class="action-btn" style="width: 100%; margin: 0;" onclick="saveFullConfig()">💾 Alles Speichern & Übernehmen</button>` +
+		`<div style="margin-top:10px;padding:10px;background:rgba(56,189,248,0.06);border-radius:7px;border:1px solid rgba(56,189,248,0.15);">` +
+		`<div style="font-size:0.68rem;color:#94a3b8;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;">📱 ` + T.SettingsTelegramHeading + ` </div>` +
+
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsTGToken+`</span>`+
+			`<input type="password" id="cfg-tg-token" class="s-input" style="width:220px;"`+
+			` placeholder="`+T.SettingsTokenUnchanged+`" value="%s"></div>`,
+			html.EscapeString(c.Notifications.Telegram.Token)) +
+
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsTGChatID+`</span>`+
+			`<input type="text" id="cfg-tg-chatid" class="s-input" style="width:160px;"`+
+			` placeholder="-100xxxxxxxxx" value="%s"></div>`,
+			html.EscapeString(c.Notifications.Telegram.ChatID)) +
+
 		`</div>` +
 
+		`<div style="margin-top:8px;padding:10px;background:rgba(167,139,250,0.06);border-radius:7px;border:1px solid rgba(167,139,250,0.15);">` +
+		`<div style="font-size:0.68rem;color:#94a3b8;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;">🔔 ` + T.SettingsGotifyHeading + `</div>` +
+
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Server URL</span>`+
+			`<input type="text" id="cfg-gotify-url" class="s-input" style="width:220px;"`+
+			` placeholder="https://gotify.example.com" value="%s"></div>`,
+			html.EscapeString(c.Notifications.Gotify.URL)) +
+
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">App Token</span>`+
+			`<input type="password" id="cfg-gotify-token" class="s-input" style="width:220px;"`+
+			` placeholder="`+T.SettingsTokenUnchanged+`" value="%s"></div>`,
+			html.EscapeString(c.Notifications.Gotify.Token)) +
+
+		`</div>` +
+		`</div>` +
+
+		`<div style="margin-top:20px;padding:15px;background:rgba(74,222,128,0.07);border-radius:8px;border:1px solid var(--success);">` +
+		`<p style="font-size:0.75rem;margin-bottom:10px;opacity:0.8;text-align:center;">` +
+		T.SettingsSaveHint + `<br>` +
+		T.SettingsRestartHint +
+		`</p>` +
+		`<button class="action-btn" style="width:100%;margin:0;" onclick="saveFullConfig()">` + T.SettingsSaveBtn + `</button>` +
+		`</div>` +
 		`</div></div></div>`
+
 }
 
 type safeDomainConfig struct {
@@ -481,15 +489,68 @@ type safeDomainConfig struct {
 	IPv64Token string `json:"ipv64_token,omitempty"`
 }
 
+type safeSystemConfig struct {
+	IPMode          string   `json:"ip_mode"`
+	IfaceName       string   `json:"iface_name"`
+	HealthPort      string   `json:"health_port"`
+	DNSServers      []string `json:"dns_servers"`
+	Interval        int      `json:"interval"`
+	DryRun          bool     `json:"dry_run"`
+	HourlyRateLimit int      `json:"hourly_rate_limit"`
+	MaxConcurrent   int      `json:"max_concurrent"`
+	MaxLogLines     int      `json:"max_log_lines"`
+	MaxAPIRetries   int      `json:"max_api_retries"`
+	Lang            string   `json:"lang"`
+	NotifyEnabled   bool     `json:"notify_enabled"`
+	NotifyEvents    []string `json:"notify_events"`
+	TelegramToken   string   `json:"telegram_token"`
+	TelegramChatID  string   `json:"telegram_chat_id"`
+	GotifyURL       string   `json:"gotify_url"`
+	GotifyToken     string   `json:"gotify_token"`
+}
+
+type dashboardConfigPayload struct {
+	DomainConfigs []safeDomainConfig `json:"domain_configs"`
+	System        safeSystemConfig   `json:"system"`
+}
+
 func safeDomainConfigs(dcs []DomainConfig) []safeDomainConfig {
 	out := make([]safeDomainConfig, len(dcs))
 	for i, dc := range dcs {
 		out[i] = safeDomainConfig{
-			FQDN:     dc.FQDN,
-			Provider: string(dc.Provider),
+			FQDN:       dc.FQDN,
+			Provider:   string(dc.Provider),
+			APIPrefix:  dc.APIPrefix,
+			APISecret:  dc.APISecret,
+			CFToken:    dc.CFToken,
+			CFEmail:    dc.CFEmail,
+			CFSecret:   dc.CFSecret,
+			IPv64Token: dc.IPv64Token,
 		}
 	}
 	return out
+}
+
+func currentSystemConfig() safeSystemConfig {
+	return safeSystemConfig{
+		IPMode:          cfg.IPMode,
+		IfaceName:       cfg.IfaceName,
+		HealthPort:      cfg.HealthPort,
+		DNSServers:      cfg.DNSServers,
+		Interval:        cfg.Interval,
+		DryRun:          cfg.DryRun,
+		HourlyRateLimit: cfg.HourlyRateLimit,
+		MaxConcurrent:   cfg.MaxConcurrent,
+		MaxLogLines:     cfg.MaxLogLines,
+		MaxAPIRetries:   cfg.MaxAPIRetries,
+		Lang:            cfg.Lang,
+		NotifyEnabled:   cfg.Notifications.Enabled,
+		NotifyEvents:    cfg.Notifications.Events,
+		TelegramToken:   cfg.Notifications.Telegram.Token,
+		TelegramChatID:  cfg.Notifications.Telegram.ChatID,
+		GotifyURL:       cfg.Notifications.Gotify.URL,
+		GotifyToken:     cfg.Notifications.Gotify.Token,
+	}
 }
 
 func createMux() *http.ServeMux {
@@ -573,6 +634,23 @@ func createMux() *http.ServeMux {
 		serveCachedJSON(w, r, domainsCache)
 	})
 
+	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		type fullConfigResponse struct {
+			DomainConfigs []safeDomainConfig `json:"domain_configs"`
+			System        safeSystemConfig   `json:"system"`
+		}
+		resp := fullConfigResponse{
+			DomainConfigs: safeDomainConfigs(cfg.DomainConfigs),
+			System:        currentSystemConfig(),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+
 	mux.HandleFunc("/api/save-config", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -583,12 +661,74 @@ func createMux() *http.ServeMux {
 			return
 		}
 
-		var payload struct {
-			DomainConfigs []safeDomainConfig `json:"domain_configs"`
-		}
+		var payload dashboardConfigPayload
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			http.Error(w, "Invalid JSON", http.StatusBadRequest)
 			return
+		}
+
+		sys := payload.System
+		if sys.IPMode != "" {
+			validModes := map[string]bool{"IPV4": true, "IPV6": true, "BOTH": true}
+			if validModes[strings.ToUpper(sys.IPMode)] {
+				cfg.IPMode = strings.ToUpper(sys.IPMode)
+			}
+		}
+		if sys.Interval >= 30 {
+			cfg.Interval = sys.Interval
+		}
+		if sys.HealthPort != "" {
+			cfg.HealthPort = sys.HealthPort
+		}
+		cfg.IfaceName = sys.IfaceName
+		if sys.DNSServers != nil {
+			var cleaned []string
+			for _, s := range sys.DNSServers {
+				for _, part := range strings.Split(s, ",") {
+					if t := strings.TrimSpace(part); t != "" {
+						cleaned = append(cleaned, t)
+					}
+				}
+			}
+			cfg.DNSServers = cleaned
+		}
+		if sys.MaxLogLines > 0 {
+			cfg.MaxLogLines = sys.MaxLogLines
+		}
+		if sys.MaxAPIRetries >= 0 {
+			cfg.MaxAPIRetries = sys.MaxAPIRetries
+		}
+		if sys.MaxConcurrent > 0 && sys.MaxConcurrent <= 20 {
+			cfg.MaxConcurrent = sys.MaxConcurrent
+		}
+		if sys.HourlyRateLimit > 0 {
+			cfg.HourlyRateLimit = sys.HourlyRateLimit
+		}
+		if sys.Lang != "" {
+			cfg.Lang = sys.Lang
+		}
+		cfg.DryRun = sys.DryRun
+
+		cfg.Notifications.Enabled = sys.NotifyEnabled
+		if sys.NotifyEvents != nil {
+			cfg.Notifications.Events = sys.NotifyEvents
+		}
+		if sys.TelegramToken != "" {
+			cfg.Notifications.Telegram.Token = sys.TelegramToken
+		}
+		if sys.TelegramChatID != "" {
+			cfg.Notifications.Telegram.ChatID = sys.TelegramChatID
+		}
+		if sys.GotifyURL != "" {
+			cfg.Notifications.Gotify.URL = sys.GotifyURL
+		}
+		if sys.GotifyToken != "" {
+			cfg.Notifications.Gotify.Token = sys.GotifyToken
+		}
+		if !cfg.Notifications.Enabled {
+			cfg.Notifications.Enabled =
+				cfg.Notifications.Telegram.Token != "" ||
+					cfg.Notifications.Gotify.URL != ""
 		}
 
 		existing := make(map[string]DomainConfig)
@@ -603,6 +743,24 @@ func createMux() *http.ServeMux {
 				continue
 			}
 			if found, ok := existing[fqdn]; ok {
+				if sc.APIPrefix != "" {
+					found.APIPrefix = sc.APIPrefix
+				}
+				if sc.APISecret != "" {
+					found.APISecret = sc.APISecret
+				}
+				if sc.CFToken != "" {
+					found.CFToken = sc.CFToken
+				}
+				if sc.CFEmail != "" {
+					found.CFEmail = sc.CFEmail
+				}
+				if sc.CFSecret != "" {
+					found.CFSecret = sc.CFSecret
+				}
+				if sc.IPv64Token != "" {
+					found.IPv64Token = sc.IPv64Token
+				}
 				newConfigs = append(newConfigs, found)
 			} else {
 				newConfigs = append(newConfigs, DomainConfig{
@@ -630,10 +788,52 @@ func createMux() *http.ServeMux {
 		}
 
 		forceNextUpdate.Store(true)
+		lastCleanup = time.Time{}
 
 		debugLog("API", getClientIP(r), "✅ Configuration via Dashboard aktualisiert")
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "saved"})
+	})
+
+	mux.HandleFunc("/api/set-language", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !validateTriggerToken(r) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		lang := strings.TrimSpace(r.URL.Query().Get("lang"))
+		if lang == "" {
+			http.Error(w, "lang parameter missing", http.StatusBadRequest)
+			return
+		}
+		supported := map[string]bool{
+			"de": true, "en": true, "fr": true, "es": true,
+			"it": true, "nl": true, "pl": true, "sv": true, "da": true,
+		}
+		if !supported[lang] {
+			http.Error(w, "unsupported language: "+lang, http.StatusBadRequest)
+			return
+		}
+
+		if err := loadLanguage(lang); err != nil {
+			http.Error(w, "language load failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		cfg.Lang = lang
+		if err := saveConfigToFile(); err != nil {
+			debugLog("API", getClientIP(r), "Warning: could not save config after lang change: "+err.Error())
+		}
+
+		debugLog("API", getClientIP(r), "🌐 Sprache gewechselt zu: "+lang)
+		broadcastNotification("🌐 Language changed to: "+lang, "info")
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "lang": lang})
 	})
 
 	mux.HandleFunc("/api/domain/delete", func(w http.ResponseWriter, r *http.Request) {
@@ -957,6 +1157,8 @@ func createMux() *http.ServeMux {
 		}
 
 		loadFromDiskCache := func() bool {
+			logCacheWriteMu.Lock()
+			defer logCacheWriteMu.Unlock()
 			logStat, err := os.Stat(logPath)
 			if err != nil {
 				return false
@@ -1025,391 +1227,48 @@ func createMux() *http.ServeMux {
 			}
 
 			if payload, err := json.Marshal(logCachePayload{Logs: logs, LogTimeRange: logTimeRange}); err == nil {
+				logCacheWriteMu.Lock()
 				_ = os.WriteFile(logCachePath, payload, 0644)
+				logCacheWriteMu.Unlock()
 			}
 		}
 		jsConfigSafe, _ := json.Marshal(safeDomainConfigs(cfg.DomainConfigs))
 		if jsConfigSafe == nil {
 			jsConfigSafe = []byte("[]")
 		}
+		jsSystemCfg, _ := json.Marshal(currentSystemConfig())
+		if jsSystemCfg == nil {
+			jsSystemCfg = []byte("{}")
+		}
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = fmt.Fprintf(w, "<!DOCTYPE html><html><head>\n"+
-			"<meta charset=\"utf-8\">\n"+
-			"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"+
-			"<title>%s</title>\n"+
-			"<link id=\"favicon\" rel=\"icon\" type=\"image/svg+xml\" href=\"/favicon.svg?theme=dark\">\n"+
-			"<script>const initialConfig = %s;</script>\n",
+		_, _ = fmt.Fprintf(w, `<!DOCTYPE html><html><head>
+			<meta charset="utf-8">
+			<meta name="viewport" content="width=device-width, initial-scale=1">
+			<title>%s</title>
+			<link id="favicon" rel="icon" type="image/svg+xml" href="/favicon.svg?theme=dark">
+			<style>%s</style>
+			<script>const initialConfig = %s; const initialSystem = %s;</script>
+		</head>
+		<body>
+		<div class="container">
+			<div class="header">
+				<h1>🌐 %s</h1>
+				<div style="display: flex; gap: 10px; align-items: center;">
+					<button class="action-btn" onclick="triggerUpdate()">🔄 `+T.Update+`</button>
+					<button class="action-btn" onclick="exportData()">📥 `+T.ExportBtn+`</button>
+					<button class="theme-toggle" onclick="toggleTheme()">🌓</button>
+					<button class="menu-btn" onclick="openSettings()" title="`+T.SettingsTitle+`">⋮</button>
+				</div>
+			</div>`,
 			html.EscapeString(T.DashTitle),
+			cssData,
 			string(jsConfigSafe),
+			string(jsSystemCfg),
+			html.EscapeString(T.DashTitle),
 		)
-		_, _ = fmt.Fprint(w, `<style>
-		* {box-sizing: border-box; margin: 0; padding: 0;}
 
-
-		:root {
-			--bg: #0f172a; --card: #1e293b; --text: #f8fafc; --border: #334155;
-			--success: #4ade80; --error: #f87171; --warning: #facc15;
-			--btn-bg: #1e3a5f; --btn-text: #93c5fd; --btn-border: #3b82f6;
-			--btn-hover: #1d4ed8; --btn-shadow: rgba(59,130,246,0.4);
-		}
-		[data-theme="light"] {
-			--bg: #f8fafc; --card: #ffffff; --text: #0f172a; --border: #e2e8f0;
-			--btn-bg: #eff6ff; --btn-text: #1d4ed8; --btn-border: #93c5fd;
-			--btn-hover: #dbeafe; --btn-shadow: rgba(59,130,246,0.25);
-		}
-		
-		body {
-			font-family: system-ui, -apple-system, sans-serif;
-			background: var(--bg);
-			color: var(--text);
-			padding: 10px;
-			transition: background 0.3s, color 0.3s;
-		}
-		
-		.container {max-width: 1200px; margin: 0 auto;}
-
-		.header {
-			display: flex;
-			justify-content: space-between;
-			align-items: center;
-			margin-bottom: 20px;
-			padding: 15px;
-			background: var(--card);
-			border-radius: 12px;
-			border: 1px solid var(--border);
-		}
-		
-		.theme-toggle {
-			background: var(--border);
-			border: none;
-			padding: 8px 16px;
-			border-radius: 8px;
-			cursor: pointer;
-			color: var(--text);
-			font-size: 1.2rem;
-		}
-
-		.status-banner {
-			display: flex;
-			justify-content: space-between;
-			align-items: center;
-			padding: 15px 20px;
-			border-radius: 12px;
-			margin-bottom: 20px;
-			font-weight: 600;
-			border: 1px solid rgba(255,255,255,0.1);
-		}
-		.status-ok {background: rgba(34,197,94,0.15); color: var(--success);}
-		.status-error {background: rgba(239,68,68,0.15); color: var(--error);}
-
-		.card {
-			background: var(--card);
-			padding: 0;
-			margin-bottom: 15px;
-			border-radius: 12px;
-			border: 1px solid var(--border);
-			overflow: hidden;
-		}
-		
-		details.card {
-			padding: 0;
-		}
-		
-		details.card > summary {
-			cursor: pointer;
-			padding: 15px 20px;
-			font-weight: 600;
-			list-style: none;
-			display: flex;
-			justify-content: space-between;
-			align-items: center;
-			user-select: none;
-		}
-		
-		details.card > summary::-webkit-details-marker {display: none;}
-		
-		details.card > summary::after {
-			content: '▼';
-			transition: transform 0.2s;
-			font-size: 0.8em;
-			opacity: 0.5;
-		}
-		
-		details.card[open] > summary::after {
-			transform: rotate(-180deg);
-		}
-		
-		.card-content {
-			padding: 0 20px 20px 20px;
-		}
-
-		.search-box {
-			width: 100%;
-			padding: 12px 16px;
-			background: var(--card);
-			border: 1px solid var(--border);
-			border-radius: 8px;
-			color: var(--text);
-			font-size: 1rem;
-			margin-bottom: 15px;
-		}
-
-		.log-filters {
-			display: flex;
-			gap: 8px;
-			margin-bottom: 15px;
-			flex-wrap: wrap;
-		}
-		
-		.filter-btn {
-			padding: 6px 12px;
-			background: var(--border);
-			border: 1px solid transparent;
-			border-radius: 6px;
-			cursor: pointer;
-			color: var(--text);
-			font-size: 0.85rem;
-			transition: all 0.2s;
-		}
-		
-		.filter-btn:hover {
-			border-color: var(--success);
-		}
-		
-		.filter-btn.active {
-			background: var(--success);
-			color: white;
-		}
-
-		.copy-btn {
-			background: transparent;
-			border: 1px solid var(--border);
-			padding: 4px 8px;
-			border-radius: 4px;
-			cursor: pointer;
-			font-size: 0.9rem;
-			transition:  all 0.2s;
-			color: var(--text); 
-		}
-		
-		.copy-btn:hover {
-			background: var(--success);
-			border-color: var(--success);
-			color: white;  
-		}
-
-		.toast {
-			position: fixed;
-			top: 20px;
-			right: 20px;
-			background: var(--card);
-			border: 1px solid var(--border);
-			padding: 15px 20px;
-			border-radius: 8px;
-			box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-			transform: translateX(400px);
-			transition: transform 0.3s;
-			z-index: 1000;
-			max-width: 300px;
-		}
-		
-		.toast.show {
-			transform: translateX(0);
-		}
-
-		.badge {
-			padding: 3px 8px;
-			border-radius: 4px;
-			font-size: 0.7rem;
-			color: #fff;
-			font-weight: bold;
-			display: inline-block;
-			margin-right: 6px;
-		}
-		.v4 {background: #0ea5e9;}
-		.v6 {background: #8b5cf6;}
-
-		.log-entry {
-			padding: 10px;
-			margin-bottom: 6px;
-			border-radius: 6px;
-			font-size: 0.85rem;
-			background: rgba(255,255,255,0.03);
-		}
-		
-		.log-entry.hidden {display: none;}
-
-		.action-btn {
-			background: var(--btn-bg);
-			color: var(--btn-text);
-			border: 1px solid var(--btn-border);
-			padding: 10px 20px;
-			border-radius: 8px;
-			cursor: pointer;
-			font-weight: 600;
-			transition: all 0.2s;
-		}
-
-		.action-btn:hover {
-			background: var(--btn-hover);
-			transform: translateY(-2px);
-			box-shadow: 0 4px 12px var(--btn-shadow);
-		}
-
-		@media (max-width: 768px) {
-			.header {flex-direction: column; gap: 10px;}
-			.status-banner {flex-direction: column; text-align: center;}
-		}
-
-		.domain-card {
-			display: flex;
-			justify-content: space-between;
-			align-items: center;
-			padding: 15px;
-			background: rgba(255,255,255,0.02);
-			border-radius: 8px;
-			margin-bottom: 10px;
-		}
-		
-		.ip-display {
-			display: flex;
-			align-items: center;
-			gap: 8px;
-			font-family: 'Courier New', monospace;
-		}
-
-		.domain-status-dot {
-			display: inline-block;
-			width: 10px;
-			height: 10px;
-			border-radius: 50%;
-			margin-right: 6px;
-			flex-shrink: 0;
-		}
-		.dot-ok   { background: #4ade80; box-shadow: 0 0 6px #4ade8099; }
-		.dot-warn { background: #facc15; box-shadow: 0 0 6px #facc1599; }
-		.dot-idle { background: #475569; }
-
-		@keyframes dot-pulse {
-			0%, 100% { opacity: 1; transform: scale(1); }
-			50%       { opacity: 0.5; transform: scale(0.8); }
-		}
-		.dot-recent { animation: dot-pulse 1.4s ease-in-out infinite; }
-
-		.changed-badge {
-			display: inline-block;
-			font-size: 0.65rem;
-			padding: 1px 7px;
-			border-radius: 999px;
-			background: rgba(74,222,128,0.15);
-			border: 1px solid rgba(74,222,128,0.4);
-			color: #4ade80;
-			margin-left: 8px;
-			vertical-align: middle;
-			font-weight: 600;
-			letter-spacing: 0.02em;
-		}
-
-		.menu-btn {
-			background: var(--border); border: none;
-			padding: 8px 13px; border-radius: 8px;
-			cursor: pointer; color: var(--text);
-			font-size: 1.2rem; line-height: 1;
-			transition: background 0.15s;
-		}
-		.menu-btn:hover { background: var(--btn-border); color: #fff; }
-
-		.modal-overlay {
-			position: fixed; inset: 0;
-			background: rgba(0,0,0,0.6);
-			z-index: 2000;
-			display: flex; align-items: center; justify-content: center;
-			opacity: 0; pointer-events: none;
-			transition: opacity 0.2s;
-		}
-		.modal-overlay.open { opacity: 1; pointer-events: all; }
-		.modal {
-			background: var(--card);
-			border: 1px solid var(--border);
-			border-radius: 14px;
-			width: min(560px, 96vw);
-			max-height: 88vh;
-			overflow-y: auto;
-			box-shadow: 0 24px 64px rgba(0,0,0,0.5);
-			transform: translateY(-16px);
-			transition: transform 0.2s;
-		}
-		.modal-overlay.open .modal { transform: translateY(0); }
-		.modal-header {
-			display: flex; justify-content: space-between; align-items: center;
-			padding: 16px 20px 14px;
-			border-bottom: 1px solid var(--border);
-			position: sticky; top: 0; background: var(--card); z-index: 1;
-			border-radius: 14px 14px 0 0;
-		}
-		.modal-header h2 { font-size: 1rem; font-weight: 700; }
-		.modal-close {
-			background: none; border: none; cursor: pointer;
-			color: var(--text); opacity: 0.45; font-size: 1.3rem;
-			transition: opacity 0.15s; padding: 2px 6px;
-		}
-		.modal-close:hover { opacity: 1; }
-		.modal-body { padding: 18px 20px 22px; }
-		.s-section { margin-bottom: 20px; }
-		.s-section h3 {
-			font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em;
-			text-transform: uppercase; color: #64748b; margin-bottom: 10px;
-		}
-		.s-row {
-			display: flex; justify-content: space-between; align-items: center;
-			padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
-			font-size: 0.85rem; gap: 12px;
-		}
-		.s-row:last-child { border-bottom: none; }
-		.s-label { opacity: 0.65; white-space: nowrap; }
-		.s-val { font-family: monospace; color: var(--btn-text); text-align: right; word-break: break-all; }
-		.s-input {
-			width: 100%; padding: 8px 11px;
-			background: rgba(255,255,255,0.05);
-			border: 1px solid var(--border); border-radius: 7px;
-			color: var(--text); font-size: 0.875rem;
-		}
-		.s-input:focus { outline: none; border-color: var(--btn-border); }
-		.s-btn {
-			width: 100%; padding: 9px;
-			background: var(--btn-bg); color: var(--btn-text);
-			border: 1px solid var(--btn-border); border-radius: 7px;
-			cursor: pointer; font-weight: 600; font-size: 0.85rem;
-			transition: background 0.2s; margin-top: 6px;
-		}
-		.s-btn:hover { background: var(--btn-hover); }
-		.domain-pill {
-			display: flex; align-items: center; justify-content: space-between;
-			padding: 8px 10px; border-radius: 8px;
-			background: rgba(255,255,255,0.03);
-			border: 1px solid var(--border); margin-bottom: 6px;
-			font-size: 0.85rem;
-		}
-		.domain-pill code { font-size: 0.82rem; }
-		.provider-badge {
-			font-size: 0.65rem; padding: 1px 7px; border-radius: 999px;
-			font-weight: 700; white-space: nowrap;
-		}
-		</style>
-	</head>
-	<body>
-	<div class="container">
-		<div class="header">
-			<h1>🌐 `+html.EscapeString(T.DashTitle)+`</h1>
-			<div style="display: flex; gap: 10px; align-items: center;">
-				<button class="action-btn" onclick="triggerUpdate()">🔄 Update</button>
-				<button class="action-btn" onclick="exportData()">📥 Export</button>
-				<button class="theme-toggle" onclick="toggleTheme()">🌓</button>
-				<button class="menu-btn" onclick="openSettings()" title="Einstellungen">⋮</button>
-			</div>
-		</div>
-		
+		_, _ = fmt.Fprint(w, `
 		<div class="status-banner `+statusClass+`">
 			<span>`+statusText+`</span>
 			<span>
@@ -1486,10 +1345,10 @@ func createMux() *http.ServeMux {
 					<div><strong>`+T.TotalRequests+`:</strong> <span id="mTotal">%v</span></div>
 					<div><strong>`+T.SuccessRate+`:</strong> <span id="mSuccess" style="color:var(--success)">%v</span></div>
 					<div><strong>`+T.AvgLatency+`:</strong> <span id="mLatency">%v</span></div>
-					<div title="Client Errors (inkl. Netzwerk) / Server Errors"><strong>`+T.Errors+`:</strong> <span id="mErrors">%v / %v</span></div>
+					<div title="`+T.ClientErrors+` / `+T.ServerErrors+`"><strong>`+T.Errors+`:</strong> <span id="mErrors">%v / %v</span></div>
 				</div>
 				<div style="margin-top: 14px; padding: 12px 14px; background: rgba(139,92,246,0.08); border: 1px solid rgba(139,92,246,0.2); border-radius: 8px;">
-					<div style="font-size: 0.68rem; color: #94a3b8; letter-spacing: 0.06em; margin-bottom: 8px; font-weight: 600; text-transform: uppercase;">Latenz Percentile</div>
+					<div style="font-size: 0.68rem; color: #94a3b8; letter-spacing: 0.06em; margin-bottom: 8px; font-weight: 600; text-transform: uppercase;">`+T.MetricLatencyPercentile+`</div>
 					<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center;">
 						<div style="padding: 8px; background: rgba(74,222,128,0.08); border-radius: 6px; border: 1px solid rgba(74,222,128,0.2);">
 							<div style="font-size: 0.65rem; color: #94a3b8; margin-bottom: 3px; letter-spacing: 0.05em;">P50</div>
@@ -1506,29 +1365,23 @@ func createMux() *http.ServeMux {
 					</div>
 				</div>
 				<div style="margin-top: 20px;">
-					<div style="display: flex; justify-content: space-between; align-items: baseline;
-								font-size: 0.7rem; color: #94a3b8; margin-bottom: 6px;">
+					<div style="display: flex; justify-content: space-between; align-items: baseline; font-size: 0.7rem; color: #94a3b8; margin-bottom: 6px;">
 						<span style="letter-spacing: 0.04em;">`+T.HourlyLimitEst+`</span>
 						<span id="mUsage" style="font-weight: 600; color: var(--text);">
 							%v / %v `+T.RequestsLabel+`
 						</span>
 					</div>
-
-					<div style="width: 100%%; background: #334155; height: 8px;
-								border-radius: 999px; overflow: hidden;">
-						<div id="mUsageBar"
-							style="width: %s%%; height: 100%%; background: %s;
-									transition: width 0.5s ease;">
+					<div style="width: 100%%; background: #334155; height: 8px; border-radius: 999px; overflow: hidden;">
+						<div id="mUsageBar" style="width: %v%%; height: 100%%; background: %s; transition: width 0.5s ease;">
 						</div>
 					</div>
-
 					<div style="font-size: 0.65rem; color: #64748b; margin-top: 6px;">
 						`+T.UsageLast60Min+`
 					</div>
 				</div>
 				<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px;">
 					<div style="padding:12px 14px; background:rgba(56,189,248,0.08); border:1px solid rgba(56,189,248,0.2); border-radius:8px;">
-						<div style="font-size:0.68rem; color:#94a3b8; letter-spacing:0.06em; margin-bottom:8px; font-weight:600; text-transform:uppercase;">Heute &middot; HTTP-Methoden</div>
+						<div style="font-size:0.68rem; color:#94a3b8; letter-spacing:0.06em; margin-bottom:8px; font-weight:600; text-transform:uppercase;">`+T.MetricHTTPMethods+`</div>
 						<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
 							<div style="display:flex; justify-content:space-between; padding:4px 8px; background:rgba(74,222,128,0.08); border-radius:5px;">
 								<span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">GET</span>
@@ -1550,19 +1403,19 @@ func createMux() *http.ServeMux {
 						</div>
 					</div>
 					<div style="padding:12px 14px; background:rgba(167,139,250,0.08); border:1px solid rgba(167,139,250,0.2); border-radius:8px;">
-						<div style="font-size:0.68rem; color:#94a3b8; letter-spacing:0.06em; margin-bottom:8px; font-weight:600; text-transform:uppercase;">IP-Check Latenz</div>
+						<div style="font-size:0.68rem; color:#94a3b8; letter-spacing:0.06em; margin-bottom:8px; font-weight:600; text-transform:uppercase;">`+T.MetricIPLatency+`</div>
 						<div style="text-align:center; padding:4px 0;">
 							<div id="mIPLatency" style="font-size:1.4rem; font-weight:700; color:#a78bfa; font-family:monospace;">%v</div>
-							<div style="font-size:0.65rem; color:#64748b; margin-top:4px;">&#216; aus <span id="mIPCount">%v</span> Checks</div>
-							<div style="font-size:0.65rem; color:#64748b; margin-top:2px;">Letzter: <span id="mLastIPCheck">%v</span></div>
+							<div style="font-size:0.65rem; color:#64748b; margin-top:4px;">`+T.MetricAvgFrom+` <span id="mIPCount">%v</span> `+T.ChecksLabel+`</div>
+							<div style="font-size:0.65rem; color:#64748b; margin-top:2px;">`+T.MetricLastCheck+` <span id="mLastIPCheck">%v</span></div>
 						</div>
 					</div>
 				</div>
-            </div>
+			</div>
 		</details>
-		
+
 		%s
-		
+
 		%s
 		`,
 			T.APIPerformance,
@@ -1587,7 +1440,8 @@ func createMux() *http.ServeMux {
 			stats["ip_latency_count"],
 			stats["last_ip_check"],
 			chartSVG,
-			latencySVG)
+			latencySVG,
+		)
 
 		if len(logs) > 0 {
 			_, _ = fmt.Fprintf(w, `
@@ -1595,7 +1449,7 @@ func createMux() *http.ServeMux {
                           <summary>
                           🧾 %s 
                       <span style="opacity:0.6; font-size:0.9em; margin-left: 10px;">
-                          (%d entries) 
+                          (%d `+T.EntriesLabel+`)
                      <span style="margin-left: 10px; border-left: 1px solid #ccc; padding-left: 10px;">
                      🕒 %s
                      </span>
@@ -1603,15 +1457,15 @@ func createMux() *http.ServeMux {
                        </summary>
                    <div class="card-content">
                         <div class="log-filters">
-                               <button class="filter-btn active" data-filter="all" onclick="filterLogs('all')">All</button>
-                               <button class="filter-btn" data-filter="ERR" onclick="filterLogs('ERR')">Errors</button>
-                               <button class="filter-btn" data-filter="WARN" onclick="filterLogs('WARN')">Warnings</button>
-                               <button class="filter-btn" data-filter="UPDATE" onclick="filterLogs('UPDATE')">Updates</button>
-                               <button class="filter-btn" data-filter="START" onclick="filterLogs('START')">Starts</button>
-                               <button class="filter-btn" data-filter="STOP" onclick="filterLogs('STOP')">Stop</button>
-                               <button class="filter-btn" data-filter="CREATE" onclick="filterLogs('CREATE')">Created</button>
-                               <button class="filter-btn" data-filter="CLEANUP" onclick="filterLogs('CLEANUP')">Cleanup</button>
-                               <button class="filter-btn" data-filter="SKIP" onclick="filterLogs('SKIP')">Skip</button>
+                               <button class="filter-btn active" data-filter="all" onclick="filterLogs('all')">`+T.FilterAll+`</button>
+                               <button class="filter-btn" data-filter="ERR" onclick="filterLogs('ERR')">`+T.FilterErrors+`</button>
+                               <button class="filter-btn" data-filter="WARN" onclick="filterLogs('WARN')">`+T.FilterWarnings+`</button>
+                               <button class="filter-btn" data-filter="UPDATE" onclick="filterLogs('UPDATE')">`+T.FilterUpdates+`</button>
+                               <button class="filter-btn" data-filter="START" onclick="filterLogs('START')">`+T.FilterStarts+`</button>
+                               <button class="filter-btn" data-filter="STOP" onclick="filterLogs('STOP')">`+T.FilterStop+`</button>
+                               <button class="filter-btn" data-filter="CREATE" onclick="filterLogs('CREATE')">`+T.FilterCreated+`</button>
+                               <button class="filter-btn" data-filter="CLEANUP" onclick="filterLogs('CLEANUP')">`+T.FilterCleanup+`</button>
+                               <button class="filter-btn" data-filter="SKIP" onclick="filterLogs('SKIP')">`+T.FilterSkip+`</button>
                            </div>
                        <div id="logContainer" style="max-height: 300px; overflow-y: auto; font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 13px; padding-right: 5px;">
                        `, T.SystemEvents, len(logs), logTimeRange)
@@ -1703,7 +1557,7 @@ func createMux() *http.ServeMux {
 		}
 		sort.Strings(keys)
 
-		_, _ = fmt.Fprint(w, `<input type="text" class="search-box" id="domainSearch" placeholder="🔍 Domain suchen..." oninput="filterDomains(this.value)"><div id="domainContainer">`)
+		_, _ = fmt.Fprint(w, `<input type="text" class="search-box" id="domainSearch" placeholder="`+T.DomainSearchPlaceholder+`" oninput="filterDomains(this.value)"><div id="domainContainer">`)
 
 		configuredDomains := make(map[string]struct{})
 		for _, dc := range cfg.DomainConfigs {
@@ -1741,21 +1595,21 @@ func createMux() *http.ServeMux {
 			isOrphan := !isActive
 
 			dotClass := "domain-status-dot dot-idle"
-			dotTitle := "Noch kein Update gesehen"
-			changedBadge := `<span id="badge-` + safeID + `" class="changed-badge" style="display:none;">🔄 gerade geändert</span>`
+			dotTitle := T.DotTitleNoUpdate
+			changedBadge := `<span id="badge-` + safeID + `" class="changed-badge" style="display:none;">` + T.BadgeChanged + `</span>`
 			if h.LastChanged != "" {
 				if t, err := time.Parse("02.01.2006 15:04:05", h.LastChanged); err == nil {
 					switch {
 					case time.Since(t) < 15*time.Minute:
 						dotClass = "domain-status-dot dot-ok dot-recent"
-						dotTitle = "Gerade geändert: " + h.LastChanged
+						dotTitle = T.DotTitleChanged + h.LastChanged
 						changedBadge = `<span id="badge-` + safeID + `" class="changed-badge">🔄 gerade geändert</span>`
 					case !newestChange.IsZero() && t.Before(newestChange.Add(-time.Minute)):
 						dotClass = "domain-status-dot dot-warn"
-						dotTitle = "Letzte Änderung: " + h.LastChanged + " · Andere Domain wurde seitdem aktualisiert"
+						dotTitle = T.DotTitleLast + h.LastChanged + T.DotTitleOther
 					default:
 						dotClass = "domain-status-dot dot-ok"
-						dotTitle = "Aktiv · Letzte Änderung: " + h.LastChanged
+						dotTitle = T.DotTitleActive + h.LastChanged
 					}
 				}
 			}
@@ -1765,46 +1619,49 @@ func createMux() *http.ServeMux {
 			deleteBtn := ""
 			if isOrphan {
 				orphanStyle = ` style="border-color: rgba(248,113,113,0.5);"`
-				orphanLabel = `<span style="font-size:0.65rem; padding:1px 7px; border-radius:999px; background:rgba(248,113,113,0.15); border:1px solid rgba(248,113,113,0.4); color:#f87171; margin-left:8px; font-weight:600;">nicht mehr konfiguriert</span>`
-				deleteBtn = `<button class="action-btn" style="background:rgba(248,113,113,0.15); color:#f87171; border-color:rgba(248,113,113,0.5); font-size:0.7rem; padding:3px 10px; margin-left:auto;" onclick="event.preventDefault(); event.stopPropagation(); deleteDomain('` + html.EscapeString(k) + `', this)">🗑️ Entfernen</button>`
+				orphanLabel = `<span style="font-size:0.65rem; padding:1px 7px; border-radius:999px; background:rgba(248,113,113,0.15); border:1px solid rgba(248,113,113,0.4); color:#f87171; margin-left:8px; font-weight:600;">>` + T.NotConfiguredLabel + `</span>`
+				deleteBtn = `<button class="action-btn" style="background:rgba(248,113,113,0.15); color:#f87171; border-color:rgba(248,113,113,0.5); font-size:0.7rem; padding:3px 10px; margin-left:auto;" onclick="event.preventDefault(); event.stopPropagation(); deleteDomain('` + html.EscapeString(k) + `', this)">` + T.RemoveBtn + `</button>`
 			}
 
 			_, _ = fmt.Fprintf(w, `
-		<details class="card domain-item" data-domain="%s"%s>
-			<summary style="display:flex; align-items:center;">`+
-				`<span id="dot-`+safeID+`" class="%s" title="%s"></span>`+
-				`🌐 %s <span style="opacity:0.6; font-size:0.9em; margin-left:5px;">(%s)</span>%s%s%s`+
-				`</summary>
-			<div class="card-content">
-				<div class="domain-card" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 10px;">
-					<div>
-						<div class="ip-display">
-							<span class="badge v4">IPv4</span>
-							<span id="ip4-%s">%s</span>
-							<button class="copy-btn" onclick="copyIP('%s')" title="Copy">📋</button>
-						</div>
-						<div class="ip-display" style="margin-top: 8px;">
-							<span class="badge v6">IPv6</span>
-							<span id="ip6-%s">%s</span>
-							<button class="copy-btn" onclick="copyIP('%s')" title="Copy">📋</button>
+			<details class="card domain-item" data-domain="%s"%s>
+				<summary style="display:flex; align-items:center;">
+					<span id="dot-%s" class="%s" title="%s"></span>
+					🌐 %s <span style="opacity:0.6; font-size:0.9em; margin-left:5px;">(%s)</span>%s%s%s
+				</summary>
+				<div class="card-content">
+					<div class="domain-card" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 10px;">
+						<div style="display: flex; justify-content: space-between; align-items: flex-start;">
+							<div>
+								<div class="ip-display">
+									<span class="badge v4">IPv4</span>
+									<span id="ip4-%s">%s</span>
+									<button class="copy-btn" onclick="copyIP('%s')" title="Copy">📋</button>
+								</div>
+								<div class="ip-display" style="margin-top: 8px;">
+									<span class="badge v6">IPv6</span>
+									<span id="ip6-%s">%s</span>
+									<button class="copy-btn" onclick="copyIP('%s')" title="Copy">📋</button>
+								</div>
+							</div>
+							<div style="text-align: right; opacity: 0.7;">
+								<small>`+T.LastShort+` %s</small>
+							</div>
 						</div>
 					</div>
-					<div style="text-align: right; opacity: 0.7;">
-						<small>Zuletzt: %s</small>
-					</div>
-				</div>
 
-				<div style="max-height: 200px; overflow-y: auto;">
-					<table style="width: 100%%; font-size: 0.85em; border-collapse: collapse;">
-						<thead style="text-align: left; opacity: 0.5; font-size: 0.7rem;">
-							<tr>
-								<th style="padding-bottom: 5px;">Zeitpunkt</th>
-								<th style="padding-bottom: 5px;">IP Adressen</th>
-							</tr>
-						</thead>
-						<tbody>`,
+					<div style="max-height: 300px; overflow-y: auto; margin-top: 10px; border: 1px solid rgba(255,255,255,0.05); border-radius: 8px;">
+						<table style="width: 100%%; border-collapse: collapse; table-layout: fixed;">
+							<thead style="background: rgba(255,255,255,0.02); text-align: left; opacity: 0.5; font-size: 0.7rem;">
+								<tr>
+									<th style="padding: 10px; width: 140px;">`+T.TableTime+`</th>
+									<th style="padding: 10px;">`+T.TableIPs+`</th>
+								</tr>
+							</thead>
+							<tbody>`,
 				html.EscapeString(k),
 				orphanStyle,
+				safeID,
 				dotClass,
 				dotTitle,
 				html.EscapeString(k),
@@ -1824,27 +1681,41 @@ func createMux() *http.ServeMux {
 			for i := len(h.IPs) - 2; i >= 0; i-- {
 				e := h.IPs[i]
 				_, _ = fmt.Fprintf(w, `
-			<tr style="border-top: 1px solid rgba(255,255,255,0.05);">
-				<td style="padding: 8px 0; vertical-align: top; opacity: 0.7; font-family: monospace;">%s</td>
-				<td style="padding: 8px 0;">
-					<div style="display:flex; align-items:center; gap:5px;">
-						<span class="badge v4" style="font-size:0.6rem; padding: 1px 4px;">v4</span> 
-						<span style="opacity:0.9;">%s</span>
-					</div>
-					<div style="display:flex; align-items:center; gap:5px; margin-top:4px;">
-						<span class="badge v6" style="font-size:0.6rem; padding: 1px 4px;">v6</span> 
-						<span style="opacity:0.9;">%s</span>
-					</div>
-				</td>
-			</tr>`,
+				<tr style="border-top: 1px solid rgba(255,255,255,0.05);">
+					<td style="padding: 10px; vertical-align: top; font-family: monospace; font-size: 0.8rem; color: #94a3b8; white-space: nowrap;">
+						%s
+					</td>
+					<td style="padding: 10px; vertical-align: top;">
+						<div style="display: flex; flex-direction: column; gap: 6px;">
+							<div style="display: flex; align-items: center; font-family: monospace; font-size: 0.85rem;">
+								<span class="badge v4" style="width: 25px; margin-right: 8px; flex-shrink: 0; text-align: center;">v4</span>
+								<span style="color: #e2e8f0;">%s</span>
+							</div>
+							<div style="display: flex; align-items: center; font-family: monospace; font-size: 0.85rem;">
+								<span class="badge v6" style="width: 25px; margin-right: 8px; flex-shrink: 0; text-align: center;">v6</span>
+								<span style="color: #e2e8f0; word-break: break-all;">%s</span>
+							</div>
+						</div>
+					</td>
+				</tr>`,
 					html.EscapeString(e.Time),
-					html.EscapeString(e.IPv4),
-					html.EscapeString(e.IPv6),
+					func() string {
+						if e.IPv4 == "" {
+							return "—"
+						}
+						return html.EscapeString(e.IPv4)
+					}(),
+					func() string {
+						if e.IPv6 == "" {
+							return "—"
+						}
+						return html.EscapeString(e.IPv6)
+					}(),
 				)
 			}
 
 			if len(h.IPs) < 2 {
-				_, _ = fmt.Fprint(w, `<tr><td colspan="2" style="text-align:center; opacity:0.5; padding: 10px;">Keine weiteren Einträge</td></tr>`)
+				_, _ = fmt.Fprint(w, `<tr><td colspan="2" style="text-align:center; opacity:0.5; padding: 10px;">`+T.NoMoreEntries+`</td></tr>`)
 			}
 
 			_, _ = fmt.Fprint(w, `
@@ -1856,447 +1727,13 @@ func createMux() *http.ServeMux {
 		}
 		_, _ = fmt.Fprint(w, `</div>`)
 
-		_, _ = fmt.Fprint(w, `
-	<script>
-	let blinkTimer = null;
-	let currentLevel = 'ok';
-	let ws = null;
-	let reconnectTimer = null;
-	let reconnectDelay = 1000;
-	const reconnectDelayMax = 10000;
+		_, _ = fmt.Fprintf(w, `
+			<script>%s</script>
+		</div>
+		</body>
+		</html>
+		`, jsData)
 
-   let tempDomainConfigs = [];
-
-   if (typeof initialConfig !== 'undefined' && initialConfig !== null) {
-       tempDomainConfigs = Array.isArray(initialConfig) ? [...initialConfig] : [];
-   }
-
-	document.addEventListener('DOMContentLoaded', () => {
-		const savedTheme = localStorage.getItem('theme') || 'dark';
-		document.documentElement.setAttribute('data-theme', savedTheme);
-
-		renderSettingsDomainList();
-
-		const initialMetrics = {
-			avg_latency: (document.getElementById('mLatency')?.textContent || '').trim(),
-			success_rate: (document.getElementById('mSuccess')?.textContent || '').trim(),
-			total_requests: (document.getElementById('mTotal')?.textContent || '0').trim(),
-		};
-		currentLevel = calcLevelFromMetrics(initialMetrics);
-		applyFavicon(savedTheme, currentLevel, false);
-		setBlinking(savedTheme, currentLevel);
-
-		document.querySelectorAll('details.card').forEach(details => {
-			const id = details.id;
-			const saved = id ? localStorage.getItem('collapse-' + id) : null;
-			if (saved === 'open') details.setAttribute('open', '');
-			else if (saved === 'closed') details.removeAttribute('open');
-			
-			if (id) {
-				details.addEventListener('toggle', () => {
-					localStorage.setItem('collapse-' + id, details.open ? 'open' : 'closed');
-				});
-			}
-		});
-
-		startClock();
-		connectWS();
-		document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSettings(); });
-	});
-
-	function faviconHref(theme, level, blink) {
-		return '/favicon.svg?theme=' + encodeURIComponent(theme) +
-				'&level=' + encodeURIComponent(level) +
-				'&blink=' + (blink ? '1' : '0') +
-				'&v=' + Date.now();
-	}
-
-	function applyFavicon(theme, level, blink) {
-		const fav = document.getElementById('favicon');
-		if (!fav) return;
-		fav.href = faviconHref(theme, level, blink);
-	}
-
-	function setBlinking(theme, level) {
-		if (blinkTimer) { clearInterval(blinkTimer); blinkTimer = null; }
-		if (level !== 'err') return;
-		let on = false;
-		blinkTimer = setInterval(() => {
-			on = !on;
-			applyFavicon(theme, 'err', on);
-		}, 700);
-	}
-
-	function toggleTheme() {
-		const html = document.documentElement;
-		const current = html.getAttribute('data-theme') || 'dark';
-		const next = current === 'dark' ? 'light' : 'dark';
-		html.setAttribute('data-theme', next);
-		localStorage.setItem('theme', next);
-		applyFavicon(next, currentLevel, false);
-		setBlinking(next, currentLevel);
-		showToast('Theme: ' + next);
-	}
-
-	function parseDurationToMs(s) {
-		s = (s || '').trim().toLowerCase().replace('µs', 'us');
-		const m = s.match(/^([0-9]+(?:\.[0-9]+)?)(ms|s|us)$/);
-		if (!m) return NaN;
-		const val = parseFloat(m[1]);
-		const unit = m[2];
-		if (unit === 'ms') return val;
-		if (unit === 's') return val * 1000;
-		if (unit === 'us') return val / 1000;
-		return NaN;
-	}
-
-	function toNum(v, fallback = 0) {
-		if (v == null) return fallback;
-		if (typeof v === "number") return v;
-		const s = String(v).replace(",", ".").replace("%", "").trim();
-		const n = Number(s);
-		return Number.isFinite(n) ? n : fallback;
-	}
-
-	function calcLevelFromMetrics(m) {
-		const total = toNum(m.total_requests, 0);
-		const successRate = toNum(m.success_rate, 100);
-		const successAge = toNum(m.last_success_age_secs, -1);
-		const errorAge   = toNum(m.last_error_age_secs,   -1);
-		const recovered = successAge >= 0 && errorAge >= 0 && successAge < errorAge;
-		const hasActiveError = errorAge >= 0 && !recovered;
-
-		if (hasActiveError) return errorAge > 600 ? 'warn' : 'err';
-		if (total >= 5 && successRate <= 0) return 'err';
-		if (total >= 10 && successRate < 50) return 'err';
-
-		const ms = parseDurationToMs(m.avg_latency);
-		if (Number.isFinite(ms)) {
-			if (ms >= 1000) return 'err';
-			if (ms >= 300) return 'warn';
-		}
-		if (total >= 10 && successRate < 90) return 'warn';
-		return 'ok';
-	}
-
-	function updateMetrics(m) {
-		const setTxt = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
-		setTxt('lastUpdate', new Date().toLocaleTimeString());
-		setTxt('mTotal', m.total_requests);
-		setTxt('mSuccess', m.success_rate);
-		setTxt('mLatency', m.avg_latency);
-		setTxt('mErrors', (m.client_errors || 0) + " / " + (m.server_errors || 0));
-		setTxt('mP50', m.p50_latency);
-		setTxt('mP85', m.p85_latency);
-		setTxt('mP99', m.p99_latency);
-		
-		const bar = document.getElementById('mUsageBar');
-		if (bar) {
-			const p = (m.usage_percent != null) ? Number(m.usage_percent) : 0;
-			bar.style.width = String(isFinite(p) ? p : 0) + "%";
-			if (m.usage_color) bar.style.background = m.usage_color;
-		}
-
-		setTxt('mDailyGET', m.daily_get);
-		setTxt('mDailyPOST', m.daily_post);
-		setTxt('mDailyPUT', m.daily_put);
-		setTxt('mDailyDELETE', m.daily_delete);
-		setTxt('mDailyNIC', m.daily_nic);
-		setTxt('mIPLatency', m.ip_latency_avg);
-		setTxt('mIPCount', m.ip_latency_count);
-		setTxt('mLastIPCheck', m.last_ip_check);
-	}
-
-	function connectWS() {
-		const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
-		ws = new WebSocket(proto + location.host + '/ws');
-		ws.onmessage = (e) => {
-			const msg = JSON.parse(e.data);
-			if (msg.type === 'initial' || msg.type === 'metrics') {
-				updateMetrics(msg.data);
-				const theme = localStorage.getItem('theme') || 'dark';
-				currentLevel = calcLevelFromMetrics(msg.data);
-				applyFavicon(theme, currentLevel, false);
-				setBlinking(theme, currentLevel);
-			} else if (msg.type === 'domain_update') {
-				updateDomainDisplay(msg.data);
-			} else if (msg.type === 'notification') {
-				showToast(msg.data.message, msg.data.level || 'info');
-			}
-		};
-		ws.onclose = () => scheduleReconnect();
-		ws.onopen = () => { reconnectDelay = 1000; if(reconnectTimer) clearTimeout(reconnectTimer); };
-	}
-
-	function scheduleReconnect() {
-		if (reconnectTimer) return;
-		reconnectTimer = setTimeout(() => { reconnectTimer = null; connectWS(); }, reconnectDelay);
-		reconnectDelay = Math.min(reconnectDelay * 2, reconnectDelayMax);
-	}
-
-	function showToast(message, type = 'success') {
-		const toast = document.getElementById('toast');
-		if(!toast) return;
-		toast.textContent = message;
-		let borderColor = 'var(--success)';
-		let duration = 3000;
-		if(type === 'error') { borderColor = 'var(--error)'; duration = 5000; }
-		else if(type === 'warning') { borderColor = '#facc15'; duration = 4000; }
-		else if(type === 'info') { borderColor = '#3b82f6'; duration = 2500; }
-		toast.style.borderLeft = '4px solid ' + borderColor;
-		toast.classList.add('show');
-		setTimeout(() => toast.classList.remove('show'), duration);
-	}
-
-	function copyIP(text) {
-		if (!text || text === 'N/A' || text === '-') {
-			showToast('❌ Keine IP zum Kopieren', 'error');
-			return;
-		}
-		const fallback = (t) => {
-			const ta = document.createElement("textarea"); ta.value = t;
-			ta.style.position = "fixed"; ta.style.left = "-9999px";
-			document.body.appendChild(ta); ta.focus(); ta.select();
-			try { document.execCommand('copy'); showToast('✓ Kopiert: ' + t); } 
-			catch (err) { showToast('❌ Fehler', 'error'); }
-			document.body.removeChild(ta);
-		};
-		if (navigator.clipboard && window.isSecureContext) {
-			navigator.clipboard.writeText(text).then(() => showToast('✓ Kopiert: ' + text)).catch(() => fallback(text));
-		} else fallback(text);
-	}
-
-	function filterLogs(filter) {
-		document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.filter === filter));
-		document.querySelectorAll('.log-entry').forEach(entry => {
-			const action = (entry.dataset.action || '').toUpperCase();
-			const level = (entry.dataset.level || '').toUpperCase();
-			if (filter === 'all') { entry.style.display = ''; return; }
-			const shouldShow = (filter.toUpperCase() === 'ERR' && level === 'ERR') || 
-							   (filter.toUpperCase() === 'WARN' && level === 'WARN') || 
-							   (action === filter.toUpperCase());
-			entry.style.display = shouldShow ? '' : 'none';
-		});
-	}
-
-	function triggerUpdate() {
-		const token = localStorage.getItem('triggerToken') || '';
-		showToast('⏳ Update wird gestartet...', 'info');
-		fetch('/api/trigger', { method: 'POST', headers: token ? {'X-Trigger-Token': token} : {} })
-		.then(r => r.json().then(j => {
-			if (j.error) showToast('⚠️ ' + j.error, 'warning');
-			else showToast('✅ Update gestartet', 'success');
-		})).catch(() => showToast('❌ Verbindungsfehler', 'error'));
-	}
-
-	function exportData() {
-		fetch('/api/export').then(r => r.blob()).then(blob => {
-			const url = URL.createObjectURL(blob);
-			const a = document.createElement('a');
-			a.href = url; a.download = 'dyndns-export-' + new Date().toISOString().split('T')[0] + '.json';
-			a.click(); showToast('✓ Export gestartet');
-		}).catch(() => showToast('Export fehlgeschlagen', 'error'));
-	}
-
-	function sanitizeBase(s) {
-		s = (s || '').toLowerCase();
-		let out = '';
-		for (const ch of s) {
-			const code = ch.charCodeAt(0);
-			if ((code >= 97 && code <= 122) || (code >= 48 && code <= 57) || ch === '-' || ch === '_') out += ch;
-			else if (ch === '.') out += '-';
-		}
-		return out || 'x';
-	}
-
-	async function shortHash8(str) {
-		if (!(window.crypto && crypto.subtle)) return '00000000';
-		const data = new TextEncoder().encode(str || '');
-		const buf = await crypto.subtle.digest('SHA-1', data);
-		return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 8);
-	}
-
-	async function makeSafeID(domain) {
-		const base = sanitizeBase(domain);
-		const sfx = await shortHash8(domain);
-		return (base === 'x' ? 'd-' : base + '-') + sfx;
-	}
-
-	async function updateDomainDisplay(data) {
-		const safeID = await makeSafeID(data.domain);
-		const ip4El = document.getElementById('ip4-' + safeID);
-		const ip6El = document.getElementById('ip6-' + safeID);
-		if (ip4El && data.ipv4) ip4El.textContent = data.ipv4;
-		if (ip6El && data.ipv6) ip6El.textContent = data.ipv6;
-		const dotEl = document.getElementById('dot-' + safeID);
-		if (dotEl) {
-			dotEl.className = 'domain-status-dot dot-ok dot-recent';
-			setTimeout(() => { if(dotEl) dotEl.classList.remove('dot-recent'); }, 3600000);
-		}
-		showToast('✓ ' + data.domain + ' updated');
-	}
-
-	function openSettings() {
-		document.getElementById('settingsOverlay').classList.add('open');
-		const saved = localStorage.getItem('triggerToken') || '';
-		const inp = document.getElementById('s-token');
-		if (inp) inp.placeholder = saved ? '●●●●●● (gespeichert)' : 'Token eingeben...';
-		renderSettingsDomainList();
-	}
-
-	function closeSettings() { 
-		const el = document.getElementById('settingsOverlay');
-		if(el) el.classList.remove('open'); 
-	}
-	
-	function closeSettingsOutside(e) { if (e.target.id === 'settingsOverlay') closeSettings(); }
-
-	function saveToken() {
-		const val = (document.getElementById('s-token').value || '').trim();
-		if (val) {
-			localStorage.setItem('triggerToken', val);
-			document.getElementById('s-token').value = '';
-			document.getElementById('s-token').placeholder = '●●●●●● (gespeichert)';
-			showToast('✅ Token gespeichert', 'success');
-		} else {
-			localStorage.removeItem('triggerToken');
-			document.getElementById('s-token').placeholder = 'Token eingeben...';
-			showToast('🗑️ Token gelöscht', 'info');
-		}
-	}
-
-	function renderSettingsDomainList() {
-		const container = document.getElementById('settings-domain-list');
-		if (!container) return;
-		container.innerHTML = '';
-		tempDomainConfigs.forEach((d, index) => {
-			const div = document.createElement('div');
-			div.className = 'domain-pill';
-			div.innerHTML = '<span><strong>' + d.fqdn + '</strong> <small>(' + d.provider + ')</small></span>' +
-			                '<button onclick="removeDomainFromList(' + index + ')" style="background:none; border:none; color:var(--error); cursor:pointer; font-weight:bold;">✕</button>';
-			container.appendChild(div);
-		});
-	}
-
-	function toggleProviderFields() {
-		const p = document.getElementById('new-domain-provider').value;
-		document.getElementById('fields-ionos').style.display = p === 'IONOS' ? 'block' : 'none';
-		document.getElementById('fields-cloudflare').style.display = p === 'CLOUDFLARE' ? 'block' : 'none';
-		document.getElementById('fields-ipv64').style.display = p === 'IPV64' ? 'block' : 'none';
-	}
-
-	function addDomainToList() {
-		const fqdn = document.getElementById('new-domain-fqdn').value.trim();
-		const provider = document.getElementById('new-domain-provider').value;
-		if(!fqdn) return showToast('FQDN fehlt', 'error');
-
-		let entry = { fqdn: fqdn, provider: provider };
-		if(provider === 'IONOS') {
-			entry.api_prefix = document.getElementById('new-ionos-prefix').value;
-			entry.api_secret = document.getElementById('new-ionos-secret').value;
-		} else if(provider === 'CLOUDFLARE') {
-			entry.cf_token = document.getElementById('new-cf-token').value;
-			entry.cf_email = document.getElementById('new-cf-email').value;
-			entry.cf_secret = document.getElementById('new-cf-secret').value;
-		} else if(provider === 'IPV64') {
-			entry.ipv64_token = document.getElementById('new-ipv64-token').value;
-		}
-		tempDomainConfigs.push(entry);
-		renderSettingsDomainList();
-		document.getElementById('new-domain-fqdn').value = '';
-	}
-
-	function removeDomainFromList(index) {
-		tempDomainConfigs.splice(index, 1);
-		renderSettingsDomainList();
-	}
-
-	async function saveFullConfig() {
-		if(!confirm("Configuration speichern?")) return;
-		const token = localStorage.getItem('triggerToken') || '';
-		try {
-			const r = await fetch('/api/save-config', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json', 'X-Trigger-Token': token },
-				body: JSON.stringify({ domain_configs: tempDomainConfigs })
-			});
-			if (r.ok) {
-				showToast('✅ Gespeichert!', 'success');
-				setTimeout(() => location.reload(), 1200);
-			} else {
-				const txt = await r.text();
-				showToast('❌ Fehler: ' + txt, 'error');
-			}
-		} catch (e) { showToast('❌ Netzwerkfehler', 'error'); }
-	}
-
-	function resetMetrics() {
-		if (!confirm('Möchtest du wirklich alle Metriken (Statistiken) löschen?')) return;
-		const token = localStorage.getItem('triggerToken') || '';
-		fetch('/api/metrics/reset', {
-			method: 'POST',
-			headers: token ? {'X-Trigger-Token': token} : {}
-		})
-		.then(r => {
-			if (r.ok) { showToast('✅ Metriken zurückgesetzt', 'success'); }
-			else { showToast('❌ Reset fehlgeschlagen', 'error'); }
-		})
-		.catch(() => showToast('❌ Verbindungsfehler', 'error'));
-	}
-
-	function filterDomains(query) {
-		document.querySelectorAll('.domain-item').forEach(d => {
-			const name = (d.getAttribute('data-domain') || '').toLowerCase();
-			d.style.display = name.includes(query.toLowerCase()) ? '' : 'none';
-		});
-	}
-
-	function deleteDomain(domain, btn) {
-		if (!confirm('Domain "' + domain + '" wirklich aus dem Status entfernen?')) return;
-		const token = localStorage.getItem('triggerToken') || '';
-		btn.disabled = true;
-		btn.textContent = '⏳';
-		fetch('/api/domain/delete?domain=' + encodeURIComponent(domain), {
-			method: 'POST',
-			headers: token ? {'X-Trigger-Token': token} : {}
-		})
-		.then(r => r.json().then(j => ({ status: r.status, json: j })))
-		.then(({ status, json: j }) => {
-			if (status === 200) {
-				const card = btn.closest('.domain-item');
-				if (card) { card.style.transition = 'opacity 0.4s'; card.style.opacity = '0'; setTimeout(() => card.remove(), 400); }
-				showToast('🗑️ ' + domain + ' entfernt', 'success');
-			} else {
-				btn.disabled = false; btn.textContent = '🗑️ Entfernen';
-				showToast('❌ ' + (j.error || 'Fehler beim Löschen'), 'error');
-			}
-		})
-		.catch(() => { btn.disabled = false; btn.textContent = '🗑️ Entfernen'; showToast('❌ Verbindungsfehler', 'error'); });
-	}
-
-	function fallbackCopy(text) {
-		const ta = document.createElement('textarea');
-		ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px';
-		document.body.appendChild(ta); ta.focus(); ta.select();
-		try { document.execCommand('copy'); showToast('✓ Kopiert: ' + text, 'success'); }
-		catch { showToast('❌ Kopieren fehlgeschlagen', 'error'); }
-		document.body.removeChild(ta);
-	}
-
-	function startClock() {
-		const el = document.getElementById('clock');
-		if (!el) return;
-		const tick = () => { 
-			const d = new Date();
-			el.textContent = [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, '0')).join(':');
-		};
-		tick(); setInterval(tick, 1000);
-	}
-	</script>
-	</div>
-	</body>
-	</html>
-	`)
 	})
 
 	return mux

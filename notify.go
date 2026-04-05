@@ -10,57 +10,34 @@ import (
 // ============================================================================
 // INIT
 // ============================================================================
-
-// Telegram: TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID
-// Gotify:   GOTIFY_URL + GOTIFY_TOKEN
-// Events:   NOTIFY_ON (Default: UPDATE,CREATE,ERROR)
 func initNotifiers() {
-    if cfg.Notifications.Telegram.Token == "" {
-        cfg.Notifications.Telegram.Token = getEnvOrDefault("TELEGRAM_BOT_TOKEN", "")
-    }
-    if cfg.Notifications.Telegram.ChatID == "" {
-        cfg.Notifications.Telegram.ChatID = getEnvOrDefault("TELEGRAM_CHAT_ID", "")
-    }
-    if cfg.Notifications.Gotify.URL == "" {
-        cfg.Notifications.Gotify.URL = getEnvOrDefault("GOTIFY_URL", "")
-    }
-    if cfg.Notifications.Gotify.Token == "" {
-        cfg.Notifications.Gotify.Token = getEnvOrDefault("GOTIFY_TOKEN", "")
-    }
+	notifyCfg = notifyConfig{
+		events:    make(map[NotifyEvent]struct{}),
+		notifiers: []Notifier{},
+	}
 
-    if len(cfg.Notifications.Events) == 0 {
-        notifyOn := getEnvOrDefault("NOTIFY_ON", "UPDATE,CREATE,ERROR")
-        cfg.Notifications.Events = strings.Split(notifyOn, ",")
-    }
+	for _, raw := range cfg.Notifications.Events {
+		e := NotifyEvent(strings.ToUpper(strings.TrimSpace(raw)))
+		notifyCfg.events[e] = struct{}{}
+	}
 
-    notifyCfg = notifyConfig{
-        events:    make(map[NotifyEvent]struct{}),
-        notifiers: []Notifier{},
-    }
+	if cfg.Notifications.Telegram.Token != "" && cfg.Notifications.Telegram.ChatID != "" {
+		tg := newTelegramNotifier(cfg.Notifications.Telegram.Token, cfg.Notifications.Telegram.ChatID)
+		notifyCfg.notifiers = append(notifyCfg.notifiers, tg)
+		tg.StartPolling()
+		debugLog("NOTIFY", "", "✅ Telegram aktiv")
+	}
 
-    for _, raw := range cfg.Notifications.Events {
-        e := NotifyEvent(strings.ToUpper(strings.TrimSpace(raw)))
-        notifyCfg.events[e] = struct{}{}
-    }
-
-    if cfg.Notifications.Telegram.Token != "" && cfg.Notifications.Telegram.ChatID != "" {
-        tg := newTelegramNotifier(cfg.Notifications.Telegram.Token, cfg.Notifications.Telegram.ChatID)
-        notifyCfg.notifiers = append(notifyCfg.notifiers, tg)
-        tg.StartPolling()
-        debugLog("NOTIFY", "", "✅ Telegram aktiv")
-    }
-
-    if cfg.Notifications.Gotify.URL != "" && cfg.Notifications.Gotify.Token != "" {
-        notifyCfg.notifiers = append(notifyCfg.notifiers, 
-            newGotifyNotifier(cfg.Notifications.Gotify.URL, cfg.Notifications.Gotify.Token))
-        debugLog("NOTIFY", "", "✅ Gotify aktiv")
-    }
+	if cfg.Notifications.Gotify.URL != "" && cfg.Notifications.Gotify.Token != "" {
+		notifyCfg.notifiers = append(notifyCfg.notifiers,
+			newGotifyNotifier(cfg.Notifications.Gotify.URL, cfg.Notifications.Gotify.Token))
+		debugLog("NOTIFY", "", "✅ Gotify aktiv")
+	}
 }
 
 // ============================================================================
 // DISPATCH — async (normal log path)
 // ============================================================================
-
 func notify(ctx LogContext) {
 	if len(notifyCfg.notifiers) == 0 {
 		return

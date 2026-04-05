@@ -221,7 +221,7 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 		return respBody, nil
 	}
 
-	return nil, fmt.Errorf(T.IPv64ApiFailed+": %w", cfg.MaxAPIRetries, lastErr)
+	return nil, fmt.Errorf("%s: %w", fmt.Sprintf(T.IPv64ApiFailed, cfg.MaxAPIRetries), lastErr)
 }
 
 func loadIPv64Domains(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
@@ -438,7 +438,13 @@ func loadAllIPv64Domains(ctx context.Context, dc *DomainConfig) error {
 			fmt.Sprintf(
 				T.IPv64CachedDomain,
 				len(domain.Records),
-				subdomain.DomainUpdateHash[:8],
+				func() string {
+					h := subdomain.DomainUpdateHash
+					if len(h) < 8 {
+						return h
+					}
+					return h[:8]
+				}(),
 			),
 		)
 	}
@@ -692,6 +698,7 @@ func cleanupIPv64Records(ctx context.Context) {
 	}
 
 	debugLog("MAINTENANCE", "", T.CleanupStartIPv64)
+
 	configuredFQDNs := make(map[string]struct{})
 	ourBaseDomains := make(map[string]struct{})
 

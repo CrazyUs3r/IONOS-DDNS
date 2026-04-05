@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -153,33 +154,29 @@ func run() int {
 	}
 
 	cfg = Config{
-		Interval:        tempInterval,
-		IPMode:          strings.ToUpper(os.Getenv("IP_MODE")),
-		IfaceName:       os.Getenv("INTERFACE"),
-		HealthPort:      os.Getenv("HEALTH_PORT"),
-		DryRun:          os.Getenv("DRY_RUN") == "true",
+		Interval:        DefaultInterval,
+		IPMode:          "BOTH",
+		HealthPort:      "8080",
 		LogDir:          logsDir,
 		Lang:            lang,
-		DNSServers:      dnsList,
-		DebugEnabled:    os.Getenv("DEBUG") == "true",
-		DebugHTTPRaw:    os.Getenv("DEBUG_HTTP_RAW") == "true",
-		HourlyRateLimit: hourlyLimit,
-		MaxConcurrent:   maxConcurrent,
-		MaxLogLines:     tempmaxLogLines,
-		MaxAPIRetries:   tempmaxAPIRetries,
+		HourlyRateLimit: DefaultHourlyRateLimit,
+		MaxConcurrent:   DefaultMaxConcurrent,
+		MaxLogLines:     DefaultMaxLogLines,
+		MaxAPIRetries:   DefaultMaxAPIRetries,
 	}
 
-	if cfg.MaxLogLines < 10 || cfg.MaxLogLines > 10000 {
-		log(LogContext{
-			Level:   LogWarn,
-			Message: fmt.Sprintf("LOG_MAX_LINES außerhalb Range (10-10000): %d", cfg.MaxLogLines),
-		})
-		cfg.MaxLogLines = DefaultMaxLogLines
+	if data, err := os.ReadFile(configPath); err == nil {
+		if err := json.Unmarshal(data, &cfg); err != nil {
+			log(LogContext{
+				Level:   LogWarn,
+				Action:  ActionConfig,
+				Message: fmt.Sprintf("config.json konnte nicht gelesen werden, nutze Defaults: %v", err),
+			})
+		}
 	}
 
-	if cfg.IPMode == "" {
-		cfg.IPMode = "BOTH"
-	}
+	applyEnvOverrides(logsDir, lang, tempInterval, dnsList,
+		tempmaxAPIRetries, tempmaxLogLines, hourlyLimit, maxConcurrent)
 
 	workerSemaphore = make(chan struct{}, cfg.MaxConcurrent)
 
@@ -207,6 +204,7 @@ func run() int {
 
 	logHTTPClientStats()
 	metricsBroadcasterLoop()
+
 	if cfg.HealthPort == "" {
 		cfg.HealthPort = "8080"
 	}
@@ -322,7 +320,18 @@ func run() int {
 
 		case <-ticker.C:
 			debugLog("SCHEDULER", "", "Intervall erreicht, starte runUpdate(false)")
-			runUpdate(false)
+			if activeUpdates.Load() > 0 {
+				debugLog("SCHEDULER", "", "⚠️ Vorheriges Update läuft noch. Überspringe diesen Durchlauf...")
+
+				limit := cfg.MaxLogLines
+				if cfg.Interval > 500 && limit == DefaultMaxLogLines {
+					limit = 1000
+				}
+				rotateLogFile(logPath, limit)
+				continue
+			}
+
+			go runUpdate(false)
 
 			limit := cfg.MaxLogLines
 			if cfg.Interval > 500 && limit == DefaultMaxLogLines {
@@ -383,7 +392,6 @@ func run() int {
 			close(logWriteQueue)
 
 			ctx, cancel := context.WithTimeout(context.Background(), ShutdownGraceTimeout)
-			defer cancel()
 
 			debugLog("SYSTEM", "", T.ServerShuttingDown)
 			if err := srv.Shutdown(ctx); err != nil {
@@ -395,8 +403,77 @@ func run() int {
 			} else {
 				debugLog("SYSTEM", "", T.ServerShutdownComplete)
 			}
+			cancel()
 
 			return 0
 		}
+	}
+}
+
+func applyEnvOverrides(
+	logsDir, lang string,
+	tempInterval int,
+	dnsList []string,
+	maxAPIRetries, maxLogLines, hourlyLimit, maxConcurrent int,
+) {
+	if v := strings.ToUpper(os.Getenv("IP_MODE")); v != "" {
+		cfg.IPMode = v
+	}
+	if v := os.Getenv("INTERFACE"); v != "" {
+		cfg.IfaceName = v
+	}
+	if v := os.Getenv("HEALTH_PORT"); v != "" {
+		cfg.HealthPort = v
+	}
+	if v := os.Getenv("DRY_RUN"); v != "" {
+		cfg.DryRun = v == "true"
+	}
+	if v := os.Getenv("DEBUG"); v != "" {
+		cfg.DebugEnabled = v == "true"
+	}
+	if v := os.Getenv("DEBUG_HTTP_RAW"); v != "" {
+		cfg.DebugHTTPRaw = v == "true"
+	}
+	cfg.LogDir = logsDir
+	if os.Getenv("LANG") != "" {
+		cfg.Lang = lang
+	}
+	if os.Getenv("INTERVAL") != "" {
+		cfg.Interval = tempInterval
+	}
+	if os.Getenv("DNS_SERVERS") != "" {
+		cfg.DNSServers = dnsList
+	}
+	if os.Getenv("MAX_API_RETRIES") != "" {
+		cfg.MaxAPIRetries = maxAPIRetries
+	}
+	if os.Getenv("LOG_MAX_LINES") != "" {
+		cfg.MaxLogLines = maxLogLines
+	}
+	if os.Getenv("HOURLY_RATE_LIMIT") != "" {
+		cfg.HourlyRateLimit = hourlyLimit
+	}
+	if os.Getenv("MAX_CONCURRENT") != "" {
+		cfg.MaxConcurrent = maxConcurrent
+	}
+	if v := os.Getenv("TELEGRAM_BOT_TOKEN"); v != "" {
+		cfg.Notifications.Telegram.Token = strings.TrimSpace(v)
+	}
+	if v := os.Getenv("TELEGRAM_CHAT_ID"); v != "" {
+		cfg.Notifications.Telegram.ChatID = strings.TrimSpace(v)
+	}
+	if v := os.Getenv("GOTIFY_URL"); v != "" {
+		cfg.Notifications.Gotify.URL = strings.TrimSpace(v)
+	}
+	if v := os.Getenv("GOTIFY_TOKEN"); v != "" {
+		cfg.Notifications.Gotify.Token = strings.TrimSpace(v)
+	}
+	if v := os.Getenv("NOTIFY_ON"); v != "" {
+		cfg.Notifications.Events = strings.Split(v, ",")
+	}
+	if !cfg.Notifications.Enabled {
+		cfg.Notifications.Enabled =
+			cfg.Notifications.Telegram.Token != "" ||
+				cfg.Notifications.Gotify.URL != ""
 	}
 }

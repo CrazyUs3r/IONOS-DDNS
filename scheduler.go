@@ -40,8 +40,14 @@ func runUpdate(firstRun bool) {
 		v4, v6, err := fetchCurrentIPs(ctx)
 		return ipPair{v4: v4, v6: v6}, err
 	})
+
 	if err != nil {
 		lastOk.Store(false)
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: fmt.Sprintf("IP-Abfrage konnte nicht durchgeführt werden: %v", err),
+		})
 		return
 	}
 	currentIPv4, currentIPv6 := ips.v4, ips.v6
@@ -75,7 +81,6 @@ func runUpdate(firstRun bool) {
 	}
 
 	saveCachesToDisk(zonesByProvider, cache)
-	runCleanupIfNeeded(ctx, zonesByProvider, cache)
 
 	if firstRun {
 		printGroupedDomains()
@@ -84,6 +89,7 @@ func runUpdate(firstRun bool) {
 
 	successCount := processDomains(ctx, zonesByProvider, cache, currentIPv4, currentIPv6)
 	debugLog("SCHEDULER", "", fmt.Sprintf(T.SchedulerCompleted, successCount))
+	runCleanupIfNeeded(ctx, zonesByProvider, cache)
 }
 
 // ============================================================================

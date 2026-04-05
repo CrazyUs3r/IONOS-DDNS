@@ -40,9 +40,11 @@ func saveIONOSCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error {
 		LastUpdate: time.Now().Local(),
 	}
 
+	totalRecords := 0
 	for _, zone := range zones {
 		if records, exists := recordCache.Get(zone.ID); exists {
 			cache.Records[zone.ID] = records
+			totalRecords += len(records)
 		}
 	}
 
@@ -57,10 +59,11 @@ func saveIONOSCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error {
 	}
 
 	if err := os.Rename(tmpPath, cachePath); err != nil {
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("%s: %w", T.ErrCacheRename, err)
 	}
 
-	debugLog("CACHE", "", fmt.Sprintf(T.CacheSavedZones, "IONOS", len(zones), len(cache.Records)))
+	debugLog("CACHE", "", fmt.Sprintf(T.CacheSavedZones, "IONOS", len(zones), totalRecords))
 	return nil
 }
 
@@ -257,7 +260,7 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 		}
 	}
 
-	return nil, fmt.Errorf(T.IonosAPIFailed+": %w", cfg.MaxAPIRetries, lastErr)
+	return nil, fmt.Errorf("%s: %w", fmt.Sprintf(T.IonosAPIFailed, cfg.MaxAPIRetries), lastErr)
 }
 
 // ============================================================================

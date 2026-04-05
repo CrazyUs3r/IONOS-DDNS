@@ -44,6 +44,7 @@ var (
 	apiMetrics      = &APIMetrics{}
 	latestMetricsMu sync.RWMutex
 	latestMetrics   map[string]interface{}
+	logCacheWriteMu sync.Mutex
 
 	metricsSignal = make(chan struct{}, 1)
 
@@ -354,6 +355,8 @@ type Phrases struct {
 	Ipv64TokenRequired, CloudflareAuthRequired, UnknownProvider            string
 	ConfigErrorPrefix, DomainIsEmpty, DomainTooLong, InvalidDomainFormat   string
 	LabelTooLong, InvalidLabel                                             string
+	MetricLatencyPercentile, MetricHTTPMethods                             string
+	MetricIPLatency, MetricLastCheck, MetricAvgFrom                        string
 
 	// Cache & persistence
 	ErrRecordCacheNil, ErrCacheDirCreate, ErrCacheMarshal   string
@@ -406,6 +409,35 @@ type Phrases struct {
 	IonosPayload, IonosRecordArrow           string
 	IonosRetryable                           string
 	IonosErrDetail                           string
+
+	// Settings Modal
+	SettingsTitle, SettingsSecurity, SettingsTriggerToken          string
+	SettingsTokenPlaceholder, SettingsTokenSave                    string
+	SettingsSystem, SettingsIPMode, SettingsInterval               string
+	SettingsHealthPort, SettingsIface, SettingsIfaceHint           string
+	SettingsDNS, SettingsDNSHint, SettingsMaxLog                   string
+	SettingsMaxRetries, SettingsMaxConcurrent, SettingsHourlyLimit string
+	SettingsLang, SettingsDryRun, SettingsDryRunHint               string
+	SettingsDryRunActive, SettingsDomains, SettingsAddDomain       string
+	SettingsAddBtn, SettingsCFTokenPlaceholder, SettingsCFOr       string
+	SettingsNotify, SettingsNotifyEnabled, SettingsNotifyOn        string
+	SettingsNotifyEvents, SettingsTGToken, SettingsTGChatID        string
+	SettingsGotifyURL, SettingsGotifyToken, SettingsTokenUnchanged string
+	SettingsSaveBtn, SettingsSaveHint, SettingsRestartHint         string
+	SettingsEditBtn, SettingsIfacePlaceholder                      string
+	SettingsAPIPrefix, SettingsAPISecret                           string
+	SettingsCFEmail, SettingsCFGlobalKey                           string
+	SettingsIPv64Token, SettingsTGChatPlaceholder                  string
+	SettingsTelegramHeading, SettingsGotifyHeading                 string
+
+	// Domain display
+	DotTitleNoUpdate, DotTitleChanged, DotTitleLast string
+	DotTitleOther, DotTitleActive                   string
+	TableTime, TableIPs, LastShort                  string
+	NotConfiguredLabel, RemoveBtn                   string
+
+	// Misc
+	ExportBtn string
 }
 
 type LogLevel int
@@ -499,10 +531,9 @@ type Config struct {
 	MaxConcurrent   int            `json:"max_concurrent"`
 	MaxLogLines     int            `json:"max_log_lines"`
 	MaxAPIRetries   int            `json:"max_api_retries"`
-	NotifyOn        string         `json:"notify_on"`
-	Notifications struct {
-		Enabled bool     `json:"enabled"`
-		Events  []string `json:"events"`
+	Notifications   struct {
+		Enabled  bool     `json:"enabled"`
+		Events   []string `json:"events"`
 		Telegram struct {
 			Token  string `json:"token"`
 			ChatID string `json:"chat_id"`

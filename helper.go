@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"golang.org/x/sync/singleflight"
@@ -44,8 +43,7 @@ func recordNameFromFQDN(fqdn, zone string) string {
 }
 
 func isNonRecoverableError(err error) bool {
-	var apiErr *APIError
-	if errors.As(err, &apiErr) {
+	if apiErr, ok := errors.AsType[*APIError](err); ok {
 		switch apiErr.StatusCode {
 		case 401, 403, 404:
 			return true
@@ -157,11 +155,4 @@ func doSingleflight[T any](
 		}
 		return res.Val.(T), nil
 	}
-}
-
-func getEnvOrDefault(key, def string) string {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-		return v
-	}
-	return def
 }

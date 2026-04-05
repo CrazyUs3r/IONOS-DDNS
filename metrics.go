@@ -139,7 +139,15 @@ func (m *APIMetrics) calcPercentile(p float64) time.Duration {
 	}
 	count := m.LatencySampleCount
 	samples := make([]int64, count)
-	copy(samples, m.LatencySamples[:count])
+
+	if count < len(m.LatencySamples) {
+		copy(samples, m.LatencySamples[:count])
+	} else {
+		start := m.LatencySampleIdx
+		for i := 0; i < count; i++ {
+			samples[i] = m.LatencySamples[(start+i)%len(m.LatencySamples)]
+		}
+	}
 
 	for i := 1; i < len(samples); i++ {
 		key := samples[i]
@@ -507,6 +515,13 @@ func handleMetricsReset(w http.ResponseWriter, r *http.Request) {
 	apiMetrics.LatencySamples = [1000]int64{}
 	apiMetrics.LatencySampleIdx = 0
 	apiMetrics.LatencySampleCount = 0
+	apiMetrics.IPLatencySum = 0
+	apiMetrics.IPLatencyCount = 0
+	apiMetrics.IPLatencyAvg = 0
+	apiMetrics.IPLatencySamples = [200]int64{}
+	apiMetrics.IPLatencySampleIdx = 0
+	apiMetrics.IPLatencySampleCount = 0
+	apiMetrics.LastIPCheckTime = time.Time{}
 
 	statsCopy := apiMetrics.getStatsUnsafe()
 	apiMetrics.Unlock()
