@@ -357,7 +357,7 @@ func buildSettingsModal(c Config) string {
 			`<input type="text" id="cfg-health-port" class="s-input" style="width:90px;text-align:right;" value="%s"></div>`, html.EscapeString(c.HealthPort)) +
 
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsIface+` <small style="opacity:.5">`+T.SettingsIfaceHint+`</small></span>`+
-			`<input type="text" id="cfg-iface" class="s-input" style="width:150px;" placeholder="`+T.SettingsIfacePlaceholder+` value="%s"></div>`, html.EscapeString(c.IfaceName)) +
+			`<input type="text" id="cfg-iface" class="s-input" style="width:150px;" placeholder="`+T.SettingsIfacePlaceholder+`" value="%s"></div>`, html.EscapeString(c.IfaceName)) +
 
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsDNS+` <small style="opacity:.5">(kommagetrennt)</small></span>`+
 			`<input type="text" id="cfg-dns" class="s-input" style="width:220px;" placeholder="1.1.1.1:53, 8.8.8.8:53" value="%s"></div>`, html.EscapeString(dnsStr)) +
