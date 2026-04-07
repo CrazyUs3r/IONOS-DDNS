@@ -47,7 +47,7 @@ func (rl *RateLimiter) Remaining() int {
 	return int(tokens)
 }
 
-func NewIPRateLimiter(tokensPerIP, refillRate float64, ctx context.Context) *IPRateLimiter {
+func NewIPRateLimiter(ctx context.Context, tokensPerIP, refillRate float64) *IPRateLimiter {
 	limiter := &IPRateLimiter{
 		limiters:    make(map[string]*RateLimiter),
 		cleanup:     5 * time.Minute,
