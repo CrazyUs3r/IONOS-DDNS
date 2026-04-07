@@ -267,7 +267,7 @@ func run() int {
 	})
 
 	globalTriggerLimiter = NewRateLimiter(10, 1.0/6.0)
-	ipTriggerLimiter = NewIPRateLimiter(5, 0.1, shutdownCtx)
+	ipTriggerLimiter = NewIPRateLimiter(shutdownCtx, 5, 0.1)
 
 	if err := updateDomainsCache(); err != nil {
 		log(LogContext{
