@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"math"
 	"time"
 )
@@ -46,12 +47,13 @@ func (rl *RateLimiter) Remaining() int {
 	return int(tokens)
 }
 
-func NewIPRateLimiter(tokensPerIP, refillRate float64) *IPRateLimiter {
+func NewIPRateLimiter(tokensPerIP, refillRate float64, ctx context.Context) *IPRateLimiter {
 	limiter := &IPRateLimiter{
 		limiters:    make(map[string]*RateLimiter),
 		cleanup:     5 * time.Minute,
 		tokensPerIP: tokensPerIP,
 		refillRate:  refillRate,
+		ctx:         ctx,
 	}
 	go limiter.cleanupRoutine()
 	return limiter
@@ -100,8 +102,8 @@ func (ipl *IPRateLimiter) cleanupRoutine() {
 
 			ipl.mu.Unlock()
 
-		case <-shutdownCtx.Done():
-			debugLog("SYSTEM", "", "Rate Limiter cleanup routine stopping...")
+		case <-ipl.ctx.Done():
+			debugLog("SYSTEM", "", "IP Rate Limiter cleanup routine stopping...")
 			return
 		}
 	}

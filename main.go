@@ -28,6 +28,20 @@ func run() int {
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Printf("[FATAL] Main-Panic: %v\n", r)
+
+			flushLogQueue(2 * time.Second)
+
+			if metricsPersistPath != "" {
+				_ = apiMetrics.SaveToFile(metricsPersistPath)
+			}
+
+			select {
+			case _, ok := <-logWriteQueue:
+				if ok {
+					close(logWriteQueue)
+				}
+			default:
+			}
 		}
 	}()
 
@@ -47,26 +61,7 @@ func run() int {
 	fmt.Printf("[INFO] → Sprachen: %s\n", langDir)
 	fmt.Printf("[INFO] → Logs: %s\n", logsDir)
 
-	lang := "de"
-	envLang := strings.ToLower(os.Getenv("LANG"))
-	switch {
-	case strings.HasPrefix(envLang, "en"):
-		lang = "en"
-	case strings.HasPrefix(envLang, "fr"):
-		lang = "fr"
-	case strings.HasPrefix(envLang, "es"):
-		lang = "es"
-	case strings.HasPrefix(envLang, "pl"):
-		lang = "pl"
-	case strings.HasPrefix(envLang, "da"):
-		lang = "da"
-	case strings.HasPrefix(envLang, "it"):
-		lang = "it"
-	case strings.HasPrefix(envLang, "sv"):
-		lang = "sv"
-	case strings.HasPrefix(envLang, "nl"):
-		lang = "nl"
-	}
+	lang := detectLanguage(langDir)
 
 	if err := os.MkdirAll(langDir, 0755); err != nil {
 		fmt.Printf("[FATAL] Lang-Verzeichnis konnte nicht erstellt werden: %v\n", err)
@@ -165,6 +160,8 @@ func run() int {
 		MaxAPIRetries:   DefaultMaxAPIRetries,
 	}
 
+	configLoaded := false
+
 	if data, err := os.ReadFile(configPath); err == nil {
 		if err := json.Unmarshal(data, &cfg); err != nil {
 			log(LogContext{
@@ -172,11 +169,18 @@ func run() int {
 				Action:  ActionConfig,
 				Message: fmt.Sprintf("config.json konnte nicht gelesen werden, nutze Defaults: %v", err),
 			})
+		} else if len(cfg.DomainConfigs) > 0 {
+			configLoaded = true
 		}
 	}
 
-	applyEnvOverrides(logsDir, lang, tempInterval, dnsList,
-		tempmaxAPIRetries, tempmaxLogLines, hourlyLimit, maxConcurrent)
+	if !configLoaded {
+		applyEnvOverrides(
+			logsDir, lang, tempInterval, dnsList,
+			tempmaxAPIRetries, tempmaxLogLines,
+			hourlyLimit, maxConcurrent,
+		)
+	}
 
 	workerSemaphore = make(chan struct{}, cfg.MaxConcurrent)
 
@@ -263,7 +267,7 @@ func run() int {
 	})
 
 	globalTriggerLimiter = NewRateLimiter(10, 1.0/6.0)
-	ipTriggerLimiter = NewIPRateLimiter(5, 0.1)
+	ipTriggerLimiter = NewIPRateLimiter(5, 0.1, shutdownCtx)
 
 	if err := updateDomainsCache(); err != nil {
 		log(LogContext{

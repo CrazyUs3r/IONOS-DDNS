@@ -1,6 +1,6 @@
 module github.com/CrazyUs3r/IONOS-DDNS/v2
 
-go 1.25
+go 1.26.1
 
 require (
 	github.com/gorilla/websocket v1.5.3

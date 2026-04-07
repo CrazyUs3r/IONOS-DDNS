@@ -26,13 +26,17 @@ func loadLanguage(lang string) error {
 	}()
 
 	langFile := filepath.Join(langDir, lang+".json")
-	fmt.Printf("[INFO] %s %s\n", T.TryingLoadLanguage, langFile)
+	msg := T.TryingLoadLanguage
+	if strings.TrimSpace(msg) == "" {
+		msg = "Trying to load language file: %s"
+	}
+	fmt.Println("[INFO]", fmt.Sprintf(msg, langFile))
 
 	data, err := os.ReadFile(langFile)
 	if err != nil {
 		embedName := "lang/" + lang + ".json"
 		if embedded, embedErr := embeddedLang.ReadFile(embedName); embedErr == nil {
-			fmt.Printf("[INFO] %s (embedded)\n", T.TryingLoadLanguage)
+			fmt.Println("[INFO]", fmt.Sprintf(T.TryingLoadLanguage, embedName))
 			data = embedded
 		} else {
 			fmt.Printf("[WARN] %s %v\n", T.LanguageFileNotFound, err)
@@ -44,20 +48,20 @@ func loadLanguage(lang string) error {
 	}
 
 	if len(data) == 0 {
-		fmt.Printf("[ERROR] Keine Sprachdaten geladen für: %s\n", lang)
+		fmt.Printf("[ERROR] no language data loaded for: %s\n", lang)
 		if lang != "en" {
 			return loadLanguage("en")
 		}
-		return fmt.Errorf("keine Sprachdaten verfügbar")
+		return fmt.Errorf("no language data available")
 	}
 
 	var translations map[string]string
 	if err := json.Unmarshal(data, &translations); err != nil {
-		fmt.Printf("[ERROR] JSON parse error: %v\n", err)
+		fmt.Printf("[ERROR] %s: %v\n", T.JSONParseError, err)
 		if lang != "en" {
 			return loadLanguage("en")
 		}
-		return fmt.Errorf("JSON parse error: %w", err)
+		return fmt.Errorf("json parse error: %w", err)
 	}
 
 	v := reflect.ValueOf(&T).Elem()
@@ -70,12 +74,17 @@ func loadLanguage(lang string) error {
 		}
 	}
 
-	fmt.Printf("[INFO] ✓ %s\n", fmt.Sprintf(T.LanguageLoaded, lang, len(translations)))
+	fmt.Println("[INFO] ✓", fmt.Sprintf(T.LanguageLoaded, lang, len(translations)))
 
-	requiredKeys := []string{"startup", "shutdown", "no_zones", "update", "requests", "success_rate", "avg_latency"}
-	for _, key := range requiredKeys {
-		if _, ok := translations[key]; !ok {
+	expected := expectedTranslationKeys()
+	for _, key := range expected {
+		val, ok := translations[key]
+		if !ok {
 			fmt.Printf("[WARN] %s: %s\n", T.MissingTranslationKey, key)
+			continue
+		}
+		if strings.TrimSpace(val) == "" {
+			fmt.Printf("[WARN] empty translation value: %s\n", key)
 		}
 	}
 
@@ -83,25 +92,9 @@ func loadLanguage(lang string) error {
 }
 
 var knownAcronyms = []string{
-	"IPv4", "IPv6", "HTTP", "JSON", "API", "DNS", "IP", "CF"}
+	"IPv4", "IPv6", "HTTP", "JSON", "API", "DNS", "IP", "CF", "OK", "URL", "HTML", "TG", "ID", "WS"}
 
-var snakeCaseOverrides = map[string]string{
-	"HealthCheckOK":             "health_check_ok",
-	"LanguageFileNotFound":      "language_file_not_found",
-	"BasedOnLast60Min":          "based_on_last_60_min",
-	"CleanupStartIonos":         "cleanup_start_ionos",
-	"CleanupStartCF":            "cleanup_start_c_f",
-	"CleanupStartIPv64":         "cleanup_start_i_pv64",
-	"IPv64APIError":             "ipv64_a_p_i_error",
-	"IPv64HTTPError":            "ipv64_h_t_t_p_error",
-	"IPv64CacheAPIError":        "ipv64_cache_a_p_i_error",
-	"IonosRetryable":            "ionos_retryable",
-	"IonosErrDetail":            "ionos_err_detail",
-	"SettingsTGToken":           "settings_tg_token",
-	"SettingsTGChatID":          "settings_tg_chatid",
-	"SettingsGotifyURL":         "settings_gotify_url",
-	"SettingsTGChatPlaceholder": "settings_tg_chat_placeholder",
-}
+var snakeCaseOverrides = map[string]string{}
 
 func toSnakeCase(s string) string {
 	if key, ok := snakeCaseOverrides[s]; ok {
@@ -135,20 +128,25 @@ func copyEmbeddedLangFiles(dir string) {
 		name := e.Name()
 		dst := filepath.Join(dir, name)
 
-		if _, err := os.Stat(dst); err == nil {
-			continue
-		}
-
-		data, err := embeddedLang.ReadFile("lang/" + name)
+		newData, err := embeddedLang.ReadFile("lang/" + name)
 		if err != nil {
 			fmt.Printf("[WARN] Embedded file unreadable: %s: %v\n", name, err)
 			continue
 		}
 
-		if err := os.WriteFile(dst, data, 0644); err != nil {
+		if oldData, err := os.ReadFile(dst); err == nil {
+			if string(oldData) == string(newData) {
+				continue
+			}
+			fmt.Printf("[INFO] Update erkannt: %s\n", name)
+		} else {
+			fmt.Printf("[INFO] Neue Datei: %s\n", name)
+		}
+
+		if err := os.WriteFile(dst, newData, 0644); err != nil {
 			fmt.Printf("[WARN] write failed: %s: %v\n", dst, err)
 		} else {
-			fmt.Printf("[INFO] copied: %s\n", dst)
+			fmt.Printf("[INFO] gespeichert: %s\n", dst)
 		}
 	}
 }

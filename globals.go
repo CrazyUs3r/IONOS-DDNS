@@ -357,6 +357,30 @@ type Phrases struct {
 	LabelTooLong, InvalidLabel                                             string
 	MetricLatencyPercentile, MetricHTTPMethods                             string
 	MetricIPLatency, MetricLastCheck, MetricAvgFrom                        string
+	WSUpgradeFailed, CouldNotLoadLanguages                                 string
+	SaveFailed, LangParamMissing, UnsupportedLanguage                      string
+	LanguageLoadFailed, ConfigSaveWarnAfterLangChange                      string
+	LanguageChangedLog, LanguageChangedNotification                        string
+	DomainParamMissing, DomainStillActiveInConfig                          string
+	NoStatusFileFound, DomainNotFoundInStatus                              string
+	DomainDeletedFromStatusLog, DomainRemovedFromStatus                    string
+	InvalidOrMissingTriggerToken, TriggerBlockedInvalidToken               string
+	GlobalRateLimitExceeded, TriggerBlockedGlobalRateLimit                 string
+	TooManyUpdateRequestsWait, IPRateLimitExceeded                         string
+	TriggerBlockedIPRateLimit, UpdateAlreadyInProgressAPI                  string
+	TriggerStatusBusy, TriggerBlockedUpdateRunning                         string
+	UpdateAlreadyRunningNotification, ManualUpdateTriggeredLog             string
+	ManualUpdateStartedNotification, UpdateStartedMessage                  string
+	WaitingForFirstSchedulerRun, HealthCriticalSuccessRate                 string
+	HealthDegradedSuccessRate, HealthLastSchedulerFailed                   string
+
+	// Notify event labels & descriptions
+	NotifyEventUpdateLabel, NotifyEventUpdateDesc   string
+	NotifyEventCreateLabel, NotifyEventCreateDesc   string
+	NotifyEventErrorLabel, NotifyEventErrorDesc     string
+	NotifyEventStartLabel, NotifyEventStartDesc     string
+	NotifyEventStopLabel, NotifyEventStopDesc       string
+	NotifyEventCleanupLabel, NotifyEventCleanupDesc string
 
 	// Cache & persistence
 	ErrRecordCacheNil, ErrCacheDirCreate, ErrCacheMarshal   string
@@ -394,9 +418,6 @@ type Phrases struct {
 	IPv64CachedDomain                                                string
 	CleanupSkipForeignBase, CleanupSkipCDN, CleanupSkipDeactivated   string
 	CleanupSkipOrphaned, CleanupDryRunID                             string
-
-	// Health
-	HealthStarting, HealthLastRunFailed string
 
 	// API retry attempts
 	CFAttempt, IPv64Attempt, IonosAttempt string
@@ -751,6 +772,7 @@ type IPRateLimiter struct {
 	cleanup     time.Duration
 	tokensPerIP float64
 	refillRate  float64
+	ctx         context.Context
 }
 
 type loggingTransport struct {

@@ -6,6 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"reflect"
+	"sort"
 	"strings"
 
 	"golang.org/x/sync/singleflight"
@@ -27,7 +31,145 @@ func (s *SafeErrorMsg) Get() string {
 }
 
 // ============================================================================
-// DNS HELPERS
+// HELPERS - DASHBOARD
+// ============================================================================
+func getAvailableLanguages(langDir string) (map[string]bool, error) {
+	files, err := os.ReadDir(langDir)
+	if err != nil {
+		return nil, err
+	}
+
+	langs := make(map[string]bool)
+
+	for _, f := range files {
+		if f.IsDir() {
+			continue
+		}
+
+		name := f.Name()
+		ext := filepath.Ext(name)
+		base := strings.TrimSuffix(name, ext)
+
+		if ext == ".json" && base != "" {
+			base = strings.ToLower(base)
+			if i := strings.Index(base, "_"); i != -1 {
+				base = base[:i]
+			}
+
+			langs[base] = true
+		}
+	}
+
+	return langs, nil
+}
+
+func normalizeLang(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+
+	if i := strings.Index(s, "_"); i != -1 {
+		s = s[:i]
+	}
+	if i := strings.Index(s, "."); i != -1 {
+		s = s[:i]
+	}
+
+	return s
+}
+
+func detectLanguage(langDir string) string {
+	langs, err := getAvailableLanguages(langDir)
+	if err != nil {
+		fmt.Printf("[WARN] Konnte Sprachdateien nicht lesen: %v\n", err)
+		return "en"
+	}
+
+	envLang := normalizeLang(os.Getenv("LANG"))
+
+	if envLang == "" {
+		envLang = "en"
+	}
+	if langs[envLang] {
+		return envLang
+	}
+	if envLang != "" {
+		fmt.Printf("[WARN] Sprache '%s' nicht gefunden\n", envLang)
+	}
+	if langs["en"] {
+		return "en"
+	}
+	for l := range langs {
+		return l
+	}
+	return "en"
+}
+
+var knownLangLabels = map[string]string{
+	"de": "🇩🇪 Deutsch",
+	"en": "🇬🇧 English",
+	"fr": "🇫🇷 Français",
+	"es": "🇪🇸 Español",
+	"it": "🇮🇹 Italiano",
+	"nl": "🇳🇱 Nederlands",
+	"pl": "🇵🇱 Polski",
+	"sv": "🇸🇪 Svenska",
+	"da": "🇩🇰 Dansk",
+	"pt": "🇵🇹 Português",
+	"cs": "🇨🇿 Čeština",
+	"hu": "🇭🇺 Magyar",
+	"ro": "🇷🇴 Română",
+	"tr": "🇹🇷 Türkçe",
+	"ja": "🇯🇵 日本語",
+	"zh": "🇨🇳 中文",
+	"ru": "🇷🇺 Русский",
+	"uk": "🇺🇦 Українська",
+	"fi": "🇫🇮 Suomi",
+	"nb": "🇳🇴 Norsk",
+}
+
+func getLangLabel(code string) string {
+	if label, ok := knownLangLabels[code]; ok {
+		return label
+	}
+	return strings.ToUpper(code)
+}
+
+func buildDynamicLangOptions(current string) string {
+	langs, err := getAvailableLanguages(langDir)
+	if err != nil || len(langs) == 0 {
+		label := getLangLabel(current)
+		return `<option value="` + current + `" selected>` + label + `</option>`
+	}
+
+	codes := make([]string, 0, len(langs))
+	for code := range langs {
+		codes = append(codes, code)
+	}
+
+	sort.Strings(codes)
+
+	var out strings.Builder
+	for _, code := range codes {
+		sel := ""
+		if code == current {
+			sel = ` selected`
+		}
+		label := getLangLabel(code)
+		out.WriteString(`<option value="` + code + `"` + sel + `>` + label + `</option>`)
+	}
+	return out.String()
+}
+func expectedTranslationKeys() []string {
+	v := reflect.TypeOf(T)
+	keys := make([]string, 0, v.NumField())
+	for i := 0; i < v.NumField(); i++ {
+		keys = append(keys, toSnakeCase(v.Field(i).Name))
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// ============================================================================
+// HELPER - DNS
 // ============================================================================
 func recordNameFromFQDN(fqdn, zone string) string {
 	if fqdn == zone {

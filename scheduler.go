@@ -64,6 +64,22 @@ func runUpdate(firstRun bool) {
 		return
 	}
 
+	for i := range cfg.DomainConfigs {
+		providerKey := string(cfg.DomainConfigs[i].Provider)
+		zones, exists := zonesByProvider[providerKey]
+		if !exists || len(zones) == 0 {
+			log(LogContext{
+				Level:  LogWarn,
+				Action: ActionZone,
+				Domain: cfg.DomainConfigs[i].FQDN,
+				Message: fmt.Sprintf(
+					"Provider %s hat 0 Zonen zurückgegeben – API-Key prüfen",
+					providerKey,
+				),
+			})
+		}
+	}
+
 	cache, err := loadRecordsWithCache(ctx, zonesByProvider, forced)
 	if err != nil {
 		lastOk.Store(false)

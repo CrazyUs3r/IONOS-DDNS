@@ -15,10 +15,10 @@ import (
 	"time"
 )
 
-//go:embed statics/dashboard.css
+//go:embed http/dashboard.css
 var cssData string
 
-//go:embed statics/dashboard.js
+//go:embed http/dashboard.js
 var jsData string
 
 // ============================================================================
@@ -71,24 +71,24 @@ func generateSVGChart(data [24]int) string {
 	timeLabels := labelsBuilder.String()
 
 	return fmt.Sprintf(`
-<details class="card">
-	<summary>📈 %s</summary>
-	<div class="card-content" style="position:relative; padding-left:40px; margin-top:15px; padding-right:10px;">
-		<div style="position:absolute; left:0; top:0; height:60px; font-size:0.6rem; color:gray; text-align:right; width:35px; pointer-events:none;">
-			<div style="position:absolute; top:0; right:5px; transform: translateY(-50%%);">%.0f</div>
-			<div style="position:absolute; top:30px; right:5px; transform: translateY(-50%%);">%.0f</div>
-			<div style="position:absolute; top:60px; right:5px; transform: translateY(-50%%);">0</div>
-		</div>
-		<svg viewBox="0 0 300 60" preserveAspectRatio="none" style="width:100%%; height:60px; display:block; border-bottom: 1px solid rgba(255,255,255,0.1);">
-			<path d="%s L 300,60 L 0,60 Z" fill="rgba(56,189,248,0.1)"/>
-			<path d="%s" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/>
-		</svg>
+	<details class="card">
+		<summary>📈 %s</summary>
+		<div class="card-content" style="position:relative; padding-left:40px; margin-top:15px; padding-right:10px;">
+			<div style="position:absolute; left:0; top:0; height:60px; font-size:0.6rem; color:gray; text-align:right; width:35px; pointer-events:none;">
+				<div style="position:absolute; top:0; right:5px; transform: translateY(-50%%);">%.0f</div>
+				<div style="position:absolute; top:30px; right:5px; transform: translateY(-50%%);">%.0f</div>
+				<div style="position:absolute; top:60px; right:5px; transform: translateY(-50%%);">0</div>
+			</div>
+			<svg viewBox="0 0 300 60" preserveAspectRatio="none" style="width:100%%; height:60px; display:block; border-bottom: 1px solid rgba(255,255,255,0.1);">
+				<path d="%s L 300,60 L 0,60 Z" fill="rgba(56,189,248,0.1)"/>
+				<path d="%s" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/>
+			</svg>
 
-		<div style="display:flex; justify-content:space-between; font-size:0.6rem; margin-top:8px; color:gray;">
-			%s
+			<div style="display:flex; justify-content:space-between; font-size:0.6rem; margin-top:8px; color:gray;">
+				%s
+			</div>
 		</div>
-	</div>
-</details>`, T.RequestHistory, renderMax, renderMax/2, pathData, pathData, timeLabels)
+	</details>`, T.RequestHistory, renderMax, renderMax/2, pathData, pathData, timeLabels)
 }
 
 func generateLatencyChart(data [24]time.Duration) string {
@@ -137,24 +137,24 @@ func generateLatencyChart(data [24]time.Duration) string {
 	timeLabels := labelsBuilder.String()
 
 	return fmt.Sprintf(`
-<details class="card">
-	<summary>⚡ %s</summary>
-	<div class="card-content" style="position:relative; padding-left:40px; margin-top:15px; padding-right:5px;">
-		<div style="position:absolute; left:0; top:0; height:60px; font-size:0.55rem; color:gray; text-align:right; width:35px; pointer-events:none; font-family:monospace;">
-			<div style="position:absolute; top:0; right:5px; transform:translateY(-50%%);">%.0fms</div>
-			<div style="position:absolute; top:30px; right:5px; transform:translateY(-50%%);">%.0fms</div>
-			<div style="position:absolute; top:60px; right:5px; transform:translateY(-50%%);">0</div>
-		</div>
-		<svg viewBox="0 0 300 60" preserveAspectRatio="none" style="width:100%%; height:60px; display:block; border-bottom: 1px solid rgba(255,255,255,0.1); overflow:visible;">
-			<path d="%s L 300,60 L 0,60 Z" fill="rgba(139,92,246,0.15)"/>
-			<path d="%s" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-		</svg>
+	<details class="card">
+		<summary>⚡ %s</summary>
+		<div class="card-content" style="position:relative; padding-left:40px; margin-top:15px; padding-right:5px;">
+			<div style="position:absolute; left:0; top:0; height:60px; font-size:0.55rem; color:gray; text-align:right; width:35px; pointer-events:none; font-family:monospace;">
+				<div style="position:absolute; top:0; right:5px; transform:translateY(-50%%);">%.0fms</div>
+				<div style="position:absolute; top:30px; right:5px; transform:translateY(-50%%);">%.0fms</div>
+				<div style="position:absolute; top:60px; right:5px; transform:translateY(-50%%);">0</div>
+			</div>
+			<svg viewBox="0 0 300 60" preserveAspectRatio="none" style="width:100%%; height:60px; display:block; border-bottom: 1px solid rgba(255,255,255,0.1); overflow:visible;">
+				<path d="%s L 300,60 L 0,60 Z" fill="rgba(139,92,246,0.15)"/>
+				<path d="%s" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			</svg>
 
-		<div style="display:flex; justify-content:space-between; font-size:0.6rem; margin-top:8px; color:gray;">
-			%s
+			<div style="display:flex; justify-content:space-between; font-size:0.6rem; margin-top:8px; color:gray;">
+				%s
+			</div>
 		</div>
-	</div>
-</details>`, T.LatencyHistory, renderMax, renderMax/2, pathData, pathData, timeLabels)
+	</details>`, T.LatencyHistory, renderMax, renderMax/2, pathData, pathData, timeLabels)
 }
 
 func toInt24(v any) ([24]int, bool) {
@@ -250,38 +250,15 @@ func buildSettingsModal(c Config) string {
 	dnsStr := strings.Join(c.DNSServers, ", ")
 
 	ipModeOptions := func(current string) string {
-		out := ""
+		var out strings.Builder
 		for _, m := range []string{"BOTH", "IPV4", "IPV6"} {
 			sel := ""
 			if m == current {
 				sel = ` selected`
 			}
-			out += fmt.Sprintf(`<option value="%s"%s>%s</option>`, m, sel, m)
+			fmt.Fprintf(&out, `<option value="%s"%s>%s</option>`, m, sel, m)
 		}
-		return out
-	}
-
-	langOptions := func(current string) string {
-		langs := []struct{ code, label string }{
-			{"de", "🇩🇪 Deutsch"},
-			{"en", "🇬🇧 English"},
-			{"fr", "🇫🇷 Français"},
-			{"es", "🇪🇸 Español"},
-			{"it", "🇮🇹 Italiano"},
-			{"nl", "🇳🇱 Nederlands"},
-			{"pl", "🇵🇱 Polski"},
-			{"sv", "🇸🇪 Svenska"},
-			{"da", "🇩🇰 Dansk"},
-		}
-		out := ""
-		for _, l := range langs {
-			sel := ""
-			if l.code == current {
-				sel = ` selected`
-			}
-			out += fmt.Sprintf(`<option value="%s"%s>%s</option>`, l.code, sel, l.label)
-		}
-		return out
+		return out.String()
 	}
 
 	notifyEventCheckboxes := func(current []string) string {
@@ -290,33 +267,32 @@ func buildSettingsModal(c Config) string {
 			active[strings.ToUpper(strings.TrimSpace(e))] = true
 		}
 		events := []struct{ code, label, desc string }{
-			{"UPDATE", "🔄 Update", "DNS-Record wurde aktualisiert"},
-			{"CREATE", "🆕 Create", "Neuer DNS-Record angelegt"},
-			{"ERROR", "❌ Error", "API- oder Netzwerkfehler"},
-			{"START", "🚀 Start", "Service gestartet"},
-			{"STOP", "🛑 Stop", "Service beendet"},
-			{"CLEANUP", "🧹 Cleanup", "Verwaiste Records entfernt"},
+			{"UPDATE", T.NotifyEventUpdateLabel, T.NotifyEventUpdateDesc},
+			{"CREATE", T.NotifyEventCreateLabel, T.NotifyEventCreateDesc},
+			{"ERROR", T.NotifyEventErrorLabel, T.NotifyEventErrorDesc},
+			{"START", T.NotifyEventStartLabel, T.NotifyEventStartDesc},
+			{"STOP", T.NotifyEventStopLabel, T.NotifyEventStopDesc},
+			{"CLEANUP", T.NotifyEventCleanupLabel, T.NotifyEventCleanupDesc},
 		}
-		out := `<div style="display:flex;flex-direction:column;gap:6px;margin-top:4px;">`
+		var out strings.Builder
+		out.WriteString(`<div style="display:flex;flex-direction:column;gap:6px;margin-top:4px;">`)
 		for _, ev := range events {
 			chk := ""
 			if active[ev.code] {
 				chk = ` checked`
 			}
-			out += fmt.Sprintf(
-				`<label style="display:flex;align-items:center;gap:10px;padding:6px 8px;`+
-					`background:rgba(255,255,255,0.03);border-radius:6px;cursor:pointer;">`+
-					`<input type="checkbox" name="notify-event" value="%s"%s `+
-					`style="width:16px;height:16px;cursor:pointer;flex-shrink:0;">`+
-					`<span style="display:flex;flex-direction:column;gap:1px;">`+
-					`<span style="font-size:0.85rem;font-weight:600;">%s</span>`+
-					`<span style="font-size:0.7rem;opacity:0.5;">%s</span>`+
-					`</span></label>`,
-				ev.code, chk, ev.label, ev.desc,
-			)
+			fmt.Fprintf(&out, `<label style="display:flex;align-items:center;gap:10px;padding:6px 8px;`+
+				`background:rgba(255,255,255,0.03);border-radius:6px;cursor:pointer;">`+
+				`<input type="checkbox" name="notify-event" value="%s"%s `+
+				`style="width:16px;height:16px;cursor:pointer;flex-shrink:0;">`+
+				`<span style="display:flex;flex-direction:column;gap:1px;">`+
+				`<span style="font-size:0.85rem;font-weight:600;">%s</span>`+
+				`<span style="font-size:0.7rem;opacity:0.5;">%s</span>`+
+				`</span></label>`,
+				ev.code, chk, ev.label, ev.desc)
 		}
-		out += `</div>`
-		return out
+		out.WriteString(`</div>`)
+		return out.String()
 	}
 
 	dryRunChecked := ""
@@ -376,7 +352,7 @@ func buildSettingsModal(c Config) string {
 
 		`<div class="s-row"><span class="s-label">` + T.SettingsLang + `</span>` +
 		`<select id="cfg-lang" class="s-input" style="width:auto;min-width:160px;">` +
-		langOptions(c.Lang) +
+		buildDynamicLangOptions(c.Lang) +
 		`</select></div>` +
 
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsDryRun+` <small style="opacity:.5">`+T.SettingsDryRunHint+`</small></span>`+
@@ -392,7 +368,7 @@ func buildSettingsModal(c Config) string {
 
 		`<div style="background:rgba(255,255,255,0.05);padding:12px;border-radius:8px;border:1px dashed var(--border);">` +
 		`<h4 style="font-size:0.75rem;margin-bottom:8px;opacity:0.8;text-transform:uppercase;">` + T.SettingsAddDomain + `</h4>` +
-		`<input type="text" id="new-domain-fqdn" class="s-input" placeholder="` + T.SettingsCFTokenPlaceholder + `" style="margin-bottom:8px;">` +
+		`<input type="text" id="new-domain-fqdn" class="s-input" placeholder="z.B. home.example.com" style="margin-bottom:8px;">` +
 		`<select id="new-domain-provider" class="s-input" style="margin-bottom:8px;" onchange="toggleProviderFields()">` +
 		`<option value="IONOS">IONOS</option>` +
 		`<option value="CLOUDFLARE">Cloudflare</option>` +
@@ -587,23 +563,23 @@ func createMux() *http.ServeMux {
 		}
 
 		svg := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
-	<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-	<rect width="64" height="64" rx="14" fill="%s"/>
+			<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+			<rect width="64" height="64" rx="14" fill="%s"/>
 
-	<!-- Main icon -->
-	<text x="32" y="40" text-anchor="middle" font-size="32"
-			font-family="Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji">🌐</text>
+			<!-- Main icon -->
+			<text x="32" y="40" text-anchor="middle" font-size="32"
+					font-family="Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji">🌐</text>
 
-	<!-- Status badge (Ampel) -->
-	<g opacity="%s">
-		<circle cx="48" cy="48" r="10" fill="%s"/>
-		<text x="48" y="52" text-anchor="middle" font-size="14" font-weight="800"
-			fill="white" font-family="system-ui">%s</text>
-	</g>
+			<!-- Status badge (Ampel) -->
+			<g opacity="%s">
+				<circle cx="48" cy="48" r="10" fill="%s"/>
+				<text x="48" y="52" text-anchor="middle" font-size="14" font-weight="800"
+					fill="white" font-family="system-ui">%s</text>
+			</g>
 
-	<!-- Optional tiny label for theme readability -->
-	<circle cx="14" cy="14" r="4" fill="%s" opacity="0.35"/>
-	</svg>`, bg, badgeOpacity, statusColor, symbol, textColor)
+			<!-- Optional tiny label for theme readability -->
+			<circle cx="14" cy="14" r="4" fill="%s" opacity="0.35"/>
+			</svg>`, bg, badgeOpacity, statusColor, symbol, textColor)
 
 		w.Header().Set("Content-Type", "image/svg+xml; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
@@ -615,7 +591,7 @@ func createMux() *http.ServeMux {
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			debugLog("WS", "", fmt.Sprintf("Upgrade failed: %v", err))
+			debugLog("WS", "", fmt.Sprintf(T.WSUpgradeFailed, err))
 			return
 		}
 
@@ -651,6 +627,36 @@ func createMux() *http.ServeMux {
 		_ = json.NewEncoder(w).Encode(resp)
 	})
 
+	mux.HandleFunc("/api/languages", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		langs, err := getAvailableLanguages(langDir)
+		if err != nil {
+			http.Error(w, T.CouldNotLoadLanguages, http.StatusInternalServerError)
+			return
+		}
+		type langEntry struct {
+			Code  string `json:"code"`
+			Label string `json:"label"`
+		}
+		codes := make([]string, 0, len(langs))
+		for code := range langs {
+			codes = append(codes, code)
+		}
+		sort.Strings(codes)
+		entries := make([]langEntry, 0, len(codes))
+		for _, code := range codes {
+			entries = append(entries, langEntry{
+				Code:  code,
+				Label: getLangLabel(code),
+			})
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(entries)
+	})
+
 	mux.HandleFunc("/api/save-config", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -663,7 +669,7 @@ func createMux() *http.ServeMux {
 
 		var payload dashboardConfigPayload
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			http.Error(w, T.JSONParseError, http.StatusBadRequest)
 			return
 		}
 
@@ -783,14 +789,14 @@ func createMux() *http.ServeMux {
 		}
 
 		if err := saveConfigToFile(); err != nil {
-			http.Error(w, "Save failed", http.StatusInternalServerError)
+			http.Error(w, T.SaveFailed, http.StatusInternalServerError)
 			return
 		}
 
 		forceNextUpdate.Store(true)
 		lastCleanup = time.Time{}
 
-		debugLog("API", getClientIP(r), "✅ Configuration via Dashboard aktualisiert")
+		debugLog("API", getClientIP(r), T.ConfigHeading)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "saved"})
 	})
@@ -807,30 +813,28 @@ func createMux() *http.ServeMux {
 
 		lang := strings.TrimSpace(r.URL.Query().Get("lang"))
 		if lang == "" {
-			http.Error(w, "lang parameter missing", http.StatusBadRequest)
+			http.Error(w, T.LangParamMissing, http.StatusBadRequest)
 			return
 		}
-		supported := map[string]bool{
-			"de": true, "en": true, "fr": true, "es": true,
-			"it": true, "nl": true, "pl": true, "sv": true, "da": true,
-		}
-		if !supported[lang] {
-			http.Error(w, "unsupported language: "+lang, http.StatusBadRequest)
+
+		supported, err := getAvailableLanguages(langDir)
+		if err != nil || !supported[lang] {
+			http.Error(w, fmt.Sprintf(T.UnsupportedLanguage, lang), http.StatusBadRequest)
 			return
 		}
 
 		if err := loadLanguage(lang); err != nil {
-			http.Error(w, "language load failed: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf(T.LanguageLoadFailed, err), http.StatusInternalServerError)
 			return
 		}
 
 		cfg.Lang = lang
 		if err := saveConfigToFile(); err != nil {
-			debugLog("API", getClientIP(r), "Warning: could not save config after lang change: "+err.Error())
+			debugLog("API", getClientIP(r), fmt.Sprintf(T.ConfigSaveWarnAfterLangChange, err))
 		}
 
-		debugLog("API", getClientIP(r), "🌐 Sprache gewechselt zu: "+lang)
-		broadcastNotification("🌐 Language changed to: "+lang, "info")
+		debugLog("API", getClientIP(r), fmt.Sprintf(T.LanguageChangedLog, lang))
+		broadcastNotification(fmt.Sprintf(T.LanguageChangedNotification, lang), "info")
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "lang": lang})
@@ -844,21 +848,21 @@ func createMux() *http.ServeMux {
 		if !validateTriggerToken(r) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid token"})
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": T.InvalidToken})
 			return
 		}
 		domain := strings.TrimSpace(r.URL.Query().Get("domain"))
 		if domain == "" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "domain parameter missing"})
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": T.DomainParamMissing})
 			return
 		}
 		for _, dc := range cfg.DomainConfigs {
 			if strings.EqualFold(dc.FQDN, domain) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusConflict)
-				_ = json.NewEncoder(w).Encode(map[string]string{"error": "domain still active in config"})
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": T.DomainStillActiveInConfig})
 				return
 			}
 		}
@@ -871,13 +875,13 @@ func createMux() *http.ServeMux {
 		if fileData == nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusNotFound)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "no status file found"})
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": T.NoStatusFileFound})
 			return
 		}
 		if _, exists := fileData[domain]; !exists {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusNotFound)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "domain not found in status"})
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": T.DomainNotFoundInStatus})
 			return
 		}
 		delete(fileData, domain)
@@ -887,8 +891,8 @@ func createMux() *http.ServeMux {
 				_ = os.Rename(tmp, updatePath)
 			}
 		}
-		debugLog("API", getClientIP(r), fmt.Sprintf("🗑️ Domain aus Status gelöscht: %s", domain))
-		broadcastNotification(fmt.Sprintf("🗑️ %s aus Status entfernt", domain), "info")
+		debugLog("API", getClientIP(r), fmt.Sprintf(T.DomainDeletedFromStatusLog, domain))
+		broadcastNotification(fmt.Sprintf(T.DomainRemovedFromStatus, domain), "info")
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "deleted", "domain": domain})
 	})
@@ -907,12 +911,12 @@ func createMux() *http.ServeMux {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			if err := json.NewEncoder(w).Encode(map[string]string{
-				"error": "invalid or missing trigger token",
+				"error": T.InvalidOrMissingTriggerToken,
 			}); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			debugLog("API", clientIP, "Trigger blocked: Invalid token")
+			debugLog("API", clientIP, T.TriggerBlockedInvalidToken)
 			return
 		}
 
@@ -921,14 +925,14 @@ func createMux() *http.ServeMux {
 			w.Header().Set("Retry-After", "10")
 			w.WriteHeader(http.StatusTooManyRequests)
 			if err := json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":               "global rate limit exceeded",
+				"error":               T.GlobalRateLimitExceeded,
 				"retry_after_seconds": 10,
 			}); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			debugLog("API", clientIP, "Trigger blocked: Global rate limit")
-			broadcastNotification("⚠️ Update Rate Limit erreicht - bitte warten", "warning")
+			debugLog("API", clientIP, T.TriggerBlockedGlobalRateLimit)
+			broadcastNotification(T.RateLimitGlobal, "warning")
 			return
 		}
 
@@ -940,15 +944,15 @@ func createMux() *http.ServeMux {
 			w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
 			w.WriteHeader(http.StatusTooManyRequests)
 			if err := json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":               "IP rate limit exceeded",
+				"error":               T.IPRateLimitExceeded,
 				"retry_after_seconds": 10,
 				"remaining":           remaining,
 			}); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			debugLog("API", clientIP, "Trigger blocked: IP rate limit")
-			broadcastNotification("⚠️ Zu viele Update-Requests - bitte 10s warten", "warning")
+			debugLog("API", clientIP, T.TriggerBlockedIPRateLimit)
+			broadcastNotification(T.TooManyUpdateRequestsWait, "warning")
 			return
 		}
 
@@ -956,21 +960,21 @@ func createMux() *http.ServeMux {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusConflict)
 			if err := json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":  "update already in progress",
-				"status": "busy",
+				"error":  T.UpdateAlreadyInProgressAPI,
+				"status": T.TriggerStatusBusy,
 			}); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			debugLog("API", clientIP, "Trigger blocked: Update already running")
-			broadcastNotification("ℹ️ Update läuft bereits", "info")
+			debugLog("API", clientIP, T.TriggerBlockedUpdateRunning)
+			broadcastNotification(T.UpdateAlreadyRunningNotification, "info")
 			return
 		}
 
 		go func() {
 			defer updateInProgress.Store(false)
-			debugLog("API", clientIP, "Manual update triggered (force cache refresh)")
-			broadcastNotification("🔄 Manuelles Update gestartet (Cache wird neu geladen)", "info")
+			debugLog("API", clientIP, T.ManualUpdateTriggeredLog)
+			broadcastNotification(T.ManualUpdateStartedNotification, "info")
 			forceNextUpdate.Store(true)
 			runUpdate(false)
 		}()
@@ -981,7 +985,7 @@ func createMux() *http.ServeMux {
 		w.WriteHeader(http.StatusAccepted)
 		if err := json.NewEncoder(w).Encode(map[string]interface{}{
 			"status":               "triggered",
-			"message":              "update started",
+			"message":              T.UpdateStartedMessage,
 			"rate_limit_remaining": remaining,
 		}); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -994,7 +998,7 @@ func createMux() *http.ServeMux {
 		ipLimiter := ipTriggerLimiter.GetLimiter(clientIP)
 
 		if !ipLimiter.Allow() {
-			http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+			http.Error(w, T.RateLimitExceeded, http.StatusTooManyRequests)
 			return
 		}
 
@@ -1062,7 +1066,7 @@ func createMux() *http.ServeMux {
 			w.WriteHeader(http.StatusOK)
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"status": "starting",
-				"reason": "waiting for first scheduler run",
+				"reason": T.WaitingForFirstSchedulerRun,
 			})
 			return
 		}
@@ -1073,17 +1077,17 @@ func createMux() *http.ServeMux {
 				if _, err := fmt.Sscanf(successRateStr, "%f%%", &rate); err == nil {
 					if rate < 20.0 {
 						isHealthy = false
-						healthReason = "critical: success rate below 20%"
+						healthReason = T.HealthCriticalSuccessRate
 					} else if rate < 50.0 {
 						degradedMode = true
-						healthReason = "degraded: success rate below 50%, operating on cache"
+						healthReason = T.HealthDegradedSuccessRate
 					}
 				}
 			}
 		}
 
 		if !isHealthy && healthReason == "" {
-			healthReason = "last scheduler run failed (IP fetch, zone load or record update error)"
+			healthReason = T.HealthLastSchedulerFailed
 		}
 
 		if degradedMode && isHealthy {
