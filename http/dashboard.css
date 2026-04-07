@@ -328,12 +328,56 @@ details.card[open] > summary::after {
 .s-label { opacity: 0.65; white-space: nowrap; }
 .s-val { font-family: monospace; color: var(--btn-text); text-align: right; word-break: break-all; }
 .s-input {
-	width: 100%; padding: 8px 11px;
-	background: rgba(255,255,255,0.05);
-	border: 1px solid var(--border); border-radius: 7px;
-	color: var(--text); font-size: 0.875rem;
+    width: 100%;
+    padding: 8px 11px;
+    box-sizing: border-box;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--text);
+    font-size: 0.875rem;
+    transition: all 0.15s ease;
 }
-.s-input:focus { outline: none; border-color: var(--btn-border); }
+.s-input:focus {
+    outline: none;
+    border-color: var(--btn-border);
+    box-shadow: 0 0 0 2px var(--btn-shadow);
+}
+select.s-input {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background: rgba(255,255,255,0.05);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+
+    cursor: pointer;
+}
+select.s-input:hover {
+    border-color: var(--btn-border);
+}
+select.s-input option {
+    background: var(--card);
+    color: var(--text);
+}
+select.s-input optgroup {
+    background: var(--card);
+    color: var(--text);
+    font-weight: 600;
+}
+[data-theme="light"] select.s-input option,
+[data-theme="light"] select.s-input optgroup {
+    background: #ffffff;
+    color: #0f172a;
+}
+:root select.s-input option {
+    background: #1e293b;
+    color: #f8fafc;
+}
+select.s-input {
+    color-scheme: dark;
+}
 .s-btn {
 	width: 100%; padding: 9px;
 	background: var(--btn-bg); color: var(--btn-text);
