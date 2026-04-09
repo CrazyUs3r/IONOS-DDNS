@@ -76,30 +76,31 @@ func normalizeLang(s string) string {
 	return s
 }
 
-func detectLanguage(langDir string) string {
+func detectLanguage(langDir string, preferred string) string {
 	langs, err := getAvailableLanguages(langDir)
 	if err != nil {
 		fmt.Printf("[WARN] Konnte Sprachdateien nicht lesen: %v\n", err)
 		return "en"
 	}
 
-	envLang := normalizeLang(os.Getenv("LANG"))
+	preferred = normalizeLang(preferred)
 
-	if envLang == "" {
-		envLang = "en"
+	if preferred != "" && langs[preferred] {
+		return preferred
 	}
-	if langs[envLang] {
-		return envLang
+
+	if preferred != "" {
+		fmt.Printf("[WARN] Sprache '%s' nicht gefunden\n", preferred)
 	}
-	if envLang != "" {
-		fmt.Printf("[WARN] Sprache '%s' nicht gefunden\n", envLang)
-	}
+
 	if langs["en"] {
 		return "en"
 	}
+
 	for l := range langs {
 		return l
 	}
+
 	return "en"
 }
 
@@ -158,13 +159,26 @@ func buildDynamicLangOptions(current string) string {
 	}
 	return out.String()
 }
+
 func expectedTranslationKeys() []string {
-	v := reflect.TypeOf(T)
+	v := reflect.TypeFor[Phrases]()
 	keys := make([]string, 0, v.NumField())
-	for i := 0; i < v.NumField(); i++ {
-		keys = append(keys, toSnakeCase(v.Field(i).Name))
+	for field := range v.Fields() {
+		keys = append(keys, toSnakeCase(field.Name))
 	}
 	sort.Strings(keys)
+	return keys
+}
+
+func expectedTranslationKeySet() map[string]struct{} {
+	keys := make(map[string]struct{})
+
+	v := reflect.ValueOf(T)
+	typ := v.Type()
+	for i := 0; i < v.NumField(); i++ {
+		keys[toSnakeCase(typ.Field(i).Name)] = struct{}{}
+	}
+
 	return keys
 }
 

@@ -1,7 +1,7 @@
 ﻿# =============================================================================
 # Builder Stage
 # =============================================================================
-FROM --platform=${BUILDPLATFORM} golang:1.26.1-alpine AS builder
+FROM --platform=${BUILDPLATFORM} golang:1.26.2-alpine AS builder
 
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
@@ -37,7 +37,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
 # =============================================================================
 FROM busybox:stable-musl
 
-ARG VERSION=2.3.0
+ARG VERSION=2.3.8
 ARG BUILD_DATE
 ARG VCS_REF
 

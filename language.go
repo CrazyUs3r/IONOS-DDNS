@@ -18,37 +18,72 @@ var embeddedLang embed.FS
 // ============================================================================
 // LANGUAGE
 // ============================================================================
+
+func t(val string, fallback string) string {
+	if strings.TrimSpace(val) == "" {
+		return fallback
+	}
+	return val
+}
+
 func loadLanguage(lang string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Printf("[ERROR] %s: %v\n", T.PanicLoadingLanguage, r)
+			log(LogContext{
+				Level:    LogError,
+				Category: "CONFIG",
+				Action:   ActionConfig,
+				Message:  fmt.Sprintf("%s: %v", t(T.PanicLoadingLanguage, "Panic loading language"), r),
+			})
 		}
 	}()
 
 	langFile := filepath.Join(langDir, lang+".json")
-	msg := T.TryingLoadLanguage
-	if strings.TrimSpace(msg) == "" {
-		msg = "Trying to load language file: %s"
-	}
-	fmt.Println("[INFO]", fmt.Sprintf(msg, langFile))
+
+	log(LogContext{
+		Level:    LogInfo,
+		Category: "CONFIG",
+		Action:   ActionConfig,
+		Message:  fmt.Sprintf(t(T.TryingLoadLanguage, "Trying to load language file: %s"), langFile),
+	})
 
 	data, err := os.ReadFile(langFile)
 	if err != nil {
 		embedName := "lang/" + lang + ".json"
 		if embedded, embedErr := embeddedLang.ReadFile(embedName); embedErr == nil {
-			fmt.Println("[INFO]", fmt.Sprintf(T.TryingLoadLanguage, embedName))
+			log(LogContext{
+				Level:    LogInfo,
+				Category: "CONFIG",
+				Action:   ActionConfig,
+				Message:  fmt.Sprintf(t(T.TryingLoadLanguage, "Trying to load language file: %s"), embedName),
+			})
 			data = embedded
 		} else {
-			fmt.Printf("[WARN] %s %v\n", T.LanguageFileNotFound, err)
+			log(LogContext{
+				Level:    LogWarn,
+				Category: "CONFIG",
+				Action:   ActionConfig,
+				Message:  fmt.Sprintf("%s %v", t(T.LanguageFileNotFound, "Language file not found:"), err),
+			})
 			if lang != "en" {
-				fmt.Printf("[INFO] %s\n", T.TryingFallbackEn)
+				log(LogContext{
+					Level:    LogInfo,
+					Category: "CONFIG",
+					Action:   ActionConfig,
+					Message:  t(T.TryingFallbackEn, "Trying fallback to English..."),
+				})
 				return loadLanguage("en")
 			}
 		}
 	}
 
 	if len(data) == 0 {
-		fmt.Printf("[ERROR] no language data loaded for: %s\n", lang)
+		log(LogContext{
+			Level:    LogError,
+			Category: "CONFIG",
+			Action:   ActionConfig,
+			Message:  fmt.Sprintf(t(T.NoLanguageDataLoaded, "No language data loaded for: %s"), lang),
+		})
 		if lang != "en" {
 			return loadLanguage("en")
 		}
@@ -57,7 +92,12 @@ func loadLanguage(lang string) error {
 
 	var translations map[string]string
 	if err := json.Unmarshal(data, &translations); err != nil {
-		fmt.Printf("[ERROR] %s: %v\n", T.JSONParseError, err)
+		log(LogContext{
+			Level:    LogError,
+			Category: "CONFIG",
+			Action:   ActionConfig,
+			Message:  fmt.Sprintf("%s: %v", t(T.JSONParseError, "JSON parse error"), err),
+		})
 		if lang != "en" {
 			return loadLanguage("en")
 		}
@@ -74,20 +114,48 @@ func loadLanguage(lang string) error {
 		}
 	}
 
-	fmt.Println("[INFO] ✓", fmt.Sprintf(T.LanguageLoaded, lang, len(translations)))
+	log(LogContext{
+		Level:    LogInfo,
+		Category: "CONFIG",
+		Action:   ActionConfig,
+		Message:  fmt.Sprintf(T.LanguageLoaded, lang, len(translations)),
+	})
 
-	expected := expectedTranslationKeys()
-	for _, key := range expected {
+	expectedList := expectedTranslationKeys()
+	expectedSet := expectedTranslationKeySet()
+
+	for _, key := range expectedList {
 		val, ok := translations[key]
 		if !ok {
-			fmt.Printf("[WARN] %s: %s\n", T.MissingTranslationKey, key)
+			log(LogContext{
+				Level:    LogWarn,
+				Category: "CONFIG",
+				Action:   ActionConfig,
+				Message:  fmt.Sprintf("%s: %s", T.MissingTranslationKey, key),
+			})
 			continue
 		}
 		if strings.TrimSpace(val) == "" {
-			fmt.Printf("[WARN] empty translation value: %s\n", key)
+			log(LogContext{
+				Level:    LogWarn,
+				Category: "CONFIG",
+				Action:   ActionConfig,
+				Message:  fmt.Sprintf(t(T.EmptyTranslationValue, "Empty translation value: %s"), key),
+			})
 		}
 	}
 
+	for key := range translations {
+		if _, ok := expectedSet[key]; !ok {
+			log(LogContext{
+				Level:    LogWarn,
+				Category: "CONFIG",
+				Action:   ActionConfig,
+				Message:  fmt.Sprintf(t(T.RemovedUnusedKey, "Removed unused translation key: %s"), key),
+			})
+			delete(translations, key)
+		}
+	}
 	return nil
 }
 
@@ -120,7 +188,12 @@ func toSnakeCase(s string) string {
 func copyEmbeddedLangFiles(dir string) {
 	entries, err := embeddedLang.ReadDir("lang")
 	if err != nil {
-		fmt.Println("[ERROR] cannot read embedded lang dir:", err)
+		log(LogContext{
+			Level:    LogError,
+			Category: "SYSTEM",
+			Action:   ActionConfig,
+			Message:  fmt.Sprintf("%s: %v", t(T.CannotReadEmbeddedDir, "cannot read embedded lang dir"), err),
+		})
 		return
 	}
 
@@ -130,7 +203,12 @@ func copyEmbeddedLangFiles(dir string) {
 
 		newData, err := embeddedLang.ReadFile("lang/" + name)
 		if err != nil {
-			fmt.Printf("[WARN] Embedded file unreadable: %s: %v\n", name, err)
+			log(LogContext{
+				Level:    LogWarn,
+				Category: "SYSTEM",
+				Action:   ActionConfig,
+				Message:  fmt.Sprintf("%s: %s: %v", t(T.EmbeddedFileUnreadable, "Embedded file unreadable"), name, err),
+			})
 			continue
 		}
 
@@ -138,15 +216,35 @@ func copyEmbeddedLangFiles(dir string) {
 			if string(oldData) == string(newData) {
 				continue
 			}
-			fmt.Printf("[INFO] Update erkannt: %s\n", name)
+			log(LogContext{
+				Level:    LogInfo,
+				Category: "CONFIG",
+				Action:   ActionConfig,
+				Message:  fmt.Sprintf("%s: %s", t(T.UpdateDetected, "Update detected"), name),
+			})
 		} else {
-			fmt.Printf("[INFO] Neue Datei: %s\n", name)
+			log(LogContext{
+				Level:    LogInfo,
+				Category: "CONFIG",
+				Action:   ActionConfig,
+				Message:  fmt.Sprintf("%s: %s", t(T.NewFileDetected, "New file"), name),
+			})
 		}
 
 		if err := os.WriteFile(dst, newData, 0644); err != nil {
-			fmt.Printf("[WARN] write failed: %s: %v\n", dst, err)
+			log(LogContext{
+				Level:    LogWarn,
+				Category: "CONFIG",
+				Action:   ActionConfig,
+				Message:  fmt.Sprintf("%s: %s: %v", t(T.WriteFailed, "write failed"), dst, err),
+			})
 		} else {
-			fmt.Printf("[INFO] gespeichert: %s\n", dst)
+			log(LogContext{
+				Level:    LogInfo,
+				Category: "CONFIG",
+				Action:   ActionConfig,
+				Message:  fmt.Sprintf("%s: %s", t(T.FileSaved, "saved"), dst),
+			})
 		}
 	}
 }

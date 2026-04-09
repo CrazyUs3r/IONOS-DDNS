@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -14,136 +15,168 @@ import (
 // ============================================================================
 // IP DETECTION
 // ============================================================================
-func getPublicIP(url string, want IPVersion) (string, error) {
+func fetchIPResponse(ctx context.Context, url string) (string, int, time.Duration, error) {
 	debugLog("IP-CHECK", "", "🌐 "+url)
 
-	ctx, cancel := context.WithTimeout(context.Background(), IPCheckTimeout)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		debugLog("IP-CHECK", "", fmt.Sprintf("❌ Request-Erstellung: %v", err))
-		return "", fmt.Errorf("request error: %w", err)
+		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", T.RequestCreationFailed, err))
+		return "", 0, 0, fmt.Errorf("%s: %w", t(T.ErrRequestCreate, "request create failed"), err)
 	}
 
-	start := time.Now().Local()
+	start := time.Now()
 	resp, err := getHTTPClient().Do(req)
 	duration := time.Since(start)
-
 	if err != nil {
-		debugLog("IP-CHECK", "", fmt.Sprintf("❌ HTTP: %v", err))
-		apiMetrics.RecordError("IP", 0, err, duration)
-		return "", fmt.Errorf("http error: %w", err)
+		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", T.HTTPError, err))
+		return "", 0, duration, fmt.Errorf("%s: %w", t(T.ErrNetworkError, "network error"), err)
 	}
 	defer func() {
-		if err := resp.Body.Close(); err != nil {
+		if cerr := resp.Body.Close(); cerr != nil {
 			log(LogContext{
 				Level:   LogError,
 				Action:  ActionError,
-				Message: fmt.Sprintf("Failed to close response body: %v", err),
+				Message: fmt.Sprintf(t(T.FailedCloseResponseBody, "Failed to close response body: %v"), cerr),
 			})
 		}
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		debugLog("IP-CHECK", "", fmt.Sprintf("❌ Status Code: %d", resp.StatusCode))
-		apiMetrics.RecordError("IP", resp.StatusCode, fmt.Errorf("bad status: %d", resp.StatusCode), duration)
-		return "", fmt.Errorf("bad status: %d", resp.StatusCode)
+		err := fmt.Errorf("%s: %d", T.BadStatusCode, resp.StatusCode)
+		debugLog("IP-CHECK", "", "❌ "+err.Error())
+		return "", resp.StatusCode, duration, err
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, IPCheckBodyMaxBytes))
 	if err != nil {
 		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", T.BodyReadError, err))
-		apiMetrics.RecordError("IP", resp.StatusCode, err, duration)
-		return "", fmt.Errorf("read error: %w", err)
+		return "", resp.StatusCode, duration, fmt.Errorf("%s: %w", t(T.ErrBodyRead, "body read failed"), err)
 	}
 
-	ipStr := strings.TrimSpace(string(body))
+	return strings.TrimSpace(string(body)), resp.StatusCode, duration, nil
+}
+
+func validatePublicIP(ipStr string, want IPVersion) (string, error) {
 	parsed := net.ParseIP(ipStr)
 	if parsed == nil {
-		debugLog("IP-CHECK", "", fmt.Sprintf("❌ Ungültige IP: '%s'", ipStr))
-		apiMetrics.RecordError("IP", resp.StatusCode, fmt.Errorf("invalid ip: %s", ipStr), duration)
-		return "", fmt.Errorf("invalid ip: %s", ipStr)
+		return "", fmt.Errorf(T.InvalidIPDetected, ipStr)
 	}
 
 	switch want {
 	case IPV4:
 		if parsed.To4() == nil {
-			err := fmt.Errorf("expected IPv4 but got: %s", ipStr)
-			apiMetrics.RecordError("IP", resp.StatusCode, err, duration)
-			return "", err
+			return "", fmt.Errorf(T.ExpectedIPv4ButGot, ipStr)
 		}
 	case IPV6:
 		if parsed.To4() != nil {
-			err := fmt.Errorf("expected IPv6 but got: %s", ipStr)
-			apiMetrics.RecordError("IP", resp.StatusCode, err, duration)
-			return "", err
+			return "", fmt.Errorf(T.ExpectedIPv6ButGot, ipStr)
 		}
 	}
-
-	debugLog("IP-CHECK", "", fmt.Sprintf("✅ %s: %s | %s: %v", T.ReceivedIP, ipStr, T.AvgLatency, duration))
-	ipLog(fmt.Sprintf("✅ Öffentliche IP (%v) erkannt via %s: %s | %s: %v", want, url, ipStr, T.AvgLatency, duration))
-
-	apiMetrics.RecordSuccess("IP", duration)
-	apiMetrics.RecordIPLatency(duration)
 
 	return ipStr, nil
 }
 
+func getPublicIP(ctx context.Context, url string, want IPVersion) (string, error) {
+	ipStr, statusCode, duration, err := fetchIPResponse(ctx, url)
+	if err != nil {
+		apiMetrics.RecordError("IP", statusCode, err, duration)
+		return "", err
+	}
+
+	validatedIP, err := validatePublicIP(ipStr, want)
+	if err != nil {
+		apiMetrics.RecordError("IP", statusCode, err, duration)
+		debugLog("IP-CHECK", "", "❌ "+err.Error())
+		return "", err
+	}
+
+	debugLog("IP-CHECK", "", fmt.Sprintf("✅ %s: %s | %s: %v", T.ReceivedIP, validatedIP, T.AvgLatency, duration))
+	ipLog(fmt.Sprintf(T.PublicIPDetectedVia, want, url, validatedIP, T.AvgLatency, duration))
+
+	apiMetrics.RecordSuccess("IP", duration)
+	apiMetrics.RecordIPLatency(duration)
+
+	return validatedIP, nil
+}
+
 func getPublicIPFromAny(urls []string, want IPVersion) (string, error) {
+	if len(urls) == 0 {
+		return "", errors.New(T.NoIPEndpointsConfigured)
+	}
+
 	var lastErr error
 
-	for _, u := range urls {
-		ip, err := getPublicIP(u, want)
+	for _, rawURL := range urls {
+		u := strings.TrimSpace(rawURL)
+		if u == "" {
+			continue
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), IPCheckTimeout)
+		ip, err := getPublicIP(ctx, u, want)
+		cancel()
+
 		if err == nil {
 			return ip, nil
 		}
+
 		lastErr = err
-		debugLog("IP-CHECK", "", fmt.Sprintf("⚠️  Fallback failed (%s): %v", u, err))
+		debugLog("IP-CHECK", "", fmt.Sprintf(T.FallbackFailed, u, err))
 	}
 
 	if lastErr == nil {
-		lastErr = fmt.Errorf("no endpoints configured")
+		lastErr = errors.New(T.NoIPEndpointsConfigured)
 	}
-	return "", fmt.Errorf("all IP endpoints failed: %w", lastErr)
+
+	return "", fmt.Errorf("%s: %w", T.AllIPEndpointsFailed, lastErr)
+}
+
+func getIPv6FromInterface(ifaceName string) (string, error) {
+	debugLog("IP-CHECK", "", fmt.Sprintf("🔍 %s: %s", T.CheckingInterface, ifaceName))
+
+	iface, err := net.InterfaceByName(ifaceName)
+	if err != nil {
+		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", T.InterfaceNotFound, err))
+		return "", err
+	}
+
+	addrs, err := iface.Addrs()
+	if err != nil {
+		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", T.AddressesNotReadable, err))
+		return "", err
+	}
+
+	for _, a := range addrs {
+		ipnet, ok := a.(*net.IPNet)
+		if !ok || ipnet.IP == nil {
+			continue
+		}
+
+		ip := ipnet.IP
+		if ip.To4() != nil {
+			continue
+		}
+		if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsPrivate() {
+			continue
+		}
+
+		ipLog(fmt.Sprintf(T.IPv6ViaInterface, ifaceName, ip.String()))
+		return ip.String(), nil
+	}
+
+	debugLog("IP-CHECK", "", "⚠️  "+T.NoIPv6OnInterface)
+	return "", errors.New(T.NoIPv6OnInterface)
 }
 
 func getIPv6() (string, error) {
 	if cfg.IfaceName != "" {
-		debugLog("IP-CHECK", "", fmt.Sprintf("🔍 %s: %s", T.CheckingInterface, cfg.IfaceName))
-
-		iface, err := net.InterfaceByName(cfg.IfaceName)
-		if err != nil {
-			debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", T.InterfaceNotFound, err))
-		} else {
-			addrs, err := iface.Addrs()
-			if err != nil {
-				debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", T.AddressesNotReadable, err))
-			} else {
-				for _, a := range addrs {
-					ipnet, ok := a.(*net.IPNet)
-					if !ok || ipnet.IP == nil {
-						continue
-					}
-
-					ip := ipnet.IP
-					if ip.To4() != nil {
-						continue
-					}
-					if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsPrivate() {
-						continue
-					}
-
-					ipLog(fmt.Sprintf("✅ IPv6 via Interface %s: %s", cfg.IfaceName, ip.String()))
-					return ip.String(), nil
-				}
-				debugLog("IP-CHECK", "", "⚠️  "+T.NoIPv6OnInterface)
-			}
+		if ip, err := getIPv6FromInterface(cfg.IfaceName); err == nil {
+			return ip, nil
 		}
 	}
 
-	ipLog("ℹ️ IPv6 nicht lokal gefunden – nutze öffentliche IPv6-Endpunkte (Fallback)")
-	debugLog("IP-CHECK", "", "🌐 Fallback auf öffentliche IPv6-Endpunkte")
+	ipLog(T.IPv6PublicFallback)
+	debugLog("IP-CHECK", "", T.IPv6FallbackEndpoints)
 
 	return getPublicIPFromAny(DefaultIPv6Endpoints, IPV6)
 }
@@ -152,28 +185,26 @@ func fetchCurrentIPs(_ context.Context) (ipv4, ipv6 string, err error) {
 	var errV4, errV6 error
 
 	if cfg.IPMode != "IPV6" {
-		ipLog("🔎 Prüfe öffentliche IPv4 ...")
-
+		ipLog("🔎 " + T.CheckingIPv4 + " ...")
 		ipv4, errV4 = getPublicIPFromAny(DefaultIPv4Endpoints, IPV4)
 		if errV4 != nil {
 			log(LogContext{
 				Level:   LogError,
 				Action:  ActionError,
-				Message: "IPv4 check failed",
+				Message: T.IPv4CheckFailed,
 				Error:   errV4,
 			})
 		}
 	}
 
 	if cfg.IPMode != "IPV4" {
-		ipLog("🔎 Prüfe IPv6 ...")
-
+		ipLog("🔎 " + T.CheckingIPv6 + " ...")
 		ipv6, errV6 = getIPv6()
 		if errV6 != nil {
 			log(LogContext{
 				Level:   LogError,
 				Action:  ActionError,
-				Message: "IPv6 check failed",
+				Message: T.IPv6CheckFailed,
 				Error:   errV6,
 			})
 		}
@@ -182,21 +213,29 @@ func fetchCurrentIPs(_ context.Context) (ipv4, ipv6 string, err error) {
 	switch cfg.IPMode {
 	case "IPV4":
 		if errV4 != nil {
-			return "", "", fmt.Errorf("IPv4 required but failed: %w", errV4)
+			return "", "", fmt.Errorf("%s: %w", T.IPv4RequiredButFailed, errV4)
 		}
 		if ipv4 != "" {
-			ipLog(fmt.Sprintf("✅ IPv4 aktuell: %s", ipv4))
+			ipLog(fmt.Sprintf(T.IPv4Current, ipv4))
 		}
+
 	case "IPV6":
 		if errV6 != nil {
-			return "", "", fmt.Errorf("IPv6 required but failed: %w", errV6)
+			return "", "", fmt.Errorf("%s: %w", T.IPv6RequiredButFailed, errV6)
 		}
 		if ipv6 != "" {
-			ipLog(fmt.Sprintf("✅ IPv6 aktuell: %s", ipv6))
+			ipLog(fmt.Sprintf(T.IPv6Current, ipv6))
 		}
+
 	case "BOTH":
 		if errV4 != nil && errV6 != nil {
-			return "", "", fmt.Errorf("both IP versions failed: v4=%v, v6=%v", errV4, errV6)
+			return "", "", fmt.Errorf("%s: v4=%v, v6=%v", T.BothIPVersionsFailed, errV4, errV6)
+		}
+		if ipv4 != "" {
+			ipLog(fmt.Sprintf(T.IPv4Current, ipv4))
+		}
+		if ipv6 != "" {
+			ipLog(fmt.Sprintf(T.IPv6Current, ipv6))
 		}
 	}
 

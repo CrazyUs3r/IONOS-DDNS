@@ -131,7 +131,13 @@ func persistLog(ctx LogContext) {
 	select {
 	case logWriteQueue <- entry:
 	default:
-		fmt.Fprintf(os.Stderr, "[WARN] Log queue full, dropped: %s\n", entry.Message)
+		log(LogContext{
+			Level:      LogWarn,
+			Category:   "SYSTEM",
+			Action:     ActionError,
+			Message:    fmt.Sprintf(t(T.LogQueueFull, "Log queue full, dropped: %s"), entry.Message),
+			SkipNotify: true,
+		})
 	}
 
 	if !ctx.SkipNotify {
@@ -172,11 +178,11 @@ func ipLog(msg string) {
 }
 
 func notifyError(msg string) {
-	fmt.Fprintf(os.Stderr, "[WARN] %s\n", msg)
-	go notify(LogContext{
-		Level:   LogError,
-		Action:  ActionError,
-		Message: msg,
+	log(LogContext{
+		Level:    LogWarn,
+		Category: "SYSTEM",
+		Action:   ActionError,
+		Message:  msg,
 	})
 }
 
@@ -187,7 +193,14 @@ func startLogWriter() {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				fmt.Fprintf(os.Stderr, "[FATAL] Log writer panic: %v\n", r)
+				log(LogContext{
+					Level:      LogError,
+					Category:   "SYSTEM",
+					Action:     ActionError,
+					Message:    t(T.LogWriterPanic, "Log writer panic"),
+					Error:      fmt.Errorf("%v", r),
+					SkipNotify: true,
+				})
 			}
 		}()
 
@@ -233,7 +246,14 @@ func startLogWriter() {
 
 				logMutex.Lock()
 				if err := ensureOpen(); err != nil {
-					fmt.Fprintf(os.Stderr, "[ERROR] Cannot open log file %s: %v\n", logPath, err)
+					log(LogContext{
+						Level:      LogError,
+						Category:   "SYSTEM",
+						Action:     ActionError,
+						Message:    fmt.Sprintf(t(T.LogCannotOpenFile, "Cannot open log file %s"), logPath),
+						Error:      err,
+						SkipNotify: true,
+					})
 					logMutex.Unlock()
 					continue
 				}
@@ -246,7 +266,14 @@ func startLogWriter() {
 
 				_, err = writer.Write(append(data, '\n'))
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "[ERROR] Write failed: %v\n", err)
+					log(LogContext{
+						Level:      LogError,
+						Category:   "SYSTEM",
+						Action:     ActionError,
+						Message:    t(T.LogWriteFailed, "Write failed"),
+						Error:      err,
+						SkipNotify: true,
+					})
 					_ = file.Close()
 					writer = nil
 					file = nil
@@ -284,11 +311,12 @@ func startLogRotationWorker() {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				fmt.Fprintf(os.Stderr, "[WARN] Rotation worker panic: %v\n", r)
-				go notify(LogContext{
-					Level:   LogError,
-					Action:  ActionError,
-					Message: fmt.Sprintf("Log rotation worker panic: %v", r),
+				log(LogContext{
+					Level:    LogError,
+					Category: "MAINTENANCE",
+					Action:   ActionError,
+					Message:  t(T.RotationWorkerPanic, "Log rotation worker panic"),
+					Error:    fmt.Errorf("%v", r),
 				})
 			}
 		}()
@@ -328,10 +356,17 @@ func doLogRotation(path string, maxLines int) {
 		lines = append(lines, scanner.Text())
 	}
 	if err := scanner.Err(); err != nil {
-		notifyError(fmt.Sprintf("Rotation scanner error: %v", err))
+		notifyError(fmt.Sprintf("%s: %v", t(T.RotationScannerError, "Rotation scanner error"), err))
 	}
 	if closeErr := file.Close(); closeErr != nil {
-		fmt.Fprintf(os.Stderr, "[WARN] Failed to close file: %v\n", closeErr)
+		log(LogContext{
+			Level:      LogWarn,
+			Category:   "MAINTENANCE",
+			Action:     ActionError,
+			Message:    t(T.LogFileCloseFailed, "Failed to close file"),
+			Error:      closeErr,
+			SkipNotify: true,
+		})
 	}
 
 	if len(lines) <= maxLines {
@@ -360,9 +395,9 @@ func doLogRotation(path string, maxLines int) {
 func rotateLogFile(path string, maxLines int) {
 	select {
 	case rotationQueue <- rotationJob{path: path, maxLines: maxLines}:
-		debugLog("MAINTENANCE", "", "📋 Log-Rotation eingereiht")
+		debugLog("MAINTENANCE", "", t(T.RotationQueued, "Log rotation queued"))
 	default:
-		debugLog("MAINTENANCE", "", "⚠️ Rotation-Queue voll, überspringe")
+		debugLog("MAINTENANCE", "", t(T.RotationQueueFull, "Rotation queue full, skipping"))
 	}
 }
 
@@ -377,7 +412,13 @@ func flushLogQueue(timeout time.Duration) {
 		select {
 		case <-timer.C:
 			if n := len(logWriteQueue); n > 0 {
-				fmt.Fprintf(os.Stderr, "[WARN] Log-Queue nicht vollständig geleert (%d verbleibend)\n", n)
+				log(LogContext{
+					Level:      LogWarn,
+					Category:   "SYSTEM",
+					Action:     ActionError,
+					Message:    fmt.Sprintf(t(T.LogFlushQueueNotEmptyWithN, "Log queue not fully flushed (%d remaining)"), n),
+					SkipNotify: true,
+				})
 			}
 			return
 		default:

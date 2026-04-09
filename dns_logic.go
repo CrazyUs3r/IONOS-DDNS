@@ -23,7 +23,7 @@ domainLoop:
 
 		select {
 		case <-ctx.Done():
-			debugLog("SCHEDULER", "", "Domain-Loop abgebrochen: Context cancelled")
+			debugLog("SCHEDULER", "", t("domain_loop_cancelled", "Domain loop aborted: context cancelled"))
 			break domainLoop
 		default:
 		}
@@ -38,7 +38,7 @@ domainLoop:
 						Level:   LogError,
 						Action:  ActionError,
 						Domain:  domainConfig.FQDN,
-						Message: fmt.Sprintf("Panic: %v", r),
+						Message: fmt.Sprintf(t(T.PanicOccurred, "Panic: %v"), r),
 					})
 				}
 			}()
@@ -49,19 +49,19 @@ domainLoop:
 
 			select {
 			case workerSemaphore <- struct{}{}:
-				debugLog("WORKER", domainConfig.FQDN, T.WorkerSlotAcquired)
+				debugLog("WORKER", domainConfig.FQDN, t(T.WorkerSlotAcquired, "Worker slot acquired"))
 			case <-ctx.Done():
-				debugLog("WORKER", domainConfig.FQDN, "Abgebrochen: Context cancelled")
+				debugLog("WORKER", domainConfig.FQDN, t(T.WorkerCancelledContext, "Cancelled: context cancelled"))
 				return
 			}
 
 			defer func() {
-				debugLog("WORKER", domainConfig.FQDN, T.WorkerSlotReleased)
+				debugLog("WORKER", domainConfig.FQDN, t(T.WorkerSlotReleased, "Worker slot released"))
 				<-workerSemaphore
 			}()
 
 			if ctx.Err() != nil {
-				debugLog("WORKER", domainConfig.FQDN, T.ContextExpired)
+				debugLog("WORKER", domainConfig.FQDN, t(T.ContextExpired, "Timeout (Context Expired)"))
 				return
 			}
 
@@ -70,7 +70,7 @@ domainLoop:
 				debugLog("DNS-LOGIC", domainConfig.FQDN, T.NoZoneFoundForDomain)
 				results <- domainUpdateResult{
 					Domain: domainConfig.FQDN,
-					Error:  fmt.Errorf("no zones found for provider %s", domainConfig.Provider),
+					Error:  fmt.Errorf(t(T.NoZonesFoundForProvider, "No zones found for provider %s"), domainConfig.Provider),
 				}
 				return
 			}
@@ -89,7 +89,7 @@ domainLoop:
 				debugLog("DNS-LOGIC", domainConfig.FQDN, T.NoZoneFoundForDomain)
 				results <- domainUpdateResult{
 					Domain: domainConfig.FQDN,
-					Error:  fmt.Errorf("no zone found"),
+					Error:  fmt.Errorf("%s", t(T.NoZoneFound, "No zone found")),
 				}
 				return
 			}
@@ -98,7 +98,7 @@ domainLoop:
 			if zoneID == "" {
 				results <- domainUpdateResult{
 					Domain: domainConfig.FQDN,
-					Error:  fmt.Errorf("matched zone has empty ID"),
+					Error:  fmt.Errorf("%s", t(T.MatchedZoneEmptyId, "Matched zone has empty ID")),
 				}
 				return
 			}
@@ -170,7 +170,7 @@ func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdate
 		changed, err := updateIPv64DNS(ctx, job.Domain, ipv4, ipv6)
 		if err != nil {
 			if isNonRecoverableError(err) {
-				result.Error = fmt.Errorf("non-recoverable IPv64 error: %w", err)
+				result.Error = fmt.Errorf(t(T.NonRecoverableIPv64Error, "Non-recoverable IPv64 error: %w"), err)
 				return result
 			}
 			debugLog("DNS-LOGIC", job.Domain, fmt.Sprintf("%s IPv64: %v", T.UpdateFailed, err))
@@ -196,7 +196,7 @@ func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdate
 
 		if err != nil {
 			if isNonRecoverableError(err) {
-				result.Error = fmt.Errorf("non-recoverable IPv4 error: %w", err)
+				result.Error = fmt.Errorf(t(T.NonRecoverableIPv4Error, "Non-recoverable IPv4 error: %w"), err)
 				return result
 			}
 			debugLog("DNS-LOGIC", job.Domain, fmt.Sprintf("%s IPv4: %v", T.UpdateFailed, err))
@@ -219,7 +219,7 @@ func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdate
 
 		if err != nil {
 			if isNonRecoverableError(err) {
-				result.Error = fmt.Errorf("non-recoverable IPv6 error: %w", err)
+				result.Error = fmt.Errorf(t(T.NonRecoverableIPv6Error, "Non-recoverable IPv6 error: %w"), err)
 				return result
 			}
 			debugLog("DNS-LOGIC", job.Domain, fmt.Sprintf("%s IPv6: %v", T.UpdateFailed, err))

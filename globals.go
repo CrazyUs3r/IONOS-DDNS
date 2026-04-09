@@ -290,89 +290,99 @@ type ProviderType string
 // ============================================================================
 type Phrases struct {
 	// Basis & Dashboard
-	Startup, Shutdown, NoZones, Update, Created, Current, DryRunWarn, ConfigError  string
-	DashTitle, StatusOk, StatusErr, LastUpdate, InfraHeading, ZoneLabel            string
-	ServiceStarted, ServiceStopped, DashboardStarted, ServerError                  string
-	HealthCheckOK, HealthCheckFailed, SystemEvents, History, EventLog              string
-	DomainStatus, Provider, LastChanged, IPv4Label, IPv6Label, CriticalAPIError    string
-	PanicLoadingLanguage, TryingLoadLanguage, LanguageFileNotFound                 string
-	TryingFallbackEn, UsingBuiltinDefaults, JSONParseError, LanguageLoaded         string
-	MissingTranslationKey, HTTPPool, HourlyLimitEst, RequestsLabel, UsageLast60Min string
-	MaxLogLines, MaxAPIRetries, MaxConcurrent, Interval, DeleteDomainCheck         string
-	DeleteButton, DeleteSuccess, DeleteError, ConnectionError                      string
+	Startup, Shutdown, NoZones, Update, Current                                   string
+	DashTitle, StatusOk, StatusErr, LastUpdate, InfraHeading                      string
+	ServiceStarted, DashboardStarted, ServerError, SystemEvents, CriticalAPIError string
+	PanicLoadingLanguage, TryingLoadLanguage, LanguageFileNotFound                string
+	TryingFallbackEn, JSONParseError, LanguageLoaded, MissingTranslationKey       string
+	HTTPPool, HourlyLimitEst, RequestsLabel, UsageLast60Min                       string
+	MaxLogLines, MaxAPIRetries, MaxConcurrent, Interval, EmptyTranslationValue    string
 
 	// Statistiken & Metriken
-	Requests, SuccessRate, LastSuccess, AvgLatency, Errors, HourlyLimit       string
-	RequestHistory, LatencyHistory, APIPerformance, BasedOnLast60Min          string
-	UnhealthyStatus, DetailedStats, TotalRequests, ClientErrors, ServerErrors string
+	SuccessRate, AvgLatency, Errors                 string
+	RequestHistory, LatencyHistory, APIPerformance  string
+	TotalRequests, ClientErrors, ServerErrors       string
+	MetricLatencyPercentile, MetricHTTPMethods      string
+	MetricIPLatency, MetricLastCheck, MetricAvgFrom string
 
-	// Validierung & Log
-	NoDomains, InvalidDomain, NoZoneFound, NoValidDomains, RootDomain string
-	CouldNotExtractDomain, LogRotated, LogRotationError               string
+	// Validierung & allgemeine Fehler
+	NoDomains, InvalidPort, IntervalTooSmall, ShortIntervalWarning       string
+	InvalidIPMode, InvalidToken, BadRequest, Unauthorized, Forbidden     string
+	NotFound, UnprocessableEntity, RateLimitExceeded                     string
+	InternalServerError, BadGateway, ServiceUnavailable, GatewayTimeout  string
+	ConfigErrorPrefix, DomainIsEmpty, DomainTooLong, InvalidDomainFormat string
+	LabelTooLong, InvalidLabel                                           string
 
-	// DNS & Netzwerk Logik
-	RecordFound, RecordCurrent, NoRecordFound, RecordUpdateNeeded, WouldSet   string
-	APICall, PayloadSent, ReceivedIP, CheckingInterface, InterfaceNotFound    string
-	AddressesNotReadable, NoIPv6OnInterface, FallbackToExternal               string
-	Attempt, NetworkError, RetryIn, Success, BodyReadError, NonRetryableError string
-	MaxAttemptsReached, RetryScheduled, ContextCancelled, ContextExpired      string
+	// Logging
+	LogRotated, LogRotationError                                    string
+	LogQueueFull, LogWriterPanic, LogCannotOpenFile, LogWriteFailed string
+	RotationWorkerPanic, LogFlushQueueNotEmptyWithN                 string
+	LogFileCloseFailed, RotationQueued, RotationQueueFull           string
+	RotationScannerError, NoLanguageDataLoaded                      string
+
+	// DNS & Netzwerk
+	RecordFound, RecordCurrent, NoRecordFound, RecordUpdateNeeded, WouldSet     string
+	APICall, PayloadSent, ReceivedIP, CheckingInterface, InterfaceNotFound      string
+	AddressesNotReadable, NoIPv6OnInterface                                     string
+	Attempt, NetworkError, RetryIn, Success, BodyReadError, NonRetryableError   string
+	MaxAttemptsReached, RetryScheduled, ContextCancelled, ContextExpired        string
+	RequestCreationFailed, HTTPError, FailedCloseResponseBody                   string
+	BadStatusCode, InvalidIPDetected, ExpectedIPv4ButGot, ExpectedIPv6ButGot    string
+	FallbackFailed, NoIPEndpointsConfigured, AllIPEndpointsFailed               string
+	IPv6PublicFallback, IPv6FallbackEndpoints, IPv4CheckFailed, IPv6CheckFailed string
+	IPv4RequiredButFailed, IPv6RequiredButFailed, BothIPVersionsFailed          string
+	PublicIPDetectedVia, IPv6ViaInterface, IPv4Current, IPv6Current             string
+	DomainLoopCancelled, PanicOccurred, WorkerCancelledContext                  string
+	NoZonesFoundForProvider, NoZoneFound, MatchedZoneEmptyId                    string
+	NonRecoverableIPv64Error, NonRecoverableIPv4Error, NonRecoverableIPv6Error  string
 
 	// Worker & Status
-	WorkerSlotAcquired, WorkerProcessingComplete, WorkerSlotReleased   string
-	NoZoneFoundForDomain, NoRecordsInCache, CheckingIPv4, CheckingIPv6 string
-	UpdateFailed, CriticalError, ChangesDetected, WritingStatusFile    string
-	NoChangesNeeded, SchedulerStarted, SchedulerCompleted              string
+	WorkerSlotAcquired, WorkerSlotReleased                                     string
+	NoZoneFoundForDomain, NoRecordsInCache, CheckingIPv4, CheckingIPv6         string
+	UpdateFailed, ChangesDetected, NoChangesNeeded                             string
+	SchedulerStarted, SchedulerCompleted                                       string
+	UpdateAlreadyInProgressAPI, TriggerStatusBusy, TriggerBlockedUpdateRunning string
+	UpdateAlreadyRunningNotification, ManualUpdateTriggeredLog                 string
+	ManualUpdateStartedNotification, UpdateStartedMessage                      string
+	WaitingForFirstSchedulerRun, HealthCriticalSuccessRate                     string
+	HealthDegradedSuccessRate, HealthLastSchedulerFailed                       string
 
 	// Configuration
-	ConfigHeading, ConfigAPIPrefix, ConfigDomains, ConfigInterval string
-	ConfigIPMode, ConfigInterface, ConfigHealthPort, ConfigDryRun string
-	ConfigLogDir, ConfigLanguage                                  string
+	ConfigHeading, ConfigInterval, ConfigIPMode, ConfigInterface                string
+	ConfigHealthPort, ConfigDryRun                                              string
+	ConfigLogDir, ConfigLanguage, ConfigDir, ConfigLangDir, ConfigLogsDir       string
+	LangDirCreateFailed, LangFileLoadFailed, MetricsLoadFailed, InvalidInterval string
 
-	// API Fehler & System
-	BadRequest, Unauthorized, Forbidden, NotFound, UnprocessableEntity     string
-	RateLimitExceeded, InternalServerError, BadGateway, ServiceUnavailable string
-	GatewayTimeout, MaintenanceStarting, HTTPConnectionsClosed             string
-	ServerShuttingDown, ServerShutdownComplete, ShutdownError              string
+	// System
+	MaintenanceStarting, HTTPConnectionsClosed                            string
+	ServerShuttingDown, ServerShutdownComplete, ShutdownError             string
+	Mode, HTTPClientInitialized                                           string
+	WSUpgradeFailed, CouldNotLoadLanguages                                string
+	SaveFailed, LangParamMissing, UnsupportedLanguage                     string
+	LanguageLoadFailed, ConfigSaveWarnAfterLangChange                     string
+	LanguageChangedLog, LanguageChangedNotification                       string
+	RemovedUnusedKey, UpdateDetected, NewFileDetected                     string
+	WriteFailed, FileSaved, EmbeddedFileUnreadable, CannotReadEmbeddedDir string
 
-	// Sonstiges
-	Mode, NoDNSServer, DNSFailover, HTTPClientInitialized                 string
-	InvalidPort, UsingDefaultPort, IntervalTooSmall, ShortIntervalWarning string
-	InvalidIPMode, UsingDefaultMode                                       string
+	// Dashboard UI
+	DomainSearchPlaceholder, NoMoreEntries                                string
+	ChecksLabel, EntriesLabel, BadgeChanged                               string
+	FilterAll, FilterErrors, FilterWarnings                               string
+	FilterUpdates, FilterStarts, FilterStop, FilterCreated, FilterCleanup string
+	FilterSkip, FilterConfig                                              string
+	NoDomainsConfigured, DomainContext                                    string
 
-	// Dashboard UI – Texte
-	DomainSearchPlaceholder, NoMoreEntries, NotConfigured, RecentlyChanged string
-	LastUpdateShort, LatencyPercentile, IPCheckLatency, ChecksLabel        string
-	LastLabel, TimeLabel, IPAddresses, MetricsResetConfirm                 string
-	MetricsResetSuccess, MetricsResetFailed, UpdateStarting                string
-	RateLimitGlobal, RateLimitIP, UpdateInProgress, InvalidToken           string
-	UpdateStarted, RemainingLabel, NoIPToCopy, Copied, CopyFailed          string
-	ExportStarted, ExportFailed, EntriesLabel, DotNoUpdate, DotJustChanged string
-	DotLastChanged, DotActive, DotOtherUpdated, BadgeChanged               string
-	MetricsBroadcast, FilterAll, FilterErrors, FilterWarnings              string
-	FilterUpdates, FilterStarts, FilterStop, FilterCreated, FilterCleanup  string
-	FilterSkip, DailyLabel, AvgFromLabel, LastCheckLabel                   string
-	NoDomainsConfigured, DomainContext, IonosAPIRequired                   string
-	Ipv64TokenRequired, CloudflareAuthRequired, UnknownProvider            string
-	ConfigErrorPrefix, DomainIsEmpty, DomainTooLong, InvalidDomainFormat   string
-	LabelTooLong, InvalidLabel                                             string
-	MetricLatencyPercentile, MetricHTTPMethods                             string
-	MetricIPLatency, MetricLastCheck, MetricAvgFrom                        string
-	WSUpgradeFailed, CouldNotLoadLanguages                                 string
-	SaveFailed, LangParamMissing, UnsupportedLanguage                      string
-	LanguageLoadFailed, ConfigSaveWarnAfterLangChange                      string
-	LanguageChangedLog, LanguageChangedNotification                        string
-	DomainParamMissing, DomainStillActiveInConfig                          string
-	NoStatusFileFound, DomainNotFoundInStatus                              string
-	DomainDeletedFromStatusLog, DomainRemovedFromStatus                    string
-	InvalidOrMissingTriggerToken, TriggerBlockedInvalidToken               string
-	GlobalRateLimitExceeded, TriggerBlockedGlobalRateLimit                 string
-	TooManyUpdateRequestsWait, IPRateLimitExceeded                         string
-	TriggerBlockedIPRateLimit, UpdateAlreadyInProgressAPI                  string
-	TriggerStatusBusy, TriggerBlockedUpdateRunning                         string
-	UpdateAlreadyRunningNotification, ManualUpdateTriggeredLog             string
-	ManualUpdateStartedNotification, UpdateStartedMessage                  string
-	WaitingForFirstSchedulerRun, HealthCriticalSuccessRate                 string
-	HealthDegradedSuccessRate, HealthLastSchedulerFailed                   string
+	// Provider-Hinweise / Config
+	IonosAPIRequired, Ipv64TokenRequired, CloudflareAuthRequired, UnknownProvider string
+	DomainParamMissing, DomainStillActiveInConfig                                 string
+	NoStatusFileFound, DomainNotFoundInStatus                                     string
+	DomainDeletedFromStatusLog, DomainRemovedFromStatus                           string
+
+	// Trigger / Rate Limit
+	InvalidOrMissingTriggerToken, TriggerBlockedInvalidToken                  string
+	GlobalRateLimitExceeded, TriggerBlockedGlobalRateLimit                    string
+	TooManyUpdateRequestsWait, IPRateLimitExceeded, TriggerBlockedIPRateLimit string
+	RateLimitGlobal                                                           string
 
 	// Notify event labels & descriptions
 	NotifyEventUpdateLabel, NotifyEventUpdateDesc   string
@@ -392,22 +402,26 @@ type Phrases struct {
 	ErrContextError, ErrJSONMarshal, ErrRequestCreate, ErrNetworkError string
 	ErrBodyClose, ErrBodyRead, ErrRateLimit, ErrContextCancelled       string
 	ErrAuthFailed, ErrResourceNotFound, ErrValidationFailed            string
-	ErrZoneNotInCache, ErrZoneNameEmpty, ErrAPIGeneric                 string
+	ErrZoneNameEmpty, ErrAPIGeneric                                    string
 
-	// Maintenance / Cleanup
-	CleanupStartIonos, CleanupStartCF, CleanupStartIPv64    string
-	CleanupDryRun, CleanupDeleteError, CleanupRecordRemoved string
+	// Cleanup
+	CleanupStartIonos, CleanupStartCF, CleanupStartIPv64                                string
+	CleanupDryRun, CleanupDeleteError, CleanupRecordRemoved                             string
+	CleanupSkipForeignBase, CleanupSkipCDN, CleanupSkipDeactivated, CleanupSkipOrphaned string
+	CleanupOrphanedCF, CleanupOrphanedIonos                                             string
 
-	// Ionos specific
+	// Ionos
 	IonosAPIFailed, IonosMaxAttempts                                 string
 	IonosCacheZoneNotFound, IonosCacheUpdated, IonosCacheRecordAdded string
+	IonosPayload, IonosRecordArrow, IonosRetryable, IonosErrDetail   string
 
-	// Cloudflare specific
+	// Cloudflare
 	CFNoCredentials, CFTokenEmpty, CFHTMLResponse string
 	CFInvalidJSON, CFApiFailed, CFZoneLoadError   string
 	CFZoneParseError, CFRecordsParseError         string
+	CFUnmanagedRecord                             string
 
-	// IPv64 specific
+	// IPv64
 	IPv64BaseDomainNotFound, IPv64CDNIgnoredV4, IPv64CDNIgnoredV6    string
 	IPv64UpdateURL, IPv64HTMLResponse, IPv64ParseError               string
 	IPv64APIError, IPv64ApiFailed, IPv64HTTPError, IPv64UpdateFailed string
@@ -415,47 +429,58 @@ type Phrases struct {
 	IPv64CacheBuilt, IPv64CacheUsed, IPv64CacheLoadDisk              string
 	IPv64CacheLoadedDisk, IPv64CacheAPIError, IPv64CacheDiskError    string
 	IPv64CacheFallback, IPv64ParseHTMLCache, IPv64CacheSaveError     string
-	IPv64CachedDomain                                                string
-	CleanupSkipForeignBase, CleanupSkipCDN, CleanupSkipDeactivated   string
-	CleanupSkipOrphaned, CleanupDryRunID                             string
+	IPv64CachedDomain, IPv64RecordUpdated, IPv64RecordUpdatedV6      string
+	IPv64CacheUpdated, IPv64DeleteResponse                           string
 
-	// API retry attempts
+	// Retry attempts
 	CFAttempt, IPv64Attempt, IonosAttempt string
 
-	// DNS record operations
-	CFUnmanagedRecord                        string
-	CleanupOrphanedCF, CleanupOrphanedIonos  string
-	IPv64RecordUpdated, IPv64RecordUpdatedV6 string
-	IPv64CacheUpdated, IPv64DeleteResponse   string
-	IonosPayload, IonosRecordArrow           string
-	IonosRetryable                           string
-	IonosErrDetail                           string
-
 	// Settings Modal
-	SettingsTitle, SettingsSecurity, SettingsTriggerToken          string
-	SettingsTokenPlaceholder, SettingsTokenSave                    string
-	SettingsSystem, SettingsIPMode, SettingsInterval               string
-	SettingsHealthPort, SettingsIface, SettingsIfaceHint           string
-	SettingsDNS, SettingsDNSHint, SettingsMaxLog                   string
-	SettingsMaxRetries, SettingsMaxConcurrent, SettingsHourlyLimit string
-	SettingsLang, SettingsDryRun, SettingsDryRunHint               string
-	SettingsDryRunActive, SettingsDomains, SettingsAddDomain       string
-	SettingsAddBtn, SettingsCFTokenPlaceholder, SettingsCFOr       string
-	SettingsNotify, SettingsNotifyEnabled, SettingsNotifyOn        string
-	SettingsNotifyEvents, SettingsTGToken, SettingsTGChatID        string
-	SettingsGotifyURL, SettingsGotifyToken, SettingsTokenUnchanged string
-	SettingsSaveBtn, SettingsSaveHint, SettingsRestartHint         string
-	SettingsEditBtn, SettingsIfacePlaceholder                      string
-	SettingsAPIPrefix, SettingsAPISecret                           string
-	SettingsCFEmail, SettingsCFGlobalKey                           string
-	SettingsIPv64Token, SettingsTGChatPlaceholder                  string
-	SettingsTelegramHeading, SettingsGotifyHeading                 string
+	SettingsTitle, SettingsSecurity, SettingsTriggerToken    string
+	SettingsTokenPlaceholder, SettingsTokenSave              string
+	SettingsSystem, SettingsIPMode, SettingsInterval         string
+	SettingsHealthPort, SettingsIface, SettingsIfaceHint     string
+	SettingsDNS, SettingsMaxLog, SettingsMaxRetries          string
+	SettingsMaxConcurrent, SettingsHourlyLimit               string
+	SettingsLang, SettingsDryRun, SettingsDryRunHint         string
+	SettingsDryRunActive, SettingsDomains, SettingsAddDomain string
+	SettingsAddBtn, SettingsCFOr                             string
+	SettingsNotify, SettingsNotifyEnabled, SettingsNotifyOn  string
+	SettingsNotifyEvents, SettingsTGToken, SettingsTGChatID  string
+	SettingsTokenUnchanged                                   string
+	SettingsSaveBtn, SettingsSaveHint, SettingsRestartHint   string
+	SettingsIfacePlaceholder                                 string
+	SettingsAPIPrefix, SettingsAPISecret                     string
+	SettingsCFEmail, SettingsCFGlobalKey                     string
+	SettingsIPv64Token                                       string
+	SettingsTelegramHeading, SettingsGotifyHeading           string
 
 	// Domain display
 	DotTitleNoUpdate, DotTitleChanged, DotTitleLast string
 	DotTitleOther, DotTitleActive                   string
 	TableTime, TableIPs, LastShort                  string
 	NotConfiguredLabel, RemoveBtn                   string
+
+	// Scheduler / Cache / Cleanup
+	ContextTimeoutForDomains, IPFetchFailed, ZoneLoadingFailed, ProviderReturnedNoZonesCheckAPIKey string
+	CacheLoadFailed, IPv64CacheError, RecordCacheError, RecordCacheCouldNotBeLoaded                string
+	UsingZoneCacheAge, ForcedRefreshLoadZones, NoZoneCacheInitialLoad, ZoneCacheTooOldReload       string
+	ZonesLoadedFromDiskNoAPICall, ZoneAPILoadFailed, TryingDiskCacheFallback, ZonesLoadedFromDisk  string
+	ZonesLoadedFromAPI, UsingRecordCacheAge, ForcedRefreshLoadRecords, NoRecordCacheInitialLoad    string
+	RecordCacheTooOldReload, RecordCacheLoadedFromDiskNoAPICall, TryingLoadRecordCacheFromDisk     string
+	RecordCacheLoadedFromDisk, RecordsLoadedSuccessfully                                           string
+	DiskCachePersistSkipped, CloudflareCacheSaveFailed, IonosCacheSaveFailed                       string
+	CleanupSkippedLastRun, CleanupStartingLastRun, CheckingIPv64OrphanedRecords                    string
+	IPv64ZonesLoadedFromDisk, CloudflareZonesLoadedFromDisk, IonosZonesLoadedFromDisk              string
+	NoProviderCacheOnDiskFound, NoRecordCachesFound, APIAndDiskCacheFailed                         string
+
+	//main
+	MaxAPIRetriesInvalid, LogMaxLinesInvalid, ConfigJSONReadFailed, ProviderConfigFailed                   string
+	DebugModeActive, LoadedDomains, MaxLogLinesInfo, MaxAPIRetriesInfo, MaxConcurrentInfo                  string
+	LogDirCreateFailed, DomainCacheUpdateFailed, MetricCacheUpdateFailed                                   string
+	WebSocketHubStarted, SchedulerShutdownActive, SchedulerIntervalReached, SchedulerPreviousUpdateRunning string
+	ShutdownSignalReceived, WaitingForRunningUpdates, AllUpdatesFinished, WaitForUpdatesTimeout            string
+	WaitingForLogQueue, MetricsSaveFailed, Providers                                                       string
 
 	// Misc
 	ExportBtn string

@@ -57,29 +57,41 @@ func run() int {
 		configPath = filepath.Join(logsDir, "config.json")
 	}
 
-	fmt.Printf("[INFO] Config-Verzeichnis: %s\n", configDir)
-	fmt.Printf("[INFO] → Sprachen: %s\n", langDir)
-	fmt.Printf("[INFO] → Logs: %s\n", logsDir)
-
-	lang := detectLanguage(langDir)
-
-	if err := os.MkdirAll(langDir, 0755); err != nil {
-		fmt.Printf("[FATAL] Lang-Verzeichnis konnte nicht erstellt werden: %v\n", err)
-		return 1
-	}
-
 	copyEmbeddedLangFiles(langDir)
 
-	if err := loadLanguage(lang); err != nil {
-		fmt.Printf("[FATAL] Sprachdatei konnte nicht geladen werden: %v\n", err)
+	if err := os.MkdirAll(langDir, 0755); err != nil {
+		log(LogContext{
+			Level:    LogError,
+			Category: "CONFIG",
+			Message:  fmt.Sprintf(t(T.LangDirCreateFailed, "Failed to create language directory: %v"), err),
+		})
 		return 1
 	}
+
+	log(LogContext{
+		Level:    LogInfo,
+		Category: "CONFIG",
+		Message:  fmt.Sprintf(t(T.ConfigDir, "Config directory: %s"), configDir),
+	})
+
+	log(LogContext{
+		Level:    LogInfo,
+		Category: "CONFIG",
+		Message:  fmt.Sprintf(t(T.ConfigLangDir, "Languages: %s"), langDir),
+	})
+
+	log(LogContext{
+		Level:    LogInfo,
+		Category: "CONFIG",
+		Message:  fmt.Sprintf(t(T.ConfigLogsDir, "Logs: %s"), logsDir),
+	})
 
 	if err := apiMetrics.LoadFromFile(metricsPersistPath); err != nil {
 		log(LogContext{
-			Level:   LogWarn,
-			Action:  ActionConfig,
-			Message: fmt.Sprintf("Metrics konnten nicht geladen werden: %v", err),
+			Level:    LogWarn,
+			Category: "CONFIG",
+			Action:   ActionConfig,
+			Message:  fmt.Sprintf(t(T.MetricsLoadFailed, "Failed to load metrics: %v"), err),
 		})
 	}
 
@@ -89,9 +101,10 @@ func run() int {
 			tempInterval = i
 		} else {
 			log(LogContext{
-				Level:   LogWarn,
-				Action:  ActionConfig,
-				Message: fmt.Sprintf("Ungültiger INTERVAL Wert '%s', benutze Default 300", s),
+				Level:    LogWarn,
+				Category: "CONFIG",
+				Action:   ActionConfig,
+				Message:  fmt.Sprintf(t(T.InvalidInterval, "Invalid INTERVAL value '%s', using default 300"), s),
 			})
 		}
 	}
@@ -116,7 +129,7 @@ func run() int {
 			log(LogContext{
 				Level:   LogWarn,
 				Action:  ActionConfig,
-				Message: fmt.Sprintf("Ungültiger MAX_API_RETRIES Wert '%s', benutze Default %d", s, DefaultMaxAPIRetries),
+				Message: fmt.Sprintf(t(T.MaxAPIRetriesInvalid, "Invalid MAX_API_RETRIES value '%s', using default %d"), s, DefaultMaxAPIRetries),
 			})
 		}
 	}
@@ -129,7 +142,7 @@ func run() int {
 			log(LogContext{
 				Level:   LogWarn,
 				Action:  ActionConfig,
-				Message: fmt.Sprintf("Ungültiger LOG_MAX_LINES Wert '%s', benutze Default %d", s, DefaultMaxLogLines),
+				Message: fmt.Sprintf(t(T.LogMaxLinesInvalid, "Invalid LOG_MAX_LINES value '%s', using default %d"), s, DefaultMaxLogLines),
 			})
 		}
 	}
@@ -153,7 +166,6 @@ func run() int {
 		IPMode:          "BOTH",
 		HealthPort:      "8080",
 		LogDir:          logsDir,
-		Lang:            lang,
 		HourlyRateLimit: DefaultHourlyRateLimit,
 		MaxConcurrent:   DefaultMaxConcurrent,
 		MaxLogLines:     DefaultMaxLogLines,
@@ -167,7 +179,7 @@ func run() int {
 			log(LogContext{
 				Level:   LogWarn,
 				Action:  ActionConfig,
-				Message: fmt.Sprintf("config.json konnte nicht gelesen werden, nutze Defaults: %v", err),
+				Message: fmt.Sprintf(t(T.ConfigJSONReadFailed, "config.json could not be read, using defaults: %v"), err),
 			})
 		} else if len(cfg.DomainConfigs) > 0 {
 			configLoaded = true
@@ -176,19 +188,36 @@ func run() int {
 
 	if !configLoaded {
 		applyEnvOverrides(
-			logsDir, lang, tempInterval, dnsList,
+			logsDir, tempInterval, dnsList,
 			tempmaxAPIRetries, tempmaxLogLines,
 			hourlyLimit, maxConcurrent,
 		)
 	}
+	var lang string
 
+	if strings.TrimSpace(cfg.Lang) != "" {
+		lang = normalizeLang(cfg.Lang)
+	} else {
+		lang = detectLanguage(langDir, os.Getenv("LANG"))
+	}
+
+	cfg.Lang = lang
+
+	if err := loadLanguage(cfg.Lang); err != nil {
+		log(LogContext{
+			Level:    LogError,
+			Category: "CONFIG",
+			Message:  fmt.Sprintf(t(T.LangFileLoadFailed, "Failed to load language file: %v"), err),
+		})
+		return 1
+	}
 	workerSemaphore = make(chan struct{}, cfg.MaxConcurrent)
 
 	if err := initProviderConfig(); err != nil {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionConfig,
-			Message: fmt.Sprintf("Provider-%s fehlgeschlagen: %v", T.ConfigHeading, err),
+			Message: fmt.Sprintf(t(T.ProviderConfigFailed, "Provider-%s failed: %v"), T.ConfigHeading, err),
 		})
 		return 1
 	}
@@ -196,11 +225,11 @@ func run() int {
 	initNotifiers()
 
 	if cfg.DebugEnabled {
-		debugLog("CONFIG", "", fmt.Sprintf("Debug-Modus aktiv. Intervall: %ds, Mode: %s", cfg.Interval, cfg.IPMode))
-		debugLog("CONFIG", "", fmt.Sprintf("Geladene Domains: %d", len(cfg.DomainConfigs)))
-		debugLog("CONFIG", "", fmt.Sprintf("Max Log Lines: %d", cfg.MaxLogLines))
-		debugLog("CONFIG", "", fmt.Sprintf("Max API Retries: %d", cfg.MaxAPIRetries))
-		debugLog("CONFIG", "", fmt.Sprintf("Max Concurrent: %d", cfg.MaxConcurrent))
+		debugLog("CONFIG", "", fmt.Sprintf(t(T.DebugModeActive, "Debug mode active. Interval: %ds, mode: %s"), cfg.Interval, cfg.IPMode))
+		debugLog("CONFIG", "", fmt.Sprintf(t(T.LoadedDomains, "Loaded domains: %d"), len(cfg.DomainConfigs)))
+		debugLog("CONFIG", "", fmt.Sprintf(t(T.MaxLogLinesInfo, "Max log lines: %d"), cfg.MaxLogLines))
+		debugLog("CONFIG", "", fmt.Sprintf(t(T.MaxAPIRetriesInfo, "Max API retries: %d"), cfg.MaxAPIRetries))
+		debugLog("CONFIG", "", fmt.Sprintf(t(T.MaxConcurrentInfo, "Max concurrent: %d"), cfg.MaxConcurrent))
 		for _, dc := range cfg.DomainConfigs {
 			debugLog("CONFIG", "", fmt.Sprintf("  - %s (%s)", dc.FQDN, dc.Provider))
 		}
@@ -217,7 +246,7 @@ func run() int {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionConfig,
-			Message: fmt.Sprintf("Log-Verzeichnis konnte nicht erstellt werden: %v", err),
+			Message: fmt.Sprintf(t(T.LogDirCreateFailed, "Failed to create log directory: %v"), err),
 		})
 		return 1
 	}
@@ -226,7 +255,7 @@ func run() int {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionConfig,
-			Message: fmt.Sprintf("Lang-Verzeichnis konnte nicht erstellt werden: %v", err),
+			Message: fmt.Sprintf(t(T.LangDirCreateFailed, "Failed to create lang directory: %v"), err),
 		})
 		return 1
 	}
@@ -263,7 +292,7 @@ func run() int {
 	log(LogContext{
 		Level:   LogInfo,
 		Action:  ActionStart,
-		Message: fmt.Sprintf("🚀 %s (Providers: %s)", T.Startup, strings.Join(providerNames, ", ")),
+		Message: fmt.Sprintf("🚀 %s (%s: %s)", T.Startup, t(T.Providers, "Providers"), strings.Join(providerNames, ", ")),
 	})
 
 	globalTriggerLimiter = NewRateLimiter(10, 1.0/6.0)
@@ -273,7 +302,7 @@ func run() int {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionError,
-			Message: fmt.Sprintf("Failed to update domain cache: %v", err),
+			Message: fmt.Sprintf(t(T.DomainCacheUpdateFailed, "Failed to update domain cache: %v"), err),
 		})
 	}
 
@@ -281,7 +310,7 @@ func run() int {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionError,
-			Message: fmt.Sprintf("Failed to update metric cache: %v", err),
+			Message: fmt.Sprintf(t(T.MetricCacheUpdateFailed, "Failed to update metric cache: %v"), err),
 		})
 	}
 
@@ -307,7 +336,7 @@ func run() int {
 	}()
 
 	go wsHub.run()
-	debugLog("SYSTEM", "", "WebSocket Hub gestartet")
+	debugLog("SYSTEM", "", t(T.WebSocketHubStarted, "WebSocket hub started"))
 
 	runUpdate(true)
 	ticker := time.NewTicker(time.Duration(cfg.Interval) * time.Second)
@@ -319,13 +348,13 @@ func run() int {
 	for {
 		select {
 		case <-shutdownCtx.Done():
-			debugLog("SCHEDULER", "", "Shutdown aktiv, beende Scheduler")
+			debugLog("SCHEDULER", "", t(T.SchedulerShutdownActive, "Shutdown active, stopping scheduler"))
 			return 0
 
 		case <-ticker.C:
-			debugLog("SCHEDULER", "", "Intervall erreicht, starte runUpdate(false)")
+			debugLog("SCHEDULER", "", t(T.SchedulerIntervalReached, "Interval reached, starting runUpdate(false)"))
 			if activeUpdates.Load() > 0 {
-				debugLog("SCHEDULER", "", "⚠️ Vorheriges Update läuft noch. Überspringe diesen Durchlauf...")
+				debugLog("SCHEDULER", "", t(T.SchedulerPreviousUpdateRunning, "⚠️ Previous update is still running. Skipping this cycle..."))
 
 				limit := cfg.MaxLogLines
 				if cfg.Interval > 500 && limit == DefaultMaxLogLines {
@@ -346,7 +375,7 @@ func run() int {
 			rotateLogFile(logPath, limit)
 
 		case sig := <-stop:
-			debugLog("SYSTEM", "", fmt.Sprintf("Shutdown Signal empfangen: %v", sig))
+			debugLog("SYSTEM", "", fmt.Sprintf(t(T.ShutdownSignalReceived, "Shutdown signal received: %v"), sig))
 			stopCtx := LogContext{
 				Level:   LogInfo,
 				Action:  ActionStop,
@@ -364,7 +393,7 @@ func run() int {
 				debugLog("SYSTEM", "", T.HTTPConnectionsClosed)
 			}
 
-			debugLog("SYSTEM", "", "⏳ Warte auf laufende Updates...")
+			debugLog("SYSTEM", "", t(T.WaitingForRunningUpdates, "⏳ Waiting for running updates..."))
 
 			waitCtx, waitCancel := context.WithTimeout(context.Background(), ShutdownWaitTimeout)
 
@@ -382,16 +411,16 @@ func run() int {
 
 			select {
 			case <-done:
-				debugLog("SYSTEM", "", "✅ Alle Updates abgeschlossen")
+				debugLog("SYSTEM", "", t(T.AllUpdatesFinished, "✅ All updates finished"))
 			case <-waitCtx.Done():
-				debugLog("SYSTEM", "", "⚠️ Timeout beim Warten auf Updates - Force Shutdown")
+				debugLog("SYSTEM", "", t(T.WaitForUpdatesTimeout, "⚠️ Timeout while waiting for updates - force shutdown"))
 			}
 			waitCancel()
 
-			debugLog("SYSTEM", "", "📝 Warte auf Log-Queue...")
+			debugLog("SYSTEM", "", t(T.WaitingForLogQueue, "📝 Waiting for log queue..."))
 			flushLogQueue(2 * time.Second)
 			if err := apiMetrics.SaveToFile(metricsPersistPath); err != nil {
-				debugLog("SYSTEM", "", fmt.Sprintf("Metrics konnten nicht gespeichert werden: %v", err))
+				debugLog("SYSTEM", "", fmt.Sprintf(t(T.MetricsSaveFailed, "Metrics could not be saved: %v"), err))
 			}
 			close(logWriteQueue)
 
@@ -415,7 +444,7 @@ func run() int {
 }
 
 func applyEnvOverrides(
-	logsDir, lang string,
+	logsDir string,
 	tempInterval int,
 	dnsList []string,
 	maxAPIRetries, maxLogLines, hourlyLimit, maxConcurrent int,
@@ -439,8 +468,8 @@ func applyEnvOverrides(
 		cfg.DebugHTTPRaw = v == "true"
 	}
 	cfg.LogDir = logsDir
-	if os.Getenv("LANG") != "" {
-		cfg.Lang = lang
+	if v := strings.TrimSpace(os.Getenv("LANG")); v != "" {
+		cfg.Lang = normalizeLang(v)
 	}
 	if os.Getenv("INTERVAL") != "" {
 		cfg.Interval = tempInterval
