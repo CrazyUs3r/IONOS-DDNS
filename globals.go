@@ -333,7 +333,7 @@ type Phrases struct {
 	IPv4RequiredButFailed, IPv6RequiredButFailed, BothIPVersionsFailed          string
 	PublicIPDetectedVia, IPv6ViaInterface, IPv4Current, IPv6Current             string
 	DomainLoopCancelled, PanicOccurred, WorkerCancelledContext                  string
-	NoZonesFoundForProvider, NoZoneFound, MatchedZoneEmptyId                    string
+	NoZonesFoundForProvider, NoZoneFound, MatchedZoneEmptyID                    string
 	NonRecoverableIPv64Error, NonRecoverableIPv4Error, NonRecoverableIPv6Error  string
 
 	// Worker & Status
