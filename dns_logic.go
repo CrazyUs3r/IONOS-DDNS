@@ -98,7 +98,7 @@ domainLoop:
 			if zoneID == "" {
 				results <- domainUpdateResult{
 					Domain: domainConfig.FQDN,
-					Error:  fmt.Errorf("%s"T.MatchedZoneEmptyID, t(T.MatchedZoneEmptyID, "Matched zone has empty ID")),
+					Error:  fmt.Errorf("%s", t(T.MatchedZoneEmptyID, "Matched zone has empty ID")),
 				}
 				return
 			}
