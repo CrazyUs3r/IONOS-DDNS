@@ -534,3 +534,16 @@ function startClock() {
 	};
 	tick(); setInterval(tick, 1000);
 }
+
+function togglePassword(id, btn) {
+  const input = document.getElementById(id);
+  if (!input) return;
+
+  if (input.type === "password") {
+    input.type = "text";
+    btn.textContent = "🙈";
+  } else {
+    input.type = "password";
+    btn.textContent = "👁️";
+  }
+}
