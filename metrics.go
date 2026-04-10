@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 )
 
@@ -144,29 +145,19 @@ func (m *APIMetrics) calcPercentile(p float64) time.Duration {
 		copy(samples, m.LatencySamples[:count])
 	} else {
 		start := m.LatencySampleIdx
-		for i := 0; i < count; i++ {
+		for i := range count {
 			samples[i] = m.LatencySamples[(start+i)%len(m.LatencySamples)]
 		}
 	}
 
-	for i := 1; i < len(samples); i++ {
-		key := samples[i]
-		j := i - 1
-		for j >= 0 && samples[j] > key {
-			samples[j+1] = samples[j]
-			j--
-		}
-		samples[j+1] = key
-	}
+	slices.Sort(samples)
 
-	idx := int(float64(count-1) * p)
-	if idx < 0 {
-		idx = 0
-	}
+	idx := max(int(float64(count-1)*p), 0)
 	if idx >= count {
 		idx = count - 1
 	}
 	return time.Duration(samples[idx]) * time.Millisecond
+
 }
 
 func (m *APIMetrics) cleanupOldTimestamps(now time.Time) {
@@ -531,7 +522,7 @@ func handleMetricsReset(w http.ResponseWriter, r *http.Request) {
 	}
 
 	setLatestMetrics(statsCopy)
-	broadcastNotification("📊 Metriken wurden zurückgesetzt", "info")
+	broadcastNotification("📊 "+T.MetricsResetNotification, "info")
 
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(map[string]string{"status": "reset_success"}); err != nil {

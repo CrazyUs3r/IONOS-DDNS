@@ -19,7 +19,6 @@ import (
 // ============================================================================
 // TELEGRAM NOTIFIER
 // ============================================================================
-
 func newTelegramNotifier(token, chatID string) *telegramNotifier {
 	return &telegramNotifier{
 		token:       token,
@@ -61,7 +60,6 @@ func (t *telegramNotifier) Name() string { return "Telegram" }
 // ============================================================================
 // SEND (outbound notifications) — uses shared getHTTPClient()
 // ============================================================================
-
 func (t *telegramNotifier) Send(msg NotifyMessage) error {
 	text := formatTelegramMessage(msg, t.instanceTag)
 	return t.sendText(t.chatID, text, nil)
@@ -248,13 +246,13 @@ func (t *telegramNotifier) getUpdates(offset int) ([]tgUpdateFull, error) {
 
 func (t *telegramNotifier) registerCommands() {
 	commands := []map[string]string{
-		{"command": "start", "description": "Hauptmenü anzeigen"},
-		{"command": "status", "description": "System-Status & IPs"},
-		{"command": "metrics", "description": "API-Metriken anzeigen"},
-		{"command": "domains", "description": "Alle Domains & IPs auflisten"},
-		{"command": "update", "description": "Manuelles DNS-Update starten"},
-		{"command": "health", "description": "Health-Check abfragen"},
-		{"command": "help", "description": "Alle Befehle anzeigen"},
+		{"command": "start", "description": T.TgCmdStart},
+		{"command": "status", "description": T.TgCmdStatus},
+		{"command": "metrics", "description": T.TgCmdMetrics},
+		{"command": "domains", "description": T.TgCmdDomains},
+		{"command": "update", "description": T.TgCmdUpdate},
+		{"command": "health", "description": T.TgCmdHealth},
+		{"command": "help", "description": T.TgCmdHelp},
 	}
 	payload := map[string]interface{}{"commands": commands}
 	body, _ := json.Marshal(payload)
@@ -394,7 +392,7 @@ func backKeyboard() *tgInlineKeyboard {
 // ============================================================================
 func (t *telegramNotifier) sendMainMenu(chatID string) {
 	text := fmt.Sprintf(
-		"<b>🌐 Go-DynDNS</b>  <code>%s</code>\n\nWas möchtest du tun?",
+		"<b>🌐 Go-DynDNS</b>  <code>%s</code>\n\n"+T.TgMenuPrompt,
 		t.instanceTag,
 	)
 	_ = t.sendText(chatID, text, mainKeyboard())
@@ -534,11 +532,11 @@ func (t *telegramNotifier) sendHealth(chatID string) {
 
 func (t *telegramNotifier) triggerUpdate(chatID string) {
 	if !updateInProgress.CompareAndSwap(false, true) {
-		_ = t.sendText(chatID, "ℹ️ Ein Update läuft bereits. Bitte kurz warten.", backKeyboard())
+		_ = t.sendText(chatID, T.TgUpdateAlreadyRunning, backKeyboard())
 		return
 	}
 
-	_ = t.sendText(chatID, "🔄 <b>Manuelles Update wird gestartet...</b>", backKeyboard())
+	_ = t.sendText(chatID, T.TgUpdateStarting, backKeyboard())
 
 	go func() {
 		defer updateInProgress.Store(false)
@@ -546,7 +544,7 @@ func (t *telegramNotifier) triggerUpdate(chatID string) {
 		forceNextUpdate.Store(true)
 		runUpdate(false)
 		_ = t.sendText(chatID,
-			fmt.Sprintf("✅ Update abgeschlossen.\n🕒 <i>%s</i>",
+			fmt.Sprintf(T.TgUpdateDone+"\n🕒 <i>%s</i>",
 				time.Now().Local().Format("02.01.2006 15:04:05")),
 			backKeyboard())
 	}()

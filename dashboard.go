@@ -312,7 +312,10 @@ func buildSettingsModal(c Config) string {
 		`<h3>` + T.SettingsSecurity + `</h3>` +
 		`<div class="s-row" style="flex-direction:column;align-items:stretch;gap:8px;">` +
 		`<span class="s-label">` + T.SettingsTriggerToken + `</span>` +
-		`<input type="password" id="s-token" class="s-input" placeholder="` + T.SettingsTokenPlaceholder + `" autocomplete="off">` +
+		`<div style="position:relative;width:100%;">` +
+		`<input type="password" id="s-token" class="s-input" placeholder="` + T.SettingsTokenPlaceholder + `" autocomplete="off" style="padding-right:40px;">` +
+		`<button type="button" onclick="togglePassword('s-token', this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:0;font-size:16px;line-height:1;">👁️</button>` +
+		`</div>` +
 		`<button class="s-btn" onclick="saveToken()">` + T.SettingsTokenSave + `</button>` +
 		`</div></div>` +
 
@@ -335,7 +338,7 @@ func buildSettingsModal(c Config) string {
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsIface+` <small style="opacity:.5">`+T.SettingsIfaceHint+`</small></span>`+
 			`<input type="text" id="cfg-iface" class="s-input" style="width:150px;" placeholder="`+T.SettingsIfacePlaceholder+`" value="%s"></div>`, html.EscapeString(c.IfaceName)) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsDNS+` <small style="opacity:.5">(kommagetrennt)</small></span>`+
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsDNS+` <small style="opacity:.5">(`+T.SettingsDNSHint+`)</small></span>`+
 			`<input type="text" id="cfg-dns" class="s-input" style="width:220px;" placeholder="1.1.1.1:53, 8.8.8.8:53" value="%s"></div>`, html.EscapeString(dnsStr)) +
 
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsMaxLog+`</span>`+
@@ -350,7 +353,7 @@ func buildSettingsModal(c Config) string {
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsHourlyLimit+`</span>`+
 			`<input type="number" id="cfg-hourly-limit" class="s-input" style="width:90px;text-align:right;" min="100" max="100000" value="%d"></div>`, c.HourlyRateLimit) +
 
-		`<div class="s-row"><span class="s-label">` + T.SettingsLang + `</span>` +
+		`<div class="s-row"><span class="s-label">` + T.SettingsLanguage + `</span>` +
 		`<select id="cfg-lang" class="s-input" style="width:auto;min-width:160px;">` +
 		buildDynamicLangOptions(c.Lang) +
 		`</select></div>` +
@@ -368,7 +371,7 @@ func buildSettingsModal(c Config) string {
 
 		`<div style="background:rgba(255,255,255,0.05);padding:12px;border-radius:8px;border:1px dashed var(--border);">` +
 		`<h4 style="font-size:0.75rem;margin-bottom:8px;opacity:0.8;text-transform:uppercase;">` + T.SettingsAddDomain + `</h4>` +
-		`<input type="text" id="new-domain-fqdn" class="s-input" placeholder="z.B. home.example.com" style="margin-bottom:8px;">` +
+		`<input type="text" id="new-domain-fqdn" class="s-input" placeholder="` + T.SettingsDomainPlaceholder + `" style="margin-bottom:8px;">` +
 		`<select id="new-domain-provider" class="s-input" style="margin-bottom:8px;" onchange="toggleProviderFields()">` +
 		`<option value="IONOS">IONOS</option>` +
 		`<option value="CLOUDFLARE">Cloudflare</option>` +
@@ -376,16 +379,25 @@ func buildSettingsModal(c Config) string {
 		`</select>` +
 		`<div id="fields-ionos">` +
 		`<input type="text" id="new-ionos-prefix" class="s-input" placeholder="` + T.SettingsAPIPrefix + `" style="margin-bottom:8px;">` +
-		`<input type="password" id="new-ionos-secret" class="s-input" placeholder="` + T.SettingsAPISecret + `">` +
+		`<div style="position:relative;width:100%;margin-top:8px;">` +
+		`<input type="password" id="new-ionos-secret" class="s-input" placeholder="` + T.SettingsAPISecret + `" style="padding-right:40px;">` +
+		`<button type="button" onclick="togglePassword('new-ionos-secret', this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:0;font-size:16px;line-height:1;">👁️</button>` +
+		`</div>` +
 		`</div>` +
 		`<div id="fields-cloudflare" style="display:none;">` +
-		`<input type="text" id="new-cf-token" class="s-input" placeholder="API Token (empfohlen)" style="margin-bottom:8px;">` +
+		`<input type="text" id="new-cf-token" class="s-input" placeholder="` + T.SettingsCFTokenHint + `" style="margin-bottom:8px;">` +
 		`<div style="font-size:0.65rem;text-align:center;margin:4px 0;opacity:0.4;">` + T.SettingsCFOr + `</div>` +
 		`<input type="text" id="new-cf-email" class="s-input" placeholder="` + T.SettingsCFEmail + `" style="margin-bottom:8px;">` +
-		`<input type="password" id="new-cf-secret" class="s-input" placeholder="` + T.SettingsCFGlobalKey + `">` +
+		`<div style="position:relative;width:100%;">` +
+		`<input type="password" id="new-cf-secret" class="s-input" placeholder="` + T.SettingsCFGlobalKey + `" style="padding-right:40px;">` +
+		`<button type="button" onclick="togglePassword('new-cf-secret', this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:0;font-size:16px;line-height:1;">👁️</button>` +
+		`</div>` +
 		`</div>` +
 		`<div id="fields-ipv64" style="display:none;">` +
-		`<input type="password" id="new-ipv64-token" class="s-input" placeholder="` + T.SettingsIPv64Token + `">` +
+		`<div style="position:relative;width:100%;">` +
+		`<input type="password" id="new-ipv64-token" class="s-input" placeholder="` + T.SettingsIPv64Token + `" style="padding-right:40px;">` +
+		`<button type="button" onclick="togglePassword('new-ipv64-token', this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:0;font-size:16px;line-height:1;">👁️</button>` +
+		`</div>` +
 		`</div>` +
 		`<button class="s-btn" onclick="addDomainToList()" style="margin-top:12px;background:var(--success);color:white;border:none;width:100%;">` +
 		T.SettingsAddBtn +
@@ -415,29 +427,35 @@ func buildSettingsModal(c Config) string {
 		`<div style="margin-top:10px;padding:10px;background:rgba(56,189,248,0.06);border-radius:7px;border:1px solid rgba(56,189,248,0.15);">` +
 		`<div style="font-size:0.68rem;color:#94a3b8;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;">📱 ` + T.SettingsTelegramHeading + ` </div>` +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsTGToken+`</span>`+
-			`<input type="password" id="cfg-tg-token" class="s-input" style="width:220px;"`+
-			` placeholder="`+T.SettingsTokenUnchanged+`" value="%s"></div>`,
-			html.EscapeString(c.Notifications.Telegram.Token)) +
-
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsTGChatID+`</span>`+
 			`<input type="text" id="cfg-tg-chatid" class="s-input" style="width:160px;"`+
 			` placeholder="-100xxxxxxxxx" value="%s"></div>`,
 			html.EscapeString(c.Notifications.Telegram.ChatID)) +
+
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsTGToken+`</span>`+
+			`<div style="position:relative;width:220px;">`+
+			`<input type="password" id="cfg-tg-token" class="s-input" style="width:220px;padding-right:40px;"`+
+			` placeholder="`+T.SettingsTokenUnchanged+`" value="%s">`+
+			`<button type="button" onclick="togglePassword('cfg-tg-token', this)" style="position:absolute;right:8px;top:50%%;transform:translateY(-50%%);background:none;border:none;cursor:pointer;padding:0;font-size:16px;line-height:1;">👁️</button>`+
+			`</div></div>`,
+			html.EscapeString(c.Notifications.Telegram.Token)) +
 
 		`</div>` +
 
 		`<div style="margin-top:8px;padding:10px;background:rgba(167,139,250,0.06);border-radius:7px;border:1px solid rgba(167,139,250,0.15);">` +
 		`<div style="font-size:0.68rem;color:#94a3b8;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;">🔔 ` + T.SettingsGotifyHeading + `</div>` +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">Server URL</span>`+
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsGotifyURL+`</span>`+
 			`<input type="text" id="cfg-gotify-url" class="s-input" style="width:220px;"`+
 			` placeholder="https://gotify.example.com" value="%s"></div>`,
 			html.EscapeString(c.Notifications.Gotify.URL)) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">App Token</span>`+
-			`<input type="password" id="cfg-gotify-token" class="s-input" style="width:220px;"`+
-			` placeholder="`+T.SettingsTokenUnchanged+`" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsGotifyToken+`</span>`+
+			`<div style="position:relative;width:220px;">`+
+			`<input type="password" id="cfg-gotify-token" class="s-input" style="width:220px;padding-right:40px;"`+
+			` placeholder="`+T.SettingsTokenUnchanged+`" value="%s">`+
+			`<button type="button" onclick="togglePassword('cfg-gotify-token', this)" style="position:absolute;right:8px;top:50%%;transform:translateY(-50%%);background:none;border:none;cursor:pointer;padding:0;font-size:16px;line-height:1;">👁️</button>`+
+			`</div></div>`,
 			html.EscapeString(c.Notifications.Gotify.Token)) +
 
 		`</div>` +
@@ -793,6 +811,7 @@ func createMux() *http.ServeMux {
 			return
 		}
 
+		ResetHTTPClient()
 		forceNextUpdate.Store(true)
 		lastCleanup = time.Time{}
 
@@ -813,7 +832,7 @@ func createMux() *http.ServeMux {
 
 		lang := strings.TrimSpace(r.URL.Query().Get("lang"))
 		if lang == "" {
-			http.Error(w, T.LangParamMissing, http.StatusBadRequest)
+			http.Error(w, T.LanguageParamMissing, http.StatusBadRequest)
 			return
 		}
 
@@ -830,7 +849,7 @@ func createMux() *http.ServeMux {
 
 		cfg.Lang = lang
 		if err := saveConfigToFile(); err != nil {
-			debugLog("API", getClientIP(r), fmt.Sprintf(T.ConfigSaveWarnAfterLangChange, err))
+			debugLog("API", getClientIP(r), fmt.Sprintf(T.ConfigSaveWarnAfterLanguageChange, err))
 		}
 
 		debugLog("API", getClientIP(r), fmt.Sprintf(T.LanguageChangedLog, lang))
@@ -1316,7 +1335,7 @@ func createMux() *http.ServeMux {
 		nicHTML := ""
 		if hasIPv64 {
 			nicHTML = `<div style="display:flex; justify-content:space-between; padding:4px 8px; background:rgba(251,191,36,0.08); border-radius:5px; grid-column:1/-1;">` +
-				`<span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">NIC <span style="font-weight:400; opacity:0.6;">(IPv64 Updates)</span></span>` +
+				`<span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">NIC <span style="font-weight:400; opacity:0.6;">(` + T.NicIPv64Updates + `)</span></span>` +
 				`<span id="mDailyNIC" style="font-size:0.95rem; font-weight:700; color:#fbbf24; font-family:monospace;">` +
 				fmt.Sprintf("%v", stats["daily_nic"]) +
 				`</span></div>`
@@ -1343,7 +1362,7 @@ func createMux() *http.ServeMux {
 
 		_, _ = fmt.Fprintf(w, `
 		<details class="card" open id="metrics-card">
-			<summary style="display:flex; justify-content:space-between; align-items:center;">📊 %s<button class="action-btn" style="background:var(--error); font-size:0.7rem; padding:3px 10px; margin-left:auto;" onclick="event.preventDefault(); resetMetrics()">🗑️ Reset</button></summary>
+			<summary style="display:flex; justify-content:space-between; align-items:center;">📊 %s<button class="action-btn" style="background:var(--error); font-size:0.7rem; padding:3px 10px; margin-left:auto;" onclick="event.preventDefault(); resetMetrics()">🗑️ `+T.MetricsResetBtn+`</button></summary>
 			<div class="card-content">
 				<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-top: 10px;">
 					<div><strong>`+T.TotalRequests+`:</strong> <span id="mTotal">%v</span></div>
@@ -1608,7 +1627,7 @@ func createMux() *http.ServeMux {
 					case time.Since(t) < 15*time.Minute:
 						dotClass = "domain-status-dot dot-ok dot-recent"
 						dotTitle = T.DotTitleChanged + h.LastChanged
-						changedBadge = `<span id="badge-` + safeID + `" class="changed-badge">🔄 gerade geändert</span>`
+						changedBadge = `<span id="badge-` + safeID + `" class="changed-badge">` + T.BadgeChanged + `</span>`
 					case !newestChange.IsZero() && t.Before(newestChange.Add(-time.Minute)):
 						dotClass = "domain-status-dot dot-warn"
 						dotTitle = T.DotTitleLast + h.LastChanged + T.DotTitleOther

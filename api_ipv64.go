@@ -112,10 +112,7 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 			apiMetrics.RecordError(method, 0, err, duration)
 			lastErr = fmt.Errorf("%s: %w", T.ErrNetworkError, err)
 
-			wait := calculateRetryDelay(attempt, false)
-			select {
-			case <-time.After(wait):
-			case <-ctx.Done():
+			if !sleepOrCancel(ctx, calculateRetryDelay(attempt, false)) {
 				return nil, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
 			}
 			continue
@@ -158,9 +155,7 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 
 			if attempt < cfg.MaxAPIRetries-1 {
 				debugLog("HTTP", "", fmt.Sprintf(T.IPv64RetriableWait, waitDuration))
-				select {
-				case <-time.After(waitDuration):
-				case <-ctx.Done():
+				if !sleepOrCancel(ctx, waitDuration) {
 					return nil, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
 				}
 				continue
@@ -175,9 +170,7 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 			if apiErr.Retryable && attempt < cfg.MaxAPIRetries-1 {
 				wait := calculateRetryDelay(attempt, res.StatusCode >= 500)
 				debugLog("HTTP", "", fmt.Sprintf(T.IPv64RetriableWait, wait))
-				select {
-				case <-time.After(wait):
-				case <-ctx.Done():
+				if !sleepOrCancel(ctx, wait) {
 					return nil, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
 				}
 				lastErr = apiErr
@@ -547,9 +540,7 @@ func updateIPv64DNS(
 		wait := 12*time.Second - time.Since(lastIPv64Update)
 		ipv64Mutex.Unlock()
 
-		select {
-		case <-time.After(wait):
-		case <-ctx.Done():
+		if !sleepOrCancel(ctx, wait) {
 			return false, ctx.Err()
 		}
 

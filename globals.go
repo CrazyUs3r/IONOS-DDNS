@@ -39,8 +39,11 @@ var (
 	statusMutex      sync.Mutex
 	lastErrorMsg     = &SafeErrorMsg{}
 
-	httpClient      *http.Client
-	clientOnce      sync.Once
+	httpClient   *http.Client
+	clientOnce   sync.Once
+	clientMu     sync.RWMutex
+	clientDNSKey string
+
 	apiMetrics      = &APIMetrics{}
 	latestMetricsMu sync.RWMutex
 	latestMetrics   map[string]interface{}
@@ -304,6 +307,7 @@ type Phrases struct {
 	TotalRequests, ClientErrors, ServerErrors       string
 	MetricLatencyPercentile, MetricHTTPMethods      string
 	MetricIPLatency, MetricLastCheck, MetricAvgFrom string
+	MetricsResetBtn, MetricsResetNotification       string
 
 	// Validierung & allgemeine Fehler
 	NoDomains, InvalidPort, IntervalTooSmall, ShortIntervalWarning       string
@@ -348,18 +352,18 @@ type Phrases struct {
 	HealthDegradedSuccessRate, HealthLastSchedulerFailed                       string
 
 	// Configuration
-	ConfigHeading, ConfigInterval, ConfigIPMode, ConfigInterface                string
-	ConfigHealthPort, ConfigDryRun                                              string
-	ConfigLogDir, ConfigLanguage, ConfigDir, ConfigLangDir, ConfigLogsDir       string
-	LangDirCreateFailed, LangFileLoadFailed, MetricsLoadFailed, InvalidInterval string
+	ConfigHeading, ConfigInterval, ConfigIPMode, ConfigInterface                        string
+	ConfigHealthPort, ConfigDryRun                                                      string
+	ConfigLogDir, ConfigLanguage, ConfigDir, ConfigLanguageDir, ConfigLogsDir           string
+	LanguageDirCreateFailed, LanguageFileLoadFailed, MetricsLoadFailed, InvalidInterval string
 
 	// System
 	MaintenanceStarting, HTTPConnectionsClosed                            string
 	ServerShuttingDown, ServerShutdownComplete, ShutdownError             string
 	Mode, HTTPClientInitialized                                           string
 	WSUpgradeFailed, CouldNotLoadLanguages                                string
-	SaveFailed, LangParamMissing, UnsupportedLanguage                     string
-	LanguageLoadFailed, ConfigSaveWarnAfterLangChange                     string
+	SaveFailed, LanguageParamMissing, UnsupportedLanguage                 string
+	LanguageLoadFailed, ConfigSaveWarnAfterLanguageChange                 string
 	LanguageChangedLog, LanguageChangedNotification                       string
 	RemovedUnusedKey, UpdateDetected, NewFileDetected                     string
 	WriteFailed, FileSaved, EmbeddedFileUnreadable, CannotReadEmbeddedDir string
@@ -374,7 +378,7 @@ type Phrases struct {
 
 	// Provider-Hinweise / Config
 	IonosAPIRequired, Ipv64TokenRequired, CloudflareAuthRequired, UnknownProvider string
-	DomainParamMissing, DomainStillActiveInConfig                                 string
+	DomainParamMissing, DomainStillActiveInConfig, NicIPv64Updates                string
 	NoStatusFileFound, DomainNotFoundInStatus                                     string
 	DomainDeletedFromStatusLog, DomainRemovedFromStatus                           string
 
@@ -385,18 +389,23 @@ type Phrases struct {
 	RateLimitGlobal                                                           string
 
 	// Notify event labels & descriptions
-	NotifyEventUpdateLabel, NotifyEventUpdateDesc   string
-	NotifyEventCreateLabel, NotifyEventCreateDesc   string
-	NotifyEventErrorLabel, NotifyEventErrorDesc     string
-	NotifyEventStartLabel, NotifyEventStartDesc     string
-	NotifyEventStopLabel, NotifyEventStopDesc       string
-	NotifyEventCleanupLabel, NotifyEventCleanupDesc string
+	NotifyEventUpdateLabel, NotifyEventUpdateDesc          string
+	NotifyEventCreateLabel, NotifyEventCreateDesc          string
+	NotifyEventErrorLabel, NotifyEventErrorDesc            string
+	NotifyEventStartLabel, NotifyEventStartDesc            string
+	NotifyEventStopLabel, NotifyEventStopDesc              string
+	NotifyEventCleanupLabel, NotifyEventCleanupDesc        string
+	TgCmdStart, TgCmdStatus, TgCmdMetrics, TgCmdDomains    string
+	TgCmdUpdate, TgCmdHealth, TgCmdHelp, TgMenuPrompt      string
+	TgUpdateAlreadyRunning, TgUpdateStarting, TgUpdateDone string
 
 	// Cache & persistence
 	ErrRecordCacheNil, ErrCacheDirCreate, ErrCacheMarshal   string
 	ErrCacheWrite, ErrCacheRename                           string
 	CacheSavedZones, CacheSavedDomains                      string
 	CacheFileNotFound, CacheLoadedZones, CacheLoadedDomains string
+	IPv64CacheNoData, CacheLoadError, CacheRecordsLoaded    string
+	IPv64CacheRecordsLoaded, IPv64CacheLoadDiskFailed       string
 
 	// Generic API errors
 	ErrContextError, ErrJSONMarshal, ErrRequestCreate, ErrNetworkError string
@@ -436,24 +445,25 @@ type Phrases struct {
 	CFAttempt, IPv64Attempt, IonosAttempt string
 
 	// Settings Modal
-	SettingsTitle, SettingsSecurity, SettingsTriggerToken    string
-	SettingsTokenPlaceholder, SettingsTokenSave              string
-	SettingsSystem, SettingsIPMode, SettingsInterval         string
-	SettingsHealthPort, SettingsIface, SettingsIfaceHint     string
-	SettingsDNS, SettingsMaxLog, SettingsMaxRetries          string
-	SettingsMaxConcurrent, SettingsHourlyLimit               string
-	SettingsLang, SettingsDryRun, SettingsDryRunHint         string
-	SettingsDryRunActive, SettingsDomains, SettingsAddDomain string
-	SettingsAddBtn, SettingsCFOr                             string
-	SettingsNotify, SettingsNotifyEnabled, SettingsNotifyOn  string
-	SettingsNotifyEvents, SettingsTGToken, SettingsTGChatID  string
-	SettingsTokenUnchanged                                   string
-	SettingsSaveBtn, SettingsSaveHint, SettingsRestartHint   string
-	SettingsIfacePlaceholder                                 string
-	SettingsAPIPrefix, SettingsAPISecret                     string
-	SettingsCFEmail, SettingsCFGlobalKey                     string
-	SettingsIPv64Token                                       string
-	SettingsTelegramHeading, SettingsGotifyHeading           string
+	SettingsTitle, SettingsSecurity, SettingsTriggerToken       string
+	SettingsTokenPlaceholder, SettingsTokenSave                 string
+	SettingsSystem, SettingsIPMode, SettingsInterval            string
+	SettingsHealthPort, SettingsIface, SettingsIfaceHint        string
+	SettingsDNS, SettingsMaxLog, SettingsMaxRetries             string
+	SettingsMaxConcurrent, SettingsHourlyLimit                  string
+	SettingsLanguage, SettingsDryRun, SettingsDryRunHint        string
+	SettingsDryRunActive, SettingsDomains, SettingsAddDomain    string
+	SettingsAddBtn, SettingsCFOr                                string
+	SettingsNotify, SettingsNotifyEnabled, SettingsNotifyOn     string
+	SettingsNotifyEvents, SettingsTGToken, SettingsTGChatID     string
+	SettingsTokenUnchanged, SettingsDNSHint                     string
+	SettingsSaveBtn, SettingsSaveHint, SettingsRestartHint      string
+	SettingsIfacePlaceholder                                    string
+	SettingsAPIPrefix, SettingsAPISecret                        string
+	SettingsCFEmail, SettingsCFGlobalKey                        string
+	SettingsIPv64Token, SettingsTelegramHeading                 string
+	SettingsGotifyHeading, SettingsDomainPlaceholder            string
+	SettingsCFTokenHint, SettingsGotifyURL, SettingsGotifyToken string
 
 	// Domain display
 	DotTitleNoUpdate, DotTitleChanged, DotTitleLast string
@@ -912,6 +922,15 @@ type NotifyMessage struct {
 type notifyConfig struct {
 	notifiers []Notifier
 	events    map[NotifyEvent]struct{}
+	limiter   *notifyRateLimiter
+}
+
+type notifyRateLimiter struct {
+	mu       sync.Mutex
+	tokens   int
+	maxBurst int
+	lastFill time.Time
+	perSec   float64
 }
 
 // ============================================================================

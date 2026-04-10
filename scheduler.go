@@ -262,6 +262,14 @@ func saveCachesToDisk(zonesByProvider map[string][]Zone, cache *ZoneRecordCache)
 		pType := ProviderType(providerStr)
 
 		switch pType {
+		case ProviderIONOS:
+			if err := saveIONOSCacheToFile(zones, cache); err != nil {
+				debugLog("CACHE", "", fmt.Sprintf(T.IonosCacheSaveFailed, err))
+			} else {
+				savedZone = true
+				savedRecord = true
+			}
+
 		case ProviderCloudflare:
 			if err := saveCloudflareCacheToFile(zones, cache); err != nil {
 				debugLog("CACHE", "", fmt.Sprintf(T.CloudflareCacheSaveFailed, err))
@@ -270,13 +278,14 @@ func saveCachesToDisk(zonesByProvider map[string][]Zone, cache *ZoneRecordCache)
 				savedRecord = true
 			}
 
-		case ProviderIONOS:
-			if err := saveIONOSCacheToFile(zones, cache); err != nil {
-				debugLog("CACHE", "", fmt.Sprintf(T.IonosCacheSaveFailed, err))
+		case ProviderIPv64:
+			if err := saveIPv64Cache(); err != nil {
+				debugLog("CACHE", "", fmt.Sprintf("⚠️ IPv64 cache save failed: %v", err))
 			} else {
 				savedZone = true
 				savedRecord = true
 			}
+
 		}
 	}
 
@@ -347,6 +356,16 @@ func loadZonesFromDiskCache() (map[string][]Zone, error) {
 		seen[provider] = true
 
 		switch provider {
+		case ProviderIONOS:
+			if zones, _, err := loadIONOSCacheFromFile(); err == nil && len(zones) > 0 {
+				zonesByProvider[string(ProviderIONOS)] = zones
+				debugLog("CACHE", "", fmt.Sprintf(T.IonosZonesLoadedFromDisk, len(zones)))
+			}
+		case ProviderCloudflare:
+			if zones, _, err := loadCloudflareCacheFromFile(); err == nil && len(zones) > 0 {
+				zonesByProvider[string(ProviderCloudflare)] = zones
+				debugLog("CACHE", "", fmt.Sprintf(T.CloudflareZonesLoadedFromDisk, len(zones)))
+			}
 		case ProviderIPv64:
 			if err := loadIPv64CacheFromDisk(); err == nil {
 				providerCache.RLock()
@@ -359,16 +378,6 @@ func loadZonesFromDiskCache() (map[string][]Zone, error) {
 					zonesByProvider[string(ProviderIPv64)] = zones
 					debugLog("CACHE", "", fmt.Sprintf(T.IPv64ZonesLoadedFromDisk, len(zones)))
 				}
-			}
-		case ProviderCloudflare:
-			if zones, _, err := loadCloudflareCacheFromFile(); err == nil && len(zones) > 0 {
-				zonesByProvider[string(ProviderCloudflare)] = zones
-				debugLog("CACHE", "", fmt.Sprintf(T.CloudflareZonesLoadedFromDisk, len(zones)))
-			}
-		case ProviderIONOS:
-			if zones, _, err := loadIONOSCacheFromFile(); err == nil && len(zones) > 0 {
-				zonesByProvider[string(ProviderIONOS)] = zones
-				debugLog("CACHE", "", fmt.Sprintf(T.IonosZonesLoadedFromDisk, len(zones)))
 			}
 		}
 	}
@@ -388,6 +397,26 @@ func loadRecordCacheFromDisk(zonesByProvider map[string][]Zone) (*ZoneRecordCach
 		pType := ProviderType(providerStr)
 
 		switch pType {
+		case ProviderIONOS:
+			_, recordCache, err := loadIONOSCacheFromFile()
+			if err == nil && recordCache != nil {
+				for _, zone := range zones {
+					if records, exists := recordCache.Get(zone.ID); exists {
+						cache.Set(zone.ID, records)
+						loadedAny = true
+					}
+				}
+			}
+		case ProviderCloudflare:
+			_, recordCache, err := loadCloudflareCacheFromFile()
+			if err == nil && recordCache != nil {
+				for _, zone := range zones {
+					if records, exists := recordCache.Get(zone.ID); exists {
+						cache.Set(zone.ID, records)
+						loadedAny = true
+					}
+				}
+			}
 		case ProviderIPv64:
 			providerCache.RLock()
 			for _, z := range zones {
@@ -410,27 +439,6 @@ func loadRecordCacheFromDisk(zonesByProvider map[string][]Zone) (*ZoneRecordCach
 			}
 			providerCache.RUnlock()
 
-		case ProviderCloudflare:
-			_, recordCache, err := loadCloudflareCacheFromFile()
-			if err == nil && recordCache != nil {
-				for _, zone := range zones {
-					if records, exists := recordCache.Get(zone.ID); exists {
-						cache.Set(zone.ID, records)
-						loadedAny = true
-					}
-				}
-			}
-
-		case ProviderIONOS:
-			_, recordCache, err := loadIONOSCacheFromFile()
-			if err == nil && recordCache != nil {
-				for _, zone := range zones {
-					if records, exists := recordCache.Get(zone.ID); exists {
-						cache.Set(zone.ID, records)
-						loadedAny = true
-					}
-				}
-			}
 		}
 	}
 

@@ -140,19 +140,33 @@ domainLoop:
 	close(results)
 
 	successCount := 0
-	hasErrors := false
+	errorCount := 0
+	totalDomains := len(cfg.DomainConfigs)
 
 	for result := range results {
 		if result.Error != nil {
-			hasErrors = true
+			errorCount++
+			log(LogContext{
+				Level:   LogError,
+				Action:  ActionError,
+				Domain:  result.Domain,
+				Message: fmt.Sprintf("%s: %v", T.UpdateFailed, result.Error),
+			})
 		} else if result.Changed {
 			successCount++
 		}
 	}
-
-	lastOk.Store(successCount > 0 || !hasErrors)
+	allOk := errorCount == 0 && totalDomains > 0
+	lastOk.Store(allOk)
 	schedulerRanOnce.Store(true)
+
+	if errorCount > 0 {
+		debugLog("SCHEDULER", "",
+			fmt.Sprintf("⚠️ %d/%d domains failed", errorCount, totalDomains))
+	}
+
 	return successCount
+
 }
 
 func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdateJob, cache *ZoneRecordCache) domainUpdateResult {

@@ -179,9 +179,7 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 			wait := calculateRetryDelay(attempt, false)
 			debugLog("HTTP", "", fmt.Sprintf("⏱️  %s %v", T.RetryIn, wait))
 
-			select {
-			case <-time.After(wait):
-			case <-ctx.Done():
+			if !sleepOrCancel(ctx, wait) {
 				return nil, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
 			}
 			continue
@@ -200,9 +198,7 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 			lastErr = fmt.Errorf("%s: %w", T.ErrBodyRead, err)
 
 			wait := calculateRetryDelay(attempt, false)
-			select {
-			case <-time.After(wait):
-			case <-ctx.Done():
+			if !sleepOrCancel(ctx, wait) {
 				return nil, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
 			}
 			continue
@@ -252,9 +248,7 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 
 		debugLog("HTTP", "", fmt.Sprintf("🔄 %s #%d in %v...", T.RetryScheduled, attempt+2, wait))
 
-		select {
-		case <-time.After(wait):
-		case <-ctx.Done():
+		if !sleepOrCancel(ctx, wait) {
 			debugLog("HTTP", "", "❌ "+T.ContextCancelled)
 			return nil, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
 		}

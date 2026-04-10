@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"unicode"
 )
 
@@ -160,19 +161,35 @@ func loadLanguage(lang string) error {
 }
 
 var knownAcronyms = []string{
-	"IPv4", "IPv6", "HTTP", "JSON", "API", "DNS", "IP", "CF", "OK", "URL", "HTML", "TG", "ID", "WS"}
+	"IPv4", "IPv6", "HTML", "HTTP", "JSON", "API", "DNS", "URL", "CF", "OK", "TG", "WS", "ID", "IP"}
 
 var snakeCaseOverrides = map[string]string{}
+var snakeCaseCache sync.Map // map[string]string
 
 func toSnakeCase(s string) string {
 	if key, ok := snakeCaseOverrides[s]; ok {
 		return key
 	}
+	if cached, ok := snakeCaseCache.Load(s); ok {
+		return cached.(string)
+	}
+
+	result := buildSnakeCase(s)
+	snakeCaseCache.Store(s, result)
+	return result
+}
+
+func buildSnakeCase(s string) string {
+	type replacement struct{ from, to string }
+	var replacements []replacement
 
 	for _, acr := range knownAcronyms {
-		replacement := string(unicode.ToUpper([]rune(acr)[0])) +
-			strings.ToLower(acr[1:])
-		s = strings.ReplaceAll(s, acr, replacement)
+		if !strings.Contains(s, acr) {
+			continue
+		}
+		normalized := string(unicode.ToUpper([]rune(acr)[0])) + strings.ToLower(acr[1:])
+		replacements = append(replacements, replacement{acr, normalized})
+		s = strings.ReplaceAll(s, acr, normalized)
 	}
 
 	var result []rune

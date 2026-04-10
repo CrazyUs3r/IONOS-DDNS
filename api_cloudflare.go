@@ -176,13 +176,10 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 			apiMetrics.RecordError(method, 0, err, duration)
 			lastErr = fmt.Errorf("%s: %w", T.ErrNetworkError, err)
 
-			wait := calculateRetryDelay(attempt, true)
-			select {
-			case <-time.After(wait):
-				continue
-			case <-ctx.Done():
+			if !sleepOrCancel(ctx, calculateRetryDelay(attempt, true)) {
 				return nil, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
 			}
+			continue
 		}
 
 		respBody, readErr := io.ReadAll(res.Body)
@@ -196,13 +193,10 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 			lastErr = fmt.Errorf("%s: %w", T.ErrBodyRead, readErr)
 
 			serverBusy := res.StatusCode == 429 || res.StatusCode >= 500
-			wait := calculateRetryDelay(attempt, serverBusy)
-			select {
-			case <-time.After(wait):
-				continue
-			case <-ctx.Done():
+			if !sleepOrCancel(ctx, calculateRetryDelay(attempt, serverBusy)) {
 				return nil, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
 			}
+			continue
 		}
 
 		if res.StatusCode == http.StatusTooManyRequests {
@@ -214,12 +208,10 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 			if wait <= 0 {
 				wait = calculateRetryDelay(attempt, true)
 			}
-			select {
-			case <-time.After(wait):
-				continue
-			case <-ctx.Done():
+			if !sleepOrCancel(ctx, wait) {
 				return nil, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
 			}
+			continue
 		}
 
 		var cfResp CloudflareResponse
@@ -253,13 +245,10 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 			}
 
 			serverBusy := res.StatusCode == 429 || res.StatusCode >= 500
-			wait := calculateRetryDelay(attempt, serverBusy)
-			select {
-			case <-time.After(wait):
-				continue
-			case <-ctx.Done():
+			if !sleepOrCancel(ctx, calculateRetryDelay(attempt, serverBusy)) {
 				return nil, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
 			}
+			continue
 		}
 
 		if !cfResp.Success {
@@ -277,12 +266,10 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 				serverBusy := res.StatusCode == 429 || res.StatusCode >= 500
 				wait = calculateRetryDelay(attempt, serverBusy)
 			}
-			select {
-			case <-time.After(wait):
-				continue
-			case <-ctx.Done():
+			if !sleepOrCancel(ctx, wait) {
 				return nil, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
 			}
+			continue
 		}
 
 		apiMetrics.RecordSuccess(method, duration)

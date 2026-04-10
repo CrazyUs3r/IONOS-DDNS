@@ -47,9 +47,9 @@ func loadZoneCache(ctx context.Context, zonesByProvider map[string][]Zone) (*Zon
 			providerCache.RUnlock()
 
 			if !hasData {
-				debugLog("CACHE", "", "⚠️ Kein IPv64 Cache - versuche von Disk zu laden")
+				debugLog("CACHE", "", T.IPv64CacheLoadDisk)
 				if err := loadIPv64CacheFromDisk(); err != nil {
-					debugLog("CACHE", "", fmt.Sprintf("❌ Konnte IPv64 Cache nicht von Disk laden: %v", err))
+					debugLog("CACHE", "", fmt.Sprintf(T.IPv64CacheLoadDiskFailed, err))
 				}
 			}
 
@@ -57,7 +57,7 @@ func loadZoneCache(ctx context.Context, zonesByProvider map[string][]Zone) (*Zon
 			for _, z := range zones {
 				domain, ok := providerCache.ipv64Records[z.Name]
 				if !ok {
-					debugLog("CACHE", z.Name, "⚠️ Keine IPv64-Daten im Cache")
+					debugLog("CACHE", z.Name, T.IPv64CacheNoData)
 					continue
 				}
 
@@ -74,7 +74,7 @@ func loadZoneCache(ctx context.Context, zonesByProvider map[string][]Zone) (*Zon
 				debugLog(
 					"CACHE",
 					z.Name,
-					fmt.Sprintf("✅ %d IPv64 Records aus Cache geladen", len(records)),
+					fmt.Sprintf(T.IPv64CacheRecordsLoaded, len(records)),
 				)
 			}
 			providerCache.RUnlock()
@@ -145,12 +145,12 @@ func loadZoneCache(ctx context.Context, zonesByProvider map[string][]Zone) (*Zon
 					cacheErrorsMu.Lock()
 					cacheErrors = append(cacheErrors, errMsg)
 					cacheErrorsMu.Unlock()
-					debugLog("CACHE", zone.Name, fmt.Sprintf("❌ Fehler beim Laden: %v", err))
+					debugLog("CACHE", zone.Name, fmt.Sprintf(T.CacheLoadError, err))
 					return
 				}
 
 				cache.Set(zone.ID, records)
-				debugLog("CACHE", zone.Name, fmt.Sprintf("✅ %d Records geladen", len(records)))
+				debugLog("CACHE", zone.Name, fmt.Sprintf(T.CacheRecordsLoaded, len(records)))
 			}(z, dc, provider)
 		}
 	}

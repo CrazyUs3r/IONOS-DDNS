@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 )
 
 // ============================================================================
@@ -14,6 +15,7 @@ func initNotifiers() {
 	notifyCfg = notifyConfig{
 		events:    make(map[NotifyEvent]struct{}),
 		notifiers: []Notifier{},
+		limiter:   newNotifyRateLimiter(1.0, 5),
 	}
 
 	for _, raw := range cfg.Notifications.Events {
@@ -45,6 +47,11 @@ func notify(ctx LogContext) {
 
 	event := NotifyEvent(strings.ToUpper(ctx.Action))
 	if _, ok := notifyCfg.events[event]; !ok {
+		return
+	}
+
+	if !notifyCfg.limiter.allow() {
+		debugLog("NOTIFY", "", "⚠️ Rate limit reached, notification dropped")
 		return
 	}
 
@@ -97,6 +104,34 @@ func buildNotifyMessage(ctx LogContext) NotifyMessage {
 		Message: msg,
 		Level:   ctx.Level,
 	}
+}
+
+func newNotifyRateLimiter(perSecond float64, burst int) *notifyRateLimiter {
+	return &notifyRateLimiter{
+		tokens:   burst,
+		maxBurst: burst,
+		lastFill: time.Now(),
+		perSec:   perSecond,
+	}
+}
+
+func (r *notifyRateLimiter) allow() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	now := time.Now()
+	elapsed := now.Sub(r.lastFill).Seconds()
+	r.lastFill = now
+
+	r.tokens += int(elapsed * r.perSec)
+	if r.tokens > r.maxBurst {
+		r.tokens = r.maxBurst
+	}
+	if r.tokens <= 0 {
+		return false
+	}
+	r.tokens--
+	return true
 }
 
 // ============================================================================

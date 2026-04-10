@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"time"
 
 	"golang.org/x/sync/singleflight"
 )
@@ -310,5 +311,14 @@ func doSingleflight[T any](
 			return zero, res.Err
 		}
 		return res.Val.(T), nil
+	}
+}
+
+func sleepOrCancel(ctx context.Context, d time.Duration) bool {
+	select {
+	case <-time.After(d):
+		return true
+	case <-ctx.Done():
+		return false
 	}
 }

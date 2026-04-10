@@ -63,7 +63,7 @@ func run() int {
 		log(LogContext{
 			Level:    LogError,
 			Category: "CONFIG",
-			Message:  fmt.Sprintf(t(T.LangDirCreateFailed, "Failed to create language directory: %v"), err),
+			Message:  fmt.Sprintf(t(T.LanguageDirCreateFailed, "Failed to create language directory: %v"), err),
 		})
 		return 1
 	}
@@ -77,7 +77,7 @@ func run() int {
 	log(LogContext{
 		Level:    LogInfo,
 		Category: "CONFIG",
-		Message:  fmt.Sprintf(t(T.ConfigLangDir, "Languages: %s"), langDir),
+		Message:  fmt.Sprintf(t(T.ConfigLanguageDir, "Languages: %s"), langDir),
 	})
 
 	log(LogContext{
@@ -207,7 +207,7 @@ func run() int {
 		log(LogContext{
 			Level:    LogError,
 			Category: "CONFIG",
-			Message:  fmt.Sprintf(t(T.LangFileLoadFailed, "Failed to load language file: %v"), err),
+			Message:  fmt.Sprintf(t(T.LanguageFileLoadFailed, "Failed to load language file: %v"), err),
 		})
 		return 1
 	}
@@ -255,7 +255,7 @@ func run() int {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionConfig,
-			Message: fmt.Sprintf(t(T.LangDirCreateFailed, "Failed to create lang directory: %v"), err),
+			Message: fmt.Sprintf(t(T.LanguageDirCreateFailed, "Failed to create lang directory: %v"), err),
 		})
 		return 1
 	}

@@ -16,6 +16,7 @@ import (
 	"net/http/httputil"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -226,141 +227,174 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	return resp, nil
 }
 
+func ResetHTTPClient() {
+	clientMu.Lock()
+	defer clientMu.Unlock()
+	httpClient = nil
+	clientOnce = sync.Once{}
+	clientDNSKey = ""
+}
+
+func dnsKey(servers []string) string {
+	return strings.Join(servers, ",")
+}
+
 func getHTTPClient() *http.Client {
-	clientOnce.Do(func() {
-		dnsList := cfg.DNSServers
-		if len(dnsList) == 0 {
-			dnsList = []string{"1.1.1.1:53", "8.8.8.8:53"}
-		}
+	currentKey := dnsKey(cfg.DNSServers)
 
-		domainCount := len(cfg.DomainConfigs)
-		maxIdleConns := HTTPMaxIdleConns
-		maxIdleConnsPerHost := HTTPMaxIdleConnsHost
-		maxConnsPerHost := HTTPMaxConnsHost
+	// Schneller Pfad: DNS unverändert
+	clientMu.RLock()
+	if httpClient != nil && clientDNSKey == currentKey {
+		c := httpClient
+		clientMu.RUnlock()
+		return c
+	}
+	clientMu.RUnlock()
 
-		if domainCount > 20 {
-			multiplier := (domainCount / 20) + 1
-			maxIdleConns *= multiplier
-			maxIdleConnsPerHost *= multiplier
-			maxConnsPerHost *= multiplier
+	// Langsamer Pfad: neu bauen
+	clientMu.Lock()
+	defer clientMu.Unlock()
 
-			debugLog("HTTP", "", fmt.Sprintf(
-				"🔧 %s %d Domains → MaxConns=%d, IdlePerHost=%d",
-				T.HTTPPool, domainCount, maxConnsPerHost, maxIdleConnsPerHost,
-			))
-		}
+	// Double-check nach Lock
+	if httpClient != nil && clientDNSKey == currentKey {
+		return httpClient
+	}
 
-		resolver := &net.Resolver{
-			PreferGo: true,
-			Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
-				var lastErr error
-				startIndex := int(atomic.LoadInt32(&lastSuccessfulDNS))
+	httpClient = buildHTTPClient(cfg.DNSServers)
+	clientDNSKey = currentKey
+	return httpClient
+}
 
-				for i := 0; i < len(dnsList); i++ {
-					if err := ctx.Err(); err != nil {
-						return nil, err
-					}
+func buildHTTPClient(dnsList []string) *http.Client {
+	if len(dnsList) == 0 {
+		dnsList = []string{"1.1.1.1:53", "8.8.8.8:53"}
+	}
+	domainCount := len(cfg.DomainConfigs)
+	maxIdleConns := HTTPMaxIdleConns
+	maxIdleConnsPerHost := HTTPMaxIdleConnsHost
+	maxConnsPerHost := HTTPMaxConnsHost
 
-					idx := (startIndex + i) % len(dnsList)
-					targetAddr := dnsList[idx]
-					if !strings.Contains(targetAddr, ":") {
-						targetAddr += ":53"
-					}
+	if domainCount > 20 {
+		multiplier := (domainCount / 20) + 1
+		maxIdleConns *= multiplier
+		maxIdleConnsPerHost *= multiplier
+		maxConnsPerHost *= multiplier
 
-					d := net.Dialer{Timeout: 5 * time.Second}
+		debugLog("HTTP", "", fmt.Sprintf(
+			"🔧 %s %d Domains → MaxConns=%d, IdlePerHost=%d",
+			T.HTTPPool, domainCount, maxConnsPerHost, maxIdleConnsPerHost,
+		))
+	}
 
-					conn, err := d.DialContext(ctx, "udp", targetAddr)
-					if err != nil {
-						conn, err = d.DialContext(ctx, "tcp", targetAddr)
-					}
+	resolver := &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			var lastErr error
+			startIndex := int(atomic.LoadInt32(&lastSuccessfulDNS))
 
-					if err == nil {
-						if idx != startIndex {
-							atomic.StoreInt32(&lastSuccessfulDNS, int32(idx))
-						}
-						return conn, nil
-					}
-
-					lastErr = err
-					debugLog("DNS-FAILOVER", "", fmt.Sprintf("❌ DNS %s fehlgeschlagen: %v", targetAddr, err))
+			for i := 0; i < len(dnsList); i++ {
+				if err := ctx.Err(); err != nil {
+					return nil, err
 				}
 
-				return nil, fmt.Errorf("alle DNS-Server fehlgeschlagen: %w", lastErr)
-			},
-		}
+				idx := (startIndex + i) % len(dnsList)
+				targetAddr := dnsList[idx]
+				if !strings.Contains(targetAddr, ":") {
+					targetAddr += ":53"
+				}
 
-		dnsTTL := time.Duration(cfg.Interval)*time.Second + 30*time.Second
-		if dnsTTL < 60*time.Second {
-			dnsTTL = 60 * time.Second
-		}
-		if dnsTTL > 10*time.Minute {
-			dnsTTL = 10 * time.Minute
-		}
-		cache := newDNSCache(resolver, dnsTTL)
+				d := net.Dialer{Timeout: 5 * time.Second}
 
-		baseDialer := &net.Dialer{
-			Timeout:       DNSResolverTimeout,
-			KeepAlive:     DNSKeepalive,
-			DualStack:     true,
-			FallbackDelay: 250 * time.Millisecond,
-		}
+				conn, err := d.DialContext(ctx, "udp", targetAddr)
+				if err != nil {
+					conn, err = d.DialContext(ctx, "tcp", targetAddr)
+				}
 
-		cachedDialContext := func(ctx context.Context, network, addr string) (net.Conn, error) {
-			host, port, err := net.SplitHostPort(addr)
-			if err != nil {
-				return baseDialer.DialContext(ctx, network, addr)
-			}
-
-			if ip := net.ParseIP(host); ip != nil {
-				return baseDialer.DialContext(ctx, network, addr)
-			}
-
-			addrs, err := cache.getIPAddrs(ctx, host)
-			if err != nil {
-				return nil, err
-			}
-
-			var lastErr error
-			for _, ipAddr := range addrs {
-				target := net.JoinHostPort(ipAddr.IP.String(), port)
-				conn, dErr := baseDialer.DialContext(ctx, network, target)
-				if dErr == nil {
+				if err == nil {
+					if idx != startIndex {
+						atomic.StoreInt32(&lastSuccessfulDNS, int32(idx))
+					}
 					return conn, nil
 				}
-				lastErr = dErr
+
+				lastErr = err
+				debugLog("DNS-FAILOVER", "", fmt.Sprintf("❌ DNS %s fehlgeschlagen: %v", targetAddr, err))
 			}
-			cache.invalidate(host)
-			return nil, fmt.Errorf("dial failed for %s (ips=%d): %w", addr, len(addrs), lastErr)
+
+			return nil, fmt.Errorf("alle DNS-Server fehlgeschlagen: %w", lastErr)
+		},
+	}
+
+	dnsTTL := time.Duration(cfg.Interval)*time.Second + 30*time.Second
+	if dnsTTL < 60*time.Second {
+		dnsTTL = 60 * time.Second
+	}
+	if dnsTTL > 10*time.Minute {
+		dnsTTL = 10 * time.Minute
+	}
+	cache := newDNSCache(resolver, dnsTTL)
+
+	baseDialer := &net.Dialer{
+		Timeout:       DNSResolverTimeout,
+		KeepAlive:     DNSKeepalive,
+		DualStack:     true,
+		FallbackDelay: 250 * time.Millisecond,
+	}
+
+	cachedDialContext := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			return baseDialer.DialContext(ctx, network, addr)
 		}
 
-		baseTransport := &http.Transport{
-			DialContext:           cachedDialContext,
-			MaxIdleConns:          maxIdleConns,
-			MaxIdleConnsPerHost:   maxIdleConnsPerHost,
-			MaxConnsPerHost:       maxConnsPerHost,
-			IdleConnTimeout:       HTTPIdleConnTimeout,
-			TLSHandshakeTimeout:   HTTPTLSTimeout,
-			ResponseHeaderTimeout: HTTPResponseTimeout,
-			ExpectContinueTimeout: HTTPExpectTimeout,
-			DisableKeepAlives:     false,
-			ForceAttemptHTTP2:     true,
-			TLSClientConfig: &tls.Config{
-				MinVersion:         tls.VersionTLS12,
-				ClientSessionCache: tls.NewLRUClientSessionCache(32),
-			},
+		if ip := net.ParseIP(host); ip != nil {
+			return baseDialer.DialContext(ctx, network, addr)
 		}
 
-		httpClient = &http.Client{
-			Timeout: 30 * time.Second,
-			Transport: &loggingTransport{
-				base: baseTransport,
-			},
+		addrs, err := cache.getIPAddrs(ctx, host)
+		if err != nil {
+			return nil, err
 		}
 
-		debugLog("SYSTEM", "", fmt.Sprintf(T.HTTPClientInitialized, len(dnsList)))
-	})
+		var lastErr error
+		for _, ipAddr := range addrs {
+			target := net.JoinHostPort(ipAddr.IP.String(), port)
+			conn, dErr := baseDialer.DialContext(ctx, network, target)
+			if dErr == nil {
+				return conn, nil
+			}
+			lastErr = dErr
+		}
+		cache.invalidate(host)
+		return nil, fmt.Errorf("dial failed for %s (ips=%d): %w", addr, len(addrs), lastErr)
+	}
 
-	return httpClient
+	baseTransport := &http.Transport{
+		DialContext:           cachedDialContext,
+		MaxIdleConns:          maxIdleConns,
+		MaxIdleConnsPerHost:   maxIdleConnsPerHost,
+		MaxConnsPerHost:       maxConnsPerHost,
+		IdleConnTimeout:       HTTPIdleConnTimeout,
+		TLSHandshakeTimeout:   HTTPTLSTimeout,
+		ResponseHeaderTimeout: HTTPResponseTimeout,
+		ExpectContinueTimeout: HTTPExpectTimeout,
+		DisableKeepAlives:     false,
+		ForceAttemptHTTP2:     true,
+		TLSClientConfig: &tls.Config{
+			MinVersion:         tls.VersionTLS12,
+			ClientSessionCache: tls.NewLRUClientSessionCache(32),
+		},
+	}
+
+	httpClient = &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &loggingTransport{
+			base: baseTransport,
+		},
+	}
+
+	debugLog("SYSTEM", "", fmt.Sprintf(T.HTTPClientInitialized, len(dnsList)))
+	return &http.Client{ /* ... */ }
 }
 
 // ============================================================================
