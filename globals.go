@@ -40,7 +40,6 @@ var (
 	lastErrorMsg     = &SafeErrorMsg{}
 
 	httpClient   *http.Client
-	clientOnce   sync.Once
 	clientMu     sync.RWMutex
 	clientDNSKey string
 

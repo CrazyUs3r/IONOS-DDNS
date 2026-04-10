@@ -16,7 +16,6 @@ import (
 	"net/http/httputil"
 	"os"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -231,7 +230,6 @@ func ResetHTTPClient() {
 	clientMu.Lock()
 	defer clientMu.Unlock()
 	httpClient = nil
-	clientOnce = sync.Once{}
 	clientDNSKey = ""
 }
 
