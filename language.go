@@ -180,15 +180,11 @@ func toSnakeCase(s string) string {
 }
 
 func buildSnakeCase(s string) string {
-	type replacement struct{ from, to string }
-	var replacements []replacement
-
 	for _, acr := range knownAcronyms {
 		if !strings.Contains(s, acr) {
 			continue
 		}
 		normalized := string(unicode.ToUpper([]rune(acr)[0])) + strings.ToLower(acr[1:])
-		replacements = append(replacements, replacement{acr, normalized})
 		s = strings.ReplaceAll(s, acr, normalized)
 	}
 
