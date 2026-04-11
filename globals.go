@@ -1016,13 +1016,11 @@ type telegramNotifier struct {
 	token       string
 	chatID      string
 	instanceTag string
-
 	pollOnce       sync.Once
 	pollClientOnce sync.Once
 	pollClient     *http.Client
 	lastOffset     atomic.Int32
 	sendQueue      chan tgQueuedMsg
-	queueOnce      sync.Once
 }
 
 type tgQueuedMsg struct {

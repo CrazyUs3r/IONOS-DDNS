@@ -26,7 +26,6 @@ func newTelegramNotifier(token, chatID string) *telegramNotifier {
 		instanceTag: generateInstanceTag(),
 		sendQueue:   make(chan tgQueuedMsg, tgQueueSize),
 	}
-	// Worker sofort starten
 	go t.drainQueue()
 	return t
 }
@@ -149,8 +148,6 @@ func (t *telegramNotifier) sendTextWithRetry(chatID, text string, kb *tgInlineKe
 		if err == nil {
 			return nil
 		}
-
-		// 429 Rate Limit → warten und retry
 		if strings.Contains(err.Error(), "429") {
 			debugLog("NOTIFY", "", fmt.Sprintf(
 				"⌛ Telegram Rate Limit – warte %v (Versuch %d/%d)",
