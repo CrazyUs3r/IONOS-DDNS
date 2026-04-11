@@ -812,6 +812,7 @@ func createMux() *http.ServeMux {
 		}
 
 		ResetHTTPClient()
+		initNotifiers()
 		forceNextUpdate.Store(true)
 		lastCleanup = time.Time{}
 

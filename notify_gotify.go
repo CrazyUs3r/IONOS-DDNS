@@ -16,33 +16,141 @@ import (
 // GOTIFY NOTIFIER
 // ============================================================================
 type gotifyNotifier struct {
-	url   string
-	token string
+	url       string
+	token     string
+	sendQueue chan gotifyQueuedMsg
+}
+
+type gotifyQueuedMsg struct {
+	title    string
+	body     string
+	priority int
+	enqueued time.Time
 }
 
 func newGotifyNotifier(url, token string) *gotifyNotifier {
-	url = strings.TrimRight(url, "/")
-	return &gotifyNotifier{url: url, token: token}
+	g := &gotifyNotifier{
+		url:       strings.TrimRight(url, "/"),
+		token:     token,
+		sendQueue: make(chan gotifyQueuedMsg, gotifyQueueSize),
+	}
+	go g.drainQueue()
+	return g
 }
 
 func (g *gotifyNotifier) Name() string { return "Gotify" }
 
 func (g *gotifyNotifier) Send(msg NotifyMessage) error {
 	title, body := formatGotifyMessage(msg)
+	qm := gotifyQueuedMsg{
+		title:    title,
+		body:     body,
+		priority: gotifyPriority(msg.Level),
+		enqueued: time.Now(),
+	}
+	select {
+	case g.sendQueue <- qm:
+	default:
+		select {
+		case dropped := <-g.sendQueue:
+			debugLog("NOTIFY", "", fmt.Sprintf(
+				"⚠️ Gotify Queue voll – älteste Nachricht verworfen (Alter: %v)",
+				time.Since(dropped.enqueued).Round(time.Second),
+			))
+		default:
+		}
+		select {
+		case g.sendQueue <- qm:
+		default:
+		}
+	}
+	return nil
+}
+
+func (g *gotifyNotifier) SendSync(msg NotifyMessage) error {
+	title, body := formatGotifyMessage(msg)
+	return g.sendWithRetry(gotifyQueuedMsg{
+		title:    title,
+		body:     body,
+		priority: gotifyPriority(msg.Level),
+		enqueued: time.Now(),
+	})
+}
+
+func (g *gotifyNotifier) drainQueue() {
+	ticker := time.NewTicker(gotifySendDelay)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-shutdownCtx.Done():
+			deadline := time.After(10 * time.Second)
+			for {
+				select {
+				case msg := <-g.sendQueue:
+					if time.Since(msg.enqueued) < gotifyQueueMaxAge {
+						_ = g.sendWithRetry(msg)
+					}
+				case <-deadline:
+					return
+				}
+			}
+
+		case <-ticker.C:
+			select {
+			case msg := <-g.sendQueue:
+				if time.Since(msg.enqueued) > gotifyQueueMaxAge {
+					debugLog("NOTIFY", "", fmt.Sprintf(
+						"⚠️ Gotify Nachricht verworfen (zu alt: %v)",
+						time.Since(msg.enqueued).Round(time.Second),
+					))
+					continue
+				}
+				if err := g.sendWithRetry(msg); err != nil {
+					debugLog("NOTIFY", "", fmt.Sprintf("⚠️ Gotify Send fehlgeschlagen: %v", err))
+				}
+			default:
+			}
+		}
+	}
+}
+
+func (g *gotifyNotifier) sendWithRetry(msg gotifyQueuedMsg) error {
+	const maxRetries = 3
+	wait := 5 * time.Second
 
 	payload := map[string]interface{}{
-		"title":    title,
-		"message":  body,
-		"priority": gotifyPriority(msg.Level),
+		"title":    msg.title,
+		"message":  msg.body,
+		"priority": msg.priority,
 	}
 
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		err := g.doSend(payload)
+		if err == nil {
+			return nil
+		}
+		debugLog("NOTIFY", "", fmt.Sprintf(
+			"⌛ Gotify Retry %d/%d nach Fehler: %v (warte %v)",
+			attempt+1, maxRetries, err, wait,
+		))
+		select {
+		case <-shutdownCtx.Done():
+			return err
+		case <-time.After(wait):
+		}
+		wait *= 2
+	}
+	return fmt.Errorf("gotify: max retries erreicht")
+}
+
+func (g *gotifyNotifier) doSend(payload map[string]interface{}) error {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal: %w", err)
 	}
 
 	endpoint := fmt.Sprintf("%s/message?token=%s", g.url, g.token)
-
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -63,7 +171,6 @@ func (g *gotifyNotifier) Send(msg NotifyMessage) error {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		return fmt.Errorf("gotify HTTP %d: %s", resp.StatusCode, string(b))
 	}
-
 	return nil
 }
 

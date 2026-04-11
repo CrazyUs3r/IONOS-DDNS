@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"time"
 )
 
 // ============================================================================
@@ -15,7 +14,6 @@ func initNotifiers() {
 	notifyCfg = notifyConfig{
 		events:    make(map[NotifyEvent]struct{}),
 		notifiers: []Notifier{},
-		limiter:   newNotifyRateLimiter(1.0, 5),
 	}
 
 	for _, raw := range cfg.Notifications.Events {
@@ -27,13 +25,22 @@ func initNotifiers() {
 		tg := newTelegramNotifier(cfg.Notifications.Telegram.Token, cfg.Notifications.Telegram.ChatID)
 		notifyCfg.notifiers = append(notifyCfg.notifiers, tg)
 		tg.StartPolling()
-		debugLog("NOTIFY", "", "✅ Telegram aktiv")
+		debugLog("NOTIFY", "", T.NotifyTelegramActive)
+		log(LogContext{
+			Level:   LogInfo,
+			Action:  ActionConfig,
+			Message: t(T.NotifyTelegramActive, "✅ Telegram active"),
+		})
 	}
 
 	if cfg.Notifications.Gotify.URL != "" && cfg.Notifications.Gotify.Token != "" {
-		notifyCfg.notifiers = append(notifyCfg.notifiers,
-			newGotifyNotifier(cfg.Notifications.Gotify.URL, cfg.Notifications.Gotify.Token))
-		debugLog("NOTIFY", "", "✅ Gotify aktiv")
+		notifyCfg.notifiers = append(notifyCfg.notifiers, newGotifyNotifier(cfg.Notifications.Gotify.URL, cfg.Notifications.Gotify.Token))
+		debugLog("NOTIFY", "", T.NotifyGotifyActive)
+		log(LogContext{
+			Level:   LogInfo,
+			Action:  ActionConfig,
+			Message: t(T.NotifyGotifyActive, "✅ Gotify active"),
+		})
 	}
 }
 
@@ -50,18 +57,13 @@ func notify(ctx LogContext) {
 		return
 	}
 
-	if !notifyCfg.limiter.allow() {
-		debugLog("NOTIFY", "", "⚠️ Rate limit reached, notification dropped")
-		return
-	}
-
 	nm := buildNotifyMessage(ctx)
 
 	for _, n := range notifyCfg.notifiers {
 		n := n
 		go func() {
 			if err := n.Send(nm); err != nil {
-				fmt.Printf("[WARN] Notify %s fehlgeschlagen: %v\n", n.Name(), err)
+				debugLog("NOTIFY", "", fmt.Sprintf(T.NotifyFailed, n.Name(), err))
 			}
 		}()
 	}
@@ -79,14 +81,26 @@ func notifySync(ctx LogContext) {
 
 	nm := buildNotifyMessage(ctx)
 
+	type syncSender interface {
+		SendSync(msg NotifyMessage) error
+	}
+
 	var wg sync.WaitGroup
 	for _, n := range notifyCfg.notifiers {
 		n := n
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := n.Send(nm); err != nil {
-				fmt.Printf("[WARN] Notify %s fehlgeschlagen: %v\n", n.Name(), err)
+			
+			var err error
+			if s, ok := n.(syncSender); ok {
+				err = s.SendSync(nm)
+			} else {
+				err = n.Send(nm)
+			}
+
+			if err != nil {
+				debugLog("NOTIFY", "", fmt.Sprintf(T.NotifyFailed, n.Name(), err))
 			}
 		}()
 	}
@@ -104,34 +118,6 @@ func buildNotifyMessage(ctx LogContext) NotifyMessage {
 		Message: msg,
 		Level:   ctx.Level,
 	}
-}
-
-func newNotifyRateLimiter(perSecond float64, burst int) *notifyRateLimiter {
-	return &notifyRateLimiter{
-		tokens:   burst,
-		maxBurst: burst,
-		lastFill: time.Now(),
-		perSec:   perSecond,
-	}
-}
-
-func (r *notifyRateLimiter) allow() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	now := time.Now()
-	elapsed := now.Sub(r.lastFill).Seconds()
-	r.lastFill = now
-
-	r.tokens += int(elapsed * r.perSec)
-	if r.tokens > r.maxBurst {
-		r.tokens = r.maxBurst
-	}
-	if r.tokens <= 0 {
-		return false
-	}
-	r.tokens--
-	return true
 }
 
 // ============================================================================

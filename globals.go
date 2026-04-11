@@ -276,6 +276,18 @@ const (
 	ManagedComment        = "Go-DynDNS/2.0"
 )
 
+const (
+	gotifyQueueSize   = 64
+	gotifyQueueMaxAge = 5 * time.Minute
+	gotifySendDelay   = 200 * time.Millisecond
+)
+
+const (
+	tgQueueSize    = 64
+	tgQueueMaxAge  = 5 * time.Minute
+	tgSendInterval = 500 * time.Millisecond
+)
+
 // ============================================================================
 // PROVIDER TYPES
 // ============================================================================
@@ -388,15 +400,28 @@ type Phrases struct {
 	RateLimitGlobal                                                           string
 
 	// Notify event labels & descriptions
-	NotifyEventUpdateLabel, NotifyEventUpdateDesc          string
-	NotifyEventCreateLabel, NotifyEventCreateDesc          string
-	NotifyEventErrorLabel, NotifyEventErrorDesc            string
-	NotifyEventStartLabel, NotifyEventStartDesc            string
-	NotifyEventStopLabel, NotifyEventStopDesc              string
-	NotifyEventCleanupLabel, NotifyEventCleanupDesc        string
-	TgCmdStart, TgCmdStatus, TgCmdMetrics, TgCmdDomains    string
-	TgCmdUpdate, TgCmdHealth, TgCmdHelp, TgMenuPrompt      string
-	TgUpdateAlreadyRunning, TgUpdateStarting, TgUpdateDone string
+	NotifyEventUpdateLabel, NotifyEventUpdateDesc                              string
+	NotifyEventCreateLabel, NotifyEventCreateDesc                              string
+	NotifyEventErrorLabel, NotifyEventErrorDesc                                string
+	NotifyEventStartLabel, NotifyEventStartDesc                                string
+	NotifyEventStopLabel, NotifyEventStopDesc                                  string
+	NotifyEventCleanupLabel, NotifyEventCleanupDesc                            string
+	NotifyTelegramActive, NotifyGotifyActive                                   string
+	TgCmdStart, TgCmdStatus, TgCmdMetrics, TgCmdDomains                        string
+	TgCmdUpdate, TgCmdHealth, TgCmdHelp, TgMenuPrompt                          string
+	TgUpdateAlreadyRunning, TgUpdateStarting, TgUpdateDone                     string
+	TgUnknownCommand, NotifyTelegramManualUpdate, NotifyFailed                 string
+	TgStatusOnline, TgStatusError, TgStatusStarting, TgStatusHeading           string
+	TgStatusLabelStatus, TgStatusLabelIPMode, TgStatusLabelDomains             string
+	TgStatusLabelInterval, TgStatusLabelDryRun, TgStatusLabelRequests          string
+	TgStatusLabelSuccessRate, TgStatusLabelLatency, TgStatusLabelLastOk        string
+	TgMetricsHeading, TgMetricsRequests, TgMetricsTotal, TgMetricsSuccessRate  string
+	TgMetricsClientErr, TgMetricsServerErr, TgMetricsLatency, TgMetricsIPCheck string
+	TgMetricsChecks, TgMetricsLast, TgMetricsHourlyLimit, TgMetricsUsed        string
+	TgMetricsLoad, TgMetricsTodayHTTP                                          string
+	TgDomainsHeading, TgDomainsCurrentIPs                                      string
+	TgHealthHeading, TgHealthStarting, TgHealthWaitingDetail                   string
+	TgHealthHealthy, TgHealthUnhealthy, TgHealthErrorLabel                     string
 
 	// Cache & persistence
 	ErrRecordCacheNil, ErrCacheDirCreate, ErrCacheMarshal   string
@@ -921,15 +946,6 @@ type NotifyMessage struct {
 type notifyConfig struct {
 	notifiers []Notifier
 	events    map[NotifyEvent]struct{}
-	limiter   *notifyRateLimiter
-}
-
-type notifyRateLimiter struct {
-	mu       sync.Mutex
-	tokens   int
-	maxBurst int
-	lastFill time.Time
-	perSec   float64
 }
 
 // ============================================================================
@@ -957,7 +973,6 @@ type dnsInFlight struct {
 // ============================================================================
 // TELEGRAM TYPES
 // ============================================================================
-
 type tgMessage struct {
 	MessageID int    `json:"message_id"`
 	Text      string `json:"text"`
@@ -1006,4 +1021,13 @@ type telegramNotifier struct {
 	pollClientOnce sync.Once
 	pollClient     *http.Client
 	lastOffset     atomic.Int32
+	sendQueue      chan tgQueuedMsg
+	queueOnce      sync.Once
+}
+
+type tgQueuedMsg struct {
+	chatID   string
+	text     string
+	kb       *tgInlineKeyboard
+	enqueued time.Time
 }

@@ -20,11 +20,15 @@ import (
 // TELEGRAM NOTIFIER
 // ============================================================================
 func newTelegramNotifier(token, chatID string) *telegramNotifier {
-	return &telegramNotifier{
+	t := &telegramNotifier{
 		token:       token,
 		chatID:      chatID,
 		instanceTag: generateInstanceTag(),
+		sendQueue:   make(chan tgQueuedMsg, tgQueueSize),
 	}
+	// Worker sofort starten
+	go t.drainQueue()
+	return t
 }
 
 func (t *telegramNotifier) getPollClient() *http.Client {
@@ -62,7 +66,107 @@ func (t *telegramNotifier) Name() string { return "Telegram" }
 // ============================================================================
 func (t *telegramNotifier) Send(msg NotifyMessage) error {
 	text := formatTelegramMessage(msg, t.instanceTag)
-	return t.sendText(t.chatID, text, nil)
+	t.enqueue(t.chatID, text, nil)
+	return nil
+}
+
+func (t *telegramNotifier) SendSync(msg NotifyMessage) error {
+	text := formatTelegramMessage(msg, t.instanceTag)
+	return t.sendTextWithRetry(t.chatID, text, nil)
+}
+
+func (t *telegramNotifier) enqueue(chatID, text string, kb *tgInlineKeyboard) {
+	msg := tgQueuedMsg{
+		chatID:   chatID,
+		text:     text,
+		kb:       kb,
+		enqueued: time.Now(),
+	}
+	select {
+	case t.sendQueue <- msg:
+	default:
+		select {
+		case dropped := <-t.sendQueue:
+			debugLog("NOTIFY", "", fmt.Sprintf(
+				"⚠️ Telegram Queue voll – älteste Nachricht verworfen (Alter: %v)",
+				time.Since(dropped.enqueued).Round(time.Second),
+			))
+		default:
+		}
+		select {
+		case t.sendQueue <- msg:
+		default:
+			debugLog("NOTIFY", "", "⚠️ Telegram Queue konnte Nachricht nicht einreihen")
+		}
+	}
+}
+
+func (t *telegramNotifier) drainQueue() {
+	ticker := time.NewTicker(tgSendInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-shutdownCtx.Done():
+			deadline := time.After(10 * time.Second)
+			for {
+				select {
+				case msg := <-t.sendQueue:
+					if time.Since(msg.enqueued) < tgQueueMaxAge {
+						_ = t.sendTextWithRetry(msg.chatID, msg.text, msg.kb)
+					}
+				case <-deadline:
+					return
+				}
+			}
+
+		case <-ticker.C:
+			select {
+			case msg := <-t.sendQueue:
+				if time.Since(msg.enqueued) > tgQueueMaxAge {
+					debugLog("NOTIFY", "", fmt.Sprintf(
+						"⚠️ Telegram Nachricht verworfen (zu alt: %v)",
+						time.Since(msg.enqueued).Round(time.Second),
+					))
+					continue
+				}
+				if err := t.sendTextWithRetry(msg.chatID, msg.text, msg.kb); err != nil {
+					debugLog("NOTIFY", "", fmt.Sprintf("⚠️ Telegram Send fehlgeschlagen: %v", err))
+				}
+			default:
+
+			}
+		}
+	}
+}
+
+func (t *telegramNotifier) sendTextWithRetry(chatID, text string, kb *tgInlineKeyboard) error {
+	const maxRetries = 3
+	wait := 5 * time.Second
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		err := t.sendText(chatID, text, kb)
+		if err == nil {
+			return nil
+		}
+
+		// 429 Rate Limit → warten und retry
+		if strings.Contains(err.Error(), "429") {
+			debugLog("NOTIFY", "", fmt.Sprintf(
+				"⌛ Telegram Rate Limit – warte %v (Versuch %d/%d)",
+				wait, attempt+1, maxRetries,
+			))
+			select {
+			case <-shutdownCtx.Done():
+				return err
+			case <-time.After(wait):
+			}
+			wait *= 2
+			continue
+		}
+		return err
+	}
+	return fmt.Errorf("telegram: max retries erreicht")
 }
 
 func (t *telegramNotifier) sendText(chatID, text string, kb *tgInlineKeyboard) error {
@@ -316,7 +420,7 @@ func (t *telegramNotifier) handleCommand(msg *tgMessage) {
 		t.sendHealth(chatID)
 	default:
 		if strings.HasPrefix(cmd, "/") {
-			_ = t.sendText(chatID, "❓ Unbekannter Befehl. Tippe /help für alle Befehle.", nil)
+			t.enqueue(chatID, T.TgUnknownCommand, nil)
 		}
 	}
 }
@@ -395,64 +499,64 @@ func (t *telegramNotifier) sendMainMenu(chatID string) {
 		"<b>🌐 Go-DynDNS</b>  <code>%s</code>\n\n"+T.TgMenuPrompt,
 		t.instanceTag,
 	)
-	_ = t.sendText(chatID, text, mainKeyboard())
+	t.enqueue(chatID, text, mainKeyboard())
 }
 
 func (t *telegramNotifier) sendStatus(chatID string) {
 	stats := apiMetrics.GetStats()
 
-	status := "✅ Online"
+	status := T.TgStatusOnline
 	if !lastOk.Load() {
-		status = "❌ Fehler"
+		status = T.TgStatusError
 	}
 	if !schedulerRanOnce.Load() {
-		status = "⏳ Startet..."
+		status = T.TgStatusStarting
 	}
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "<b>📊 System Status</b>  <code>%s</code>\n\n", t.instanceTag)
-	fmt.Fprintf(&sb, "🔸 Status:      <b>%s</b>\n", status)
-	fmt.Fprintf(&sb, "🔸 IP-Modus:    <code>%s</code>\n", cfg.IPMode)
-	fmt.Fprintf(&sb, "🔸 Domains:     <code>%d</code>\n", len(cfg.DomainConfigs))
-	fmt.Fprintf(&sb, "🔸 Intervall:   <code>%ds</code>\n", cfg.Interval)
-	fmt.Fprintf(&sb, "🔸 Dry-Run:     <code>%v</code>\n", cfg.DryRun)
-	fmt.Fprintf(&sb, "🔸 Anfragen:    <code>%v</code>\n", stats["total_requests"])
-	fmt.Fprintf(&sb, "🔸 Erfolgsrate: <code>%v</code>\n", stats["success_rate"])
-	fmt.Fprintf(&sb, "🔸 Ø Latenz:    <code>%v</code>\n", stats["avg_latency"])
-	fmt.Fprintf(&sb, "🔸 Letzter OK:  <code>%v</code>\n", stats["last_success_time"])
+	fmt.Fprintf(&sb, "<b>%s</b>  <code>%s</code>\n\n", T.TgStatusHeading, t.instanceTag)
+	fmt.Fprintf(&sb, "🔸 %s      <b>%s</b>\n", T.TgStatusLabelStatus, status)
+	fmt.Fprintf(&sb, "🔸 %s    <code>%s</code>\n", T.TgStatusLabelIPMode, cfg.IPMode)
+	fmt.Fprintf(&sb, "🔸 %s     <code>%d</code>\n", T.TgStatusLabelDomains, len(cfg.DomainConfigs))
+	fmt.Fprintf(&sb, "🔸 %s   <code>%ds</code>\n", T.TgStatusLabelInterval, cfg.Interval)
+	fmt.Fprintf(&sb, "🔸 %s     <code>%v</code>\n", T.TgStatusLabelDryRun, cfg.DryRun)
+	fmt.Fprintf(&sb, "🔸 %s    <code>%v</code>\n", T.TgStatusLabelRequests, stats["total_requests"])
+	fmt.Fprintf(&sb, "🔸 %s: <code>%v</code>\n", T.TgStatusLabelSuccessRate, stats["success_rate"])
+	fmt.Fprintf(&sb, "🔸 %s    <code>%v</code>\n", T.TgStatusLabelLatency, stats["avg_latency"])
+	fmt.Fprintf(&sb, "🔸 %s  <code>%v</code>\n", T.TgStatusLabelLastOk, stats["last_success_time"])
 	fmt.Fprintf(&sb, "\n🕒 <i>%s</i>", time.Now().Local().Format("02.01.2006 15:04:05"))
 
-	_ = t.sendText(chatID, sb.String(), backKeyboard())
+	t.enqueue(chatID, sb.String(), backKeyboard())
 }
 
 func (t *telegramNotifier) sendMetrics(chatID string) {
 	stats := apiMetrics.GetStats()
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "<b>📈 API Metriken</b>  <code>%s</code>\n\n", t.instanceTag)
+	fmt.Fprintf(&sb, "<b>%s</b>  <code>%s</code>\n\n", T.TgMetricsHeading, t.instanceTag)
 
-	fmt.Fprintf(&sb, "<b>Requests</b>\n")
-	fmt.Fprintf(&sb, "  Gesamt:      <code>%v</code>\n", stats["total_requests"])
-	fmt.Fprintf(&sb, "  Erfolgsrate: <code>%v</code>\n", stats["success_rate"])
-	fmt.Fprintf(&sb, "  Client-Err:  <code>%v</code>\n", stats["client_errors"])
-	fmt.Fprintf(&sb, "  Server-Err:  <code>%v</code>\n", stats["server_errors"])
+	fmt.Fprintf(&sb, "<b>%s</b>\n", T.TgMetricsRequests)
+	fmt.Fprintf(&sb, "  %s <code>%v</code>\n", T.TgMetricsTotal, stats["total_requests"])
+	fmt.Fprintf(&sb, "  %s <code>%v</code>\n", T.TgMetricsSuccessRate, stats["success_rate"])
+	fmt.Fprintf(&sb, "  %s  <code>%v</code>\n", T.TgMetricsClientErr, stats["client_errors"])
+	fmt.Fprintf(&sb, "  %s  <code>%v</code>\n", T.TgMetricsServerErr, stats["server_errors"])
 
-	fmt.Fprintf(&sb, "\n<b>Latenz</b>\n")
+	fmt.Fprintf(&sb, "\n<b>%s</b>\n", T.TgMetricsLatency)
 	fmt.Fprintf(&sb, "  Ø:   <code>%v</code>\n", stats["avg_latency"])
 	fmt.Fprintf(&sb, "  P50: <code>%v</code>\n", stats["p50_latency"])
 	fmt.Fprintf(&sb, "  P85: <code>%v</code>\n", stats["p85_latency"])
 	fmt.Fprintf(&sb, "  P99: <code>%v</code>\n", stats["p99_latency"])
 
-	fmt.Fprintf(&sb, "\n<b>IP-Check</b>\n")
+	fmt.Fprintf(&sb, "\n<b>%s</b>\n", T.TgMetricsIPCheck)
 	fmt.Fprintf(&sb, "  Ø:       <code>%v</code>\n", stats["ip_latency_avg"])
-	fmt.Fprintf(&sb, "  Checks:  <code>%v</code>\n", stats["ip_latency_count"])
-	fmt.Fprintf(&sb, "  Letzter: <code>%v</code>\n", stats["last_ip_check"])
+	fmt.Fprintf(&sb, "  %s  <code>%v</code>\n", T.TgMetricsChecks, stats["ip_latency_count"])
+	fmt.Fprintf(&sb, "  %s: <code>%v</code>\n", T.TgMetricsLast, stats["last_ip_check"])
 
-	fmt.Fprintf(&sb, "\n<b>Stunden-Limit</b>\n")
-	fmt.Fprintf(&sb, "  Genutzt: <code>%v / %v</code>\n", stats["usage_count"], stats["hourly_limit"])
-	fmt.Fprintf(&sb, "  Auslast: <code>%v%%</code>\n", stats["usage_percent"])
+	fmt.Fprintf(&sb, "\n<b>%s</b>\n", T.TgMetricsHourlyLimit)
+	fmt.Fprintf(&sb, "  %s <code>%v / %v</code>\n", T.TgMetricsUsed, stats["usage_count"], stats["hourly_limit"])
+	fmt.Fprintf(&sb, "  %s <code>%v%%</code>\n", T.TgMetricsLoad, stats["usage_percent"])
 
-	fmt.Fprintf(&sb, "\n<b>Heute (HTTP)</b>\n")
+	fmt.Fprintf(&sb, "\n<b>%s</b>\n", T.TgMetricsTodayHTTP)
 	fmt.Fprintf(&sb, "  GET: <code>%v</code>  POST: <code>%v</code>  PUT: <code>%v</code>  DEL: <code>%v</code>",
 		stats["daily_get"], stats["daily_post"], stats["daily_put"], stats["daily_delete"])
 	if v, ok := stats["daily_nic"]; ok {
@@ -460,15 +564,15 @@ func (t *telegramNotifier) sendMetrics(chatID string) {
 	}
 	fmt.Fprintf(&sb, "\n\n🕒 <i>%s</i>", time.Now().Local().Format("02.01.2006 15:04:05"))
 
-	_ = t.sendText(chatID, sb.String(), backKeyboard())
+	t.enqueue(chatID, sb.String(), backKeyboard())
 }
 
 func (t *telegramNotifier) sendDomains(chatID string) {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "<b>🌐 Domains</b>  <code>%s</code>\n\n", t.instanceTag)
+	fmt.Fprintf(&sb, "<b>%s</b>  <code>%s</code>\n\n", T.TgDomainsHeading, t.instanceTag)
 
 	if len(cfg.DomainConfigs) == 0 {
-		sb.WriteString("Keine Domains konfiguriert.")
+		sb.WriteString(T.NoDomainsConfigured)
 	} else {
 		for _, dc := range cfg.DomainConfigs {
 			fmt.Fprintf(&sb, "🔹 <code>%s</code>  <i>(%s)</i>\n", dc.FQDN, dc.Provider)
@@ -483,7 +587,7 @@ func (t *telegramNotifier) sendDomains(chatID string) {
 	statusMutex.Unlock()
 
 	if len(statusData) > 0 {
-		sb.WriteString("\n<b>Aktuelle IPs</b>\n")
+		fmt.Fprintf(&sb, "\n<b>%s</b>\n", T.TgDomainsCurrentIPs)
 		for domain, h := range statusData {
 			if len(h.IPs) == 0 {
 				continue
@@ -501,49 +605,47 @@ func (t *telegramNotifier) sendDomains(chatID string) {
 	}
 
 	fmt.Fprintf(&sb, "\n🕒 <i>%s</i>", time.Now().Local().Format("02.01.2006 15:04:05"))
-	_ = t.sendText(chatID, sb.String(), backKeyboard())
+	t.enqueue(chatID, sb.String(), backKeyboard())
 }
 
 func (t *telegramNotifier) sendHealth(chatID string) {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "<b>❤️ Health-Check</b>  <code>%s</code>\n\n", t.instanceTag)
+	fmt.Fprintf(&sb, "<b>%s</b>  <code>%s</code>\n\n", T.TgHealthHeading, t.instanceTag)
 
 	switch {
 	case !schedulerRanOnce.Load():
-		fmt.Fprintf(&sb, "⏳ Status: <b>Startet...</b>\n")
-		sb.WriteString("Wartet auf ersten Scheduler-Lauf.\n")
+		fmt.Fprintf(&sb, "%s\n", T.TgHealthStarting)
+		fmt.Fprintf(&sb, "%s\n", T.TgHealthWaitingDetail)
 	case lastOk.Load():
-		fmt.Fprintf(&sb, "✅ Status: <b>Healthy</b>\n")
+		fmt.Fprintf(&sb, "%s\n", T.TgHealthHealthy)
 	default:
-		fmt.Fprintf(&sb, "❌ Status: <b>Unhealthy</b>\n")
+		fmt.Fprintf(&sb, "%s\n", T.TgHealthUnhealthy)
 		if lastErr := lastErrorMsg.Get(); lastErr != "" {
-			fmt.Fprintf(&sb, "Fehler: <code>%s</code>\n", lastErr)
+			fmt.Fprintf(&sb, "%s <code>%s</code>\n", T.TgHealthErrorLabel, lastErr)
 		}
 	}
 
 	stats := apiMetrics.GetStats()
-	fmt.Fprintf(&sb, "\n🔸 Erfolgsrate: <code>%v</code>\n", stats["success_rate"])
-	fmt.Fprintf(&sb, "🔸 Ø Latenz:    <code>%v</code>\n", stats["avg_latency"])
-	fmt.Fprintf(&sb, "🔸 Letzter OK:  <code>%v</code>\n", stats["last_success_time"])
+	fmt.Fprintf(&sb, "\n🔸 %s <code>%v</code>\n", T.TgStatusLabelSuccessRate, stats["success_rate"])
+	fmt.Fprintf(&sb, "🔸 %s    <code>%v</code>\n", T.TgStatusLabelLatency, stats["avg_latency"])
+	fmt.Fprintf(&sb, "🔸 %s  <code>%v</code>\n", T.TgStatusLabelLastOk, stats["last_success_time"])
 	fmt.Fprintf(&sb, "\n🕒 <i>%s</i>", time.Now().Local().Format("02.01.2006 15:04:05"))
 
-	_ = t.sendText(chatID, sb.String(), backKeyboard())
+	t.enqueue(chatID, sb.String(), backKeyboard())
 }
 
 func (t *telegramNotifier) triggerUpdate(chatID string) {
 	if !updateInProgress.CompareAndSwap(false, true) {
-		_ = t.sendText(chatID, T.TgUpdateAlreadyRunning, backKeyboard())
+		t.enqueue(chatID, T.TgUpdateAlreadyRunning, backKeyboard())
 		return
 	}
-
-	_ = t.sendText(chatID, T.TgUpdateStarting, backKeyboard())
-
+	t.enqueue(chatID, T.TgUpdateStarting, backKeyboard())
 	go func() {
 		defer updateInProgress.Store(false)
-		debugLog("NOTIFY", "", "📡 Telegram: Manuelles Update ausgelöst")
+		debugLog("NOTIFY", "", T.NotifyTelegramManualUpdate)
 		forceNextUpdate.Store(true)
 		runUpdate(false)
-		_ = t.sendText(chatID,
+		t.enqueue(chatID,
 			fmt.Sprintf(T.TgUpdateDone+"\n🕒 <i>%s</i>",
 				time.Now().Local().Format("02.01.2006 15:04:05")),
 			backKeyboard())
