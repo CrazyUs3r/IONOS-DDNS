@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+  "errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -163,7 +164,7 @@ func (t *telegramNotifier) sendTextWithRetry(chatID, text string, kb *tgInlineKe
 		}
 		return err
 	}
-	return fmt.Errorf(T.TgMaxRetries)
+	return errors.New(T.TgMaxRetries)
 }
 
 func (t *telegramNotifier) sendText(chatID, text string, kb *tgInlineKeyboard) error {
@@ -200,7 +201,7 @@ func (t *telegramNotifier) sendText(chatID, text string, kb *tgInlineKeyboard) e
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf(T.TgHttpError, resp.StatusCode, string(b))
+		return fmt.Errorf(T.TgHTTPError, resp.StatusCode, string(b))
 	}
 
 	var result struct {
@@ -339,7 +340,7 @@ func (t *telegramNotifier) getUpdates(offset int) ([]tgUpdateFull, error) {
 		return nil, err
 	}
 	if !result.OK {
-		return nil, fmt.Errorf(T.TgGetUpdatesNotOk)
+		return nil, errors.New(T.TgGetUpdatesNotOk)
 	}
 
 	return result.Result, nil

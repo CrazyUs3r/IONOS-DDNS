@@ -431,7 +431,7 @@ type Phrases struct {
 	TgSetCmdsFailed, TgGetUpdatesFailed                                        string
 	TgPollingStopped, TgPollingStarted                                         string
 	TgMaxRetries, TgGetUpdatesNotOk                                            string
-	TgSendError, TgHttpError                                                   string
+	TgSendError, TgHTTPError                                                   string
 	TgRateLimit, TgSendFailed                                                  string
 	TgMsgDiscarded, TgQueueFull, TgQueuePushFailed                             string
 
