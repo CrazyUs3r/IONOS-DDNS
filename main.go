@@ -211,6 +211,10 @@ func run() int {
 		})
 		return 1
 	}
+
+	shutdownCtx, shutdownCancel = context.WithCancel(context.Background())
+	defer shutdownCancel()
+
 	workerSemaphore = make(chan struct{}, cfg.MaxConcurrent)
 
 	if err := initProviderConfig(); err != nil {
@@ -263,9 +267,6 @@ func run() int {
 	logPath = filepath.Join(logsDir, "dyndns.json")
 	updatePath = filepath.Join(logsDir, "update.json")
 	logCachePath = filepath.Join(logsDir, "log_cache.json")
-
-	shutdownCtx, shutdownCancel = context.WithCancel(context.Background())
-	defer shutdownCancel()
 
 	startMetricsAutosave(60 * time.Second)
 	startLogWriter()
