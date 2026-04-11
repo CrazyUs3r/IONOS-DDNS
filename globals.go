@@ -422,6 +422,18 @@ type Phrases struct {
 	TgDomainsHeading, TgDomainsCurrentIPs                                      string
 	TgHealthHeading, TgHealthStarting, TgHealthWaitingDetail                   string
 	TgHealthHealthy, TgHealthUnhealthy, TgHealthErrorLabel                     string
+	GotifyQueueFull, GotifyMsgDiscarded                                        string
+	GotifySendFailed, GotifyRetry                                              string
+	TgBtnMenu, TgBtnClose                                                      string
+	TgBtnStatus, TgBtnMetrics, TgBtnDomains                                    string
+	TgBtnHealth, TgBtnUpdate                                                   string
+	TgUnauthAccess, TgBotCmdsReg                                               string
+	TgSetCmdsFailed, TgGetUpdatesFailed                                        string
+	TgPollingStopped, TgPollingStarted                                         string
+	TgMaxRetries, TgGetUpdatesNotOk                                            string
+	TgSendError, TgHttpError                                                   string
+	TgRateLimit, TgSendFailed                                                  string
+	TgMsgDiscarded, TgQueueFull, TgQueuePushFailed                             string
 
 	// Cache & persistence
 	ErrRecordCacheNil, ErrCacheDirCreate, ErrCacheMarshal   string
@@ -1013,9 +1025,9 @@ type tgUpdateFull struct {
 	CallbackQuery *tgCallbackQuery `json:"callback_query,omitempty"`
 }
 type telegramNotifier struct {
-	token       string
-	chatID      string
-	instanceTag string
+	token          string
+	chatID         string
+	instanceTag    string
 	pollOnce       sync.Once
 	pollClientOnce sync.Once
 	pollClient     *http.Client

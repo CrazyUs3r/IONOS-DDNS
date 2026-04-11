@@ -87,7 +87,7 @@ func (t *telegramNotifier) enqueue(chatID, text string, kb *tgInlineKeyboard) {
 		select {
 		case dropped := <-t.sendQueue:
 			debugLog("NOTIFY", "", fmt.Sprintf(
-				"⚠️ Telegram Queue voll – älteste Nachricht verworfen (Alter: %v)",
+				T.TgQueueFull,
 				time.Since(dropped.enqueued).Round(time.Second),
 			))
 		default:
@@ -95,7 +95,7 @@ func (t *telegramNotifier) enqueue(chatID, text string, kb *tgInlineKeyboard) {
 		select {
 		case t.sendQueue <- msg:
 		default:
-			debugLog("NOTIFY", "", "⚠️ Telegram Queue konnte Nachricht nicht einreihen")
+			debugLog("NOTIFY", "", T.TgQueuePushFailed)
 		}
 	}
 }
@@ -124,13 +124,13 @@ func (t *telegramNotifier) drainQueue() {
 			case msg := <-t.sendQueue:
 				if time.Since(msg.enqueued) > tgQueueMaxAge {
 					debugLog("NOTIFY", "", fmt.Sprintf(
-						"⚠️ Telegram Nachricht verworfen (zu alt: %v)",
+						T.TgMsgDiscarded,
 						time.Since(msg.enqueued).Round(time.Second),
 					))
 					continue
 				}
 				if err := t.sendTextWithRetry(msg.chatID, msg.text, msg.kb); err != nil {
-					debugLog("NOTIFY", "", fmt.Sprintf("⚠️ Telegram Send fehlgeschlagen: %v", err))
+					debugLog("NOTIFY", "", fmt.Sprintf(T.TgSendFailed, err))
 				}
 			default:
 
@@ -150,7 +150,7 @@ func (t *telegramNotifier) sendTextWithRetry(chatID, text string, kb *tgInlineKe
 		}
 		if strings.Contains(err.Error(), "429") {
 			debugLog("NOTIFY", "", fmt.Sprintf(
-				"⌛ Telegram Rate Limit – warte %v (Versuch %d/%d)",
+				T.TgRateLimit,
 				wait, attempt+1, maxRetries,
 			))
 			select {
@@ -163,7 +163,7 @@ func (t *telegramNotifier) sendTextWithRetry(chatID, text string, kb *tgInlineKe
 		}
 		return err
 	}
-	return fmt.Errorf("telegram: max retries erreicht")
+	return fmt.Errorf(T.TgMaxRetries)
 }
 
 func (t *telegramNotifier) sendText(chatID, text string, kb *tgInlineKeyboard) error {
@@ -200,7 +200,7 @@ func (t *telegramNotifier) sendText(chatID, text string, kb *tgInlineKeyboard) e
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("telegram HTTP %d: %s", resp.StatusCode, string(b))
+		return fmt.Errorf(T.TgHttpError, resp.StatusCode, string(b))
 	}
 
 	var result struct {
@@ -211,7 +211,7 @@ func (t *telegramNotifier) sendText(chatID, text string, kb *tgInlineKeyboard) e
 		return fmt.Errorf("decode: %w", err)
 	}
 	if !result.OK {
-		return fmt.Errorf("telegram error: %s", result.Description)
+		return fmt.Errorf(T.TgSendError, result.Description)
 	}
 
 	return nil
@@ -267,20 +267,20 @@ func (t *telegramNotifier) StartPolling() {
 }
 
 func (t *telegramNotifier) pollingLoop() {
-	debugLog("NOTIFY", "", "📡 Telegram Bot Polling gestartet")
+	debugLog("NOTIFY", "", T.TgPollingStarted)
 	go t.registerCommands()
 
 	for {
 		select {
 		case <-shutdownCtx.Done():
-			debugLog("NOTIFY", "", "📡 Telegram Polling gestoppt")
+			debugLog("NOTIFY", "", T.TgPollingStopped)
 			return
 		default:
 		}
 
 		updates, err := t.getUpdates(int(t.lastOffset.Load()) + 1)
 		if err != nil {
-			debugLog("NOTIFY", "", fmt.Sprintf("⚠️ Telegram getUpdates Fehler: %v", err))
+			debugLog("NOTIFY", "", fmt.Sprintf(T.TgGetUpdatesFailed, err))
 			select {
 			case <-shutdownCtx.Done():
 				return
@@ -339,7 +339,7 @@ func (t *telegramNotifier) getUpdates(offset int) ([]tgUpdateFull, error) {
 		return nil, err
 	}
 	if !result.OK {
-		return nil, fmt.Errorf("telegram getUpdates not OK")
+		return nil, fmt.Errorf(T.TgGetUpdatesNotOk)
 	}
 
 	return result.Result, nil
@@ -368,11 +368,11 @@ func (t *telegramNotifier) registerCommands() {
 	req.Header.Set("User-Agent", ManagedComment)
 	resp, err := getHTTPClient().Do(req)
 	if err != nil {
-		debugLog("NOTIFY", "", fmt.Sprintf("⚠️ setMyCommands fehlgeschlagen: %v", err))
+		debugLog("NOTIFY", "", fmt.Sprintf(T.TgSetCmdsFailed, err))
 		return
 	}
 	_ = resp.Body.Close()
-	debugLog("NOTIFY", "", "✅ Telegram Bot-Commands registriert")
+	debugLog("NOTIFY", "", T.TgBotCmdsReg)
 }
 
 // ============================================================================
@@ -392,7 +392,7 @@ func chatIDStr(id int64) string {
 func (t *telegramNotifier) handleCommand(msg *tgMessage) {
 	chatID := chatIDStr(msg.Chat.ID)
 	if !t.isAuthorized(chatID) {
-		debugLog("NOTIFY", "", fmt.Sprintf("⛔ Telegram: Unberechtigter Zugriff von chat %s", chatID))
+		debugLog("NOTIFY", "", fmt.Sprintf(T.TgUnauthAccess, chatID))
 		return
 	}
 
@@ -457,18 +457,18 @@ func mainKeyboard() *tgInlineKeyboard {
 	return &tgInlineKeyboard{
 		InlineKeyboard: [][]tgInlineButton{
 			{
-				{Text: "📊 Status", CallbackData: "status"},
-				{Text: "📈 Metriken", CallbackData: "metrics"},
+				{Text: T.TgBtnStatus, CallbackData: "status"},
+				{Text: T.TgBtnMetrics, CallbackData: "metrics"},
 			},
 			{
-				{Text: "🌐 Domains", CallbackData: "domains"},
-				{Text: "❤️ Health", CallbackData: "health"},
+				{Text: T.TgBtnDomains, CallbackData: "domains"},
+				{Text: T.TgBtnHealth, CallbackData: "health"},
 			},
 			{
-				{Text: "🔄 Update starten", CallbackData: "update"},
+				{Text: T.TgBtnUpdate, CallbackData: "update"},
 			},
 			{
-				{Text: "✖ Schließen", CallbackData: "close"},
+				{Text: T.TgBtnClose, CallbackData: "close"},
 			},
 		},
 	}
@@ -478,11 +478,11 @@ func backKeyboard() *tgInlineKeyboard {
 	return &tgInlineKeyboard{
 		InlineKeyboard: [][]tgInlineButton{
 			{
-				{Text: "🏠 Menü", CallbackData: "menu"},
-				{Text: "🔄 Update", CallbackData: "update"},
+				{Text: T.TgBtnMenu, CallbackData: "menu"},
+				{Text: T.TgBtnUpdate, CallbackData: "update"},
 			},
 			{
-				{Text: "✖ Schließen", CallbackData: "close"},
+				{Text: T.TgBtnClose, CallbackData: "close"},
 			},
 		},
 	}
