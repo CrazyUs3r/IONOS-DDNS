@@ -295,11 +295,6 @@ func buildSettingsModal(c Config) string {
 		return out.String()
 	}
 
-	dryRunChecked := ""
-	if c.DryRun {
-		dryRunChecked = ` checked`
-	}
-
 	return `<div id="settingsOverlay" class="modal-overlay" onclick="closeSettingsOutside(event)">` +
 		`<div class="modal">` +
 		`<div class="modal-header">` +
@@ -361,7 +356,35 @@ func buildSettingsModal(c Config) string {
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsDryRun+` <small style="opacity:.5">`+T.SettingsDryRunHint+`</small></span>`+
 			`<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">`+
 			`<input type="checkbox" id="cfg-dry-run" style="width:18px;height:18px;cursor:pointer;"%s>`+
-			`<span style="font-size:0.8rem;opacity:0.7;">`+T.SettingsDryRunActive+`</span></label></div>`, dryRunChecked) +
+			`<span style="font-size:0.8rem;opacity:0.7;">`+T.SettingsDryRunActive+`</span></label></div>`,
+			func() string {
+				if c.DryRun {
+					return ` checked`
+				}
+				return ""
+			}()) +
+
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Debug-Modus <small style="opacity:.5">(verbose logs)</small></span>`+
+			`<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">`+
+			`<input type="checkbox" id="cfg-debug" style="width:18px;height:18px;cursor:pointer;"%s>`+
+			`<span style="font-size:0.8rem;opacity:0.7;">aktiviert</span></label></div>`,
+			func() string {
+				if c.DebugEnabled {
+					return ` checked`
+				}
+				return ""
+			}()) +
+
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Debug HTTP Raw <small style="opacity:.5">(raw requests)</small></span>`+
+			`<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">`+
+			`<input type="checkbox" id="cfg-debug-http" style="width:18px;height:18px;cursor:pointer;"%s>`+
+			`<span style="font-size:0.8rem;opacity:0.7;">aktiviert</span></label></div>`,
+			func() string {
+				if c.DebugHTTPRaw {
+					return ` checked`
+				}
+				return ""
+			}()) +
 
 		`</div>` +
 
@@ -501,6 +524,8 @@ type safeSystemConfig struct {
 	TelegramChatID  string   `json:"telegram_chat_id"`
 	GotifyURL       string   `json:"gotify_url"`
 	GotifyToken     string   `json:"gotify_token"`
+	DebugEnabled    bool     `json:"debug_enabled"`
+	DebugHTTPRaw    bool     `json:"debug_http_raw"`
 }
 
 type dashboardConfigPayload struct {
@@ -544,6 +569,8 @@ func currentSystemConfig() safeSystemConfig {
 		TelegramChatID:  cfg.Notifications.Telegram.ChatID,
 		GotifyURL:       cfg.Notifications.Gotify.URL,
 		GotifyToken:     cfg.Notifications.Gotify.Token,
+		DebugEnabled:    cfg.DebugEnabled,
+		DebugHTTPRaw:    cfg.DebugHTTPRaw,
 	}
 }
 
@@ -732,23 +759,19 @@ func createMux() *http.ServeMux {
 			cfg.Lang = sys.Lang
 		}
 		cfg.DryRun = sys.DryRun
+		cfg.DebugEnabled = sys.DebugEnabled
+		cfg.DebugHTTPRaw = sys.DebugHTTPRaw
 
 		cfg.Notifications.Enabled = sys.NotifyEnabled
 		if sys.NotifyEvents != nil {
 			cfg.Notifications.Events = sys.NotifyEvents
 		}
-		if sys.TelegramToken != "" {
-			cfg.Notifications.Telegram.Token = sys.TelegramToken
-		}
-		if sys.TelegramChatID != "" {
-			cfg.Notifications.Telegram.ChatID = sys.TelegramChatID
-		}
-		if sys.GotifyURL != "" {
-			cfg.Notifications.Gotify.URL = sys.GotifyURL
-		}
-		if sys.GotifyToken != "" {
-			cfg.Notifications.Gotify.Token = sys.GotifyToken
-		}
+
+		cfg.Notifications.Telegram.Token = sys.TelegramToken
+		cfg.Notifications.Telegram.ChatID = sys.TelegramChatID
+		cfg.Notifications.Gotify.URL = sys.GotifyURL
+		cfg.Notifications.Gotify.Token = sys.GotifyToken
+
 		if !cfg.Notifications.Enabled {
 			cfg.Notifications.Enabled =
 				cfg.Notifications.Telegram.Token != "" ||

@@ -193,6 +193,14 @@ func run() int {
 			hourlyLimit, maxConcurrent,
 		)
 	}
+
+	if v := os.Getenv("DEBUG"); v != "" {
+		cfg.DebugEnabled = v == "true"
+	}
+	if v := os.Getenv("DEBUG_HTTP_RAW"); v != "" {
+		cfg.DebugHTTPRaw = v == "true"
+	}
+
 	var lang string
 
 	if strings.TrimSpace(cfg.Lang) != "" {
@@ -461,12 +469,6 @@ func applyEnvOverrides(
 	}
 	if v := os.Getenv("DRY_RUN"); v != "" {
 		cfg.DryRun = v == "true"
-	}
-	if v := os.Getenv("DEBUG"); v != "" {
-		cfg.DebugEnabled = v == "true"
-	}
-	if v := os.Getenv("DEBUG_HTTP_RAW"); v != "" {
-		cfg.DebugHTTPRaw = v == "true"
 	}
 	cfg.LogDir = logsDir
 	if v := strings.TrimSpace(os.Getenv("LANG")); v != "" {

@@ -11,6 +11,12 @@ import (
 // INIT
 // ============================================================================
 func initNotifiers() {
+	for _, n := range notifyCfg.notifiers {
+		if tg, ok := n.(*telegramNotifier); ok {
+			tg.StopPolling()
+		}
+	}
+
 	notifyCfg = notifyConfig{
 		events:    make(map[NotifyEvent]struct{}),
 		notifiers: []Notifier{},
@@ -91,7 +97,7 @@ func notifySync(ctx LogContext) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			
+
 			var err error
 			if s, ok := n.(syncSender); ok {
 				err = s.SendSync(nm)

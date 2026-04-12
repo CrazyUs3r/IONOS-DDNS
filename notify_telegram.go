@@ -6,7 +6,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-  "errors"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -21,11 +21,14 @@ import (
 // TELEGRAM NOTIFIER
 // ============================================================================
 func newTelegramNotifier(token, chatID string) *telegramNotifier {
+	ctx, cancel := context.WithCancel(shutdownCtx)
 	t := &telegramNotifier{
 		token:       token,
 		chatID:      chatID,
 		instanceTag: generateInstanceTag(),
 		sendQueue:   make(chan tgQueuedMsg, tgQueueSize),
+		pollCtx:     ctx,
+		pollCancel:  cancel,
 	}
 	go t.drainQueue()
 	return t
@@ -107,7 +110,7 @@ func (t *telegramNotifier) drainQueue() {
 
 	for {
 		select {
-		case <-shutdownCtx.Done():
+		case <-t.pollCtx.Done():
 			deadline := time.After(10 * time.Second)
 			for {
 				select {
@@ -155,7 +158,7 @@ func (t *telegramNotifier) sendTextWithRetry(chatID, text string, kb *tgInlineKe
 				wait, attempt+1, maxRetries,
 			))
 			select {
-			case <-shutdownCtx.Done():
+			case <-t.pollCtx.Done():
 				return err
 			case <-time.After(wait):
 			}
@@ -267,13 +270,18 @@ func (t *telegramNotifier) StartPolling() {
 	})
 }
 
+func (t *telegramNotifier) StopPolling() {
+	t.pollCancel()
+}
+
 func (t *telegramNotifier) pollingLoop() {
 	debugLog("NOTIFY", "", T.TgPollingStarted)
+	defer t.deleteWebhook()
 	go t.registerCommands()
 
 	for {
 		select {
-		case <-shutdownCtx.Done():
+		case <-t.pollCtx.Done():
 			debugLog("NOTIFY", "", T.TgPollingStopped)
 			return
 		default:
@@ -283,7 +291,7 @@ func (t *telegramNotifier) pollingLoop() {
 		if err != nil {
 			debugLog("NOTIFY", "", fmt.Sprintf(T.TgGetUpdatesFailed, err))
 			select {
-			case <-shutdownCtx.Done():
+			case <-t.pollCtx.Done():
 				return
 			case <-time.After(10 * time.Second):
 			}
@@ -305,7 +313,7 @@ func (t *telegramNotifier) pollingLoop() {
 		}
 
 		select {
-		case <-shutdownCtx.Done():
+		case <-t.pollCtx.Done():
 			return
 		case <-time.After(2 * time.Second):
 		}
@@ -314,7 +322,7 @@ func (t *telegramNotifier) pollingLoop() {
 
 func (t *telegramNotifier) getUpdates(offset int) ([]tgUpdateFull, error) {
 	url := fmt.Sprintf(
-		`https://api.telegram.org/bot%s/getUpdates?offset=%d&timeout=30&allowed_updates=["message","callback_query"]`,
+		"https://api.telegram.org/bot%s/getUpdates?offset=%d&timeout=30",
 		t.token, offset,
 	)
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
@@ -333,14 +341,16 @@ func (t *telegramNotifier) getUpdates(offset int) ([]tgUpdateFull, error) {
 	defer func() { _ = resp.Body.Close() }()
 
 	var result struct {
-		OK     bool           `json:"ok"`
-		Result []tgUpdateFull `json:"result"`
+		OK          bool           `json:"ok"`
+		Result      []tgUpdateFull `json:"result"`
+		Description string         `json:"description"`
+		ErrorCode   int            `json:"error_code"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
 	}
 	if !result.OK {
-		return nil, errors.New(T.TgGetUpdatesNotOk)
+		return nil, fmt.Errorf(T.TgGetUpdatesNotOk, result.ErrorCode, result.Description)
 	}
 
 	return result.Result, nil
@@ -374,6 +384,25 @@ func (t *telegramNotifier) registerCommands() {
 	}
 	_ = resp.Body.Close()
 	debugLog("NOTIFY", "", T.TgBotCmdsReg)
+}
+
+func (t *telegramNotifier) deleteWebhook() {
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/deleteWebhook?drop_pending_updates=false", t.token)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		debugLog("NOTIFY", "", fmt.Sprintf("⚠️ Telegram deleteWebhook request error: %v", err))
+		return
+	}
+	req.Header.Set("User-Agent", ManagedComment)
+	resp, err := t.getPollClient().Do(req)
+	if err != nil {
+		debugLog("NOTIFY", "", fmt.Sprintf("⚠️ Telegram deleteWebhook fehlgeschlagen: %v", err))
+		return
+	}
+	_ = resp.Body.Close()
+	debugLog("NOTIFY", "", "✅ Telegram Webhook abgemeldet")
 }
 
 // ============================================================================

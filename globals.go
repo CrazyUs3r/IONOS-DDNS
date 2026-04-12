@@ -1033,6 +1033,8 @@ type telegramNotifier struct {
 	pollClient     *http.Client
 	lastOffset     atomic.Int32
 	sendQueue      chan tgQueuedMsg
+	pollCtx        context.Context
+	pollCancel     context.CancelFunc
 }
 
 type tgQueuedMsg struct {
