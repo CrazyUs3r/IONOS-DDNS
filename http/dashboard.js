@@ -301,6 +301,8 @@ function openSettings() {
 	_setVal('cfg-hourly-limit',   sys.hourly_rate_limit || 1200);
 	_setVal('cfg-lang',           sys.lang              || 'de');
 	_setChk('cfg-dry-run',        sys.dry_run           || false);
+  _setChk('cfg-debug',       sys.debug_enabled  || false);
+  _setChk('cfg-debug-http',  sys.debug_http_raw || false);
 
 	// Notifications
 	_setChk('cfg-notify-enabled',  sys.notify_enabled   || false);
@@ -441,6 +443,8 @@ async function saveFullConfig() {
 		hourly_rate_limit: parseInt(_getVal('cfg-hourly-limit'),   10) || 1200,
 		lang:              _getVal('cfg-lang') || 'de',
 		dry_run:           document.getElementById('cfg-dry-run')?.checked || false,
+    debug_enabled:     document.getElementById('cfg-debug')?.checked || false,
+    debug_http_raw:    document.getElementById('cfg-debug-http')?.checked || false,
 		notify_enabled:   document.getElementById('cfg-notify-enabled')?.checked || false,
 		notify_events:    notifyEvents,
 		telegram_token:   _getVal('cfg-tg-token'),
