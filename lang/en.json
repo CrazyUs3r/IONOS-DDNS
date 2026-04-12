@@ -432,7 +432,7 @@
 	"tg_domains_current_ips": "Current IPs",
 	"tg_domains_heading": "🌐 Domains",
 	"tg_get_updates_failed": "⚠️ Telegram getUpdates error: %v",
-	"tg_get_updates_not_ok": "Telegram getUpdates not OK",
+	"tg_get_updates_not_ok": "Telegram getUpdates not OK (code %d): %s",
 	"tg_health_error_label": "Error:",
 	"tg_health_heading": "❤️ Health-Check",
 	"tg_health_healthy": "✅ Status: <b>Healthy</b>",

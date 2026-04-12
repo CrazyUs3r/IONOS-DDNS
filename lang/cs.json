@@ -432,7 +432,7 @@
 	"tg_domains_current_ips": "Aktuální IP",
 	"tg_domains_heading": "🌐 Domény",
 	"tg_get_updates_failed": "⚠️ Telegram getUpdates chyba: %v",
-	"tg_get_updates_not_ok": "Telegram getUpdates není v pořádku",
+	"tg_get_updates_not_ok": "Telegram getUpdates není v pořádku (code %d): %s",
 	"tg_health_error_label": "Chyba:",
 	"tg_health_heading": "❤️ Kontrola stavu",
 	"tg_health_healthy": "✅ Stav: <b>V pořádku</b>",
