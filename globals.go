@@ -396,10 +396,10 @@ type Phrases struct {
 	FailedToMarshalConfigFormat, MarshalConfigFormat                               string
 	FailedToWriteTempConfigFileFormat, WriteTempConfigFileFormat                   string
 	FailedToReplaceConfigFileFormat, ReplaceConfigFileFormat                       string
-	ConfigJsonMissingMigratingFromDomainsConfig, InvalidDomainsConfigJSONFormat    string
-	CouldNotCreateConfigJsonFormat, ConfigJsonSuccessfullyCreatedFromEnv           string
-	NoConfigJsonAndNoDomainsConfigFoundUsingLegacyMode                             string
-	IonosRequiresApiPrefixAndApiSecret, CloudflareRequiresTokenOrEmailAndApiSecret string
+	ConfigJSONMissingMigratingFromDomainsConfig, InvalidDomainsConfigJSONFormat    string
+	CouldNotCreateConfigJSONFormat, ConfigJSONSuccessfullyCreatedFromEnv           string
+	NoConfigJSONAndNoDomainsConfigFoundUsingLegacyMode                             string
+	IonosRequiresAPIPrefixAndAPISecret, CloudflareRequiresTokenOrEmailAndAPISecret string
 	Ipv64RequiresToken, UnknownProviderFormat                                      string
 
 	// Trigger / Rate Limit
@@ -473,14 +473,14 @@ type Phrases struct {
 
 	// Cloudflare
 	CFNoCredentials, CFTokenEmpty, CFHTMLResponse string
-	CFInvalidJSON, CFApiFailed, CFZoneLoadError   string
+	CFInvalidJSON, CFAPIFailed, CFZoneLoadError   string
 	CFZoneParseError, CFRecordsParseError         string
 	CFUnmanagedRecord                             string
 
 	// IPv64
 	IPv64BaseDomainNotFound, IPv64CDNIgnoredV4, IPv64CDNIgnoredV6    string
 	IPv64UpdateURL, IPv64HTMLResponse, IPv64ParseError               string
-	IPv64APIError, IPv64ApiFailed, IPv64HTTPError, IPv64UpdateFailed string
+	IPv64APIError, IPv64APIFailed, IPv64HTTPError, IPv64UpdateFailed string
 	IPv64RateLimitHeader, IPv64RateLimitBackoff, IPv64RetriableWait  string
 	IPv64CacheBuilt, IPv64CacheUsed, IPv64CacheLoadDisk              string
 	IPv64CacheLoadedDisk, IPv64CacheAPIError, IPv64CacheDiskError    string

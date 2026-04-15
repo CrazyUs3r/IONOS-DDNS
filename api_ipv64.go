@@ -214,7 +214,7 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 		return respBody, nil
 	}
 
-	return nil, fmt.Errorf("%s: %w", fmt.Sprintf(T.IPv64ApiFailed, cfg.MaxAPIRetries), lastErr)
+	return nil, fmt.Errorf("%s: %w", fmt.Sprintf(T.IPv64APIFailed, cfg.MaxAPIRetries), lastErr)
 }
 
 func loadIPv64Domains(ctx context.Context, dc *DomainConfig) ([]Zone, error) {

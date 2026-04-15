@@ -62,7 +62,7 @@ func initProviderConfig() error {
 
 	configJSON := os.Getenv("DOMAINS_CONFIG")
 	if configJSON != "" {
-		debugLog("CONFIG", "", T.ConfigJsonMissingMigratingFromDomainsConfig)
+		debugLog("CONFIG", "", T.ConfigJSONMissingMigratingFromDomainsConfig)
 
 		var raw []rawEntry
 		if err := json.Unmarshal([]byte(configJSON), &raw); err != nil {
@@ -76,14 +76,14 @@ func initProviderConfig() error {
 		}
 
 		if err := saveConfigToFile(); err != nil {
-			debugLog("CONFIG", "", fmt.Sprintf(T.CouldNotCreateConfigJsonFormat, err))
+			debugLog("CONFIG", "", fmt.Sprintf(T.CouldNotCreateConfigJSONFormat, err))
 		} else {
-			debugLog("CONFIG", "", T.ConfigJsonSuccessfullyCreatedFromEnv)
+			debugLog("CONFIG", "", T.ConfigJSONSuccessfullyCreatedFromEnv)
 		}
 		return nil
 	}
 
-	debugLog("CONFIG", "", T.NoConfigJsonAndNoDomainsConfigFoundUsingLegacyMode)
+	debugLog("CONFIG", "", T.NoConfigJSONAndNoDomainsConfigFoundUsingLegacyMode)
 	err := initLegacyConfig()
 	if err == nil {
 		_ = saveConfigToFile()
@@ -163,7 +163,7 @@ func initLegacyConfig() error {
 		apiSecret := os.Getenv("API_SECRET")
 
 		if apiPrefix == "" || apiSecret == "" {
-			return fmt.Errorf("%s", T.IonosRequiresApiPrefixAndApiSecret)
+			return fmt.Errorf("%s", T.IonosRequiresAPIPrefixAndAPISecret)
 		}
 
 		for _, d := range domains {
@@ -185,7 +185,7 @@ func initLegacyConfig() error {
 		cfSecret := os.Getenv("CLOUDFLARE_API_SECRET")
 
 		if cfToken == "" && (cfEmail == "" || cfSecret == "") {
-			return fmt.Errorf("%s", T.CloudflareRequiresTokenOrEmailAndApiSecret)
+			return fmt.Errorf("%s", T.CloudflareRequiresTokenOrEmailAndAPISecret)
 		}
 
 		for _, d := range domains {
