@@ -16,9 +16,9 @@ import (
 // LOGGING
 // ============================================================================
 func log(ctx LogContext) {
-	if ctx.Level == LogDebug && !(cfg.DebugEnabled || cfg.DebugHTTPRaw) {
-		return
-	}
+	if ctx.Level == LogDebug && !cfg.DebugEnabled && !cfg.DebugHTTPRaw {
+        return
+    }
 
 	var levelStr, icon string
 	switch ctx.Level {
