@@ -75,7 +75,7 @@ function toggleTheme() {
 	localStorage.setItem('theme', next);
 	applyFavicon(next, currentLevel, false);
 	setBlinking(next, currentLevel);
-	showToast('Theme: ' + next);
+	showToast(tr('theme', 'Theme') + ': ' + next);
 }
 
 function parseDurationToMs(s) {
@@ -164,6 +164,8 @@ function connectWS() {
    		 );
 		} else if (msg.type === 'notification') {
 			showToast(msg.data.message, msg.data.level || 'info');
+		} else if (msg.type === 'debug_log') {
+			appendDebugLog(msg.data);
 		}
 	};
 	ws.onclose = () => scheduleReconnect();
@@ -192,19 +194,19 @@ function showToast(message, type = 'success') {
 
 function copyIP(text) {
 	if (!text || text === 'N/A' || text === '-') {
-		showToast('❌ Keine IP zum Kopieren', 'error');
+		showToast(tr('no_ip_to_copy', '❌ No IP to copy'), 'error');
 		return;
 	}
 	const fallback = (t) => {
 		const ta = document.createElement("textarea"); ta.value = t;
 		ta.style.position = "fixed"; ta.style.left = "-9999px";
 		document.body.appendChild(ta); ta.focus(); ta.select();
-		try { document.execCommand('copy'); showToast('✓ Kopiert: ' + t); } 
+		try { document.execCommand('copy'); showToast(tr('copied', '✓ Copied: ') + text);} 
 		catch (err) { showToast('❌ Fehler', 'error'); }
 		document.body.removeChild(ta);
 	};
 	if (navigator.clipboard && window.isSecureContext) {
-		navigator.clipboard.writeText(text).then(() => showToast('✓ Kopiert: ' + text)).catch(() => fallback(text));
+		navigator.clipboard.writeText(text).then(() => showToast(tr('copied', '✓ Copied: ') + text)).catch(() => fallback(text));
 	} else fallback(text);
 }
 
@@ -223,12 +225,12 @@ function filterLogs(filter) {
 
 function triggerUpdate() {
 	const token = localStorage.getItem('triggerToken') || '';
-	showToast('⏳ Update wird gestartet...', 'info');
+	showToast(tr('update_starting', '⏳ Update wird gestartet...'), 'info');
 	fetch('/api/trigger', { method: 'POST', headers: token ? {'X-Trigger-Token': token} : {} })
 	.then(r => r.json().then(j => {
 		if (j.error) showToast('⚠️ ' + j.error, 'warning');
-		else showToast('✅ Update gestartet', 'success');
-	})).catch(() => showToast('❌ Verbindungsfehler', 'error'));
+		else showToast(tr('update_started', '✅ Update gestartet'), 'success');
+	})).catch(() => showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'));
 }
 
 function exportData() {
@@ -280,7 +282,12 @@ async function updateDomainDisplay(data) {
 
 function _getVal(id) { const el = document.getElementById(id); return el ? el.value : ''; }
 function _setVal(id, v) { const el = document.getElementById(id); if (el) el.value = v != null ? String(v) : ''; }
-function _setChk(id, v) { const el = document.getElementById(id); if (el) el.checked = !!v; }
+function _setChk(id, v) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.checked = !!v;
+    updateCheckboxLabel(el);
+}
 
 function openSettings() {
 	document.getElementById('settingsOverlay').classList.add('open');
@@ -290,8 +297,8 @@ function openSettings() {
 	if (inp) inp.placeholder = saved ? '●●●●●● (gespeichert)' : 'Token eingeben...';
 
 	const sys = (typeof initialSystem !== 'undefined' && initialSystem) ? initialSystem : {};
-	_setVal('cfg-ip-mode',        sys.ip_mode          || 'BOTH');
-	_setVal('cfg-interval',       sys.interval         || 300);
+	_setVal('cfg-ip-mode',        sys.ip_mode           || 'BOTH');
+	_setVal('cfg-interval',       sys.interval          || 300);
 	_setVal('cfg-health-port',    sys.health_port       || '8080');
 	_setVal('cfg-iface',          sys.iface_name        || '');
 	_setVal('cfg-dns',            (sys.dns_servers || []).join(', '));
@@ -301,13 +308,13 @@ function openSettings() {
 	_setVal('cfg-hourly-limit',   sys.hourly_rate_limit || 1200);
 	_setVal('cfg-lang',           sys.lang              || 'de');
 	_setChk('cfg-dry-run',        sys.dry_run           || false);
-  _setChk('cfg-debug',       sys.debug_enabled  || false);
-  _setChk('cfg-debug-http',  sys.debug_http_raw || false);
+	_setChk('cfg-debug',       	  sys.debug_enabled     || false);
+	_setChk('cfg-debug-http',  	  sys.debug_http_raw    || false);
 
 	// Notifications
 	_setChk('cfg-notify-enabled',  sys.notify_enabled   || false);
 	const activeEvents = new Set((sys.notify_events || []).map(e => e.toUpperCase()));
-  document.querySelectorAll('input[name="notify-event"]').forEach(cb => {
+  	document.querySelectorAll('input[name="notify-event"]').forEach(cb => {
       cb.checked = activeEvents.has(cb.value);
   });
 	_setVal('cfg-tg-token',        sys.telegram_token   || '');
@@ -397,7 +404,7 @@ function toggleProviderFields() {
 function addDomainToList() {
 	const fqdn = document.getElementById('new-domain-fqdn').value.trim().toLowerCase();
 	const provider = document.getElementById('new-domain-provider').value;
-	if(!fqdn) return showToast('FQDN fehlt', 'error');
+	if (!fqdn) return showToast(tr('fqdn_missing', 'FQDN fehlt'), 'error');
 
 	let entry = { fqdn: fqdn, provider: provider };
 	if(provider === 'IONOS') {
@@ -422,7 +429,7 @@ function removeDomainFromList(index) {
 }
 
 async function saveFullConfig() {
-	if(!confirm("Alle Einstellungen in config.json speichern?")) return;
+	if (!confirm(tr('save_config_confirm', 'Alle Einstellungen in config.json speichern?'))) return;
 	const token = localStorage.getItem('triggerToken') || '';
 
 	const dnsRaw = _getVal('cfg-dns');
@@ -443,8 +450,8 @@ async function saveFullConfig() {
 		hourly_rate_limit: parseInt(_getVal('cfg-hourly-limit'),   10) || 1200,
 		lang:              _getVal('cfg-lang') || 'de',
 		dry_run:           document.getElementById('cfg-dry-run')?.checked || false,
-    debug_enabled:     document.getElementById('cfg-debug')?.checked || false,
-    debug_http_raw:    document.getElementById('cfg-debug-http')?.checked || false,
+    	debug_enabled:     document.getElementById('cfg-debug')?.checked || false,
+    	debug_http_raw:    document.getElementById('cfg-debug-http')?.checked || false,
 		notify_enabled:   document.getElementById('cfg-notify-enabled')?.checked || false,
 		notify_events:    notifyEvents,
 		telegram_token:   _getVal('cfg-tg-token'),
@@ -467,24 +474,24 @@ async function saveFullConfig() {
         });
     }
 		if (r.ok) {
-			showToast('✅ Gespeichert! Seite wird neu geladen...', 'success');
+			showToast(tr('saved_reload', '✅ Gespeichert! Seite wird neu geladen...'), 'success');
 			setTimeout(() => location.reload(), 1800);
 		} else {
 			const txt = await r.text();
-			showToast('❌ Fehler: ' + txt, 'error');
+			showToast(tr('error_prefix', '❌ Fehler: ') + txt, 'error');
 		}
 	} catch (e) { showToast('❌ Netzwerkfehler', 'error'); }
 }
 
 function resetMetrics() {
-	if (!confirm('Möchtest du wirklich alle Metriken (Statistiken) löschen?')) return;
+	if (!confirm(tr('reset_metrics_confirm', 'Möchtest du wirklich alle Metriken (Statistiken) löschen?'))) return;
 	const token = localStorage.getItem('triggerToken') || '';
 	fetch('/api/metrics/reset', {
 		method: 'POST',
 		headers: token ? {'X-Trigger-Token': token} : {}
 	})
 	.then(r => {
-		if (r.ok) { showToast('✅ Metriken zurückgesetzt', 'success'); }
+		if (r.ok) { showToast(tr('metrics_reset_ok', '✅ Metriken zurückgesetzt'), 'success'); }
 		else { showToast('❌ Reset fehlgeschlagen', 'error'); }
 	})
 	.catch(() => showToast('❌ Verbindungsfehler', 'error'));
@@ -498,7 +505,7 @@ function filterDomains(query) {
 }
 
 function deleteDomain(domain, btn) {
-	if (!confirm('Domain "' + domain + '" wirklich aus dem Status entfernen?')) return;
+	if (!confirm(trf('delete_domain_confirm', { domain }, 'Domain "{domain}" wirklich aus dem Status entfernen?'))) return;
 	const token = localStorage.getItem('triggerToken') || '';
 	btn.disabled = true;
 	btn.textContent = '⏳';
@@ -511,13 +518,13 @@ function deleteDomain(domain, btn) {
 		if (status === 200) {
 			const card = btn.closest('.domain-item');
 			if (card) { card.style.transition = 'opacity 0.4s'; card.style.opacity = '0'; setTimeout(() => card.remove(), 400); }
-			showToast('🗑️ ' + domain + ' entfernt', 'success');
+			showToast(trf('domain_removed', { domain }, '🗑️ {domain} entfernt'), 'success');
 		} else {
 			btn.disabled = false; btn.textContent = '🗑️ Entfernen';
 			showToast('❌ ' + (j.error || 'Fehler beim Löschen'), 'error');
 		}
 	})
-	.catch(() => { btn.disabled = false; btn.textContent = '🗑️ Entfernen'; showToast('❌ Verbindungsfehler', 'error'); });
+	.catch(() => { btn.disabled = false; btn.textContent = tr('remove_btn', '🗑️ Entfernen'); showToast('❌ Verbindungsfehler', 'error'); });
 }
 
 function fallbackCopy(text) {
@@ -550,4 +557,113 @@ function togglePassword(id, btn) {
     input.type = "password";
     btn.textContent = "👁️";
   }
+}
+
+function updateCheckboxLabel(cb) {
+    const labelSpan = cb.parentElement.querySelector('.s-checkbox-text');
+    if (!labelSpan) return;
+    const textOn = cb.getAttribute('data-label-on') || 'Aktiv';
+    const textOff = cb.getAttribute('data-label-off') || 'Inaktiv';
+    labelSpan.textContent = cb.checked ? textOn : textOff;
+}
+
+function appendDebugLog(entry) {
+    const container = document.getElementById('debug-log-container');
+    if (!container) return;
+
+    if (
+        container.children.length === 1 &&
+        container.firstElementChild &&
+        container.firstElementChild.classList.contains('debug-placeholder')
+    ) {
+        container.innerHTML = '';
+    }
+
+    const line = document.createElement('div');
+    line.style.cssText =
+        'padding:2px 0; border-bottom:1px solid rgba(255,255,255,0.04); display:flex; gap:8px; align-items:baseline;';
+
+    const appendSpan = (text, style) => {
+        const span = document.createElement('span');
+        if (style) span.style.cssText = style;
+        span.textContent = text;
+        line.appendChild(span);
+        return span;
+    };
+
+    if (entry.timestamp) {
+        appendSpan(entry.timestamp, 'color:#4b5563; white-space:nowrap;');
+    }
+
+    if (entry.icon) {
+        appendSpan(entry.icon, '');
+    }
+
+    if (entry.category) {
+        appendSpan(
+            `[${entry.category}]`,
+            'color:#64b5f6; min-width:80px;'
+        );
+    }
+
+    if (entry.domain) {
+        appendSpan(
+            entry.domain,
+            'color:#a78bfa;'
+        );
+    }
+
+    appendSpan(
+        entry.message || '',
+        'color:#e2e8f0; word-break:break-word;'
+    );
+
+    line.dataset.text = `${entry.category || ''} ${entry.domain || ''} ${entry.message || ''}`.toLowerCase();
+
+    container.appendChild(line);
+
+    while (container.children.length > 500) {
+        container.removeChild(container.firstChild);
+    }
+
+    const autoScroll = document.getElementById('debug-autoscroll');
+    if (autoScroll && autoScroll.checked) {
+        container.scrollTop = container.scrollHeight;
+    }
+}
+
+function filterDebugLog(query) {
+    const container = document.getElementById('debug-log-container');
+    if (!container) return;
+    const q = query.toLowerCase();
+    for (const line of container.children) {
+        line.style.display = (!q || (line.dataset.text || '').includes(q)) ? '' : 'none';
+    }
+}
+
+function clearDebugLog() {
+    const container = document.getElementById('debug-log-container');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    const placeholder = document.createElement('span');
+    placeholder.className = 'debug-placeholder';
+    placeholder.style.opacity = '0.3';
+    placeholder.textContent = tr('cleared', 'Cleared.');
+    container.appendChild(placeholder);
+}
+
+function tr(key, fallback = '') {
+	const dict = (typeof window !== 'undefined' && window.I18N) ? window.I18N : {};
+	const val = dict[key];
+	return (typeof val === 'string' && val.trim() !== '') ? val : fallback;
+}
+
+function trf(key, vars = {}, fallback = '') {
+	let text = tr(key, fallback);
+	for (const [k, v] of Object.entries(vars)) {
+		text = text.replaceAll('{' + k + '}', String(v));
+	}
+	return text;
 }
