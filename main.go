@@ -292,6 +292,7 @@ func run() int {
 	for _, dc := range cfg.DomainConfigs {
 		providers[dc.Provider] = true
 	}
+
 	providerNames := make([]string, 0, len(providers))
 	for p := range providers {
 		providerNames = append(providerNames, string(p))
@@ -348,7 +349,9 @@ func run() int {
 	debugLog("SYSTEM", "", t(T.WebSocketHubStarted, "WebSocket hub started"))
 
 	runUpdate(true)
-	ticker := time.NewTicker(time.Duration(cfg.Interval) * time.Second)
+
+	currentInterval := cfg.Interval
+	ticker := time.NewTicker(time.Duration(currentInterval) * time.Second)
 	defer ticker.Stop()
 
 	stop := make(chan os.Signal, 1)
@@ -361,7 +364,15 @@ func run() int {
 			return 0
 
 		case <-ticker.C:
+			if cfg.Interval != currentInterval {
+				ticker.Stop()
+				currentInterval = cfg.Interval
+				ticker = time.NewTicker(time.Duration(currentInterval) * time.Second)
+				debugLog("SCHEDULER", "", fmt.Sprintf(t(T.SchedulerIntervalChanged, "Interval changed → new ticker: %ds"), currentInterval))
+			}
+
 			debugLog("SCHEDULER", "", t(T.SchedulerIntervalReached, "Interval reached, starting runUpdate(false)"))
+
 			if activeUpdates.Load() > 0 {
 				debugLog("SCHEDULER", "", t(T.SchedulerPreviousUpdateRunning, "⚠️ Previous update is still running. Skipping this cycle..."))
 

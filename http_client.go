@@ -16,6 +16,7 @@ import (
 	"net/http/httputil"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -231,6 +232,8 @@ func ResetHTTPClient() {
 	defer clientMu.Unlock()
 	httpClient = nil
 	clientDNSKey = ""
+	secretReplacerOnce = sync.Once{}
+	secretReplacer = nil
 }
 
 func dnsKey(servers []string) string {
@@ -239,8 +242,6 @@ func dnsKey(servers []string) string {
 
 func getHTTPClient() *http.Client {
 	currentKey := dnsKey(cfg.DNSServers)
-
-	// Schneller Pfad: DNS unverändert
 	clientMu.RLock()
 	if httpClient != nil && clientDNSKey == currentKey {
 		c := httpClient
@@ -249,11 +250,9 @@ func getHTTPClient() *http.Client {
 	}
 	clientMu.RUnlock()
 
-	// Langsamer Pfad: neu bauen
 	clientMu.Lock()
 	defer clientMu.Unlock()
 
-	// Double-check nach Lock
 	if httpClient != nil && clientDNSKey == currentKey {
 		return httpClient
 	}
@@ -392,7 +391,7 @@ func buildHTTPClient(dnsList []string) *http.Client {
 	}
 
 	debugLog("SYSTEM", "", fmt.Sprintf(T.HTTPClientInitialized, len(dnsList)))
-	return &http.Client{ /* ... */ }
+	return httpClient
 }
 
 // ============================================================================

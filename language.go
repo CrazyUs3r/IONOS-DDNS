@@ -19,7 +19,6 @@ var embeddedLang embed.FS
 // ============================================================================
 // LANGUAGE
 // ============================================================================
-
 func t(val string, fallback string) string {
 	if strings.TrimSpace(val) == "" {
 		return fallback
@@ -161,10 +160,12 @@ func loadLanguage(lang string) error {
 }
 
 var knownAcronyms = []string{
-	"IPv4", "IPv6", "HTML", "HTTP", "JSON", "API", "DNS", "URL", "CF", "OK", "TG", "WS", "ID", "IP"}
+	"IPv4", "IPv6", "HTML", "HTTP", "JSON", "FQDN",
+	"API", "DNS", "URL", "CF",
+	"OK", "TG", "WS", "ID", "IP", "JS"}
 
 var snakeCaseOverrides = map[string]string{}
-var snakeCaseCache sync.Map // map[string]string
+var snakeCaseCache sync.Map
 
 func toSnakeCase(s string) string {
 	if key, ok := snakeCaseOverrides[s]; ok {

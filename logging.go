@@ -16,7 +16,7 @@ import (
 // LOGGING
 // ============================================================================
 func log(ctx LogContext) {
-	if ctx.Level == LogDebug && !cfg.DebugEnabled {
+	if ctx.Level == LogDebug && !(cfg.DebugEnabled || cfg.DebugHTTPRaw) {
 		return
 	}
 
@@ -69,6 +69,23 @@ func log(ctx LogContext) {
 
 	if shouldPersistLevel(ctx.Level, ctx.Action) {
 		persistLog(ctx)
+	}
+
+	switch ctx.Level {
+	case LogDebug, LogWarn, LogError:
+		ctxCopy := ctx
+		msgCopy := msg
+		iconCopy := icon
+
+		go func(c LogContext, m, i string) {
+			broadcastUpdate("debug_log", map[string]string{
+				"timestamp": time.Now().Local().Format("02.01.2006 15:04:05"),
+				"category":  c.Category,
+				"domain":    c.Domain,
+				"message":   m,
+				"icon":      i,
+			})
+		}(ctxCopy, msgCopy, iconCopy)
 	}
 }
 

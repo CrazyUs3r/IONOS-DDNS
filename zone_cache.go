@@ -161,7 +161,7 @@ func loadZoneCache(ctx context.Context, zonesByProvider map[string][]Zone) (*Zon
 		log(LogContext{
 			Level:   LogWarn,
 			Action:  ActionError,
-			Message: fmt.Sprintf("Cache-Fehler bei %d Zone(n): %s", len(cacheErrors), strings.Join(cacheErrors, "; ")),
+			Message: fmt.Sprintf(T.RecordCacheErrorZone+" Zone(n): %s", len(cacheErrors), strings.Join(cacheErrors, "; ")),
 		})
 	}
 

@@ -388,10 +388,19 @@ type Phrases struct {
 	NoDomainsConfigured, DomainContext                                    string
 
 	// Provider-Hinweise / Config
-	IonosAPIRequired, Ipv64TokenRequired, CloudflareAuthRequired, UnknownProvider string
-	DomainParamMissing, DomainStillActiveInConfig, NicIPv64Updates                string
-	NoStatusFileFound, DomainNotFoundInStatus                                     string
-	DomainDeletedFromStatusLog, DomainRemovedFromStatus                           string
+	IonosAPIRequired, Ipv64TokenRequired, CloudflareAuthRequired, UnknownProvider  string
+	DomainParamMissing, DomainStillActiveInConfig, NicIPv64Updates                 string
+	NoStatusFileFound, DomainNotFoundInStatus                                      string
+	DomainDeletedFromStatusLog, DomainRemovedFromStatus                            string
+	FailedToCreateConfigDirectoryFormat, CreateConfigDirectoryFormat               string
+	FailedToMarshalConfigFormat, MarshalConfigFormat                               string
+	FailedToWriteTempConfigFileFormat, WriteTempConfigFileFormat                   string
+	FailedToReplaceConfigFileFormat, ReplaceConfigFileFormat                       string
+	ConfigJsonMissingMigratingFromDomainsConfig, InvalidDomainsConfigJSONFormat    string
+	CouldNotCreateConfigJsonFormat, ConfigJsonSuccessfullyCreatedFromEnv           string
+	NoConfigJsonAndNoDomainsConfigFoundUsingLegacyMode                             string
+	IonosRequiresApiPrefixAndApiSecret, CloudflareRequiresTokenOrEmailAndApiSecret string
+	Ipv64RequiresToken, UnknownProviderFormat                                      string
 
 	// Trigger / Rate Limit
 	InvalidOrMissingTriggerToken, TriggerBlockedInvalidToken                  string
@@ -434,6 +443,8 @@ type Phrases struct {
 	TgSendError, TgHTTPError                                                   string
 	TgRateLimit, TgSendFailed                                                  string
 	TgMsgDiscarded, TgQueueFull, TgQueuePushFailed                             string
+	TgWebhookDeleteRequestError, TgWebhookDeleteFailed                         string
+	TgWebhookUnregistered                                                      string
 
 	// Cache & persistence
 	ErrRecordCacheNil, ErrCacheDirCreate, ErrCacheMarshal   string
@@ -481,25 +492,26 @@ type Phrases struct {
 	CFAttempt, IPv64Attempt, IonosAttempt string
 
 	// Settings Modal
-	SettingsTitle, SettingsSecurity, SettingsTriggerToken       string
-	SettingsTokenPlaceholder, SettingsTokenSave                 string
-	SettingsSystem, SettingsIPMode, SettingsInterval            string
-	SettingsHealthPort, SettingsIface, SettingsIfaceHint        string
-	SettingsDNS, SettingsMaxLog, SettingsMaxRetries             string
-	SettingsMaxConcurrent, SettingsHourlyLimit                  string
-	SettingsLanguage, SettingsDryRun, SettingsDryRunHint        string
-	SettingsDryRunActive, SettingsDomains, SettingsAddDomain    string
-	SettingsAddBtn, SettingsCFOr                                string
-	SettingsNotify, SettingsNotifyEnabled, SettingsNotifyOn     string
-	SettingsNotifyEvents, SettingsTGToken, SettingsTGChatID     string
-	SettingsTokenUnchanged, SettingsDNSHint                     string
-	SettingsSaveBtn, SettingsSaveHint, SettingsRestartHint      string
-	SettingsIfacePlaceholder                                    string
-	SettingsAPIPrefix, SettingsAPISecret                        string
-	SettingsCFEmail, SettingsCFGlobalKey                        string
-	SettingsIPv64Token, SettingsTelegramHeading                 string
-	SettingsGotifyHeading, SettingsDomainPlaceholder            string
-	SettingsCFTokenHint, SettingsGotifyURL, SettingsGotifyToken string
+	SettingsTitle, SettingsSecurity, SettingsTriggerToken               string
+	SettingsTokenPlaceholder, SettingsTokenSave                         string
+	SettingsSystem, SettingsIPMode, SettingsInterval                    string
+	SettingsHealthPort, SettingsIface, SettingsIfaceHint                string
+	SettingsDNS, SettingsMaxLog, SettingsMaxRetries                     string
+	SettingsMaxConcurrent, SettingsHourlyLimit                          string
+	SettingsLanguage, SettingsDryRun, SettingsDryRunHint                string
+	SettingsCheckboxActive, SettingsCheckboxDeactive, SettingsAddDomain string
+	SettingsDomains, SettingsAddBtn, SettingsCFOr                       string
+	SettingsNotify, SettingsNotifyEnabled, SettingsNotifyOn             string
+	SettingsNotifyEvents, SettingsTGToken, SettingsTGChatID             string
+	SettingsTokenUnchanged, SettingsDNSHint                             string
+	SettingsSaveBtn, SettingsSaveHint, SettingsRestartHint              string
+	SettingsDebugVerboseHint, SettingsDebugHTTPHint                     string
+	SettingsIfacePlaceholder                                            string
+	SettingsAPIPrefix, SettingsAPISecret                                string
+	SettingsCFEmail, SettingsCFGlobalKey                                string
+	SettingsIPv64Token, SettingsTelegramHeading                         string
+	SettingsGotifyHeading, SettingsDomainPlaceholder                    string
+	SettingsCFTokenHint, SettingsGotifyURL, SettingsGotifyToken         string
 
 	// Domain display
 	DotTitleNoUpdate, DotTitleChanged, DotTitleLast string
@@ -514,7 +526,7 @@ type Phrases struct {
 	ZonesLoadedFromDiskNoAPICall, ZoneAPILoadFailed, TryingDiskCacheFallback, ZonesLoadedFromDisk  string
 	ZonesLoadedFromAPI, UsingRecordCacheAge, ForcedRefreshLoadRecords, NoRecordCacheInitialLoad    string
 	RecordCacheTooOldReload, RecordCacheLoadedFromDiskNoAPICall, TryingLoadRecordCacheFromDisk     string
-	RecordCacheLoadedFromDisk, RecordsLoadedSuccessfully                                           string
+	RecordCacheLoadedFromDisk, RecordsLoadedSuccessfully, RecordCacheErrorZone                     string
 	DiskCachePersistSkipped, CloudflareCacheSaveFailed, IonosCacheSaveFailed                       string
 	CleanupSkippedLastRun, CleanupStartingLastRun, CheckingIPv64OrphanedRecords                    string
 	IPv64ZonesLoadedFromDisk, CloudflareZonesLoadedFromDisk, IonosZonesLoadedFromDisk              string
@@ -523,13 +535,21 @@ type Phrases struct {
 	// Main
 	MaxAPIRetriesInvalid, LogMaxLinesInvalid, ConfigJSONReadFailed, ProviderConfigFailed                   string
 	DebugModeActive, LoadedDomains, MaxLogLinesInfo, MaxAPIRetriesInfo, MaxConcurrentInfo                  string
-	LogDirCreateFailed, DomainCacheUpdateFailed, MetricCacheUpdateFailed                                   string
+	LogDirCreateFailed, DomainCacheUpdateFailed, MetricCacheUpdateFailed, SchedulerIntervalChanged         string
 	WebSocketHubStarted, SchedulerShutdownActive, SchedulerIntervalReached, SchedulerPreviousUpdateRunning string
 	ShutdownSignalReceived, WaitingForRunningUpdates, AllUpdatesFinished, WaitForUpdatesTimeout            string
 	WaitingForLogQueue, MetricsSaveFailed, Providers                                                       string
 
 	// Misc
-	ExportBtn string
+	ExportBtn                                                      string
+	ThemeLabel, NoIPToCopy, Copied, CopyFailed                     string
+	UpdateStartingJS, UpdateStartedJS, ConnectionErrorJS           string
+	ExportStartedJS, ExportFailedJS, FQDNMissingJS                 string
+	SaveConfigConfirmJS, SavedReloadJS, ErrorPrefixJS              string
+	ResetMetricsConfirmJS, MetricsResetOKJS, MetricsResetFailedJS  string
+	DeleteDomainConfirmJS, DomainRemovedJS, DeleteFailedJS         string
+	TokenSavedJS, TokenDeletedJS, TokenSavedMaskedJS, TokenEnterJS string
+	DomainUpdatedJS, ClearedJS, ActiveJS, InactiveJS               string
 }
 
 type LogLevel int
@@ -863,6 +883,8 @@ type domainUpdateResult struct {
 	Domain  string
 	Changed bool
 	Error   error
+	IPv4    string
+	IPv6    string
 }
 
 type rotationJob struct {
@@ -1041,5 +1063,21 @@ type tgQueuedMsg struct {
 	chatID   string
 	text     string
 	kb       *tgInlineKeyboard
+	enqueued time.Time
+}
+
+// ============================================================================
+// GOTIFY TYPES
+// ============================================================================
+type gotifyNotifier struct {
+	url       string
+	token     string
+	sendQueue chan gotifyQueuedMsg
+}
+
+type gotifyQueuedMsg struct {
+	title    string
+	body     string
+	priority int
 	enqueued time.Time
 }

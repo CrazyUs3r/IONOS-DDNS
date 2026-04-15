@@ -15,19 +15,6 @@ import (
 // ============================================================================
 // GOTIFY NOTIFIER
 // ============================================================================
-type gotifyNotifier struct {
-	url       string
-	token     string
-	sendQueue chan gotifyQueuedMsg
-}
-
-type gotifyQueuedMsg struct {
-	title    string
-	body     string
-	priority int
-	enqueued time.Time
-}
-
 func newGotifyNotifier(url, token string) *gotifyNotifier {
 	g := &gotifyNotifier{
 		url:       strings.TrimRight(url, "/"),
@@ -128,7 +115,7 @@ func (g *gotifyNotifier) sendWithRetry(msg gotifyQueuedMsg) error {
 		"priority": msg.priority,
 	}
 
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := range maxRetries {
 		err := g.doSend(payload)
 		if err == nil {
 			return nil

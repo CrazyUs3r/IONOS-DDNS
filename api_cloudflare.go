@@ -358,7 +358,8 @@ func loadCloudflareRecords(ctx context.Context, dc *DomainConfig, zoneID string)
 // DNS LOGIC - CLOUDFLARE
 // ============================================================================
 func updateCloudflareDNS(ctx context.Context, dc *DomainConfig, fqdn, recordType, newIP string,
-	records []Record, zoneID string) (bool, error) {
+	records []Record, zoneID string,
+) (bool, error) {
 	var existing *Record
 	for i := range records {
 		if strings.EqualFold(strings.TrimSuffix(records[i].Name, "."), strings.TrimSuffix(fqdn, ".")) &&
@@ -576,7 +577,6 @@ func classifyCloudflareAPIError(
 	cfResp *CloudflareResponse,
 	headers http.Header,
 ) *APIError {
-
 	msg := strings.TrimSpace(string(responseBody))
 
 	if cfResp != nil && !cfResp.Success {

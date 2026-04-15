@@ -1,4 +1,3 @@
-// Package main
 package main
 
 import (
@@ -14,17 +13,46 @@ import (
 // ============================================================================
 func saveConfigToFile() error {
 	dir := filepath.Dir(configPath)
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return err
-		}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: fmt.Sprintf(T.FailedToCreateConfigDirectoryFormat, err),
+		})
+		return fmt.Errorf(T.CreateConfigDirectoryFormat, err)
 	}
 
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
-		return err
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: fmt.Sprintf(T.FailedToMarshalConfigFormat, err),
+		})
+		return fmt.Errorf(T.MarshalConfigFormat, err)
 	}
-	return os.WriteFile(configPath, data, 0644)
+
+	tmp := configPath + ".tmp"
+
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: fmt.Sprintf(T.FailedToWriteTempConfigFileFormat, err),
+		})
+		return fmt.Errorf(T.WriteTempConfigFileFormat, err)
+	}
+
+	if err := os.Rename(tmp, configPath); err != nil {
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: fmt.Sprintf(T.FailedToReplaceConfigFileFormat, err),
+		})
+		return fmt.Errorf(T.ReplaceConfigFileFormat, err)
+	}
+
+	return nil
 }
 
 func initProviderConfig() error {
@@ -34,11 +62,11 @@ func initProviderConfig() error {
 
 	configJSON := os.Getenv("DOMAINS_CONFIG")
 	if configJSON != "" {
-		debugLog("CONFIG", "", "📦 config.json fehlt. Migriere Daten aus DOMAINS_CONFIG...")
+		debugLog("CONFIG", "", T.ConfigJsonMissingMigratingFromDomainsConfig)
 
 		var raw []rawEntry
 		if err := json.Unmarshal([]byte(configJSON), &raw); err != nil {
-			return fmt.Errorf("invalid DOMAINS_CONFIG JSON: %w", err)
+			return fmt.Errorf(T.InvalidDomainsConfigJSONFormat, err)
 		}
 
 		cfg.DomainConfigs = expandDomainConfigs(raw)
@@ -48,14 +76,14 @@ func initProviderConfig() error {
 		}
 
 		if err := saveConfigToFile(); err != nil {
-			debugLog("CONFIG", "", "⚠️ Konnte config.json nicht erstellen: "+err.Error())
+			debugLog("CONFIG", "", fmt.Sprintf(T.CouldNotCreateConfigJsonFormat, err))
 		} else {
-			debugLog("CONFIG", "", "✅ config.json erfolgreich aus ENV erstellt.")
+			debugLog("CONFIG", "", T.ConfigJsonSuccessfullyCreatedFromEnv)
 		}
 		return nil
 	}
 
-	debugLog("CONFIG", "", "📦 Keine config.json und keine DOMAINS_CONFIG gefunden. Nutze Legacy-Mode.")
+	debugLog("CONFIG", "", T.NoConfigJsonAndNoDomainsConfigFoundUsingLegacyMode)
 	err := initLegacyConfig()
 	if err == nil {
 		_ = saveConfigToFile()
@@ -123,7 +151,7 @@ func initLegacyConfig() error {
 
 	domainsEnv := os.Getenv("DOMAINS")
 	if domainsEnv == "" {
-		return fmt.Errorf("no domains configured (DOMAINS env var empty)")
+		return fmt.Errorf("%s", T.NoDomainsConfigured)
 	}
 
 	domains := strings.Split(domainsEnv, ",")
@@ -135,7 +163,7 @@ func initLegacyConfig() error {
 		apiSecret := os.Getenv("API_SECRET")
 
 		if apiPrefix == "" || apiSecret == "" {
-			return fmt.Errorf("ionos requires API_PREFIX and API_SECRET")
+			return fmt.Errorf("%s", T.IonosRequiresApiPrefixAndApiSecret)
 		}
 
 		for _, d := range domains {
@@ -157,7 +185,7 @@ func initLegacyConfig() error {
 		cfSecret := os.Getenv("CLOUDFLARE_API_SECRET")
 
 		if cfToken == "" && (cfEmail == "" || cfSecret == "") {
-			return fmt.Errorf("cloudflare requires CLOUDFLARE_TOKEN or CLOUDFLARE_EMAIL + CLOUDFLARE_API_SECRET")
+			return fmt.Errorf("%s", T.CloudflareRequiresTokenOrEmailAndApiSecret)
 		}
 
 		for _, d := range domains {
@@ -178,7 +206,7 @@ func initLegacyConfig() error {
 		token := os.Getenv("IPV64_TOKEN")
 
 		if token == "" {
-			return fmt.Errorf("ipv64 requires IPV64_TOKEN")
+			return fmt.Errorf("%s", T.Ipv64RequiresToken)
 		}
 
 		for _, d := range domains {
@@ -194,7 +222,7 @@ func initLegacyConfig() error {
 		}
 
 	default:
-		return fmt.Errorf("unknown provider: %s (supported: IONOS, CLOUDFLARE, IPV64)", providerEnv)
+		return fmt.Errorf(T.UnknownProviderFormat, providerEnv)
 	}
 
 	cfg.DomainConfigs = configs

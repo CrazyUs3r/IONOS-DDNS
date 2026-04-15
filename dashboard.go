@@ -353,37 +353,61 @@ func buildSettingsModal(c Config) string {
 		buildDynamicLangOptions(c.Lang) +
 		`</select></div>` +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsDryRun+` <small style="opacity:.5">`+T.SettingsDryRunHint+`</small></span>`+
-			`<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">`+
-			`<input type="checkbox" id="cfg-dry-run" style="width:18px;height:18px;cursor:pointer;"%s>`+
-			`<span style="font-size:0.8rem;opacity:0.7;">`+T.SettingsDryRunActive+`</span></label></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsDryRun+`<small style="display:block; opacity:.5; line-height:1.2; word-wrap:break-word;">`+T.SettingsDryRunHint+`</small></span>`+
+			`<label class="s-checkbox-container">`+
+			`<input type="checkbox" id="cfg-dry-run" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)"`+
+			` data-label-on="%s" data-label-off="%s"%s>`+
+			`<span class="s-checkbox-text">%s</span></label></div>`,
+			T.SettingsCheckboxActive, T.SettingsCheckboxDeactive,
 			func() string {
 				if c.DryRun {
 					return ` checked`
 				}
 				return ""
+			}(),
+			func() string {
+				if c.DryRun {
+					return T.SettingsCheckboxActive
+				}
+				return T.SettingsCheckboxDeactive
 			}()) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">Debug-Modus <small style="opacity:.5">(verbose logs)</small></span>`+
-			`<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">`+
-			`<input type="checkbox" id="cfg-debug" style="width:18px;height:18px;cursor:pointer;"%s>`+
-			`<span style="font-size:0.8rem;opacity:0.7;">aktiviert</span></label></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Debug-Modus <small style="display:block; opacity:.5; line-height:1.2; word-wrap:break-word;">`+T.SettingsDebugVerboseHint+`</small></span>`+
+			`<label class="s-checkbox-container">`+
+			`<input type="checkbox" id="cfg-debug" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)"`+
+			` data-label-on="%s" data-label-off="%s"%s>`+
+			`<span class="s-checkbox-text">%s</span></label></div>`,
+			T.SettingsCheckboxActive, T.SettingsCheckboxDeactive,
 			func() string {
 				if c.DebugEnabled {
 					return ` checked`
 				}
 				return ""
+			}(),
+			func() string {
+				if c.DebugEnabled {
+					return T.SettingsCheckboxActive
+				}
+				return T.SettingsCheckboxDeactive
 			}()) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">Debug HTTP Raw <small style="opacity:.5">(raw requests)</small></span>`+
-			`<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">`+
-			`<input type="checkbox" id="cfg-debug-http" style="width:18px;height:18px;cursor:pointer;"%s>`+
-			`<span style="font-size:0.8rem;opacity:0.7;">aktiviert</span></label></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Debug HTTP Raw <small style="display:block; opacity:.5; line-height:1.2; word-wrap:break-word;">`+T.SettingsDebugHTTPHint+`</small></span>`+
+			`<label class="s-checkbox-container">`+
+			`<input type="checkbox" id="cfg-debug-http" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)"`+
+			` data-label-on="%s" data-label-off="%s"%s>`+
+			`<span class="s-checkbox-text">%s</span></label></div>`,
+			T.SettingsCheckboxActive, T.SettingsCheckboxDeactive,
 			func() string {
 				if c.DebugHTTPRaw {
 					return ` checked`
 				}
 				return ""
+			}(),
+			func() string {
+				if c.DebugHTTPRaw {
+					return T.SettingsCheckboxActive
+				}
+				return T.SettingsCheckboxDeactive
 			}()) +
 
 		`</div>` +
@@ -432,14 +456,22 @@ func buildSettingsModal(c Config) string {
 		`<h3>` + T.SettingsNotify + `</h3>` +
 
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsNotifyEnabled+`</span>`+
-			`<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">`+
-			`<input type="checkbox" id="cfg-notify-enabled" style="width:18px;height:18px;cursor:pointer;"%s>`+
-			`<span style="font-size:0.8rem;opacity:0.7;">`+T.SettingsNotifyOn+`</span></label></div>`,
+			`<label class="s-checkbox-container">`+
+			`<input type="checkbox" id="cfg-notify-enabled" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)"`+
+			` data-label-on="%s" data-label-off="%s"%s>`+
+			`<span class="s-checkbox-text">%s</span></label></div>`,
+			T.SettingsCheckboxActive, T.SettingsCheckboxDeactive,
 			func() string {
 				if c.Notifications.Enabled {
 					return ` checked`
 				}
 				return ""
+			}(),
+			func() string {
+				if c.Notifications.Enabled {
+					return T.SettingsCheckboxActive
+				}
+				return T.SettingsCheckboxDeactive
 			}()) +
 
 		`<div class="s-row" style="flex-direction:column;align-items:stretch;gap:6px;">` +
@@ -572,6 +604,45 @@ func currentSystemConfig() safeSystemConfig {
 		DebugEnabled:    cfg.DebugEnabled,
 		DebugHTTPRaw:    cfg.DebugHTTPRaw,
 	}
+}
+
+func dashboardI18NJSON() string {
+	m := map[string]string{
+		"theme":                 t(T.ThemeLabel, "Theme"),
+		"no_ip_to_copy":         t(T.NoIPToCopy, "❌ No IP to copy"),
+		"copied":                t(T.Copied, "✓ Copied: "),
+		"copy_failed":           t(T.CopyFailed, "❌ Copy failed"),
+		"update_starting":       t(T.UpdateStartingJS, "⏳ Update wird gestartet..."),
+		"update_started":        t(T.UpdateStartedJS, "✅ Update gestartet"),
+		"connection_error":      t(T.ConnectionErrorJS, "❌ Verbindungsfehler"),
+		"export_started":        t(T.ExportStartedJS, "✓ Export gestartet"),
+		"export_failed":         t(T.ExportFailedJS, "Export fehlgeschlagen"),
+		"fqdn_missing":          t(T.FQDNMissingJS, "FQDN fehlt"),
+		"save_config_confirm":   t(T.SaveConfigConfirmJS, "Alle Einstellungen in config.json speichern?"),
+		"saved_reload":          t(T.SavedReloadJS, "✅ Gespeichert! Seite wird neu geladen..."),
+		"error_prefix":          t(T.ErrorPrefixJS, "❌ Fehler: "),
+		"reset_metrics_confirm": t(T.ResetMetricsConfirmJS, "Möchtest du wirklich alle Metriken (Statistiken) löschen?"),
+		"metrics_reset_ok":      t(T.MetricsResetOKJS, "✅ Metriken zurückgesetzt"),
+		"metrics_reset_failed":  t(T.MetricsResetFailedJS, "❌ Reset fehlgeschlagen"),
+		"delete_domain_confirm": t(T.DeleteDomainConfirmJS, `Domain "{domain}" wirklich aus dem Status entfernen?`),
+		"domain_removed":        t(T.DomainRemovedJS, "🗑️ {domain} entfernt"),
+		"delete_failed":         t(T.DeleteFailedJS, "Fehler beim Löschen"),
+		"remove_btn":            t(T.RemoveBtn, "🗑️ Entfernen"),
+		"token_saved":           t(T.TokenSavedJS, "✅ Token gespeichert"),
+		"token_deleted":         t(T.TokenDeletedJS, "🗑️ Token gelöscht"),
+		"token_saved_masked":    t(T.TokenSavedMaskedJS, "●●●●●● (gespeichert)"),
+		"token_enter":           t(T.TokenEnterJS, "Token eingeben..."),
+		"domain_updated":        t(T.DomainUpdatedJS, "✓ {domain} updated"),
+		"cleared":               t(T.ClearedJS, "Gelöscht."),
+		"active":                t(T.ActiveJS, "Aktiv"),
+		"inactive":              t(T.InactiveJS, "Inaktiv"),
+	}
+
+	b, err := json.Marshal(m)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
 }
 
 func createMux() *http.ServeMux {
@@ -1490,6 +1561,39 @@ func createMux() *http.ServeMux {
 			latencySVG,
 		)
 
+		if cfg.DebugEnabled || cfg.DebugHTTPRaw {
+			_, _ = fmt.Fprint(w, `
+					<details class="card" id="debug-log-card" open>
+						<summary>🐞 Debug Log <span id="debug-badge" style="
+							font-size:0.65rem; padding:1px 7px; border-radius:999px;
+							background:rgba(250,204,21,0.15); border:1px solid rgba(250,204,21,0.4);
+							color:#facc15; margin-left:8px;">LIVE</span>
+						</summary>
+						<div class="card-content">
+							<div style="display:flex; gap:8px; margin-bottom:8px; align-items:center;">
+								<input type="text" id="debug-filter" placeholder="Filter..." 
+									oninput="filterDebugLog(this.value)"
+									style="flex:1; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1);
+										border-radius:6px; padding:5px 10px; color:inherit; font-size:0.8rem;">
+								<button onclick="clearDebugLog()" class="action-btn" 
+									style="font-size:0.75rem; padding:4px 10px;">🗑️ Clear</button>
+								<label style="font-size:0.75rem; opacity:0.7; white-space:nowrap;">
+									<input type="checkbox" id="debug-autoscroll" checked style="margin-right:4px;">
+									Auto-scroll
+								</label>
+							</div>
+							<div id="debug-log-container" style="
+								height: 300px; overflow-y: auto;
+								background: rgba(0,0,0,0.3); border-radius:8px;
+								border: 1px solid rgba(255,255,255,0.07);
+								padding: 8px; font-family: monospace; font-size: 0.78rem;">
+								<span class="debug-placeholder" style="opacity:0.3;">Waiting for debug messages...</span>
+							</div>
+						</div>
+					</details>
+					`)
+		}
+
 		if len(logs) > 0 {
 			_, _ = fmt.Fprintf(w, `
                      <details class="card" id="logs-card">
@@ -1776,11 +1880,14 @@ func createMux() *http.ServeMux {
 		_, _ = fmt.Fprint(w, `</div>`)
 
 		_, _ = fmt.Fprintf(w, `
+			<script>
+				window.I18N = %s;
+			</script>
 			<script>%s</script>
 		</div>
 		</body>
 		</html>
-		`, jsData)
+		`, dashboardI18NJSON(), jsData)
 
 	})
 

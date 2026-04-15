@@ -83,7 +83,9 @@ func updateStatusFile(fqdn, ipv4, ipv6, provider string) {
 		}
 	}()
 
-	broadcastUpdate("domain_update", map[string]interface{}{
+	go func(data map[string]interface{}) {
+		broadcastUpdate("domain_update", data)
+	}(map[string]interface{}{
 		"domain": fqdn,
 		"ipv4":   ipv4,
 		"ipv6":   ipv6,

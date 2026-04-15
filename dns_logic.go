@@ -23,7 +23,7 @@ domainLoop:
 
 		select {
 		case <-ctx.Done():
-			debugLog("SCHEDULER", "", t("domain_loop_cancelled", "Domain loop aborted: context cancelled"))
+			debugLog("SCHEDULER", "", t(T.DomainLoopCancelled, "Domain loop aborted: context cancelled"))
 			break domainLoop
 		default:
 		}
@@ -108,7 +108,7 @@ domainLoop:
 				debugLog("DNS-LOGIC", domainConfig.FQDN, T.NoRecordsInCache)
 				results <- domainUpdateResult{
 					Domain: domainConfig.FQDN,
-					Error:  fmt.Errorf("no records in cache"),
+					Error:  fmt.Errorf("%s", t(T.NoRecordsInCache, "no records in cache")),
 				}
 				return
 			}
@@ -123,16 +123,24 @@ domainLoop:
 			}
 
 			result := processDomainUpdate(ctx, domainConfig, job, cache)
-			results <- result
 
 			providerName := string(domainConfig.Provider)
 
 			if result.Changed && !cfg.DryRun {
 				debugLog("STATUS", domainConfig.FQDN, T.ChangesDetected)
-				updateStatusFile(domainConfig.FQDN, ipv4, ipv6, providerName)
+				v4 := result.IPv4
+				v6 := result.IPv6
+				if v4 == "" {
+					v4 = ipv4
+				}
+				if v6 == "" {
+					v6 = ipv6
+				}
+				updateStatusFile(domainConfig.FQDN, v4, v6, providerName)
 			} else if result.Error == nil {
 				debugLog("STATUS", domainConfig.FQDN, T.NoChangesNeeded)
 			}
+			results <- result
 		}(dc)
 	}
 
@@ -170,7 +178,11 @@ domainLoop:
 }
 
 func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdateJob, cache *ZoneRecordCache) domainUpdateResult {
-	result := domainUpdateResult{Domain: job.Domain}
+	result := domainUpdateResult{
+		Domain: job.Domain,
+		IPv4:   job.IPv4,
+		IPv6:   job.IPv6,
+	}
 	if dc.Provider == ProviderIPv64 {
 		ipv4 := ""
 		ipv6 := ""

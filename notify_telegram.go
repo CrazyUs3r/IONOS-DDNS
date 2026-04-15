@@ -392,17 +392,17 @@ func (t *telegramNotifier) deleteWebhook() {
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		debugLog("NOTIFY", "", fmt.Sprintf("⚠️ Telegram deleteWebhook request error: %v", err))
+		debugLog("NOTIFY", "", fmt.Sprintf(T.TgWebhookDeleteRequestError, err))
 		return
 	}
 	req.Header.Set("User-Agent", ManagedComment)
 	resp, err := t.getPollClient().Do(req)
 	if err != nil {
-		debugLog("NOTIFY", "", fmt.Sprintf("⚠️ Telegram deleteWebhook fehlgeschlagen: %v", err))
+		debugLog("NOTIFY", "", fmt.Sprintf(T.TgWebhookDeleteFailed, err))
 		return
 	}
 	_ = resp.Body.Close()
-	debugLog("NOTIFY", "", "✅ Telegram Webhook abgemeldet")
+	debugLog("NOTIFY", "", T.TgWebhookUnregistered)
 }
 
 // ============================================================================
