@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha1"
+	"crypto/subtle"
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
@@ -322,13 +323,7 @@ func buildHTTPClient(dnsList []string) *http.Client {
 		},
 	}
 
-	dnsTTL := time.Duration(cfg.Interval)*time.Second + 30*time.Second
-	if dnsTTL < 60*time.Second {
-		dnsTTL = 60 * time.Second
-	}
-	if dnsTTL > 10*time.Minute {
-		dnsTTL = 10 * time.Minute
-	}
+	dnsTTL := min(max(time.Duration(cfg.Interval)*time.Second+30*time.Second, 60*time.Second), 10*time.Minute)
 	cache := newDNSCache(resolver, dnsTTL)
 
 	baseDialer := &net.Dialer{
@@ -390,7 +385,7 @@ func buildHTTPClient(dnsList []string) *http.Client {
 		},
 	}
 
-	debugLog("SYSTEM", "", fmt.Sprintf(T.HTTPClientInitialized, len(dnsList)))
+	debugLog("SYSTEM", "", fmt.Sprintf(T.HTTPClientInitialized, len(dnsList), strings.Join(dnsList, ", ")))
 	return httpClient
 }
 
@@ -611,13 +606,14 @@ func getClientIP(r *http.Request) string {
 	return ip
 }
 
+var triggerToken = os.Getenv("TRIGGER_TOKEN")
+
 func validateTriggerToken(r *http.Request) bool {
 	token := r.Header.Get(TriggerTokenHeader)
 
-	expectedToken := os.Getenv("TRIGGER_TOKEN")
-	if expectedToken == "" {
+	if triggerToken == "" {
 		return true
 	}
 
-	return token == expectedToken
+	return subtle.ConstantTimeCompare([]byte(token), []byte(triggerToken)) == 1
 }

@@ -14,12 +14,18 @@ func processDomains(
 	cache *ZoneRecordCache,
 	ipv4, ipv6 string,
 ) int {
+
+	cfgMu.RLock()
+	domains := cfg.DomainConfigs
+	dryRun := cfg.DryRun
+	cfgMu.RUnlock()
+
 	var wg sync.WaitGroup
-	results := make(chan domainUpdateResult, len(cfg.DomainConfigs))
+	results := make(chan domainUpdateResult, len(domains))
 
 domainLoop:
-	for i := range cfg.DomainConfigs {
-		dc := &cfg.DomainConfigs[i]
+	for i := range domains {
+		dc := &domains[i]
 
 		select {
 		case <-ctx.Done():
@@ -126,7 +132,7 @@ domainLoop:
 
 			providerName := string(domainConfig.Provider)
 
-			if result.Changed && !cfg.DryRun {
+			if result.Changed && !dryRun {
 				debugLog("STATUS", domainConfig.FQDN, T.ChangesDetected)
 				v4 := result.IPv4
 				v6 := result.IPv6
@@ -149,7 +155,7 @@ domainLoop:
 
 	successCount := 0
 	errorCount := 0
-	totalDomains := len(cfg.DomainConfigs)
+	totalDomains := len(domains)
 
 	for result := range results {
 		if result.Error != nil {
@@ -178,6 +184,11 @@ domainLoop:
 }
 
 func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdateJob, cache *ZoneRecordCache) domainUpdateResult {
+
+	cfgMu.RLock()
+	ipMode := cfg.IPMode
+	cfgMu.RUnlock()
+
 	result := domainUpdateResult{
 		Domain: job.Domain,
 		IPv4:   job.IPv4,
@@ -186,10 +197,10 @@ func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdate
 	if dc.Provider == ProviderIPv64 {
 		ipv4 := ""
 		ipv6 := ""
-		if cfg.IPMode != "IPV6" {
+		if ipMode != "IPV6" {
 			ipv4 = job.IPv4
 		}
-		if cfg.IPMode != "IPV4" {
+		if ipMode != "IPV4" {
 			ipv6 = job.IPv6
 		}
 
@@ -207,7 +218,7 @@ func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdate
 
 	v4Changed, v6Changed := false, false
 
-	if cfg.IPMode != "IPV6" && job.IPv4 != "" {
+	if ipMode != "IPV6" && job.IPv4 != "" {
 		debugLog("DNS-LOGIC", job.Domain, T.CheckingIPv4)
 
 		var changed bool
@@ -230,7 +241,7 @@ func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdate
 		v4Changed = changed
 	}
 
-	if cfg.IPMode != "IPV4" && job.IPv6 != "" {
+	if ipMode != "IPV4" && job.IPv6 != "" {
 		debugLog("DNS-LOGIC", job.Domain, T.CheckingIPv6)
 
 		var changed bool

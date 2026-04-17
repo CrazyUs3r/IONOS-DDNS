@@ -35,6 +35,8 @@ var (
 
 	lastOk           atomic.Bool
 	schedulerRanOnce atomic.Bool
+	cfgMu            sync.RWMutex
+	phraseMu         sync.RWMutex
 	logMutex         sync.Mutex
 	statusMutex      sync.Mutex
 	lastErrorMsg     = &SafeErrorMsg{}
@@ -68,7 +70,7 @@ var (
 	lastRecordLoad        time.Time
 	cachedZones           map[string][]Zone
 	cachedRecords         *ZoneRecordCache
-	lastCleanup           time.Time
+	lastCleanupNano       atomic.Int64
 	zoneCacheMutex        sync.RWMutex
 	lastDiskPersistZone   time.Time
 	lastDiskPersistRecord time.Time
@@ -99,9 +101,9 @@ var (
 	}
 	workerSemaphore chan struct{}
 
-	lastIPv64Update      time.Time
-	ipv64Mutex           sync.Mutex
-	lastIPv64DomainsLoad time.Time
+	lastIPv64Update          time.Time
+	ipv64Mutex               sync.Mutex
+	lastIPv64DomainsLoadNano atomic.Int64
 
 	wsHub = &WSHub{
 		clients:    make(map[*WSClient]bool),
@@ -267,6 +269,17 @@ const (
 )
 
 // ============================================================================
+// METHOD
+// ============================================================================
+const (
+	MethodPUT    = "PUT"
+	MethodPOST   = "POST"
+	MethodDELETE = "DELETE"
+	MethodGET    = "GET"
+	MethodNIC    = "NIC"
+)
+
+// ============================================================================
 // MISC
 // ============================================================================
 const (
@@ -313,12 +326,9 @@ type Phrases struct {
 	MaxLogLines, MaxAPIRetries, MaxConcurrent, Interval, EmptyTranslationValue    string
 
 	// Statistiken & Metriken
-	SuccessRate, AvgLatency, Errors                 string
-	RequestHistory, LatencyHistory, APIPerformance  string
-	TotalRequests, ClientErrors, ServerErrors       string
-	MetricLatencyPercentile, MetricHTTPMethods      string
-	MetricIPLatency, MetricLastCheck, MetricAvgFrom string
-	MetricsResetBtn, MetricsResetNotification       string
+	SuccessRate, AvgLatency, Errors, RequestHistory, LatencyHistory, APIPerformance            string
+	TotalRequests, ClientErrors, ServerErrors, MetricLatencyPercentile, MetricHTTPMethods      string
+	MetricIPLatency, MetricLastCheck, MetricAvgFrom, MetricsResetBtn, MetricsResetNotification string
 
 	// Validierung & allgemeine Fehler
 	NoDomains, InvalidPort, IntervalTooSmall, ShortIntervalWarning       string
@@ -380,12 +390,18 @@ type Phrases struct {
 	WriteFailed, FileSaved, EmbeddedFileUnreadable, CannotReadEmbeddedDir string
 
 	// Dashboard UI
-	DomainSearchPlaceholder, NoMoreEntries                                string
-	ChecksLabel, EntriesLabel, BadgeChanged                               string
-	FilterAll, FilterErrors, FilterWarnings                               string
+	DomainSearchPlaceholder, NoMoreEntries, ChecksLabel, EntriesLabel     string
+	BadgeChanged, FilterAll, FilterErrors, FilterWarnings                 string
 	FilterUpdates, FilterStarts, FilterStop, FilterCreated, FilterCleanup string
-	FilterSkip, FilterConfig                                              string
-	NoDomainsConfigured, DomainContext                                    string
+	FilterSkip, FilterConfig, NoDomainsConfigured, DomainContext          string
+	ThemeLabel, NoIPToCopy, Copied, CopyFailed                            string
+	UpdateStartingJS, UpdateStartedJS, ConnectionErrorJS                  string
+	ExportStartedJS, ExportFailedJS, FQDNMissingJS                        string
+	SaveConfigConfirmJS, SavedReloadJS, ErrorPrefixJS                     string
+	ResetMetricsConfirmJS, MetricsResetOKJS, MetricsResetFailedJS         string
+	DeleteDomainConfirmJS, DomainRemovedJS, DeleteFailedJS                string
+	TokenSavedJS, TokenDeletedJS, TokenSavedMaskedJS, TokenEnterJS        string
+	DomainUpdatedJS, ClearedJS, ActiveJS, InactiveJS                      string
 
 	// Provider-Hinweise / Config
 	IonosAPIRequired, Ipv64TokenRequired, CloudflareAuthRequired, UnknownProvider  string
@@ -427,32 +443,28 @@ type Phrases struct {
 	TgMetricsHeading, TgMetricsRequests, TgMetricsTotal, TgMetricsSuccessRate  string
 	TgMetricsClientErr, TgMetricsServerErr, TgMetricsLatency, TgMetricsIPCheck string
 	TgMetricsChecks, TgMetricsLast, TgMetricsHourlyLimit, TgMetricsUsed        string
-	TgMetricsLoad, TgMetricsTodayHTTP                                          string
-	TgDomainsHeading, TgDomainsCurrentIPs                                      string
+	TgMetricsLoad, TgMetricsTodayHTTP, TgDomainsHeading, TgDomainsCurrentIPs   string
 	TgHealthHeading, TgHealthStarting, TgHealthWaitingDetail                   string
 	TgHealthHealthy, TgHealthUnhealthy, TgHealthErrorLabel                     string
-	GotifyQueueFull, GotifyMsgDiscarded                                        string
-	GotifySendFailed, GotifyRetry                                              string
-	TgBtnMenu, TgBtnClose                                                      string
-	TgBtnStatus, TgBtnMetrics, TgBtnDomains                                    string
-	TgBtnHealth, TgBtnUpdate                                                   string
-	TgUnauthAccess, TgBotCmdsReg                                               string
-	TgSetCmdsFailed, TgGetUpdatesFailed                                        string
-	TgPollingStopped, TgPollingStarted                                         string
-	TgMaxRetries, TgGetUpdatesNotOk                                            string
-	TgSendError, TgHTTPError                                                   string
-	TgRateLimit, TgSendFailed                                                  string
-	TgMsgDiscarded, TgQueueFull, TgQueuePushFailed                             string
-	TgWebhookDeleteRequestError, TgWebhookDeleteFailed                         string
-	TgWebhookUnregistered                                                      string
+	TgBtnMenu, TgBtnClose, TgBtnStatus, TgBtnMetrics, TgBtnDomains             string
+	TgBtnHealth, TgBtnUpdate, TgUnauthAccess, TgBotCmdsReg                     string
+	TgSetCmdsFailed, TgGetUpdatesFailed, TgPollingStopped, TgPollingStarted    string
+	TgMaxRetries, TgGetUpdatesNotOk, TgSendError, TgHTTPError                  string
+	TgRateLimit, TgSendFailed, TgMsgDiscarded, TgQueueFull, TgQueuePushFailed  string
+	TgWebhookDeleteRequestError, TgWebhookDeleteFailed, TgWebhookUnregistered  string
+	GotifyQueueFull, GotifyMsgDiscarded, GotifySendFailed, GotifyRetry         string
 
 	// Cache & persistence
-	ErrRecordCacheNil, ErrCacheDirCreate, ErrCacheMarshal   string
-	ErrCacheWrite, ErrCacheRename                           string
-	CacheSavedZones, CacheSavedDomains                      string
-	CacheFileNotFound, CacheLoadedZones, CacheLoadedDomains string
-	IPv64CacheNoData, CacheLoadError, CacheRecordsLoaded    string
-	IPv64CacheRecordsLoaded, IPv64CacheLoadDiskFailed       string
+	ErrRecordCacheNil, ErrCacheDirCreate, ErrCacheMarshal               string
+	ErrCacheWrite, ErrCacheRename                                       string
+	CacheSavedZones, CacheSavedDomains, ZoneCacheHitSkipAPI             string
+	CacheFileNotFound, CacheLoadedZones, CacheLoadedDomains             string
+	IPv64CacheNoData, CacheLoadError, CacheRecordsLoaded                string
+	IPv64CacheRecordsLoaded, IPv64CacheLoadDiskFailed                   string
+	ErrParseStatusFile, ErrMarshalStatusFile, ErrWriteTempStatusFile    string
+	ErrReplaceStatusFile, ErrUpdateDomainsCache, ErrMetricsCacheMarshal string
+	ErrResponseWrite, ErrPanicRecovered, CacheRefresherStopped          string
+	ErrPanicRefreshCycle, ErrDomainCacheRefresh, ErrMetricsCacheRefresh string
 
 	// Generic API errors
 	ErrContextError, ErrJSONMarshal, ErrRequestCreate, ErrNetworkError string
@@ -461,10 +473,10 @@ type Phrases struct {
 	ErrZoneNameEmpty, ErrAPIGeneric                                    string
 
 	// Cleanup
-	CleanupStartIonos, CleanupStartCF, CleanupStartIPv64                                string
-	CleanupDryRun, CleanupDeleteError, CleanupRecordRemoved                             string
-	CleanupSkipForeignBase, CleanupSkipCDN, CleanupSkipDeactivated, CleanupSkipOrphaned string
-	CleanupOrphanedCF, CleanupOrphanedIonos                                             string
+	CleanupStartIonos, CleanupStartCF, CleanupStartIPv64           string
+	CleanupDryRun, CleanupDeleteError, CleanupRecordRemoved        string
+	CleanupSkipForeignBase, CleanupSkipCDN, CleanupSkipDeactivated string
+	CleanupSkipOrphaned, CleanupOrphanedCF, CleanupOrphanedIonos   string
 
 	// Ionos
 	IonosAPIFailed, IonosMaxAttempts                                 string
@@ -541,15 +553,7 @@ type Phrases struct {
 	WaitingForLogQueue, MetricsSaveFailed, Providers                                                       string
 
 	// Misc
-	ExportBtn                                                      string
-	ThemeLabel, NoIPToCopy, Copied, CopyFailed                     string
-	UpdateStartingJS, UpdateStartedJS, ConnectionErrorJS           string
-	ExportStartedJS, ExportFailedJS, FQDNMissingJS                 string
-	SaveConfigConfirmJS, SavedReloadJS, ErrorPrefixJS              string
-	ResetMetricsConfirmJS, MetricsResetOKJS, MetricsResetFailedJS  string
-	DeleteDomainConfirmJS, DomainRemovedJS, DeleteFailedJS         string
-	TokenSavedJS, TokenDeletedJS, TokenSavedMaskedJS, TokenEnterJS string
-	DomainUpdatedJS, ClearedJS, ActiveJS, InactiveJS               string
+	ExportBtn string
 }
 
 type LogLevel int
@@ -601,6 +605,8 @@ type DomainConfig struct {
 	CFSecret   string       `json:"cf_secret,omitempty"`
 	CFZoneID   string       `json:"cf_zone_id,omitempty"`
 	IPv64Token string       `json:"ipv64_token,omitempty"`
+	TTL        int          `json:"ttl,omitempty"`
+	CFProxied  bool         `json:"cf_proxied,omitempty"`
 }
 
 type rawEntry struct {
@@ -625,6 +631,9 @@ type rawEntry struct {
 	// IPv64
 	IPv64Token  string `json:"ipv64_token"`
 	IPv64Token2 string `json:"IPV64_TOKEN"`
+
+	TTL       int  `json:"ttl"`
+	CFProxied bool `json:"cf_proxied"`
 }
 
 type Config struct {

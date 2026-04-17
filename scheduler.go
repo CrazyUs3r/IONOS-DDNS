@@ -18,12 +18,16 @@ func runUpdate(firstRun bool) {
 
 	debugLog("SCHEDULER", "", fmt.Sprintf(T.SchedulerStarted, firstRun))
 
+	cfgMu.RLock()
+	domainCount := len(cfg.DomainConfigs)
+	cfgMu.RUnlock()
+
 	baseTimeout := BaseUpdateTimeout
-	perDomainTimeout := time.Duration(len(cfg.DomainConfigs)) * PerDomainTimeout
+	perDomainTimeout := time.Duration(domainCount) * PerDomainTimeout
 	buffer := UpdateBufferTimeout
 	totalTimeout := min(max(baseTimeout+perDomainTimeout+buffer, MinUpdateTimeout), MaxUpdateTimeout)
 
-	debugLog("SCHEDULER", "", fmt.Sprintf(T.ContextTimeoutForDomains, totalTimeout, len(cfg.DomainConfigs)))
+	debugLog("SCHEDULER", "", fmt.Sprintf(T.ContextTimeoutForDomains, totalTimeout, domainCount))
 
 	ctx, cancel := context.WithTimeout(shutdownCtx, totalTimeout)
 	defer cancel()
@@ -56,7 +60,7 @@ func runUpdate(firstRun bool) {
 		})
 		return
 	}
-
+	cfgMu.RLock()
 	for i := range cfg.DomainConfigs {
 		providerKey := string(cfg.DomainConfigs[i].Provider)
 		zones, exists := zonesByProvider[providerKey]
@@ -70,12 +74,16 @@ func runUpdate(firstRun bool) {
 		}
 	}
 
+	cfgMu.RUnlock()
+
 	cache, err := loadRecordsWithCache(ctx, zonesByProvider, forced)
 	if err != nil {
 		lastOk.Store(false)
 		debugLog("CACHE", "", fmt.Sprintf(T.CacheLoadFailed, err))
 		return
 	}
+
+	cfgMu.RLock()
 
 	for i := range cfg.DomainConfigs {
 		if cfg.DomainConfigs[i].Provider == ProviderIPv64 {
@@ -85,6 +93,8 @@ func runUpdate(firstRun bool) {
 			break
 		}
 	}
+
+	cfgMu.RUnlock()
 
 	saveCachesToDisk(zonesByProvider, cache)
 
@@ -305,7 +315,13 @@ func saveCachesToDisk(zonesByProvider map[string][]Zone, cache *ZoneRecordCache)
 // CLEANUP NUR WENN NÖTIG
 // ============================================================================
 func runCleanupIfNeeded(ctx context.Context, zonesByProvider map[string][]Zone, cache *ZoneRecordCache) {
-	timeSinceLastCleanup := time.Since(lastCleanup)
+	lastNano := lastCleanupNano.Load()
+	var timeSinceLastCleanup time.Duration
+	if lastNano == 0 {
+		timeSinceLastCleanup = CleanupInterval + 1 // noch nie gelaufen → sofort
+	} else {
+		timeSinceLastCleanup = time.Since(time.Unix(0, lastNano))
+	}
 
 	if timeSinceLastCleanup < CleanupInterval {
 		debugLog("MAINTENANCE", "", fmt.Sprintf(T.CleanupSkippedLastRun, timeSinceLastCleanup.Round(time.Minute)))
@@ -313,7 +329,7 @@ func runCleanupIfNeeded(ctx context.Context, zonesByProvider map[string][]Zone, 
 	}
 
 	debugLog("MAINTENANCE", "", fmt.Sprintf(T.CleanupStartingLastRun, timeSinceLastCleanup.Round(time.Minute)))
-	lastCleanup = time.Now().Local()
+	lastCleanupNano.Store(time.Now().UnixNano())
 
 	for providerStr, zones := range zonesByProvider {
 		pType := ProviderType(providerStr)
@@ -327,12 +343,14 @@ func runCleanupIfNeeded(ctx context.Context, zonesByProvider map[string][]Zone, 
 
 		case ProviderIPv64:
 			var ipv64Config *DomainConfig
+			cfgMu.RLock()
 			for i := range cfg.DomainConfigs {
 				if cfg.DomainConfigs[i].Provider == ProviderIPv64 {
 					ipv64Config = &cfg.DomainConfigs[i]
 					break
 				}
 			}
+			cfgMu.RUnlock()
 			if ipv64Config != nil {
 				debugLog("MAINTENANCE", "", T.CheckingIPv64OrphanedRecords)
 				cleanupIPv64Records(ctx)
@@ -348,8 +366,12 @@ func loadZonesFromDiskCache() (map[string][]Zone, error) {
 	zonesByProvider := make(map[string][]Zone)
 	seen := make(map[ProviderType]bool)
 
-	for i := range cfg.DomainConfigs {
-		provider := cfg.DomainConfigs[i].Provider
+	cfgMu.RLock()
+	domainConfigs := cfg.DomainConfigs
+	cfgMu.RUnlock()
+
+	for i := range domainConfigs {
+		provider := domainConfigs[i].Provider
 		if seen[provider] {
 			continue
 		}

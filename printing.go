@@ -108,7 +108,7 @@ func printInfrastructure(ctx context.Context, zonesByProvider map[string][]Zone)
 
 			default:
 				if dc != nil {
-					data, _ := ionosAPI(ctx, dc, "GET", ionosBaseURL+"/"+z.ID, nil)
+					data, _ := ionosAPI(ctx, dc, MethodGET, ionosBaseURL+"/"+z.ID, nil)
 					var detail struct{ Records []Record }
 					_ = json.Unmarshal(data, &detail)
 					records = detail.Records

@@ -17,8 +17,8 @@ import (
 // ============================================================================
 func log(ctx LogContext) {
 	if ctx.Level == LogDebug && !cfg.DebugEnabled && !cfg.DebugHTTPRaw {
-        return
-    }
+		return
+	}
 
 	var levelStr, icon string
 	switch ctx.Level {
@@ -194,15 +194,6 @@ func ipLog(msg string) {
 	})
 }
 
-func notifyError(msg string) {
-	log(LogContext{
-		Level:    LogWarn,
-		Category: "SYSTEM",
-		Action:   ActionError,
-		Message:  msg,
-	})
-}
-
 // ============================================================================
 // LOG WRITER
 // ============================================================================
@@ -240,15 +231,15 @@ func startLogWriter() {
 			}
 
 			file = f
-			writer = bufio.NewWriterSize(file, 64*1024)
+			writer = bufio.NewWriterSize(file, 256*1024)
 			return nil
 		}
 
-		flushTicker := time.NewTicker(500 * time.Millisecond)
+		flushTicker := time.NewTicker(2 * time.Second)
 		defer flushTicker.Stop()
 
 		batchCount := 0
-		const maxBatchSize = 10
+		const maxBatchSize = 1000
 
 		for {
 			select {
@@ -360,7 +351,13 @@ func doLogRotation(path string, maxLines int) {
 	file, err := os.Open(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			notifyError(fmt.Sprintf("%s: %v", T.LogRotationError, err))
+			log(LogContext{
+				Level:    LogWarn,
+				Category: "MAINTENANCE",
+				Action:   ActionError,
+				Message:  t(T.LogRotationError, "Log rotation error"),
+				Error:    err,
+			})
 		}
 		return
 	}
@@ -373,7 +370,13 @@ func doLogRotation(path string, maxLines int) {
 		lines = append(lines, scanner.Text())
 	}
 	if err := scanner.Err(); err != nil {
-		notifyError(fmt.Sprintf("%s: %v", t(T.RotationScannerError, "Rotation scanner error"), err))
+		log(LogContext{
+			Level:    LogWarn,
+			Category: "MAINTENANCE",
+			Action:   ActionError,
+			Message:  fmt.Sprintf("%s: ", t(T.RotationScannerError, "Rotation scanner error")),
+			Error:    err,
+		})
 	}
 	if closeErr := file.Close(); closeErr != nil {
 		log(LogContext{
@@ -396,12 +399,24 @@ func doLogRotation(path string, maxLines int) {
 
 	tmpPath := path + ".tmp." + strconv.FormatInt(time.Now().Local().UnixNano(), 10)
 	if err := os.WriteFile(tmpPath, []byte(output), 0644); err != nil {
-		notifyError(fmt.Sprintf("%s: %v", T.LogRotationError, err))
+		log(LogContext{
+			Level:    LogWarn,
+			Category: "MAINTENANCE",
+			Action:   ActionError,
+			Message:  t(T.LogRotationError, "Log rotation error"),
+			Error:    err,
+		})
 		return
 	}
 
 	if err := os.Rename(tmpPath, path); err != nil {
-		notifyError(fmt.Sprintf("%s (rename): %v", T.LogRotationError, err))
+		log(LogContext{
+			Level:    LogWarn,
+			Category: "MAINTENANCE",
+			Action:   ActionError,
+			Message:  t(T.LogRotationError, "Log rotation rename failed"),
+			Error:    err,
+		})
 		_ = os.Remove(tmpPath)
 		return
 	}

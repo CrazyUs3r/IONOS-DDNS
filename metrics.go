@@ -106,15 +106,15 @@ func (m *APIMetrics) incrementDailyMethod(method string, now time.Time) {
 	}
 	m.DailyReset = now
 	switch method {
-	case "GET":
+	case MethodGET:
 		m.DailyGET++
-	case "POST":
+	case MethodPOST:
 		m.DailyPOST++
-	case "PUT":
+	case MethodPUT:
 		m.DailyPUT++
-	case "DELETE":
+	case MethodDELETE:
 		m.DailyDELETE++
-	case "NIC":
+	case MethodNIC:
 		m.DailyNIC++
 	}
 }

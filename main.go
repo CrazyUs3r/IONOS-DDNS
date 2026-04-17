@@ -112,8 +112,8 @@ func run() int {
 	dnsEnv := os.Getenv("DNS_SERVERS")
 	var dnsList []string
 	if dnsEnv != "" {
-		parts := strings.Split(dnsEnv, ",")
-		for _, p := range parts {
+		parts := strings.SplitSeq(dnsEnv, ",")
+		for p := range parts {
 			trimmed := strings.TrimSpace(p)
 			if trimmed != "" {
 				dnsList = append(dnsList, trimmed)

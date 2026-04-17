@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -223,7 +225,7 @@ func loadZonesForDomainConfig(ctx context.Context, dc *DomainConfig) ([]Zone, er
 }
 
 func loadIONOSZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
-	data, err := ionosAPI(ctx, dc, "GET", ionosBaseURL, nil)
+	data, err := ionosAPI(ctx, dc, MethodGET, ionosBaseURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load ionos zones: %w", err)
 	}
@@ -313,6 +315,21 @@ func doSingleflight[T any](
 		return res.Val.(T), nil
 	}
 }
+func calculateRetryDelay(attempt int, isServerError bool) time.Duration {
+	baseWait := min(max(time.Duration(math.Pow(RetryExponentBase, float64(attempt+1)))*RetryBaseDelay, RetryBaseDelay), RetryMaxDelay)
+
+	jitter := time.Duration(rand.Intn(RetryJitterMaxMs)) * time.Millisecond
+	wait := baseWait + jitter
+
+	if isServerError {
+		wait *= 2
+		if wait > RetryMaxDelay {
+			wait = RetryMaxDelay
+		}
+	}
+
+	return wait
+}
 
 func sleepOrCancel(ctx context.Context, d time.Duration) bool {
 	select {
@@ -321,4 +338,14 @@ func sleepOrCancel(ctx context.Context, d time.Duration) bool {
 	case <-ctx.Done():
 		return false
 	}
+}
+
+func effectiveTTL(dc *DomainConfig) int {
+	if dc == nil {
+		return 60
+	}
+	if dc.TTL <= 0 {
+		return 60
+	}
+	return dc.TTL
 }

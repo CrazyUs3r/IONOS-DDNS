@@ -113,7 +113,7 @@ func loadZoneCache(ctx context.Context, zonesByProvider map[string][]Zone) (*Zon
 			}
 
 			if existingRecords, hit := cache.Get(z.ID); hit && len(existingRecords) > 0 {
-				debugLog("CACHE", z.Name, fmt.Sprintf("✅ Zone bereits im Cache (%d Records) – überspringe API-Call", len(existingRecords)))
+				debugLog("CACHE", z.Name, fmt.Sprintf(t(T.ZoneCacheHitSkipAPI, "✅ Zone bereits im Cache (%d Records) – überspringe API-Call"), len(existingRecords)))
 				continue
 			}
 
@@ -128,7 +128,7 @@ func loadZoneCache(ctx context.Context, zonesByProvider map[string][]Zone) (*Zon
 					records, err = loadCloudflareRecords(ctx, domainConfig, zone.ID)
 				} else {
 					var detailData []byte
-					detailData, err = ionosAPI(ctx, domainConfig, "GET", ionosBaseURL+"/"+zone.ID, nil)
+					detailData, err = ionosAPI(ctx, domainConfig, MethodGET, ionosBaseURL+"/"+zone.ID, nil)
 					if err == nil {
 						var detail struct {
 							Records []Record `json:"records"`
@@ -161,7 +161,7 @@ func loadZoneCache(ctx context.Context, zonesByProvider map[string][]Zone) (*Zon
 		log(LogContext{
 			Level:   LogWarn,
 			Action:  ActionError,
-			Message: fmt.Sprintf(T.RecordCacheErrorZone+" Zone(n): %s", len(cacheErrors), strings.Join(cacheErrors, "; ")),
+			Message: fmt.Sprintf(T.RecordCacheErrorZone, len(cacheErrors), strings.Join(cacheErrors, "; ")),
 		})
 	}
 

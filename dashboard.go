@@ -167,7 +167,7 @@ func toInt24(v any) ([24]int, bool) {
 		if len(x) != 24 {
 			return out, false
 		}
-		for i := 0; i < 24; i++ {
+		for i := range 24 {
 			out[i] = x[i]
 		}
 		return out, true
@@ -175,7 +175,7 @@ func toInt24(v any) ([24]int, bool) {
 		if len(x) != 24 {
 			return out, false
 		}
-		for i := 0; i < 24; i++ {
+		for i := range 24 {
 			switch n := x[i].(type) {
 			case int:
 				out[i] = n
@@ -209,7 +209,7 @@ func toDur24(v any) ([24]time.Duration, bool) {
 		if len(x) != 24 {
 			return out, false
 		}
-		for i := 0; i < 24; i++ {
+		for i := range 24 {
 			out[i] = x[i]
 		}
 		return out, true
@@ -217,7 +217,7 @@ func toDur24(v any) ([24]time.Duration, bool) {
 		if len(x) != 24 {
 			return out, false
 		}
-		for i := 0; i < 24; i++ {
+		for i := range 24 {
 			switch n := x[i].(type) {
 			case time.Duration:
 				out[i] = n
@@ -248,6 +248,38 @@ func toDur24(v any) ([24]time.Duration, bool) {
 // ============================================================================
 func buildSettingsModal(c Config) string {
 	dnsStr := strings.Join(c.DNSServers, ", ")
+
+	collapsibleSection := func(title, body string, open bool) string {
+		openAttr := ""
+		if open {
+			openAttr = " open"
+		}
+		return `<details class="s-section s-collapsible"` + openAttr + `>` +
+			`<summary class="s-section-summary">` +
+			`<span>` + title + `</span>` +
+			`<span class="s-section-chevron">▾</span>` +
+			`</summary>` +
+			`<div class="s-section-content">` + body + `</div>` +
+			`</details>`
+	}
+
+	subSection := func(id, title, body string, open bool) string {
+		openAttr := ""
+		if open {
+			openAttr = " open"
+		}
+		idAttr := ""
+		if id != "" {
+			idAttr = ` id="` + id + `"`
+		}
+		return `<details class="s-subsection"` + idAttr + openAttr + `>` +
+			`<summary class="s-subsection-summary">` +
+			`<span>` + title + `</span>` +
+			`<span class="s-subsection-chevron">▾</span>` +
+			`</summary>` +
+			`<div class="s-subsection-content">` + body + `</div>` +
+			`</details>`
+	}
 
 	ipModeOptions := func(current string) string {
 		var out strings.Builder
@@ -295,166 +327,196 @@ func buildSettingsModal(c Config) string {
 		return out.String()
 	}
 
-	return `<div id="settingsOverlay" class="modal-overlay" onclick="closeSettingsOutside(event)">` +
-		`<div class="modal">` +
-		`<div class="modal-header">` +
-		`<h2>⚙️ ` + T.SettingsTitle + `</h2>` +
-		`<button class="modal-close" onclick="closeSettings()">✕</button>` +
-		`</div>` +
-		`<div class="modal-body">` +
-
-		`<div class="s-section">` +
-		`<h3>` + T.SettingsSecurity + `</h3>` +
+	securitySection :=
 		`<div class="s-row" style="flex-direction:column;align-items:stretch;gap:8px;">` +
-		`<span class="s-label">` + T.SettingsTriggerToken + `</span>` +
-		`<div style="position:relative;width:100%;">` +
-		`<input type="password" id="s-token" class="s-input" placeholder="` + T.SettingsTokenPlaceholder + `" autocomplete="off" style="padding-right:40px;">` +
-		`<button type="button" onclick="togglePassword('s-token', this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:0;font-size:16px;line-height:1;">👁️</button>` +
-		`</div>` +
-		`<button class="s-btn" onclick="saveToken()">` + T.SettingsTokenSave + `</button>` +
-		`</div></div>` +
+			`<span class="s-label">` + T.SettingsTriggerToken + `</span>` +
+			`<div style="position:relative;width:100%;">` +
+			`<input type="password" id="s-token" class="s-input" placeholder="` + T.SettingsTokenPlaceholder + `" autocomplete="off" style="padding-right:40px;">` +
+			`<button type="button" onclick="togglePassword('s-token', this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:0;font-size:16px;line-height:1;">👁️</button>` +
+			`</div>` +
+			`<button class="s-btn" onclick="saveToken()">` + T.SettingsTokenSave + `</button>` +
+			`</div>`
 
-		`<div class="s-section">` +
-		`<h3>` + T.SettingsSystem + `</h3>` +
-
+	systemSection :=
 		`<div class="s-row">` +
-		`<span class="s-label">` + T.SettingsIPMode + `</span>` +
-		`<select id="cfg-ip-mode" class="s-input" style="width:auto;min-width:110px;">` +
-		ipModeOptions(c.IPMode) +
-		`</select>` +
-		`</div>` +
+			`<span class="s-label">` + T.SettingsIPMode + `</span>` +
+			`<select id="cfg-ip-mode" class="s-input" style="width:auto;min-width:110px;">` +
+			ipModeOptions(c.IPMode) +
+			`</select>` +
+			`</div>` +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsInterval+`</span>`+
-			`<input type="number" id="cfg-interval" class="s-input" style="width:90px;text-align:right;" min="30" max="86400" value="%d"></div>`, c.Interval) +
+			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsInterval+`</span>`+
+				`<input type="number" id="cfg-interval" class="s-input" style="width:90px;text-align:right;" min="30" max="86400" value="%d"></div>`, c.Interval) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsHealthPort+`</span>`+
-			`<input type="text" id="cfg-health-port" class="s-input" style="width:90px;text-align:right;" value="%s"></div>`, html.EscapeString(c.HealthPort)) +
+			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsHealthPort+`</span>`+
+				`<input type="text" id="cfg-health-port" class="s-input" style="width:90px;text-align:right;" value="%s"></div>`, html.EscapeString(c.HealthPort)) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsIface+` <small style="opacity:.5">`+T.SettingsIfaceHint+`</small></span>`+
-			`<input type="text" id="cfg-iface" class="s-input" style="width:150px;" placeholder="`+T.SettingsIfacePlaceholder+`" value="%s"></div>`, html.EscapeString(c.IfaceName)) +
+			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsIface+` <small style="opacity:.5">`+T.SettingsIfaceHint+`</small></span>`+
+				`<input type="text" id="cfg-iface" class="s-input" style="width:150px;" placeholder="`+T.SettingsIfacePlaceholder+`" value="%s"></div>`, html.EscapeString(c.IfaceName)) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsDNS+` <small style="opacity:.5">(`+T.SettingsDNSHint+`)</small></span>`+
-			`<input type="text" id="cfg-dns" class="s-input" style="width:220px;" placeholder="1.1.1.1:53, 8.8.8.8:53" value="%s"></div>`, html.EscapeString(dnsStr)) +
+			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsDNS+` <small style="opacity:.5">(`+T.SettingsDNSHint+`)</small></span>`+
+				`<input type="text" id="cfg-dns" class="s-input" style="width:220px;" placeholder="1.1.1.1:53, 8.8.8.8:53" value="%s"></div>`, html.EscapeString(dnsStr)) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsMaxLog+`</span>`+
-			`<input type="number" id="cfg-max-log" class="s-input" style="width:90px;text-align:right;" min="100" max="50000" value="%d"></div>`, c.MaxLogLines) +
+			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsMaxLog+`</span>`+
+				`<input type="number" id="cfg-max-log" class="s-input" style="width:90px;text-align:right;" min="100" max="50000" value="%d"></div>`, c.MaxLogLines) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsMaxRetries+`</span>`+
-			`<input type="number" id="cfg-max-retries" class="s-input" style="width:90px;text-align:right;" min="0" max="20" value="%d"></div>`, c.MaxAPIRetries) +
+			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsMaxRetries+`</span>`+
+				`<input type="number" id="cfg-max-retries" class="s-input" style="width:90px;text-align:right;" min="0" max="20" value="%d"></div>`, c.MaxAPIRetries) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsMaxConcurrent+`</span>`+
-			`<input type="number" id="cfg-max-concurrent" class="s-input" style="width:90px;text-align:right;" min="1" max="20" value="%d"></div>`, c.MaxConcurrent) +
+			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsMaxConcurrent+`</span>`+
+				`<input type="number" id="cfg-max-concurrent" class="s-input" style="width:90px;text-align:right;" min="1" max="20" value="%d"></div>`, c.MaxConcurrent) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsHourlyLimit+`</span>`+
-			`<input type="number" id="cfg-hourly-limit" class="s-input" style="width:90px;text-align:right;" min="100" max="100000" value="%d"></div>`, c.HourlyRateLimit) +
+			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsHourlyLimit+`</span>`+
+				`<input type="number" id="cfg-hourly-limit" class="s-input" style="width:90px;text-align:right;" min="100" max="100000" value="%d"></div>`, c.HourlyRateLimit) +
 
-		`<div class="s-row"><span class="s-label">` + T.SettingsLanguage + `</span>` +
-		`<select id="cfg-lang" class="s-input" style="width:auto;min-width:160px;">` +
-		buildDynamicLangOptions(c.Lang) +
-		`</select></div>` +
+			`<div class="s-row"><span class="s-label">` + T.SettingsLanguage + `</span>` +
+			`<select id="cfg-lang" class="s-input" style="width:auto;min-width:160px;">` +
+			buildDynamicLangOptions(c.Lang) +
+			`</select></div>` +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsDryRun+`<small style="display:block; opacity:.5; line-height:1.2; word-wrap:break-word;">`+T.SettingsDryRunHint+`</small></span>`+
-			`<label class="s-checkbox-container">`+
-			`<input type="checkbox" id="cfg-dry-run" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)"`+
-			` data-label-on="%s" data-label-off="%s"%s>`+
-			`<span class="s-checkbox-text">%s</span></label></div>`,
-			T.SettingsCheckboxActive, T.SettingsCheckboxDeactive,
-			func() string {
-				if c.DryRun {
-					return ` checked`
-				}
-				return ""
-			}(),
-			func() string {
-				if c.DryRun {
-					return T.SettingsCheckboxActive
-				}
-				return T.SettingsCheckboxDeactive
-			}()) +
+			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsDryRun+`<small style="display:block; opacity:.5; line-height:1.2; word-wrap:break-word;">`+T.SettingsDryRunHint+`</small></span>`+
+				`<label class="s-checkbox-container">`+
+				`<input type="checkbox" id="cfg-dry-run" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)"`+
+				` data-label-on="%s" data-label-off="%s"%s>`+
+				`<span class="s-checkbox-text">%s</span></label></div>`,
+				T.SettingsCheckboxActive, T.SettingsCheckboxDeactive,
+				func() string {
+					if c.DryRun {
+						return ` checked`
+					}
+					return ""
+				}(),
+				func() string {
+					if c.DryRun {
+						return T.SettingsCheckboxActive
+					}
+					return T.SettingsCheckboxDeactive
+				}()) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">Debug-Modus <small style="display:block; opacity:.5; line-height:1.2; word-wrap:break-word;">`+T.SettingsDebugVerboseHint+`</small></span>`+
-			`<label class="s-checkbox-container">`+
-			`<input type="checkbox" id="cfg-debug" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)"`+
-			` data-label-on="%s" data-label-off="%s"%s>`+
-			`<span class="s-checkbox-text">%s</span></label></div>`,
-			T.SettingsCheckboxActive, T.SettingsCheckboxDeactive,
-			func() string {
-				if c.DebugEnabled {
-					return ` checked`
-				}
-				return ""
-			}(),
-			func() string {
-				if c.DebugEnabled {
-					return T.SettingsCheckboxActive
-				}
-				return T.SettingsCheckboxDeactive
-			}()) +
+			fmt.Sprintf(`<div class="s-row"><span class="s-label">Debug-Modus <small style="display:block; opacity:.5; line-height:1.2; word-wrap:break-word;">`+T.SettingsDebugVerboseHint+`</small></span>`+
+				`<label class="s-checkbox-container">`+
+				`<input type="checkbox" id="cfg-debug" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)"`+
+				` data-label-on="%s" data-label-off="%s"%s>`+
+				`<span class="s-checkbox-text">%s</span></label></div>`,
+				T.SettingsCheckboxActive, T.SettingsCheckboxDeactive,
+				func() string {
+					if c.DebugEnabled {
+						return ` checked`
+					}
+					return ""
+				}(),
+				func() string {
+					if c.DebugEnabled {
+						return T.SettingsCheckboxActive
+					}
+					return T.SettingsCheckboxDeactive
+				}()) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">Debug HTTP Raw <small style="display:block; opacity:.5; line-height:1.2; word-wrap:break-word;">`+T.SettingsDebugHTTPHint+`</small></span>`+
-			`<label class="s-checkbox-container">`+
-			`<input type="checkbox" id="cfg-debug-http" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)"`+
-			` data-label-on="%s" data-label-off="%s"%s>`+
-			`<span class="s-checkbox-text">%s</span></label></div>`,
-			T.SettingsCheckboxActive, T.SettingsCheckboxDeactive,
-			func() string {
-				if c.DebugHTTPRaw {
-					return ` checked`
-				}
-				return ""
-			}(),
-			func() string {
-				if c.DebugHTTPRaw {
-					return T.SettingsCheckboxActive
-				}
-				return T.SettingsCheckboxDeactive
-			}()) +
+			fmt.Sprintf(`<div class="s-row"><span class="s-label">Debug HTTP Raw <small style="display:block; opacity:.5; line-height:1.2; word-wrap:break-word;">`+T.SettingsDebugHTTPHint+`</small></span>`+
+				`<label class="s-checkbox-container">`+
+				`<input type="checkbox" id="cfg-debug-http" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)"`+
+				` data-label-on="%s" data-label-off="%s"%s>`+
+				`<span class="s-checkbox-text">%s</span></label></div>`,
+				T.SettingsCheckboxActive, T.SettingsCheckboxDeactive,
+				func() string {
+					if c.DebugHTTPRaw {
+						return ` checked`
+					}
+					return ""
+				}(),
+				func() string {
+					if c.DebugHTTPRaw {
+						return T.SettingsCheckboxActive
+					}
+					return T.SettingsCheckboxDeactive
+				}())
 
-		`</div>` +
-
-		`<div class="s-section">` +
-		`<h3>` + T.SettingsDomains + `</h3>` +
-		`<div id="settings-domain-list" style="margin-bottom:15px;display:flex;flex-direction:column;gap:8px;"></div>` +
-
+	addDomainForm :=
 		`<div style="background:rgba(255,255,255,0.05);padding:12px;border-radius:8px;border:1px dashed var(--border);">` +
-		`<h4 style="font-size:0.75rem;margin-bottom:8px;opacity:0.8;text-transform:uppercase;">` + T.SettingsAddDomain + `</h4>` +
-		`<input type="text" id="new-domain-fqdn" class="s-input" placeholder="` + T.SettingsDomainPlaceholder + `" style="margin-bottom:8px;">` +
-		`<select id="new-domain-provider" class="s-input" style="margin-bottom:8px;" onchange="toggleProviderFields()">` +
-		`<option value="IONOS">IONOS</option>` +
-		`<option value="CLOUDFLARE">Cloudflare</option>` +
-		`<option value="IPV64">IPv64</option>` +
-		`</select>` +
-		`<div id="fields-ionos">` +
-		`<input type="text" id="new-ionos-prefix" class="s-input" placeholder="` + T.SettingsAPIPrefix + `" style="margin-bottom:8px;">` +
-		`<div style="position:relative;width:100%;margin-top:8px;">` +
-		`<input type="password" id="new-ionos-secret" class="s-input" placeholder="` + T.SettingsAPISecret + `" style="padding-right:40px;">` +
-		`<button type="button" onclick="togglePassword('new-ionos-secret', this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:0;font-size:16px;line-height:1;">👁️</button>` +
-		`</div>` +
-		`</div>` +
-		`<div id="fields-cloudflare" style="display:none;">` +
-		`<input type="text" id="new-cf-token" class="s-input" placeholder="` + T.SettingsCFTokenHint + `" style="margin-bottom:8px;">` +
-		`<div style="font-size:0.65rem;text-align:center;margin:4px 0;opacity:0.4;">` + T.SettingsCFOr + `</div>` +
-		`<input type="text" id="new-cf-email" class="s-input" placeholder="` + T.SettingsCFEmail + `" style="margin-bottom:8px;">` +
-		`<div style="position:relative;width:100%;">` +
-		`<input type="password" id="new-cf-secret" class="s-input" placeholder="` + T.SettingsCFGlobalKey + `" style="padding-right:40px;">` +
-		`<button type="button" onclick="togglePassword('new-cf-secret', this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:0;font-size:16px;line-height:1;">👁️</button>` +
-		`</div>` +
-		`</div>` +
-		`<div id="fields-ipv64" style="display:none;">` +
-		`<div style="position:relative;width:100%;">` +
-		`<input type="password" id="new-ipv64-token" class="s-input" placeholder="` + T.SettingsIPv64Token + `" style="padding-right:40px;">` +
-		`<button type="button" onclick="togglePassword('new-ipv64-token', this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:0;font-size:16px;line-height:1;">👁️</button>` +
-		`</div>` +
-		`</div>` +
-		`<button class="s-btn" onclick="addDomainToList()" style="margin-top:12px;background:var(--success);color:white;border:none;width:100%;">` +
-		T.SettingsAddBtn +
-		`</button>` +
-		`</div>` +
-		`</div>` +
+			`<input type="text" id="new-domain-fqdn" class="s-input" placeholder="` + T.SettingsDomainPlaceholder + `" style="margin-bottom:8px;">` +
+			`<input type="number" id="new-domain-ttl" class="s-input" placeholder="TTL (z. B. 60)" min="1" step="1" style="margin-bottom:8px;">` +
+			`<select id="new-domain-provider" class="s-input" style="margin-bottom:8px;" onchange="toggleProviderFields()">` +
+			`<option value="IONOS">IONOS</option>` +
+			`<option value="CLOUDFLARE">Cloudflare</option>` +
+			`<option value="IPV64">IPv64</option>` +
+			`</select>` +
+			`<div id="fields-ionos">` +
+			`<input type="text" id="new-ionos-prefix" class="s-input" placeholder="` + T.SettingsAPIPrefix + `" style="margin-bottom:8px;">` +
+			`<div style="position:relative;width:100%;margin-top:8px;">` +
+			`<input type="password" id="new-ionos-secret" class="s-input" placeholder="` + T.SettingsAPISecret + `" style="padding-right:40px;">` +
+			`<button type="button" onclick="togglePassword('new-ionos-secret', this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:0;font-size:16px;line-height:1;">👁️</button>` +
+			`</div>` +
+			`</div>` +
+			`<div id="fields-cloudflare" style="display:none;">` +
+			`<input type="text" id="new-cf-token" class="s-input" placeholder="` + T.SettingsCFTokenHint + `" style="margin-bottom:8px;">` +
+			`<div style="font-size:0.65rem;text-align:center;margin:4px 0;opacity:0.4;">` + T.SettingsCFOr + `</div>` +
+			`<input type="text" id="new-cf-email" class="s-input" placeholder="` + T.SettingsCFEmail + `" style="margin-bottom:8px;">` +
+			`<div style="position:relative;width:100%;margin-top:8px;">` +
+			`<input type="password" id="new-cf-secret" class="s-input" placeholder="` + T.SettingsCFGlobalKey + `" style="padding-right:40px;">` +
+			`<button type="button" onclick="togglePassword('new-cf-secret', this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:0;font-size:16px;line-height:1;">👁️</button>` +
+			`</div>` +
+			`<label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:0.85rem;">` +
+			`<input type="checkbox" id="new-cf-proxied"> Cloudflare Proxy aktivieren` +
+			`</label>` +
+			`</div>` +
+			`<div id="fields-ipv64" style="display:none;">` +
+			`<div style="position:relative;width:100%;margin-top:8px;">` +
+			`<input type="password" id="new-ipv64-token" class="s-input" placeholder="` + T.SettingsIPv64Token + `" style="padding-right:40px;">` +
+			`<button type="button" onclick="togglePassword('new-ipv64-token', this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:0;font-size:16px;line-height:1;">👁️</button>` +
+			`</div>` +
+			`</div>` +
+			`<button class="s-btn" onclick="addDomainToList()" style="margin-top:12px;background:var(--success);color:white;border:none;width:100%;">` +
+			T.SettingsAddBtn +
+			`</button>` +
+			`</div>`
 
-		`<div class="s-section">` +
-		`<h3>` + T.SettingsNotify + `</h3>` +
+	domainsSection :=
+		`<div id="settings-domain-list" style="margin-bottom:15px;display:flex;flex-direction:column;gap:8px;"></div>` +
+			subSection("add-domain-section", T.SettingsAddDomain, addDomainForm, false)
 
+	notifyEventsSection :=
+		`<div class="s-row" style="flex-direction:column;align-items:stretch;gap:6px;">` +
+			`<span class="s-label">` + T.SettingsNotifyEvents + `</span>` +
+			notifyEventCheckboxes(c.Notifications.Events) +
+			`</div>`
+
+	telegramSection :=
+		`<div style="padding:10px;background:rgba(56,189,248,0.06);border-radius:7px;border:1px solid rgba(56,189,248,0.15);">` +
+
+			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsTGChatID+`</span>`+
+				`<input type="text" id="cfg-tg-chatid" class="s-input" style="width:160px;"`+
+				` placeholder="-100xxxxxxxxx" value="%s"></div>`,
+				html.EscapeString(c.Notifications.Telegram.ChatID)) +
+
+			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsTGToken+`</span>`+
+				`<div style="position:relative;width:220px;">`+
+				`<input type="password" id="cfg-tg-token" class="s-input" style="width:220px;padding-right:40px;"`+
+				` placeholder="`+T.SettingsTokenUnchanged+`" value="%s">`+
+				`<button type="button" onclick="togglePassword('cfg-tg-token', this)" style="position:absolute;right:8px;top:50%%;transform:translateY(-50%%);background:none;border:none;cursor:pointer;padding:0;font-size:16px;line-height:1;">👁️</button>`+
+				`</div></div>`,
+				html.EscapeString(c.Notifications.Telegram.Token)) +
+
+			`</div>`
+
+	gotifySection :=
+		`<div style="padding:10px;background:rgba(167,139,250,0.06);border-radius:7px;border:1px solid rgba(167,139,250,0.15);">` +
+
+			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsGotifyURL+`</span>`+
+				`<input type="text" id="cfg-gotify-url" class="s-input" style="width:220px;"`+
+				` placeholder="https://gotify.example.com" value="%s"></div>`,
+				html.EscapeString(c.Notifications.Gotify.URL)) +
+
+			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsGotifyToken+`</span>`+
+				`<div style="position:relative;width:220px;">`+
+				`<input type="password" id="cfg-gotify-token" class="s-input" style="width:220px;padding-right:40px;"`+
+				` placeholder="`+T.SettingsTokenUnchanged+`" value="%s">`+
+				`<button type="button" onclick="togglePassword('cfg-gotify-token', this)" style="position:absolute;right:8px;top:50%%;transform:translateY(-50%%);background:none;border:none;cursor:pointer;padding:0;font-size:16px;line-height:1;">👁️</button>`+
+				`</div></div>`,
+				html.EscapeString(c.Notifications.Gotify.Token)) +
+
+			`</div>`
+
+	notifySection :=
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsNotifyEnabled+`</span>`+
 			`<label class="s-checkbox-container">`+
 			`<input type="checkbox" id="cfg-notify-enabled" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)"`+
@@ -473,48 +535,22 @@ func buildSettingsModal(c Config) string {
 				}
 				return T.SettingsCheckboxDeactive
 			}()) +
+			subSection("", T.SettingsNotifyEvents, notifyEventsSection, false) +
+			subSection("", T.SettingsTelegramHeading, telegramSection, false) +
+			subSection("", T.SettingsGotifyHeading, gotifySection, false)
 
-		`<div class="s-row" style="flex-direction:column;align-items:stretch;gap:6px;">` +
-		`<span class="s-label">` + T.SettingsNotifyEvents + `</span>` +
-		notifyEventCheckboxes(c.Notifications.Events) +
+	return `<div id="settingsOverlay" class="modal-overlay" onclick="closeSettingsOutside(event)">` +
+		`<div class="modal">` +
+		`<div class="modal-header">` +
+		`<h2>⚙️ ` + T.SettingsTitle + `</h2>` +
+		`<button class="modal-close" onclick="closeSettings()">✕</button>` +
 		`</div>` +
+		`<div class="modal-body">` +
 
-		`<div style="margin-top:10px;padding:10px;background:rgba(56,189,248,0.06);border-radius:7px;border:1px solid rgba(56,189,248,0.15);">` +
-		`<div style="font-size:0.68rem;color:#94a3b8;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;">📱 ` + T.SettingsTelegramHeading + ` </div>` +
-
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsTGChatID+`</span>`+
-			`<input type="text" id="cfg-tg-chatid" class="s-input" style="width:160px;"`+
-			` placeholder="-100xxxxxxxxx" value="%s"></div>`,
-			html.EscapeString(c.Notifications.Telegram.ChatID)) +
-
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsTGToken+`</span>`+
-			`<div style="position:relative;width:220px;">`+
-			`<input type="password" id="cfg-tg-token" class="s-input" style="width:220px;padding-right:40px;"`+
-			` placeholder="`+T.SettingsTokenUnchanged+`" value="%s">`+
-			`<button type="button" onclick="togglePassword('cfg-tg-token', this)" style="position:absolute;right:8px;top:50%%;transform:translateY(-50%%);background:none;border:none;cursor:pointer;padding:0;font-size:16px;line-height:1;">👁️</button>`+
-			`</div></div>`,
-			html.EscapeString(c.Notifications.Telegram.Token)) +
-
-		`</div>` +
-
-		`<div style="margin-top:8px;padding:10px;background:rgba(167,139,250,0.06);border-radius:7px;border:1px solid rgba(167,139,250,0.15);">` +
-		`<div style="font-size:0.68rem;color:#94a3b8;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;">🔔 ` + T.SettingsGotifyHeading + `</div>` +
-
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsGotifyURL+`</span>`+
-			`<input type="text" id="cfg-gotify-url" class="s-input" style="width:220px;"`+
-			` placeholder="https://gotify.example.com" value="%s"></div>`,
-			html.EscapeString(c.Notifications.Gotify.URL)) +
-
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsGotifyToken+`</span>`+
-			`<div style="position:relative;width:220px;">`+
-			`<input type="password" id="cfg-gotify-token" class="s-input" style="width:220px;padding-right:40px;"`+
-			` placeholder="`+T.SettingsTokenUnchanged+`" value="%s">`+
-			`<button type="button" onclick="togglePassword('cfg-gotify-token', this)" style="position:absolute;right:8px;top:50%%;transform:translateY(-50%%);background:none;border:none;cursor:pointer;padding:0;font-size:16px;line-height:1;">👁️</button>`+
-			`</div></div>`,
-			html.EscapeString(c.Notifications.Gotify.Token)) +
-
-		`</div>` +
-		`</div>` +
+		collapsibleSection(T.SettingsSecurity, securitySection, false) +
+		collapsibleSection(T.SettingsSystem, systemSection, true) +
+		collapsibleSection(T.SettingsDomains, domainsSection, false) +
+		collapsibleSection(T.SettingsNotify, notifySection, false) +
 
 		`<div style="margin-top:20px;padding:15px;background:rgba(74,222,128,0.07);border-radius:8px;border:1px solid var(--success);">` +
 		`<p style="font-size:0.75rem;margin-bottom:10px;opacity:0.8;text-align:center;">` +
@@ -523,8 +559,8 @@ func buildSettingsModal(c Config) string {
 		`</p>` +
 		`<button class="action-btn" style="width:100%;margin:0;" onclick="saveFullConfig()">` + T.SettingsSaveBtn + `</button>` +
 		`</div>` +
-		`</div></div></div>`
 
+		`</div></div></div>`
 }
 
 type safeDomainConfig struct {
@@ -536,6 +572,8 @@ type safeDomainConfig struct {
 	CFEmail    string `json:"cf_email,omitempty"`
 	CFSecret   string `json:"cf_secret,omitempty"`
 	IPv64Token string `json:"ipv64_token,omitempty"`
+	TTL        int    `json:"ttl,omitempty"`
+	CFProxied  bool   `json:"cf_proxied,omitempty"`
 }
 
 type safeSystemConfig struct {
@@ -577,6 +615,8 @@ func safeDomainConfigs(dcs []DomainConfig) []safeDomainConfig {
 			CFEmail:    dc.CFEmail,
 			CFSecret:   dc.CFSecret,
 			IPv64Token: dc.IPv64Token,
+			TTL:        dc.TTL,
+			CFProxied:  dc.CFProxied,
 		}
 	}
 	return out
@@ -789,6 +829,7 @@ func createMux() *http.ServeMux {
 			return
 		}
 
+		cfgMu.Lock()
 		sys := payload.System
 		if sys.IPMode != "" {
 			validModes := map[string]bool{"IPV4": true, "IPV6": true, "BOTH": true}
@@ -879,6 +920,10 @@ func createMux() *http.ServeMux {
 				if sc.IPv64Token != "" {
 					found.IPv64Token = sc.IPv64Token
 				}
+
+				found.TTL = sc.TTL
+				found.CFProxied = sc.CFProxied
+
 				newConfigs = append(newConfigs, found)
 			} else {
 				newConfigs = append(newConfigs, DomainConfig{
@@ -890,6 +935,8 @@ func createMux() *http.ServeMux {
 					CFEmail:    sc.CFEmail,
 					CFSecret:   sc.CFSecret,
 					IPv64Token: sc.IPv64Token,
+					TTL:        sc.TTL,
+					CFProxied:  sc.CFProxied,
 				})
 			}
 		}
@@ -905,10 +952,12 @@ func createMux() *http.ServeMux {
 			return
 		}
 
+		cfgMu.Unlock()
+
 		ResetHTTPClient()
 		initNotifiers()
 		forceNextUpdate.Store(true)
-		lastCleanup = time.Time{}
+		lastCleanupNano.Store(0)
 
 		debugLog("API", getClientIP(r), T.ConfigHeading)
 		w.Header().Set("Content-Type", "application/json")
@@ -1128,7 +1177,12 @@ func createMux() *http.ServeMux {
 		}
 	})
 
-	mux.HandleFunc("/api/export", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/api/export", func(w http.ResponseWriter, r *http.Request) {
+		if !validateTriggerToken(r) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
 		statusMutex.Lock()
 		defer statusMutex.Unlock()
 
@@ -1397,7 +1451,7 @@ func createMux() *http.ServeMux {
 		</div>
 		
 		<div id="toast" class="toast"></div>
-	`)
+		`)
 
 		_, _ = fmt.Fprintf(w, "%s", buildSettingsModal(cfg))
 

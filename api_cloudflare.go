@@ -286,7 +286,7 @@ func loadCloudflareZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) 
 
 	for {
 		endpoint := fmt.Sprintf("/zones?page=%d&per_page=%d", page, perPage)
-		data, err := cloudflareAPI(ctx, dc, "GET", endpoint, nil)
+		data, err := cloudflareAPI(ctx, dc, MethodGET, endpoint, nil)
 		if err != nil {
 			debugLog("CACHE", "", fmt.Sprintf(T.CFZoneLoadError+": %v", err))
 			return nil, fmt.Errorf("%s: %w", T.CFZoneLoadError, err)
@@ -325,7 +325,7 @@ func loadCloudflareRecords(ctx context.Context, dc *DomainConfig, zoneID string)
 
 	for {
 		endpoint := fmt.Sprintf("/zones/%s/dns_records?page=%d&per_page=%d", zoneID, page, perPage)
-		data, err := cloudflareAPI(ctx, dc, "GET", endpoint, nil)
+		data, err := cloudflareAPI(ctx, dc, MethodGET, endpoint, nil)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", T.ErrBodyRead, err)
 		}
@@ -412,8 +412,8 @@ func updateCloudflareDNS(ctx context.Context, dc *DomainConfig, fqdn, recordType
 		"type":    recordType,
 		"name":    fqdn,
 		"content": newIP,
-		"ttl":     60,
-		"proxied": false,
+		"ttl":     effectiveTTL(dc),
+		"proxied": dc.CFProxied,
 		"comment": ManagedComment,
 	}
 
@@ -422,11 +422,11 @@ func updateCloudflareDNS(ctx context.Context, dc *DomainConfig, fqdn, recordType
 	var actionType string
 
 	if existing != nil {
-		method = "PUT"
+		method = MethodPUT
 		endpoint = fmt.Sprintf("/zones/%s/dns_records/%s", zoneID, existing.ID)
 		actionType = ActionUpdate
 	} else {
-		method = "POST"
+		method = MethodPOST
 		endpoint = fmt.Sprintf("/zones/%s/dns_records", zoneID)
 		actionType = ActionCreate
 	}
@@ -434,20 +434,20 @@ func updateCloudflareDNS(ctx context.Context, dc *DomainConfig, fqdn, recordType
 	_, err := cloudflareAPI(ctx, dc, method, endpoint, payload)
 	if err != nil {
 		var apiErr *APIError
-		if method == "PUT" && errors.As(err, &apiErr) && apiErr.StatusCode == 404 {
+		if method == MethodPUT && errors.As(err, &apiErr) && apiErr.StatusCode == 404 {
 			rec, ferr := findCloudflareRecord(ctx, dc, zoneID, fqdn, recordType)
 			if ferr != nil {
 				return false, ferr
 			}
 			if rec == nil {
 				createEndpoint := fmt.Sprintf("/zones/%s/dns_records", zoneID)
-				if _, cerr := cloudflareAPI(ctx, dc, "POST", createEndpoint, payload); cerr != nil {
+				if _, cerr := cloudflareAPI(ctx, dc, MethodPOST, createEndpoint, payload); cerr != nil {
 					return false, cerr
 				}
 				actionType = ActionCreate
 			} else {
 				putEndpoint := fmt.Sprintf("/zones/%s/dns_records/%s", zoneID, rec.ID)
-				if _, uerr := cloudflareAPI(ctx, dc, "PUT", putEndpoint, payload); uerr != nil {
+				if _, uerr := cloudflareAPI(ctx, dc, MethodPUT, putEndpoint, payload); uerr != nil {
 					return false, uerr
 				}
 				actionType = ActionUpdate
@@ -553,7 +553,7 @@ func cleanupCloudflareRecords(ctx context.Context, zones []Zone, recordCache *Zo
 			}
 
 			endpoint := fmt.Sprintf("/zones/%s/dns_records/%s", zone.ID, rec.ID)
-			if _, err := cloudflareAPI(ctx, cfDC, "DELETE", endpoint, nil); err != nil {
+			if _, err := cloudflareAPI(ctx, cfDC, MethodDELETE, endpoint, nil); err != nil {
 				debugLog("MAINTENANCE", fqdn, fmt.Sprintf(T.CleanupDeleteError, err))
 			} else {
 				log(LogContext{
@@ -643,7 +643,7 @@ func findCloudflareRecord(ctx context.Context, dc *DomainConfig, zoneID, fqdn, r
 		endpoint := fmt.Sprintf("/zones/%s/dns_records?type=%s&name=%s&page=%d&per_page=%d",
 			zoneID, recordType, url.QueryEscape(name), page, perPage)
 
-		data, err := cloudflareAPI(ctx, dc, "GET", endpoint, nil)
+		data, err := cloudflareAPI(ctx, dc, MethodGET, endpoint, nil)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", T.ErrBodyRead, err)
 		}

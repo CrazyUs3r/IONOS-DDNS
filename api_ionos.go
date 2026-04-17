@@ -8,8 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
-	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -98,28 +96,6 @@ func loadIONOSCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
 // ============================================================================
 // API - IONOS
 // ============================================================================
-func calculateRetryDelay(attempt int, isServerError bool) time.Duration {
-	baseWait := time.Duration(math.Pow(RetryExponentBase, float64(attempt+1))) * RetryBaseDelay
-	if baseWait < RetryBaseDelay {
-		baseWait = RetryBaseDelay
-	}
-	if baseWait > RetryMaxDelay {
-		baseWait = RetryMaxDelay
-	}
-
-	jitter := time.Duration(rand.Intn(RetryJitterMaxMs)) * time.Millisecond
-	wait := baseWait + jitter
-
-	if isServerError {
-		wait *= 2
-		if wait > RetryMaxDelay {
-			wait = RetryMaxDelay
-		}
-	}
-
-	return wait
-}
-
 func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body interface{}) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("%s: %w", T.ErrContextError, err)
@@ -319,7 +295,7 @@ func updateDNS(
 	)
 
 	if existing != nil {
-		method = "PUT"
+		method = MethodPUT
 		url = fmt.Sprintf("%s/%s/records/%s", ionosBaseURL, zoneID, existing.ID)
 		actionType = ActionUpdate
 
@@ -327,10 +303,10 @@ func updateDNS(
 			"name":    fqdn,
 			"type":    recordType,
 			"content": newIP,
-			"ttl":     60,
+			"ttl":     effectiveTTL(dc),
 		}
 	} else {
-		method = "POST"
+		method = MethodPOST
 		url = fmt.Sprintf("%s/%s/records", ionosBaseURL, zoneID)
 		actionType = ActionCreate
 
@@ -339,7 +315,7 @@ func updateDNS(
 				Name:    fqdn,
 				Type:    recordType,
 				Content: newIP,
-				TTL:     60,
+				TTL:     effectiveTTL(dc),
 			},
 		}
 	}
@@ -550,7 +526,7 @@ func cleanupIONOSRecords(ctx context.Context, zones []Zone, recordCache *ZoneRec
 
 			url := fmt.Sprintf("%s/%s/records/%s", ionosBaseURL, zone.ID, rec.ID)
 
-			if _, err := ionosAPI(ctx, ionosDC, "DELETE", url, nil); err != nil {
+			if _, err := ionosAPI(ctx, ionosDC, MethodDELETE, url, nil); err != nil {
 				debugLog("MAINTENANCE", fqdn, fmt.Sprintf(T.CleanupDeleteError, err))
 			} else {
 				log(LogContext{

@@ -104,6 +104,7 @@ func loadLanguage(lang string) error {
 		return fmt.Errorf("json parse error: %w", err)
 	}
 
+	phraseMu.Lock()
 	v := reflect.ValueOf(&T).Elem()
 	typ := v.Type()
 	for i := 0; i < v.NumField(); i++ {
@@ -113,6 +114,7 @@ func loadLanguage(lang string) error {
 			v.Field(i).SetString(val)
 		}
 	}
+	phraseMu.Unlock()
 
 	log(LogContext{
 		Level:    LogInfo,
