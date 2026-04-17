@@ -358,6 +358,8 @@ function renderSettingsDomainList() {
 			'<div style="flex:1;min-width:0;">' +
 				'<span style="font-weight:600;word-break:break-all;">' + escHtml(d.fqdn) + '</span>' +
 				'<span class="provider-badge" style="background:' + providerColor + '20;color:' + providerColor + ';border:1px solid ' + providerColor + '40;margin-left:6px;">' + escHtml(d.provider) + '</span>' +
+				(d.ttl ? '<span class="provider-badge" style="margin-left:6px;">TTL ' + escHtml(d.ttl) + '</span>' : '') +
+				(d.provider === 'CLOUDFLARE' && d.cf_proxied ? '<span class="provider-badge" style="margin-left:6px;">proxied</span>' : '') +
 			'</div>' +
 			'<div style="display:flex;gap:6px;flex-shrink:0;">' +
 				'<button onclick="editDomain(' + index + ')" style="background:none;border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:0.75rem;">✏️</button>' +
@@ -371,27 +373,64 @@ function escHtml(s) {
 	return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+function openAddDomainSection() {
+	const section = document.getElementById('add-domain-section');
+	if (!section) return;
+
+	section.open = true;
+	section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function resetDomainForm() {
+	_setVal('new-domain-fqdn', '');
+	_setVal('new-domain-ttl', '');
+	_setVal('new-ionos-prefix', '');
+	_setVal('new-ionos-secret', '');
+	_setVal('new-cf-token', '');
+	_setVal('new-cf-email', '');
+	_setVal('new-cf-secret', '');
+	_setVal('new-ipv64-token', '');
+	_setChk('new-cf-proxied', false);
+
+	const provSel = document.getElementById('new-domain-provider');
+	if (provSel) provSel.value = 'IONOS';
+
+	toggleProviderFields();
+}
+
 function editDomain(index) {
 	const d = tempDomainConfigs[index];
 	if (!d) return;
-	_setVal('new-domain-fqdn', d.fqdn);
+
+	// Formular vorher sauber leeren
+	resetDomainForm();
+
+	_setVal('new-domain-fqdn', d.fqdn || '');
+
 	const provSel = document.getElementById('new-domain-provider');
-	if (provSel) provSel.value = d.provider;
+	if (provSel) provSel.value = d.provider || 'IONOS';
+
 	toggleProviderFields();
+
+	_setVal('new-domain-ttl', d.ttl || '');
 
 	if (d.provider === 'IONOS') {
 		_setVal('new-ionos-prefix', d.api_prefix || '');
 		_setVal('new-ionos-secret', d.api_secret || '');
 	} else if (d.provider === 'CLOUDFLARE') {
-		_setVal('new-cf-token',  d.cf_token  || '');
-		_setVal('new-cf-email',  d.cf_email  || '');
+		_setVal('new-cf-token', d.cf_token || '');
+		_setVal('new-cf-email', d.cf_email || '');
 		_setVal('new-cf-secret', d.cf_secret || '');
+		_setChk('new-cf-proxied', d.cf_proxied || false);
 	} else if (d.provider === 'IPV64') {
 		_setVal('new-ipv64-token', d.ipv64_token || '');
 	}
+
 	tempDomainConfigs.splice(index, 1);
 	renderSettingsDomainList();
-	document.getElementById('new-domain-fqdn').focus();
+	openAddDomainSection();
+
+	document.getElementById('new-domain-fqdn')?.focus();
 }
 
 function toggleProviderFields() {
@@ -404,9 +443,15 @@ function toggleProviderFields() {
 function addDomainToList() {
 	const fqdn = document.getElementById('new-domain-fqdn').value.trim().toLowerCase();
 	const provider = document.getElementById('new-domain-provider').value;
+	const ttlRaw = _getVal('new-domain-ttl').trim();
+	const ttl = ttlRaw === '' ? 0 : parseInt(ttlRaw, 10);
 	if (!fqdn) return showToast(tr('fqdn_missing', 'FQDN fehlt'), 'error');
 
-	let entry = { fqdn: fqdn, provider: provider };
+	let entry = {
+		fqdn: fqdn,
+		provider: provider,
+		ttl: Number.isFinite(ttl) && ttl > 0 ? ttl : 0
+	};
 	if(provider === 'IONOS') {
 		entry.api_prefix = _getVal('new-ionos-prefix');
 		entry.api_secret = _getVal('new-ionos-secret');
@@ -414,13 +459,26 @@ function addDomainToList() {
 		entry.cf_token  = _getVal('new-cf-token');
 		entry.cf_email  = _getVal('new-cf-email');
 		entry.cf_secret = _getVal('new-cf-secret');
+		entry.cf_proxied = document.getElementById('new-cf-proxied')?.checked || false;
 	} else if(provider === 'IPV64') {
 		entry.ipv64_token = _getVal('new-ipv64-token');
 	}
 	tempDomainConfigs.push(entry);
 	renderSettingsDomainList();
+	resetDomainForm();
+
 	document.getElementById('new-domain-fqdn').value = '';
-	['new-ionos-prefix','new-ionos-secret','new-cf-token','new-cf-email','new-cf-secret','new-ipv64-token'].forEach(id => _setVal(id,''));
+	[
+		'new-domain-ttl',
+		'new-ionos-prefix',
+		'new-ionos-secret',
+		'new-cf-token',
+		'new-cf-email',
+		'new-cf-secret',
+		'new-ipv64-token',
+	].forEach(id => _setVal(id,''));
+
+	_setChk('new-cf-proxied', false);
 }
 
 function removeDomainFromList(index) {
