@@ -170,7 +170,10 @@ func run() int {
 		MaxConcurrent:   DefaultMaxConcurrent,
 		MaxLogLines:     DefaultMaxLogLines,
 		MaxAPIRetries:   DefaultMaxAPIRetries,
+		Lang:            "de",
+		DomainConfigs:   []DomainConfig{{FQDN: "clear", Provider: "IPv64", IPv64Token: "clear"}},
 	}
+
 
 	configLoaded := false
 
