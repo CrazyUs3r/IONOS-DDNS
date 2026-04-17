@@ -54,7 +54,7 @@ func run() int {
 	logsDir := filepath.Join(configDir, "logs")
 	metricsPersistPath = filepath.Join(logsDir, "metrics.json")
 	if configPath == "" {
-		configPath = filepath.Join(logsDir, "config.json")
+		configPath = filepath.Join(configDir, "config.json")
 	}
 
 	copyEmbeddedLangFiles(langDir)
@@ -173,7 +173,6 @@ func run() int {
 		Lang:            "de",
 		DomainConfigs:   []DomainConfig{{FQDN: "clear", Provider: "IPv64", IPv64Token: "clear"}},
 	}
-
 
 	configLoaded := false
 
