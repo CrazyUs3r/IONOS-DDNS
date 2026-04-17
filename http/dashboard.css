@@ -325,7 +325,12 @@ details.card[open] > summary::after {
 	font-size: 0.85rem; gap: 12px;
 }
 .s-row:last-child { border-bottom: none; }
-.s-label { opacity: 0.65; white-space: nowrap; }
+.s-label {
+    opacity: 0.65;
+    white-space: normal;
+    flex: 1;
+    min-width: 0;
+}
 .s-val { font-family: monospace; color: var(--btn-text); text-align: right; word-break: break-all; }
 .s-input {
     width: 100%;
@@ -393,28 +398,33 @@ select.s-input {
 	border: 1px solid var(--border); margin-bottom: 6px;
 	font-size: 0.85rem;
 }
+
 .domain-pill code { font-size: 0.82rem; }
+
 .provider-badge {
 	font-size: 0.65rem; padding: 1px 7px; border-radius: 999px;
 	font-weight: 700; white-space: nowrap;
 }
+
 .s-checkbox-container {
     display: flex;
-    align-items: center;
-    gap: 6px;
+    align-items: flex-start;
+    gap: 8px;
     cursor: pointer;
 }
 
 .s-checkbox-dynamic {
-    width: 18px;
-    height: 18px;
-    cursor: pointer;
+    flex-shrink: 0;
+    margin-top: 2px;
 }
 
 .s-checkbox-text {
     font-size: 0.8rem;
     opacity: 0.7;
     transition: opacity 0.2s;
+    flex: 1;
+    line-height: 1.3;
+    word-break: break-word;
 }
 
 .s-checkbox-dynamic:checked + .s-checkbox-text {
