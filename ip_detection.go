@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -99,7 +100,7 @@ func getPublicIP(ctx context.Context, url string, want IPVersion) (string, error
 	return validatedIP, nil
 }
 
-func getPublicIPFromAny(urls []string, want IPVersion) (string, error) {
+func getPublicIPFromAny(parent context.Context, urls []string, want IPVersion) (string, error) {
 	if len(urls) == 0 {
 		return "", errors.New(T.NoIPEndpointsConfigured)
 	}
@@ -112,7 +113,7 @@ func getPublicIPFromAny(urls []string, want IPVersion) (string, error) {
 			continue
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), IPCheckTimeout)
+		ctx, cancel := context.WithTimeout(parent, IPCheckTimeout)
 		ip, err := getPublicIP(ctx, u, want)
 		cancel()
 
@@ -168,47 +169,49 @@ func getIPv6FromInterface(ifaceName string) (string, error) {
 	return "", errors.New(T.NoIPv6OnInterface)
 }
 
-func getIPv6() (string, error) {
+func getIPv6(ctx context.Context) (string, error) {
 	if cfg.IfaceName != "" {
 		if ip, err := getIPv6FromInterface(cfg.IfaceName); err == nil {
 			return ip, nil
 		}
 	}
-
 	ipLog(T.IPv6PublicFallback)
 	debugLog("IP-CHECK", "", T.IPv6FallbackEndpoints)
-
-	return getPublicIPFromAny(DefaultIPv6Endpoints, IPV6)
+	return getPublicIPFromAny(ctx, DefaultIPv6Endpoints, IPV6)
 }
 
-func fetchCurrentIPs(_ context.Context) (ipv4, ipv6 string, err error) {
+func fetchCurrentIPs(ctx context.Context) (ipv4, ipv6 string, err error) {
 	var errV4, errV6 error
+	var resV4, resV6 string
+	var wg sync.WaitGroup
 
 	if cfg.IPMode != "IPV6" {
 		ipLog("🔎 " + T.CheckingIPv4 + " ...")
-		ipv4, errV4 = getPublicIPFromAny(DefaultIPv4Endpoints, IPV4)
-		if errV4 != nil {
-			log(LogContext{
-				Level:   LogError,
-				Action:  ActionError,
-				Message: T.IPv4CheckFailed,
-				Error:   errV4,
-			})
-		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			resV4, errV4 = getPublicIPFromAny(ctx, DefaultIPv4Endpoints, IPV4)
+			if errV4 != nil {
+				log(LogContext{Level: LogError, Action: ActionError, Message: T.IPv4CheckFailed, Error: errV4})
+			}
+		}()
 	}
 
 	if cfg.IPMode != "IPV4" {
 		ipLog("🔎 " + T.CheckingIPv6 + " ...")
-		ipv6, errV6 = getIPv6()
-		if errV6 != nil {
-			log(LogContext{
-				Level:   LogError,
-				Action:  ActionError,
-				Message: T.IPv6CheckFailed,
-				Error:   errV6,
-			})
-		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			resV6, errV6 = getIPv6(ctx)
+			if errV6 != nil {
+				log(LogContext{Level: LogError, Action: ActionError, Message: T.IPv6CheckFailed, Error: errV6})
+			}
+		}()
 	}
+
+	wg.Wait()
+
+	ipv4, ipv6 = resV4, resV6
 
 	switch cfg.IPMode {
 	case "IPV4":
@@ -218,7 +221,6 @@ func fetchCurrentIPs(_ context.Context) (ipv4, ipv6 string, err error) {
 		if ipv4 != "" {
 			ipLog(fmt.Sprintf(T.IPv4Current, ipv4))
 		}
-
 	case "IPV6":
 		if errV6 != nil {
 			return "", "", fmt.Errorf("%s: %w", T.IPv6RequiredButFailed, errV6)
@@ -226,7 +228,6 @@ func fetchCurrentIPs(_ context.Context) (ipv4, ipv6 string, err error) {
 		if ipv6 != "" {
 			ipLog(fmt.Sprintf(T.IPv6Current, ipv6))
 		}
-
 	case "BOTH":
 		if errV4 != nil && errV6 != nil {
 			return "", "", fmt.Errorf("%s: v4=%v, v6=%v", T.BothIPVersionsFailed, errV4, errV6)

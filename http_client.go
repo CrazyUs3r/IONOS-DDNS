@@ -17,7 +17,6 @@ import (
 	"net/http/httputil"
 	"os"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -233,8 +232,9 @@ func ResetHTTPClient() {
 	defer clientMu.Unlock()
 	httpClient = nil
 	clientDNSKey = ""
-	secretReplacerOnce = sync.Once{}
+	secretReplacerMu.Lock()
 	secretReplacer = nil
+	secretReplacerMu.Unlock()
 }
 
 func dnsKey(servers []string) string {
@@ -243,6 +243,7 @@ func dnsKey(servers []string) string {
 
 func getHTTPClient() *http.Client {
 	currentKey := dnsKey(cfg.DNSServers)
+
 	clientMu.RLock()
 	if httpClient != nil && clientDNSKey == currentKey {
 		c := httpClient
@@ -378,7 +379,7 @@ func buildHTTPClient(dnsList []string) *http.Client {
 		},
 	}
 
-	httpClient = &http.Client{
+	client := &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &loggingTransport{
 			base: baseTransport,
@@ -386,14 +387,19 @@ func buildHTTPClient(dnsList []string) *http.Client {
 	}
 
 	debugLog("SYSTEM", "", fmt.Sprintf(T.HTTPClientInitialized, len(dnsList), strings.Join(dnsList, ", ")))
-	return httpClient
+	return client
 }
 
 // ============================================================================
 // SANITIZATION
 // ============================================================================
 func getSecretReplacer() *strings.Replacer {
-	secretReplacerOnce.Do(func() {
+	secretReplacerMu.Lock()
+	defer secretReplacerMu.Unlock()
+	if secretReplacer != nil {
+		return secretReplacer
+	}
+	{
 		replacements := []string{}
 
 		for _, dc := range cfg.DomainConfigs {
@@ -430,7 +436,7 @@ func getSecretReplacer() *strings.Replacer {
 		} else {
 			secretReplacer = strings.NewReplacer("dummy_secret_placeholder", "none")
 		}
-	})
+	}
 
 	return secretReplacer
 }

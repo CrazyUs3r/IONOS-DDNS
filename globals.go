@@ -45,6 +45,9 @@ var (
 	clientMu     sync.RWMutex
 	clientDNSKey string
 
+	notifyCfg   notifyConfig
+	notifyCfgMu sync.RWMutex
+
 	apiMetrics      = &APIMetrics{}
 	latestMetricsMu sync.RWMutex
 	latestMetrics   map[string]interface{}
@@ -55,8 +58,8 @@ var (
 	domainRegex = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$`)
 	labelRegex  = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
-	secretReplacer     *strings.Replacer
-	secretReplacerOnce sync.Once
+	secretReplacer   *strings.Replacer
+	secretReplacerMu sync.Mutex
 
 	shutdownCtx    context.Context
 	shutdownCancel context.CancelFunc
@@ -141,8 +144,6 @@ var (
 		"https://ipv6.myip.wtf/text",
 		"https://botwhatismyipaddress.com/",
 	}
-
-	notifyCfg notifyConfig
 )
 
 // ============================================================================
@@ -1066,6 +1067,7 @@ type telegramNotifier struct {
 	sendQueue      chan tgQueuedMsg
 	pollCtx        context.Context
 	pollCancel     context.CancelFunc
+	wg             sync.WaitGroup
 }
 
 type tgQueuedMsg struct {

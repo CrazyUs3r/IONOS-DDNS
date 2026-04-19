@@ -11,26 +11,31 @@ import (
 // INIT
 // ============================================================================
 func initNotifiers() {
-	for _, n := range notifyCfg.notifiers {
+	notifyCfgMu.RLock()
+	oldNotifiers := notifyCfg.notifiers
+	notifyCfgMu.RUnlock()
+
+	for _, n := range oldNotifiers {
 		if tg, ok := n.(*telegramNotifier); ok {
 			tg.StopPolling()
 		}
 	}
 
-	notifyCfg = notifyConfig{
+	newCfg := notifyConfig{
 		events:    make(map[NotifyEvent]struct{}),
 		notifiers: []Notifier{},
 	}
 
 	for _, raw := range cfg.Notifications.Events {
 		e := NotifyEvent(strings.ToUpper(strings.TrimSpace(raw)))
-		notifyCfg.events[e] = struct{}{}
+		newCfg.events[e] = struct{}{}
 	}
 
 	if cfg.Notifications.Telegram.Token != "" && cfg.Notifications.Telegram.ChatID != "" {
 		tg := newTelegramNotifier(cfg.Notifications.Telegram.Token, cfg.Notifications.Telegram.ChatID)
-		notifyCfg.notifiers = append(notifyCfg.notifiers, tg)
+		newCfg.notifiers = append(newCfg.notifiers, tg)
 		tg.StartPolling()
+
 		debugLog("NOTIFY", "", T.NotifyTelegramActive)
 		log(LogContext{
 			Level:   LogInfo,
@@ -40,7 +45,7 @@ func initNotifiers() {
 	}
 
 	if cfg.Notifications.Gotify.URL != "" && cfg.Notifications.Gotify.Token != "" {
-		notifyCfg.notifiers = append(notifyCfg.notifiers, newGotifyNotifier(cfg.Notifications.Gotify.URL, cfg.Notifications.Gotify.Token))
+		newCfg.notifiers = append(newCfg.notifiers, newGotifyNotifier(cfg.Notifications.Gotify.URL, cfg.Notifications.Gotify.Token))
 		debugLog("NOTIFY", "", T.NotifyGotifyActive)
 		log(LogContext{
 			Level:   LogInfo,
@@ -48,24 +53,32 @@ func initNotifiers() {
 			Message: t(T.NotifyGotifyActive, "✅ Gotify active"),
 		})
 	}
+
+	notifyCfgMu.Lock()
+	notifyCfg = newCfg
+	notifyCfgMu.Unlock()
 }
 
 // ============================================================================
 // DISPATCH — async (normal log path)
 // ============================================================================
 func notify(ctx LogContext) {
-	if len(notifyCfg.notifiers) == 0 {
+	notifyCfgMu.RLock()
+	notifiers := notifyCfg.notifiers
+	events := notifyCfg.events
+	notifyCfgMu.RUnlock()
+	if len(notifiers) == 0 {
 		return
 	}
 
 	event := NotifyEvent(strings.ToUpper(ctx.Action))
-	if _, ok := notifyCfg.events[event]; !ok {
+	if _, ok := events[event]; !ok {
 		return
 	}
 
 	nm := buildNotifyMessage(ctx)
 
-	for _, n := range notifyCfg.notifiers {
+	for _, n := range notifiers {
 		n := n
 		go func() {
 			if err := n.Send(nm); err != nil {
@@ -76,12 +89,17 @@ func notify(ctx LogContext) {
 }
 
 func notifySync(ctx LogContext) {
-	if len(notifyCfg.notifiers) == 0 {
+	notifyCfgMu.RLock()
+	notifiers := notifyCfg.notifiers
+	events := notifyCfg.events
+	notifyCfgMu.RUnlock()
+
+	if len(notifiers) == 0 {
 		return
 	}
 
 	event := NotifyEvent(strings.ToUpper(ctx.Action))
-	if _, ok := notifyCfg.events[event]; !ok {
+	if _, ok := events[event]; !ok {
 		return
 	}
 
@@ -92,8 +110,8 @@ func notifySync(ctx LogContext) {
 	}
 
 	var wg sync.WaitGroup
-	for _, n := range notifyCfg.notifiers {
-		n := n
+	for _, n := range notifiers {
+		n := n // Shadowing für die Goroutine
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

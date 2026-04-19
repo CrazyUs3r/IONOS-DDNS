@@ -30,7 +30,9 @@ func newTelegramNotifier(token, chatID string) *telegramNotifier {
 		pollCtx:     ctx,
 		pollCancel:  cancel,
 	}
-	go t.drainQueue()
+	t.wg.Go(func() {
+		t.drainQueue()
+	})
 	return t
 }
 
@@ -266,12 +268,17 @@ func (t *telegramNotifier) answerCallback(callbackID string) {
 // ============================================================================
 func (t *telegramNotifier) StartPolling() {
 	t.pollOnce.Do(func() {
-		go t.pollingLoop()
+		t.wg.Add(1)
+		go func() {
+			defer t.wg.Done()
+			t.pollingLoop()
+		}()
 	})
 }
 
 func (t *telegramNotifier) StopPolling() {
 	t.pollCancel()
+	t.wg.Wait()
 }
 
 func (t *telegramNotifier) pollingLoop() {

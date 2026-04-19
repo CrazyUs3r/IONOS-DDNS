@@ -187,7 +187,8 @@ func buildSnakeCase(s string) string {
 		if !strings.Contains(s, acr) {
 			continue
 		}
-		normalized := string(unicode.ToUpper([]rune(acr)[0])) + strings.ToLower(acr[1:])
+		runes := []rune(acr)
+		normalized := string(unicode.ToUpper(runes[0])) + strings.ToLower(string(runes[1:]))
 		s = strings.ReplaceAll(s, acr, normalized)
 	}
 

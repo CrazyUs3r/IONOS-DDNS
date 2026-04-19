@@ -830,6 +830,7 @@ func createMux() *http.ServeMux {
 		}
 
 		cfgMu.Lock()
+		defer cfgMu.Unlock()
 		sys := payload.System
 		if sys.IPMode != "" {
 			validModes := map[string]bool{"IPV4": true, "IPV6": true, "BOTH": true}
@@ -951,8 +952,6 @@ func createMux() *http.ServeMux {
 			http.Error(w, T.SaveFailed, http.StatusInternalServerError)
 			return
 		}
-
-		cfgMu.Unlock()
 
 		ResetHTTPClient()
 		initNotifiers()
@@ -1285,11 +1284,31 @@ func createMux() *http.ServeMux {
 		}
 
 		if r.URL.Query().Get("detailed") == "true" {
+			lastV4, lastV6 := loadLastKnownIPs()
+
+			statusMutex.Lock()
+			var lastUpdateTime string
+			if b, err := os.ReadFile(updatePath); err == nil {
+				var domains map[string]DomainHistory
+				if json.Unmarshal(b, &domains) == nil {
+					for _, h := range domains {
+						if h.LastChanged != "" {
+							lastUpdateTime = h.LastChanged
+							break
+						}
+					}
+				}
+			}
+			statusMutex.Unlock()
+
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			if err := json.NewEncoder(w).Encode(map[string]interface{}{
-				"status":      "healthy",
-				"api_metrics": stats,
+				"status":           "healthy",
+				"api_metrics":      stats,
+				"last_known_ipv4":  lastV4,
+				"last_known_ipv6":  lastV6,
+				"last_update_time": lastUpdateTime,
 			}); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
@@ -1346,13 +1365,18 @@ func createMux() *http.ServeMux {
 			if err != nil {
 				return false
 			}
+
 			var payload logCachePayload
 			if err := json.Unmarshal(b, &payload); err != nil {
+				return false
+			}
+			if len(payload.Logs) == 0 {
 				return false
 			}
 			logs = payload.Logs
 			logTimeRange = payload.LogTimeRange
 			return true
+
 		}
 
 		if !loadFromDiskCache() {
@@ -1400,7 +1424,12 @@ func createMux() *http.ServeMux {
 
 			if payload, err := json.Marshal(logCachePayload{Logs: logs, LogTimeRange: logTimeRange}); err == nil {
 				logCacheWriteMu.Lock()
-				_ = os.WriteFile(logCachePath, payload, 0644)
+				tmp := logCachePath + ".tmp"
+				if err := os.WriteFile(tmp, payload, 0644); err == nil {
+					if err := os.Rename(tmp, logCachePath); err != nil {
+						_ = os.Remove(tmp)
+					}
+				}
 				logCacheWriteMu.Unlock()
 			}
 		}

@@ -42,9 +42,9 @@ func (rl *RateLimiter) Remaining() int {
 
 	now := time.Now().Local()
 	elapsed := now.Sub(rl.lastRefill).Seconds()
-	tokens := math.Min(rl.maxTokens, rl.tokens+elapsed*rl.refillRate)
-
-	return int(tokens)
+	rl.tokens = math.Min(rl.maxTokens, rl.tokens+elapsed*rl.refillRate)
+	rl.lastRefill = now
+	return int(rl.tokens)
 }
 
 func NewIPRateLimiter(ctx context.Context, tokensPerIP, refillRate float64) *IPRateLimiter {

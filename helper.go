@@ -267,23 +267,52 @@ func loadIONOSZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
 
 func loadAllProviderZones(ctx context.Context) (map[string][]Zone, error) {
 	zonesByProvider := make(map[string][]Zone)
-
 	providerConfigs := make(map[ProviderType]*DomainConfig)
-	for i := range cfg.DomainConfigs {
-		dc := &cfg.DomainConfigs[i]
+
+	cfgMu.RLock()
+	domainConfigs := make([]DomainConfig, len(cfg.DomainConfigs))
+	copy(domainConfigs, cfg.DomainConfigs)
+	cfgMu.RUnlock()
+
+	for i := range domainConfigs {
+		dc := &domainConfigs[i]
 		if _, exists := providerConfigs[dc.Provider]; !exists {
 			providerConfigs[dc.Provider] = dc
 		}
 	}
 
-	for provider, dc := range providerConfigs {
-		zones, err := loadZonesForDomainConfig(ctx, dc)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load zones for %s: %w", provider, err)
-		}
-		zonesByProvider[string(provider)] = zones
+	type zoneResult struct {
+		provider string
+		zones    []Zone
+		err      error
+	}
 
-		debugLog("ZONE", "", fmt.Sprintf("✅ Loaded %d zones for %s", len(zones), provider))
+	count := len(providerConfigs)
+	if count == 0 {
+		return zonesByProvider, nil
+	}
+
+	results := make(chan zoneResult, count)
+
+	for provider, dc := range providerConfigs {
+		go func(p ProviderType, d *DomainConfig) {
+			zones, err := loadZonesForDomainConfig(ctx, d)
+			results <- zoneResult{
+				provider: string(p),
+				zones:    zones,
+				err:      err,
+			}
+		}(provider, dc)
+	}
+
+	for i := 0; i < count; i++ {
+		r := <-results
+		if r.err != nil {
+			return nil, fmt.Errorf("failed to load zones for %s: %w", r.provider, r.err)
+		}
+
+		zonesByProvider[r.provider] = r.zones
+		debugLog("ZONE", "", fmt.Sprintf("✅ Loaded %d zones for %s", len(r.zones), r.provider))
 	}
 
 	return zonesByProvider, nil
@@ -332,8 +361,10 @@ func calculateRetryDelay(attempt int, isServerError bool) time.Duration {
 }
 
 func sleepOrCancel(ctx context.Context, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
 	select {
-	case <-time.After(d):
+	case <-t.C:
 		return true
 	case <-ctx.Done():
 		return false

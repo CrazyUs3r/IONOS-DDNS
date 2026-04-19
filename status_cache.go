@@ -32,10 +32,11 @@ func updateStatusFile(fqdn, ipv4, ipv6, provider string) {
 
 	h := domains[fqdn]
 	h.Provider = provider
-	h.LastChanged = time.Now().Local().Format("02.01.2006 15:04:05")
+	now := time.Now().Local().Format("02.01.2006 15:04:05")
+	h.LastChanged = now
 
 	newEntry := IPEntry{
-		Time: time.Now().Local().Format("02.01.2006 15:04:05"),
+		Time: now,
 		IPv4: ipv4,
 		IPv6: ipv6,
 	}

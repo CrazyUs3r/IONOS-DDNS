@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"time"
 )
 
@@ -53,7 +54,9 @@ func (m *APIMetrics) RecordError(method string, statusCode int, err error, durat
 	hour := now.Hour()
 	if hour >= 0 && hour < 24 {
 		m.HourlyStats[hour]++
-		m.updateLatency(duration, hour)
+		if duration > 0 && statusCode > 0 {
+			m.updateLatency(duration, hour)
+		}
 	}
 
 	switch {
@@ -162,21 +165,21 @@ func (m *APIMetrics) calcPercentile(p float64) time.Duration {
 
 func (m *APIMetrics) cleanupOldTimestamps(now time.Time) {
 	threshold := now.Add(-1 * time.Hour)
-	validIdx := len(m.RequestTimestamps)
-	for i, t := range m.RequestTimestamps {
-		if t.After(threshold) {
-			validIdx = i
-			break
-		}
-	}
 
-	if validIdx > 0 && validIdx <= len(m.RequestTimestamps) {
-		m.RequestTimestamps = append([]time.Time(nil), m.RequestTimestamps[validIdx:]...)
+	validIdx := sort.Search(len(m.RequestTimestamps), func(i int) bool {
+		return m.RequestTimestamps[i].After(threshold)
+	})
+
+	if validIdx > 0 {
+		copy(m.RequestTimestamps, m.RequestTimestamps[validIdx:])
+		m.RequestTimestamps = m.RequestTimestamps[:len(m.RequestTimestamps)-validIdx]
 	}
 
 	const maxTimestamps = 3600
 	if len(m.RequestTimestamps) > maxTimestamps {
-		m.RequestTimestamps = append([]time.Time(nil), m.RequestTimestamps[len(m.RequestTimestamps)-maxTimestamps:]...)
+		cutIdx := len(m.RequestTimestamps) - maxTimestamps
+		copy(m.RequestTimestamps, m.RequestTimestamps[cutIdx:])
+		m.RequestTimestamps = m.RequestTimestamps[:maxTimestamps]
 	}
 }
 

@@ -82,9 +82,14 @@ func loadZoneCache(ctx context.Context, zonesByProvider map[string][]Zone) (*Zon
 		}
 
 		var dc *DomainConfig
-		for i := range cfg.DomainConfigs {
-			if cfg.DomainConfigs[i].Provider == provider {
-				dc = &cfg.DomainConfigs[i]
+		cfgMu.RLock()
+		domainConfigs := make([]DomainConfig, len(cfg.DomainConfigs))
+		copy(domainConfigs, cfg.DomainConfigs)
+		cfgMu.RUnlock()
+
+		for i := range domainConfigs {
+			if domainConfigs[i].Provider == provider {
+				dc = &domainConfigs[i]
 				break
 			}
 		}
@@ -95,7 +100,7 @@ func loadZoneCache(ctx context.Context, zonesByProvider map[string][]Zone) (*Zon
 
 		for _, z := range zones {
 			needed := false
-			for _, configDc := range cfg.DomainConfigs {
+			for _, configDc := range domainConfigs {
 				if configDc.Provider != provider {
 					continue
 				}
@@ -161,8 +166,15 @@ func loadZoneCache(ctx context.Context, zonesByProvider map[string][]Zone) (*Zon
 		log(LogContext{
 			Level:   LogWarn,
 			Action:  ActionError,
-			Message: fmt.Sprintf(T.RecordCacheErrorZone, len(cacheErrors), strings.Join(cacheErrors, "; ")),
-		})
+			Message: fmt.Sprintf(T.RecordCacheErrorZone, len(cacheErrors), strings.Join(cacheErrors, "; "))})
+		totalZones := 0
+		for _, zones := range zonesByProvider {
+			totalZones += len(zones)
+		}
+		if len(cacheErrors) >= totalZones {
+			return nil, fmt.Errorf("all zone record loads failed: %s",
+				strings.Join(cacheErrors, "; "))
+		}
 	}
 
 	return cache, nil

@@ -531,18 +531,17 @@ func updateIPv64DNS(
 	}
 
 	ipv64Mutex.Lock()
-	if time.Since(lastIPv64Update) < 12*time.Second {
-		wait := 12*time.Second - time.Since(lastIPv64Update)
-		ipv64Mutex.Unlock()
-
-		if !sleepOrCancel(ctx, wait) {
-			return false, ctx.Err()
-		}
-
-		ipv64Mutex.Lock()
+	wait := time.Duration(0)
+	if since := time.Since(lastIPv64Update); since < 12*time.Second {
+		wait = 12*time.Second - since
 	}
 	lastIPv64Update = time.Now().Local()
 	ipv64Mutex.Unlock()
+	if wait > 0 {
+		if !sleepOrCancel(ctx, wait) {
+			return false, ctx.Err()
+		}
+	}
 
 	if cfg.DryRun {
 		msg := ""

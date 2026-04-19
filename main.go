@@ -35,13 +35,7 @@ func run() int {
 				_ = apiMetrics.SaveToFile(metricsPersistPath)
 			}
 
-			select {
-			case _, ok := <-logWriteQueue:
-				if ok {
-					close(logWriteQueue)
-				}
-			default:
-			}
+			flushLogQueue(2 * time.Second)
 		}
 	}()
 
@@ -161,6 +155,7 @@ func run() int {
 		}
 	}
 
+	cfgMu.RLock()
 	cfg = Config{
 		Interval:        DefaultInterval,
 		IPMode:          "BOTH",
@@ -171,8 +166,9 @@ func run() int {
 		MaxLogLines:     DefaultMaxLogLines,
 		MaxAPIRetries:   DefaultMaxAPIRetries,
 		Lang:            "de",
-		DomainConfigs:   []DomainConfig{{FQDN: "clear", Provider: "IPv64", IPv64Token: "clear"}},
+		DomainConfigs:   []DomainConfig{{FQDN: "****clear****", Provider: "IPv64", IPv64Token: "****clear****"}},
 	}
+	cfgMu.RUnlock()
 
 	configLoaded := false
 
@@ -366,9 +362,13 @@ func run() int {
 			return 0
 
 		case <-ticker.C:
-			if cfg.Interval != currentInterval {
+			cfgMu.RLock()
+			interval := cfg.Interval
+			maxLogLines := cfg.MaxLogLines
+			cfgMu.RUnlock()
+			if interval != currentInterval {
 				ticker.Stop()
-				currentInterval = cfg.Interval
+				currentInterval = interval
 				ticker = time.NewTicker(time.Duration(currentInterval) * time.Second)
 				debugLog("SCHEDULER", "", fmt.Sprintf(t(T.SchedulerIntervalChanged, "Interval changed → new ticker: %ds"), currentInterval))
 			}
@@ -378,7 +378,7 @@ func run() int {
 			if activeUpdates.Load() > 0 {
 				debugLog("SCHEDULER", "", t(T.SchedulerPreviousUpdateRunning, "⚠️ Previous update is still running. Skipping this cycle..."))
 
-				limit := cfg.MaxLogLines
+				limit := maxLogLines
 				if cfg.Interval > 500 && limit == DefaultMaxLogLines {
 					limit = 1000
 				}

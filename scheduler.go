@@ -3,7 +3,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 )
 
@@ -32,22 +34,64 @@ func runUpdate(firstRun bool) {
 	ctx, cancel := context.WithTimeout(shutdownCtx, totalTimeout)
 	defer cancel()
 
+	ipCtx, ipCancel := context.WithTimeout(shutdownCtx, 60*time.Second)
+	defer ipCancel()
+
 	type ipPair struct{ v4, v6 string }
-	ips, err := doSingleflight(ctx, &ipLoadGroup, "current_ips", func() (ipPair, error) {
-		v4, v6, err := fetchCurrentIPs(ctx)
+	ips, err := doSingleflight(ipCtx, &ipLoadGroup, "current_ips", func() (ipPair, error) {
+		v4, v6, err := fetchCurrentIPs(ipCtx)
 		return ipPair{v4: v4, v6: v6}, err
 	})
 
+	var currentIPv4, currentIPv6 string
+
 	if err != nil {
-		lastOk.Store(false)
-		log(LogContext{
-			Level:   LogError,
-			Action:  ActionError,
-			Message: fmt.Sprintf(T.IPFetchFailed, err),
-		})
-		return
+		if firstRun {
+			fallbackV4, fallbackV6 := loadLastKnownIPs()
+			if fallbackV4 != "" || fallbackV6 != "" {
+				log(LogContext{
+					Level:   LogWarn,
+					Action:  ActionError,
+					Message: fmt.Sprintf(T.IPFetchFailed, err) + " – nutze letzten bekannten Stand als Fallback",
+				})
+				currentIPv4, currentIPv6 = fallbackV4, fallbackV6
+			} else {
+				lastOk.Store(false)
+				log(LogContext{
+					Level:   LogError,
+					Action:  ActionError,
+					Message: fmt.Sprintf(T.IPFetchFailed, err),
+				})
+				return
+			}
+		} else {
+			lastOk.Store(false)
+			log(LogContext{
+				Level:   LogError,
+				Action:  ActionError,
+				Message: fmt.Sprintf(T.IPFetchFailed, err),
+			})
+			return
+		}
+	} else {
+		currentIPv4, currentIPv6 = ips.v4, ips.v6
+
+		lastV4, lastV6 := loadLastKnownIPs()
+		if lastV4 != "" && currentIPv4 != "" && lastV4 != currentIPv4 {
+			log(LogContext{
+				Level:   LogWarn,
+				Action:  ActionUpdate,
+				Message: fmt.Sprintf("🔄 IPv4 geändert: %s → %s", lastV4, currentIPv4),
+			})
+		}
+		if lastV6 != "" && currentIPv6 != "" && lastV6 != currentIPv6 {
+			log(LogContext{
+				Level:   LogWarn,
+				Action:  ActionUpdate,
+				Message: fmt.Sprintf("🔄 IPv6 geändert: %s → %s", lastV6, currentIPv6),
+			})
+		}
 	}
-	currentIPv4, currentIPv6 := ips.v4, ips.v6
 
 	zonesByProvider, err := loadZonesWithCache(ctx, forced)
 	if err != nil {
@@ -55,7 +99,7 @@ func runUpdate(firstRun bool) {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionError,
-			Message: T.NoZones,
+			Message: t(T.NoZoneFound, "No zone found"),
 			Error:   fmt.Errorf("%s: %w", T.ZoneLoadingFailed, err),
 		})
 		return
@@ -106,6 +150,38 @@ func runUpdate(firstRun bool) {
 	successCount := processDomains(ctx, zonesByProvider, cache, currentIPv4, currentIPv6)
 	debugLog("SCHEDULER", "", fmt.Sprintf(T.SchedulerCompleted, successCount))
 	runCleanupIfNeeded(ctx, zonesByProvider, cache)
+}
+
+func loadLastKnownIPs() (ipv4, ipv6 string) {
+	statusMutex.Lock()
+	defer statusMutex.Unlock()
+
+	b, err := os.ReadFile(updatePath)
+	if err != nil {
+		return "", ""
+	}
+
+	var domains map[string]DomainHistory
+	if err := json.Unmarshal(b, &domains); err != nil {
+		return "", ""
+	}
+
+	for _, h := range domains {
+		if len(h.IPs) == 0 {
+			continue
+		}
+		latest := h.IPs[len(h.IPs)-1]
+		if latest.IPv4 != "" {
+			ipv4 = latest.IPv4
+		}
+		if latest.IPv6 != "" {
+			ipv6 = latest.IPv6
+		}
+		if ipv4 != "" && ipv6 != "" {
+			break
+		}
+	}
+	return ipv4, ipv6
 }
 
 // ============================================================================
@@ -259,21 +335,23 @@ func saveCachesToDisk(zonesByProvider map[string][]Zone, cache *ZoneRecordCache)
 	diskPersistMutex.Unlock()
 
 	cacheWriteMutex.Lock()
-	defer cacheWriteMutex.Unlock()
+	type saveJob struct {
+		provider ProviderType
+		zones    []Zone
+	}
+	jobs := make([]saveJob, 0, len(zonesByProvider))
+	for p, z := range zonesByProvider {
+		jobs = append(jobs, saveJob{ProviderType(p), z})
+	}
+	cacheWriteMutex.Unlock()
 
 	savedZone := false
 	savedRecord := false
 
-	for providerStr, zones := range zonesByProvider {
-		if len(zones) == 0 || cache == nil {
-			continue
-		}
-
-		pType := ProviderType(providerStr)
-
-		switch pType {
+	for _, job := range jobs {
+		switch job.provider {
 		case ProviderIONOS:
-			if err := saveIONOSCacheToFile(zones, cache); err != nil {
+			if err := saveIONOSCacheToFile(job.zones, cache); err != nil {
 				debugLog("CACHE", "", fmt.Sprintf(T.IonosCacheSaveFailed, err))
 			} else {
 				savedZone = true
@@ -281,7 +359,7 @@ func saveCachesToDisk(zonesByProvider map[string][]Zone, cache *ZoneRecordCache)
 			}
 
 		case ProviderCloudflare:
-			if err := saveCloudflareCacheToFile(zones, cache); err != nil {
+			if err := saveCloudflareCacheToFile(job.zones, cache); err != nil {
 				debugLog("CACHE", "", fmt.Sprintf(T.CloudflareCacheSaveFailed, err))
 			} else {
 				savedZone = true
@@ -312,7 +390,7 @@ func saveCachesToDisk(zonesByProvider map[string][]Zone, cache *ZoneRecordCache)
 }
 
 // ============================================================================
-// CLEANUP NUR WENN NÖTIG
+// CLEANUP
 // ============================================================================
 func runCleanupIfNeeded(ctx context.Context, zonesByProvider map[string][]Zone, cache *ZoneRecordCache) {
 	lastNano := lastCleanupNano.Load()

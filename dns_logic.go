@@ -66,11 +66,6 @@ domainLoop:
 				<-workerSemaphore
 			}()
 
-			if ctx.Err() != nil {
-				debugLog("WORKER", domainConfig.FQDN, t(T.ContextExpired, "Timeout (Context Expired)"))
-				return
-			}
-
 			zones, exists := zonesByProvider[string(domainConfig.Provider)]
 			if !exists || len(zones) == 0 {
 				debugLog("DNS-LOGIC", domainConfig.FQDN, T.NoZoneFoundForDomain)
