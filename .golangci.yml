@@ -5,7 +5,7 @@ run:
   tests: true
 
 linters:
-  disable-all: false
+  disable-all: true
   enable:
     - govet
     - staticcheck
@@ -19,11 +19,7 @@ linters:
 linters-settings:
   errcheck:
     exclude-functions:
-      - (net/http.ResponseWriter).Write
-      - (*encoding/json.Encoder).Encode
-      - fmt.Fprint
-      - fmt.Fprintf
-      - fmt.Fprintln
+
       
   revive:
     ignore-generated-header: true
