@@ -8,7 +8,7 @@ const reconnectDelayMax = 10000;
 let tempDomainConfigs = [];
 
 if (typeof initialConfig !== 'undefined' && initialConfig !== null) {
-	tempDomainConfigs = Array.isArray(initialConfig) ? [...initialConfig] : [];
+	tempDomainConfigs = (Array.isArray(initialConfig) ? initialConfig : []).map(d => ({...d}));
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -38,7 +38,14 @@ document.addEventListener('DOMContentLoaded', () => {
 			});
 		}
 	});
-
+	document.addEventListener('visibilitychange', () => {
+		if (document.visibilityState === 'visible') {
+			if (!ws || ws.readyState === WebSocket.CLOSED) {
+				reconnectDelay = 1000;
+				connectWS();
+			}
+		}
+	});
 	startClock();
 	connectWS();
 	document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSettings(); });
@@ -183,7 +190,7 @@ function showToast(message, type = 'success') {
 	if(!toast) return;
 	toast.textContent = message;
 	let borderColor = 'var(--success)';
-	let duration = 3000;
+	let duration = 4000;
 	if(type === 'error') { borderColor = 'var(--error)'; duration = 5000; }
 	else if(type === 'warning') { borderColor = '#facc15'; duration = 4000; }
 	else if(type === 'info') { borderColor = '#3b82f6'; duration = 2500; }
@@ -238,7 +245,11 @@ function exportData() {
 		const url = URL.createObjectURL(blob);
 		const a = document.createElement('a');
 		a.href = url; a.download = 'dyndns-export-' + new Date().toISOString().split('T')[0] + '.json';
-		a.click(); showToast('✓ Export gestartet');
+		document.body.appendChild(a);
+		a.click(); 
+		document.body.removeChild(a);
+		URL.revokeObjectURL(url);
+		showToast('✓ Export gestartet');
 	}).catch(() => showToast('Export fehlgeschlagen', 'error'));
 }
 

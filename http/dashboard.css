@@ -163,7 +163,8 @@ details.card[open] > summary::after {
 	box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 	transform: translateX(400px);
 	transition: transform 0.3s;
-	z-index: 1000;
+	z-index: 3000;
+	pointer-events: auto;
 	max-width: 300px;
 }
 
