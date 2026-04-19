@@ -5,7 +5,7 @@ run:
   tests: true
 
 linters:
-  disable-all: true
+  disable-all: false
   enable:
     - govet
     - staticcheck
