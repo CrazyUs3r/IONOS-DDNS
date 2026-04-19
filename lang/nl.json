@@ -3,7 +3,7 @@
   "addresses_not_readable": "Adressen niet leesbaar",
   "all_ip_endpoints_failed": "Alle IP-endpoints zijn mislukt",
   "all_updates_finished": "✅ Alle updates voltooid",
-  "api_and_disk_cache_failed": "API en schijfcache zijn mislukt: %w",
+  "api_and_disk_cache_failed": "API en schijfcache zijn mislukt",
   "api_call": "API-aanroep",
   "api_performance": "API-prestaties",
   "attempt": "Poging",

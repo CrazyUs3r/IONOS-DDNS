@@ -3,7 +3,7 @@
   "addresses_not_readable": "Adresser ikke læsbare",
   "all_ip_endpoints_failed": "Alle IP-endpoints fejlede",
   "all_updates_finished": "✅ Alle opdateringer afsluttet",
-  "api_and_disk_cache_failed": "API og disk-cache fejlede: %w",
+  "api_and_disk_cache_failed": "API og disk-cache fejlede",
   "api_call": "API-kald",
   "api_performance": "API-ydeevne",
   "attempt": "Forsøg",

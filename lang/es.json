@@ -3,7 +3,7 @@
   "addresses_not_readable": "Direcciones no legibles",
   "all_ip_endpoints_failed": "Todos los endpoints IP fallaron",
   "all_updates_finished": "✅ Todas las actualizaciones finalizadas",
-  "api_and_disk_cache_failed": "La API y la caché en disco fallaron: %w",
+  "api_and_disk_cache_failed": "La API y la caché en disco fallaron",
   "api_call": "Llamada API",
   "api_performance": "Rendimiento de API",
   "attempt": "Intento",

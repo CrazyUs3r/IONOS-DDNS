@@ -3,7 +3,7 @@
   "addresses_not_readable": "Adresy nejsou čitelné",
   "all_ip_endpoints_failed": "Všechny IP endpointy selhaly",
   "all_updates_finished": "✅ Všechny aktualizace dokončeny",
-  "api_and_disk_cache_failed": "API i disková cache selhaly: %w",
+  "api_and_disk_cache_failed": "API i disková cache selhaly",
   "api_call": "API volání",
   "api_performance": "Výkon API",
   "attempt": "Pokus",
