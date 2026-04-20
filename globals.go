@@ -23,6 +23,7 @@ import (
 var (
 	cfg               Config
 	T                 Phrases
+	startTime         = time.Now()
 	configDir         string
 	langDir           string
 	logPath           string
@@ -505,26 +506,26 @@ type Phrases struct {
 	CFAttempt, IPv64Attempt, IonosAttempt string
 
 	// Settings Modal
-	SettingsTitle, SettingsSecurity, SettingsTriggerToken               string
-	SettingsTokenPlaceholder, SettingsTokenSave                         string
-	SettingsSystem, SettingsIPMode, SettingsInterval                    string
-	SettingsHealthPort, SettingsIface, SettingsIfaceHint                string
-	SettingsDNS, SettingsMaxLog, SettingsMaxRetries                     string
-	SettingsMaxConcurrent, SettingsHourlyLimit                          string
-	SettingsLanguage, SettingsDryRun, SettingsDryRunHint                string
-	SettingsCheckboxActive, SettingsCheckboxDeactive, SettingsAddDomain string
-	SettingsDomains, SettingsAddBtn, SettingsCFOr                       string
-	SettingsNotify, SettingsNotifyEnabled, SettingsNotifyOn             string
-	SettingsNotifyEvents, SettingsTGToken, SettingsTGChatID             string
-	SettingsTokenUnchanged, SettingsDNSHint                             string
-	SettingsSaveBtn, SettingsSaveHint, SettingsRestartHint              string
-	SettingsDebugVerboseHint, SettingsDebugHTTPHint                     string
-	SettingsIfacePlaceholder                                            string
-	SettingsAPIPrefix, SettingsAPISecret                                string
-	SettingsCFEmail, SettingsCFGlobalKey                                string
-	SettingsIPv64Token, SettingsTelegramHeading                         string
-	SettingsGotifyHeading, SettingsDomainPlaceholder                    string
-	SettingsCFTokenHint, SettingsGotifyURL, SettingsGotifyToken         string
+	SettingsTitle, SettingsSecurity, SettingsTriggerToken                    string
+	SettingsTokenPlaceholder, SettingsTokenSave                              string
+	SettingsSystem, SettingsIPMode, SettingsInterval                         string
+	SettingsHealthPort, SettingsIface, SettingsIfaceHint                     string
+	SettingsDNS, SettingsMaxLog, SettingsMaxRetries                          string
+	SettingsMaxConcurrent, SettingsHourlyLimit                               string
+	SettingsLanguage, SettingsDryRun, SettingsDryRunHint                     string
+	SettingsCheckboxActive, SettingsCheckboxDeactive, SettingsAddDomain      string
+	SettingsDomains, SettingsAddBtn, SettingsCFOr                            string
+	SettingsNotify, SettingsNotifyEnabled, SettingsNotifyOn                  string
+	SettingsNotifyEvents, SettingsTGToken, SettingsTGChatID                  string
+	SettingsTokenUnchanged, SettingsDNSHint                                  string
+	SettingsSaveBtn, SettingsSaveHint, SettingsRestartHint                   string
+	SettingsDebugVerboseHint, SettingsDebugHTTPHint                          string
+	SettingsIfacePlaceholder, SettingsAPIPrefix, SettingsAPISecret           string
+	SettingsCFEmail, SettingsCFGlobalKey                                     string
+	SettingsIPv64Token, SettingsTelegramHeading                              string
+	SettingsGotifyHeading, SettingsDomainPlaceholder, SettingsWebhookHeading string
+	SettingsCFTokenHint, SettingsGotifyURL, SettingsGotifyToken              string
+	SettingsIPv4Endpoints, SettingsIPv6Endpoints                             string
 
 	// Domain display
 	DotTitleNoUpdate, DotTitleChanged, DotTitleLast string
@@ -664,7 +665,13 @@ type Config struct {
 			URL   string `json:"url"`
 			Token string `json:"token"`
 		} `json:"gotify"`
+		Webhook struct {
+			URL    string `json:"url"`
+			Secret string `json:"secret"`
+		} `json:"webhook"`
 	} `json:"notifications"`
+	IPv4Endpoints []string `json:"ipv4_endpoints,omitempty"`
+	IPv6Endpoints []string `json:"ipv6_endpoints,omitempty"`
 }
 
 type Zone struct {

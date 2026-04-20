@@ -118,9 +118,19 @@ func getPublicIPFromAny(parent context.Context, urls []string, want IPVersion) (
 		cancel()
 
 		if err == nil {
+			broadcastUpdate("ip_check_result", map[string]interface{}{
+				"url":  u,
+				"ok":   true,
+				"want": fmt.Sprintf("%d", int(want)),
+			})
 			return ip, nil
 		}
 
+		broadcastUpdate("ip_check_result", map[string]interface{}{
+			"url":  u,
+			"ok":   false,
+			"want": fmt.Sprintf("%d", int(want)),
+		})
 		lastErr = err
 		debugLog("IP-CHECK", "", fmt.Sprintf(T.FallbackFailed, u, err))
 	}
@@ -177,7 +187,7 @@ func getIPv6(ctx context.Context) (string, error) {
 	}
 	ipLog(T.IPv6PublicFallback)
 	debugLog("IP-CHECK", "", T.IPv6FallbackEndpoints)
-	return getPublicIPFromAny(ctx, DefaultIPv6Endpoints, IPV6)
+	return getPublicIPFromAny(ctx, activeIPv6Endpoints(), IPV6)
 }
 
 func fetchCurrentIPs(ctx context.Context) (ipv4, ipv6 string, err error) {
@@ -190,7 +200,7 @@ func fetchCurrentIPs(ctx context.Context) (ipv4, ipv6 string, err error) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			resV4, errV4 = getPublicIPFromAny(ctx, DefaultIPv4Endpoints, IPV4)
+			resV4, errV4 = getPublicIPFromAny(ctx, activeIPv4Endpoints(), IPV4)
 			if errV4 != nil {
 				log(LogContext{Level: LogError, Action: ActionError, Message: T.IPv4CheckFailed, Error: errV4})
 			}
@@ -241,4 +251,24 @@ func fetchCurrentIPs(ctx context.Context) (ipv4, ipv6 string, err error) {
 	}
 
 	return ipv4, ipv6, nil
+}
+
+func activeIPv4Endpoints() []string {
+	cfgMu.RLock()
+	eps := cfg.IPv4Endpoints
+	cfgMu.RUnlock()
+	if len(eps) > 0 {
+		return eps
+	}
+	return DefaultIPv4Endpoints
+}
+
+func activeIPv6Endpoints() []string {
+	cfgMu.RLock()
+	eps := cfg.IPv6Endpoints
+	cfgMu.RUnlock()
+	if len(eps) > 0 {
+		return eps
+	}
+	return DefaultIPv6Endpoints
 }

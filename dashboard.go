@@ -71,24 +71,24 @@ func generateSVGChart(data [24]int) string {
 	timeLabels := labelsBuilder.String()
 
 	return fmt.Sprintf(`
-	<details class="card">
-		<summary>📈 %s</summary>
-		<div class="card-content" style="position:relative; padding-left:40px; margin-top:15px; padding-right:10px;">
-			<div style="position:absolute; left:0; top:0; height:60px; font-size:0.6rem; color:gray; text-align:right; width:35px; pointer-events:none;">
-				<div style="position:absolute; top:0; right:5px; transform: translateY(-50%%);">%.0f</div>
-				<div style="position:absolute; top:30px; right:5px; transform: translateY(-50%%);">%.0f</div>
-				<div style="position:absolute; top:60px; right:5px; transform: translateY(-50%%);">0</div>
-			</div>
-			<svg viewBox="0 0 300 60" preserveAspectRatio="none" style="width:100%%; height:60px; display:block; border-bottom: 1px solid rgba(255,255,255,0.1);">
-				<path d="%s L 300,60 L 0,60 Z" fill="rgba(56,189,248,0.1)"/>
-				<path d="%s" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/>
-			</svg>
+		<details class="card">
+			<summary>📈 %s</summary>
+			<div class="card-content chart-wrap pr-10">
+				<div class="chart-y-axis req">
+					<div class="chart-y-label top">%.0f</div>
+					<div class="chart-y-label middle">%.0f</div>
+					<div class="chart-y-label bottom">0</div>
+				</div>
+				<svg viewBox="0 0 300 60" preserveAspectRatio="none" class="chart-svg">
+					<path d="%s L 300,60 L 0,60 Z" fill="rgba(56,189,248,0.1)"/>
+					<path d="%s" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/>
+				</svg>
 
-			<div style="display:flex; justify-content:space-between; font-size:0.6rem; margin-top:8px; color:gray;">
-				%s
+				<div class="chart-x-labels">
+					%s
+				</div>
 			</div>
-		</div>
-	</details>`, T.RequestHistory, renderMax, renderMax/2, pathData, pathData, timeLabels)
+		</details>`, T.RequestHistory, renderMax, renderMax/2, pathData, pathData, timeLabels)
 }
 
 func generateLatencyChart(data [24]time.Duration) string {
@@ -129,7 +129,7 @@ func generateLatencyChart(data [24]time.Duration) string {
 	for _, off := range offsets {
 		h := now.Add(-time.Duration(off) * time.Hour).Hour()
 		if off == 0 {
-			fmt.Fprintf(&labelsBuilder, `<span style="color:#e5e7eb;">%02dh</span>`, h)
+			fmt.Fprintf(&labelsBuilder, `<span class="current">%02dh</span>`, h)
 		} else {
 			fmt.Fprintf(&labelsBuilder, "<span>%02dh</span>", h)
 		}
@@ -137,24 +137,24 @@ func generateLatencyChart(data [24]time.Duration) string {
 	timeLabels := labelsBuilder.String()
 
 	return fmt.Sprintf(`
-	<details class="card">
-		<summary>⚡ %s</summary>
-		<div class="card-content" style="position:relative; padding-left:40px; margin-top:15px; padding-right:5px;">
-			<div style="position:absolute; left:0; top:0; height:60px; font-size:0.55rem; color:gray; text-align:right; width:35px; pointer-events:none; font-family:monospace;">
-				<div style="position:absolute; top:0; right:5px; transform:translateY(-50%%);">%.0fms</div>
-				<div style="position:absolute; top:30px; right:5px; transform:translateY(-50%%);">%.0fms</div>
-				<div style="position:absolute; top:60px; right:5px; transform:translateY(-50%%);">0</div>
-			</div>
-			<svg viewBox="0 0 300 60" preserveAspectRatio="none" style="width:100%%; height:60px; display:block; border-bottom: 1px solid rgba(255,255,255,0.1); overflow:visible;">
-				<path d="%s L 300,60 L 0,60 Z" fill="rgba(139,92,246,0.15)"/>
-				<path d="%s" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-			</svg>
+		<details class="card">
+			<summary>⚡ %s</summary>
+			<div class="card-content chart-wrap pr-5">
+				<div class="chart-y-axis latency">
+					<div class="chart-y-label top">%.0fms</div>
+					<div class="chart-y-label middle">%.0fms</div>
+					<div class="chart-y-label bottom">0</div>
+				</div>
+				<svg viewBox="0 0 300 60" preserveAspectRatio="none" class="chart-svg chart-svg-overflow">
+					<path d="%s L 300,60 L 0,60 Z" fill="rgba(139,92,246,0.15)"/>
+					<path d="%s" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+				</svg>
 
-			<div style="display:flex; justify-content:space-between; font-size:0.6rem; margin-top:8px; color:gray;">
-				%s
+				<div class="chart-x-labels">
+					%s
+				</div>
 			</div>
-		</div>
-	</details>`, T.LatencyHistory, renderMax, renderMax/2, pathData, pathData, timeLabels)
+		</details>`, T.LatencyHistory, renderMax, renderMax/2, pathData, pathData, timeLabels)
 }
 
 func toInt24(v any) ([24]int, bool) {
@@ -247,8 +247,6 @@ func toDur24(v any) ([24]time.Duration, bool) {
 // DASHBOARD HTTP HANDLER
 // ============================================================================
 func buildSettingsModal(c Config) string {
-	dnsStr := strings.Join(c.DNSServers, ", ")
-
 	collapsibleSection := func(title, body string, open bool) string {
 		openAttr := ""
 		if open {
@@ -307,19 +305,17 @@ func buildSettingsModal(c Config) string {
 			{"CLEANUP", T.NotifyEventCleanupLabel, T.NotifyEventCleanupDesc},
 		}
 		var out strings.Builder
-		out.WriteString(`<div style="display:flex;flex-direction:column;gap:6px;margin-top:4px;">`)
+		out.WriteString(`<div class="notify-events-list">`)
 		for _, ev := range events {
 			chk := ""
 			if active[ev.code] {
 				chk = ` checked`
 			}
-			fmt.Fprintf(&out, `<label style="display:flex;align-items:center;gap:10px;padding:6px 8px;`+
-				`background:rgba(255,255,255,0.03);border-radius:6px;cursor:pointer;">`+
-				`<input type="checkbox" name="notify-event" value="%s"%s `+
-				`style="width:16px;height:16px;cursor:pointer;flex-shrink:0;">`+
-				`<span style="display:flex;flex-direction:column;gap:1px;">`+
-				`<span style="font-size:0.85rem;font-weight:600;">%s</span>`+
-				`<span style="font-size:0.7rem;opacity:0.5;">%s</span>`+
+			fmt.Fprintf(&out, `<label class="notify-event-item">`+
+				`<input type="checkbox" name="notify-event" value="%s"%s>`+
+				`<span class="notify-event-text">`+
+				`<span class="notify-event-title">%s</span>`+
+				`<span class="notify-event-desc">%s</span>`+
 				`</span></label>`,
 				ev.code, chk, ev.label, ev.desc)
 		}
@@ -328,11 +324,11 @@ func buildSettingsModal(c Config) string {
 	}
 
 	securitySection :=
-		`<div class="s-row" style="flex-direction:column;align-items:stretch;gap:8px;">` +
+		`<div class="s-row s-row-stack s-gap-8">` +
 			`<span class="s-label">` + T.SettingsTriggerToken + `</span>` +
-			`<div style="position:relative;width:100%;">` +
-			`<input type="password" id="s-token" class="s-input" placeholder="` + T.SettingsTokenPlaceholder + `" autocomplete="off" style="padding-right:40px;">` +
-			`<button type="button" onclick="togglePassword('s-token', this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:0;font-size:16px;line-height:1;">👁️</button>` +
+			`<div class="input-with-action">` +
+			`<input type="password" id="s-token" class="s-input" placeholder="` + T.SettingsTokenPlaceholder + `" autocomplete="off">` +
+			`<button type="button" class="input-action-btn" onclick="togglePassword('s-token', this)">👁️</button>` +
 			`</div>` +
 			`<button class="s-btn" onclick="saveToken()">` + T.SettingsTokenSave + `</button>` +
 			`</div>`
@@ -340,41 +336,53 @@ func buildSettingsModal(c Config) string {
 	systemSection :=
 		`<div class="s-row">` +
 			`<span class="s-label">` + T.SettingsIPMode + `</span>` +
-			`<select id="cfg-ip-mode" class="s-input" style="width:auto;min-width:110px;">` +
+			`<select id="cfg-ip-mode" class="s-input s-select-auto-sm">` +
 			ipModeOptions(c.IPMode) +
 			`</select>` +
 			`</div>` +
 
 			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsInterval+`</span>`+
-				`<input type="number" id="cfg-interval" class="s-input" style="width:90px;text-align:right;" min="30" max="86400" value="%d"></div>`, c.Interval) +
+				`<input type="number" id="cfg-interval" class="s-input s-input-sm-right" min="30" max="86400" value="%d"></div>`, c.Interval) +
 
 			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsHealthPort+`</span>`+
-				`<input type="text" id="cfg-health-port" class="s-input" style="width:90px;text-align:right;" value="%s"></div>`, html.EscapeString(c.HealthPort)) +
+				`<input type="text" id="cfg-health-port" class="s-input s-input-sm-right" value="%s"></div>`, html.EscapeString(c.HealthPort)) +
 
-			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsIface+` <small style="opacity:.5">`+T.SettingsIfaceHint+`</small></span>`+
-				`<input type="text" id="cfg-iface" class="s-input" style="width:150px;" placeholder="`+T.SettingsIfacePlaceholder+`" value="%s"></div>`, html.EscapeString(c.IfaceName)) +
+			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsIface+` <small class="s-label-hint-inline">`+T.SettingsIfaceHint+`</small></span>`+
+				`<input type="text" id="cfg-iface" class="s-input s-input-md" placeholder="`+T.SettingsIfacePlaceholder+`" value="%s"></div>`, html.EscapeString(c.IfaceName)) +
 
-			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsDNS+` <small style="opacity:.5">(`+T.SettingsDNSHint+`)</small></span>`+
-				`<input type="text" id="cfg-dns" class="s-input" style="width:220px;" placeholder="1.1.1.1:53, 8.8.8.8:53" value="%s"></div>`, html.EscapeString(dnsStr)) +
+			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsDNS+` <small class="s-label-hint-inline">(`+T.SettingsDNSHint+`)</small></span>`+
+				`<input type="text" id="cfg-dns" class="s-input s-input-lg" placeholder="1.1.1.1:53, 8.8.8.8:53" value="%s"></div>`,
+				html.EscapeString(strings.Join(c.DNSServers, ", ")),
+			) +
 
 			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsMaxLog+`</span>`+
-				`<input type="number" id="cfg-max-log" class="s-input" style="width:90px;text-align:right;" min="100" max="50000" value="%d"></div>`, c.MaxLogLines) +
+				`<input type="number" id="cfg-max-log" class="s-input s-input-sm-right" min="100" max="50000" value="%d"></div>`, c.MaxLogLines) +
 
 			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsMaxRetries+`</span>`+
-				`<input type="number" id="cfg-max-retries" class="s-input" style="width:90px;text-align:right;" min="0" max="20" value="%d"></div>`, c.MaxAPIRetries) +
+				`<input type="number" id="cfg-max-retries" class="s-input s-input-sm-right" min="0" max="20" value="%d"></div>`, c.MaxAPIRetries) +
 
 			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsMaxConcurrent+`</span>`+
-				`<input type="number" id="cfg-max-concurrent" class="s-input" style="width:90px;text-align:right;" min="1" max="20" value="%d"></div>`, c.MaxConcurrent) +
+				`<input type="number" id="cfg-max-concurrent" class="s-input s-input-sm-right" min="1" max="20" value="%d"></div>`, c.MaxConcurrent) +
 
 			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsHourlyLimit+`</span>`+
-				`<input type="number" id="cfg-hourly-limit" class="s-input" style="width:90px;text-align:right;" min="100" max="100000" value="%d"></div>`, c.HourlyRateLimit) +
+				`<input type="number" id="cfg-hourly-limit" class="s-input s-input-sm-right" min="100" max="100000" value="%d"></div>`, c.HourlyRateLimit) +
+
+			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsIPv4Endpoints+`<small class="s-label-hint-block">(`+T.SettingsDNSHint+`)</small></span>`+
+				`<input type="text" id="cfg-ipv4_endpoints" class="s-input s-input-lg" placeholder="https://4.ident.me/, https://4.tnedi.me/" value="%s"></div>`,
+				html.EscapeString(strings.Join(c.IPv4Endpoints, ", ")),
+			) +
+
+			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsIPv6Endpoints+`<small class="s-label-hint-block">(`+T.SettingsDNSHint+`)</small></span>`+
+				`<input type="text" id="cfg-ipv6_endpoints" class="s-input s-input-lg" placeholder="https://6.ident.me/, https://6.tnedi.me/" value="%s"></div>`,
+				html.EscapeString(strings.Join(c.IPv6Endpoints, ", ")),
+			) +
 
 			`<div class="s-row"><span class="s-label">` + T.SettingsLanguage + `</span>` +
-			`<select id="cfg-lang" class="s-input" style="width:auto;min-width:160px;">` +
+			`<select id="cfg-lang" class="s-input s-select-auto-md">` +
 			buildDynamicLangOptions(c.Lang) +
 			`</select></div>` +
 
-			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsDryRun+`<small style="display:block; opacity:.5; line-height:1.2; word-wrap:break-word;">`+T.SettingsDryRunHint+`</small></span>`+
+			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsDryRun+`<small class="s-label-hint-block">`+T.SettingsDryRunHint+`</small></span>`+
 				`<label class="s-checkbox-container">`+
 				`<input type="checkbox" id="cfg-dry-run" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)"`+
 				` data-label-on="%s" data-label-off="%s"%s>`+
@@ -393,7 +401,7 @@ func buildSettingsModal(c Config) string {
 					return T.SettingsCheckboxDeactive
 				}()) +
 
-			fmt.Sprintf(`<div class="s-row"><span class="s-label">Debug-Modus <small style="display:block; opacity:.5; line-height:1.2; word-wrap:break-word;">`+T.SettingsDebugVerboseHint+`</small></span>`+
+			fmt.Sprintf(`<div class="s-row"><span class="s-label">Debug-Modus <small class="s-label-hint-block">`+T.SettingsDebugVerboseHint+`</small></span>`+
 				`<label class="s-checkbox-container">`+
 				`<input type="checkbox" id="cfg-debug" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)"`+
 				` data-label-on="%s" data-label-off="%s"%s>`+
@@ -412,7 +420,7 @@ func buildSettingsModal(c Config) string {
 					return T.SettingsCheckboxDeactive
 				}()) +
 
-			fmt.Sprintf(`<div class="s-row"><span class="s-label">Debug HTTP Raw <small style="display:block; opacity:.5; line-height:1.2; word-wrap:break-word;">`+T.SettingsDebugHTTPHint+`</small></span>`+
+			fmt.Sprintf(`<div class="s-row"><span class="s-label">Debug HTTP Raw <small class="s-label-hint-block">`+T.SettingsDebugHTTPHint+`</small></span>`+
 				`<label class="s-checkbox-container">`+
 				`<input type="checkbox" id="cfg-debug-http" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)"`+
 				` data-label-on="%s" data-label-off="%s"%s>`+
@@ -432,87 +440,105 @@ func buildSettingsModal(c Config) string {
 				}())
 
 	addDomainForm :=
-		`<div style="background:rgba(255,255,255,0.05);padding:12px;border-radius:8px;border:1px dashed var(--border);">` +
-			`<input type="text" id="new-domain-fqdn" class="s-input" placeholder="` + T.SettingsDomainPlaceholder + `" style="margin-bottom:8px;">` +
-			`<input type="number" id="new-domain-ttl" class="s-input" placeholder="TTL (z. B. 60)" min="1" step="1" style="margin-bottom:8px;">` +
-			`<select id="new-domain-provider" class="s-input" style="margin-bottom:8px;" onchange="toggleProviderFields()">` +
+		`<div class="add-domain-box">` +
+			`<input type="text" id="new-domain-fqdn" class="s-input mb-8" placeholder="` + T.SettingsDomainPlaceholder + `">` +
+			`<input type="number" id="new-domain-ttl" class="s-input mb-8" placeholder="TTL (z. B. 60)" min="1" step="1">` +
+			`<select id="new-domain-provider" class="s-input mb-8" onchange="toggleProviderFields()">` +
 			`<option value="IONOS">IONOS</option>` +
 			`<option value="CLOUDFLARE">Cloudflare</option>` +
 			`<option value="IPV64">IPv64</option>` +
 			`</select>` +
 			`<div id="fields-ionos">` +
-			`<input type="text" id="new-ionos-prefix" class="s-input" placeholder="` + T.SettingsAPIPrefix + `" style="margin-bottom:8px;">` +
-			`<div style="position:relative;width:100%;margin-top:8px;">` +
-			`<input type="password" id="new-ionos-secret" class="s-input" placeholder="` + T.SettingsAPISecret + `" style="padding-right:40px;">` +
-			`<button type="button" onclick="togglePassword('new-ionos-secret', this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:0;font-size:16px;line-height:1;">👁️</button>` +
+			`<input type="text" id="new-ionos-prefix" class="s-input mb-8" placeholder="` + T.SettingsAPIPrefix + `">` +
+			`<div class="input-with-action mt-8">` +
+			`<input type="password" id="new-ionos-secret" class="s-input" placeholder="` + T.SettingsAPISecret + `">` +
+			`<button type="button" class="input-action-btn" onclick="togglePassword('new-ionos-secret', this)">👁️</button>` +
 			`</div>` +
 			`</div>` +
-			`<div id="fields-cloudflare" style="display:none;">` +
-			`<input type="text" id="new-cf-token" class="s-input" placeholder="` + T.SettingsCFTokenHint + `" style="margin-bottom:8px;">` +
-			`<div style="font-size:0.65rem;text-align:center;margin:4px 0;opacity:0.4;">` + T.SettingsCFOr + `</div>` +
-			`<input type="text" id="new-cf-email" class="s-input" placeholder="` + T.SettingsCFEmail + `" style="margin-bottom:8px;">` +
-			`<div style="position:relative;width:100%;margin-top:8px;">` +
-			`<input type="password" id="new-cf-secret" class="s-input" placeholder="` + T.SettingsCFGlobalKey + `" style="padding-right:40px;">` +
-			`<button type="button" onclick="togglePassword('new-cf-secret', this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:0;font-size:16px;line-height:1;">👁️</button>` +
+			`<div id="fields-cloudflare" class="is-hidden">` +
+			`<input type="text" id="new-cf-token" class="s-input mb-8" placeholder="` + T.SettingsCFTokenHint + `">` +
+			`<div class="center-note">` + T.SettingsCFOr + `</div>` +
+			`<input type="text" id="new-cf-email" class="s-input mb-8" placeholder="` + T.SettingsCFEmail + `">` +
+			`<div class="input-with-action mt-8">` +
+			`<input type="password" id="new-cf-secret" class="s-input" placeholder="` + T.SettingsCFGlobalKey + `">` +
+			`<button type="button" class="input-action-btn" onclick="togglePassword('new-cf-secret', this)">👁️</button>` +
 			`</div>` +
-			`<label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:0.85rem;">` +
+			`<label class="inline-check">` +
 			`<input type="checkbox" id="new-cf-proxied"> Cloudflare Proxy aktivieren` +
 			`</label>` +
 			`</div>` +
-			`<div id="fields-ipv64" style="display:none;">` +
-			`<div style="position:relative;width:100%;margin-top:8px;">` +
-			`<input type="password" id="new-ipv64-token" class="s-input" placeholder="` + T.SettingsIPv64Token + `" style="padding-right:40px;">` +
-			`<button type="button" onclick="togglePassword('new-ipv64-token', this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:0;font-size:16px;line-height:1;">👁️</button>` +
+			`<div id="fields-ipv64" class="is-hidden">` +
+			`<div class="input-with-action mt-8">` +
+			`<input type="password" id="new-ipv64-token" class="s-input" placeholder="` + T.SettingsIPv64Token + `">` +
+			`<button type="button" class="input-action-btn" onclick="togglePassword('new-ipv64-token', this)">👁️</button>` +
 			`</div>` +
 			`</div>` +
-			`<button class="s-btn" onclick="addDomainToList()" style="margin-top:12px;background:var(--success);color:white;border:none;width:100%;">` +
+			`<button class="s-btn s-btn-success-full" onclick="addDomainToList()">` +
 			T.SettingsAddBtn +
 			`</button>` +
 			`</div>`
 
 	domainsSection :=
-		`<div id="settings-domain-list" style="margin-bottom:15px;display:flex;flex-direction:column;gap:8px;"></div>` +
+		`<div id="settings-domain-list" class="settings-domain-list"></div>` +
 			subSection("add-domain-section", T.SettingsAddDomain, addDomainForm, false)
 
 	notifyEventsSection :=
-		`<div class="s-row" style="flex-direction:column;align-items:stretch;gap:6px;">` +
+		`<div class="s-row s-row-stack s-gap-6">` +
 			`<span class="s-label">` + T.SettingsNotifyEvents + `</span>` +
 			notifyEventCheckboxes(c.Notifications.Events) +
 			`</div>`
 
 	telegramSection :=
-		`<div style="padding:10px;background:rgba(56,189,248,0.06);border-radius:7px;border:1px solid rgba(56,189,248,0.15);">` +
+		`<div class="notify-box notify-telegram">` +
 
 			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsTGChatID+`</span>`+
-				`<input type="text" id="cfg-tg-chatid" class="s-input" style="width:160px;"`+
+				`<input type="text" id="cfg-tg-chat-id" class="s-input s-input-lg"`+
 				` placeholder="-100xxxxxxxxx" value="%s"></div>`,
 				html.EscapeString(c.Notifications.Telegram.ChatID)) +
 
 			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsTGToken+`</span>`+
-				`<div style="position:relative;width:220px;">`+
-				`<input type="password" id="cfg-tg-token" class="s-input" style="width:220px;padding-right:40px;"`+
+				`<div class="input-with-action">`+
+				`<input type="password" id="cfg-tg-token" class="s-input s-input-lg"`+
 				` placeholder="`+T.SettingsTokenUnchanged+`" value="%s">`+
-				`<button type="button" onclick="togglePassword('cfg-tg-token', this)" style="position:absolute;right:8px;top:50%%;transform:translateY(-50%%);background:none;border:none;cursor:pointer;padding:0;font-size:16px;line-height:1;">👁️</button>`+
+				`<button type="button" class="input-action-btn" onclick="togglePassword('cfg-tg-token', this)">👁️</button>`+
 				`</div></div>`,
 				html.EscapeString(c.Notifications.Telegram.Token)) +
 
 			`</div>`
 
 	gotifySection :=
-		`<div style="padding:10px;background:rgba(167,139,250,0.06);border-radius:7px;border:1px solid rgba(167,139,250,0.15);">` +
+		`<div class="notify-box notify-gotify">` +
 
 			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsGotifyURL+`</span>`+
-				`<input type="text" id="cfg-gotify-url" class="s-input" style="width:220px;"`+
+				`<input type="text" id="cfg-gotify-url" class="s-input s-input-lg"`+
 				` placeholder="https://gotify.example.com" value="%s"></div>`,
 				html.EscapeString(c.Notifications.Gotify.URL)) +
 
 			fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsGotifyToken+`</span>`+
-				`<div style="position:relative;width:220px;">`+
-				`<input type="password" id="cfg-gotify-token" class="s-input" style="width:220px;padding-right:40px;"`+
+				`<div class="input-with-action">`+
+				`<input type="password" id="cfg-gotify-token" class="s-input s-input-lg"`+
 				` placeholder="`+T.SettingsTokenUnchanged+`" value="%s">`+
-				`<button type="button" onclick="togglePassword('cfg-gotify-token', this)" style="position:absolute;right:8px;top:50%%;transform:translateY(-50%%);background:none;border:none;cursor:pointer;padding:0;font-size:16px;line-height:1;">👁️</button>`+
+				`<button type="button" class="input-action-btn" onclick="togglePassword('cfg-gotify-token', this)">👁️</button>`+
 				`</div></div>`,
 				html.EscapeString(c.Notifications.Gotify.Token)) +
+
+			`</div>`
+
+	webhookSection :=
+		`<div class="notify-box notify-webhook">` +
+
+			fmt.Sprintf(`<div class="s-row"><span class="s-label">URL</span>`+
+				`<input type="text" id="cfg-webhook-url" class="s-input s-input-lg"`+
+				` placeholder="https://your-endpoint.com/api" value="%s"></div>`,
+				html.EscapeString(c.Notifications.Webhook.URL)) +
+
+			fmt.Sprintf(`<div class="s-row"><span class="s-label">Secret <small class="s-label-hint-inline">(opt.)</small></span>`+
+				`<div class="input-with-action">`+
+				`<input type="password" id="cfg-webhook-secret" class="s-input s-input-lg"`+
+				` placeholder="`+T.SettingsTokenUnchanged+`" value="%s">`+
+				`<button type="button" class="input-action-btn" onclick="togglePassword('cfg-webhook-secret', this)">👁️</button>`+
+				`</div></div>`,
+				html.EscapeString(c.Notifications.Webhook.Secret)) +
 
 			`</div>`
 
@@ -537,7 +563,8 @@ func buildSettingsModal(c Config) string {
 			}()) +
 			subSection("", T.SettingsNotifyEvents, notifyEventsSection, false) +
 			subSection("", T.SettingsTelegramHeading, telegramSection, false) +
-			subSection("", T.SettingsGotifyHeading, gotifySection, false)
+			subSection("", T.SettingsGotifyHeading, gotifySection, false) +
+			subSection("", T.SettingsWebhookHeading, webhookSection, false)
 
 	return `<div id="settingsOverlay" class="modal-overlay" onclick="closeSettingsOutside(event)">` +
 		`<div class="modal">` +
@@ -594,8 +621,12 @@ type safeSystemConfig struct {
 	TelegramChatID  string   `json:"telegram_chat_id"`
 	GotifyURL       string   `json:"gotify_url"`
 	GotifyToken     string   `json:"gotify_token"`
+	WebhookURL      string   `json:"webhook_url"`
+	WebhookSecret   string   `json:"webhook_secret"`
 	DebugEnabled    bool     `json:"debug_enabled"`
 	DebugHTTPRaw    bool     `json:"debug_http_raw"`
+	IPv4Endpoints   []string `json:"ipv4_endpoints"`
+	IPv6Endpoints   []string `json:"ipv6_endpoints"`
 }
 
 type dashboardConfigPayload struct {
@@ -641,8 +672,12 @@ func currentSystemConfig() safeSystemConfig {
 		TelegramChatID:  cfg.Notifications.Telegram.ChatID,
 		GotifyURL:       cfg.Notifications.Gotify.URL,
 		GotifyToken:     cfg.Notifications.Gotify.Token,
+		WebhookURL:      cfg.Notifications.Webhook.URL,
+		WebhookSecret:   cfg.Notifications.Webhook.Secret,
 		DebugEnabled:    cfg.DebugEnabled,
 		DebugHTTPRaw:    cfg.DebugHTTPRaw,
+		IPv4Endpoints:   cfg.IPv4Endpoints,
+		IPv6Endpoints:   cfg.IPv6Endpoints,
 	}
 }
 
@@ -683,6 +718,20 @@ func dashboardI18NJSON() string {
 		return "{}"
 	}
 	return string(b)
+}
+
+func formatUptime(d time.Duration) string {
+	d = d.Round(time.Second)
+	h := int(d.Hours())
+	m := int(d.Minutes()) % 60
+	s := int(d.Seconds()) % 60
+	if h > 0 {
+		return fmt.Sprintf("%dh %dm", h, m)
+	}
+	if m > 0 {
+		return fmt.Sprintf("%dm %ds", m, s)
+	}
+	return fmt.Sprintf("%ds", s)
 }
 
 func createMux() *http.ServeMux {
@@ -874,6 +923,8 @@ func createMux() *http.ServeMux {
 		cfg.DryRun = sys.DryRun
 		cfg.DebugEnabled = sys.DebugEnabled
 		cfg.DebugHTTPRaw = sys.DebugHTTPRaw
+		cfg.IPv4Endpoints = sys.IPv4Endpoints
+		cfg.IPv6Endpoints = sys.IPv6Endpoints
 
 		cfg.Notifications.Enabled = sys.NotifyEnabled
 		if sys.NotifyEvents != nil {
@@ -884,6 +935,8 @@ func createMux() *http.ServeMux {
 		cfg.Notifications.Telegram.ChatID = sys.TelegramChatID
 		cfg.Notifications.Gotify.URL = sys.GotifyURL
 		cfg.Notifications.Gotify.Token = sys.GotifyToken
+		cfg.Notifications.Webhook.URL = sys.WebhookURL
+		cfg.Notifications.Webhook.Secret = sys.WebhookSecret
 
 		if !cfg.Notifications.Enabled {
 			cfg.Notifications.Enabled =
@@ -1469,18 +1522,29 @@ func createMux() *http.ServeMux {
 			html.EscapeString(T.DashTitle),
 		)
 
-		_, _ = fmt.Fprint(w, `
-		<div class="status-banner `+statusClass+`">
-			<span>`+statusText+`</span>
-			<span>
-              `+T.LastUpdate+`: <span id="lastUpdate">`+time.Now().Local().Format("15:04:05")+`</span>
-              <span style="opacity:0.6; margin: 0 8px;">|</span>
-              🕒 <span id="clock">--:--:--</span>
-            </span>
-		</div>
-		
-		<div id="toast" class="toast"></div>
-		`)
+		_, _ = fmt.Fprintf(w, `
+               <div class="status-banner `+statusClass+`">
+                   <span>`+statusText+`</span>
+                   <span>
+                       `+T.LastUpdate+`: <span id="lastUpdate">`+time.Now().Local().Format("15:04:05")+`</span>
+                       <span style="opacity:0.6; margin: 0 8px;">|</span>
+                       🕒 <span id="clock">--:--:--</span>
+                       <span style="opacity:0.6; margin: 0 8px;">|</span>
+                       ⏱️ <span id="uptime">%s</span>
+                   </span>
+               </div>
+
+               <div id="toast" class="toast"></div>
+
+               <details class="card" id="endpoint-card">
+                   <summary>📡 IP-Endpunkt Status</summary>
+                   <div class="card-content">
+                       <div id="endpoint-status" style="display:flex;flex-wrap:wrap;gap:8px;padding:4px 0;">
+                           <span style="opacity:0.4;font-size:0.82rem;">Warte auf ersten Check...</span>
+                       </div>
+                   </div>
+               </details>
+               `, formatUptime(time.Since(startTime)))
 
 		_, _ = fmt.Fprintf(w, "%s", buildSettingsModal(cfg))
 
@@ -1647,30 +1711,21 @@ func createMux() *http.ServeMux {
 		if cfg.DebugEnabled || cfg.DebugHTTPRaw {
 			_, _ = fmt.Fprint(w, `
 					<details class="card" id="debug-log-card" open>
-						<summary>🐞 Debug Log <span id="debug-badge" style="
-							font-size:0.65rem; padding:1px 7px; border-radius:999px;
-							background:rgba(250,204,21,0.15); border:1px solid rgba(250,204,21,0.4);
-							color:#facc15; margin-left:8px;">LIVE</span>
+						<summary>🐞 Debug Log <span id="debug-badge" class="debug-badge">LIVE</span>
 						</summary>
 						<div class="card-content">
-							<div style="display:flex; gap:8px; margin-bottom:8px; align-items:center;">
+							<div class="debug-toolbar">
 								<input type="text" id="debug-filter" placeholder="Filter..." 
 									oninput="filterDebugLog(this.value)"
-									style="flex:1; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1);
-										border-radius:6px; padding:5px 10px; color:inherit; font-size:0.8rem;">
-								<button onclick="clearDebugLog()" class="action-btn" 
-									style="font-size:0.75rem; padding:4px 10px;">🗑️ Clear</button>
-								<label style="font-size:0.75rem; opacity:0.7; white-space:nowrap;">
-									<input type="checkbox" id="debug-autoscroll" checked style="margin-right:4px;">
+									class="debug-filter-input">
+								<button onclick="clearDebugLog()" class="action-btn debug-clear-btn">🗑️ Clear</button>
+								<label class="debug-autoscroll-label">
+									<input type="checkbox" id="debug-autoscroll" checked>
 									Auto-scroll
 								</label>
 							</div>
-							<div id="debug-log-container" style="
-								height: 300px; overflow-y: auto;
-								background: rgba(0,0,0,0.3); border-radius:8px;
-								border: 1px solid rgba(255,255,255,0.07);
-								padding: 8px; font-family: monospace; font-size: 0.78rem;">
-								<span class="debug-placeholder" style="opacity:0.3;">Waiting for debug messages...</span>
+							<div id="debug-log-container" class="debug-log-box">
+								<span class="debug-placeholder">Waiting for debug messages...</span>
 							</div>
 						</div>
 					</details>
@@ -1679,31 +1734,31 @@ func createMux() *http.ServeMux {
 
 		if len(logs) > 0 {
 			_, _ = fmt.Fprintf(w, `
-                     <details class="card" id="logs-card">
-                          <summary>
-                          🧾 %s 
-                      <span style="opacity:0.6; font-size:0.9em; margin-left: 10px;">
-                          (%d `+T.EntriesLabel+`)
-                     <span style="margin-left: 10px; border-left: 1px solid #ccc; padding-left: 10px;">
-                     🕒 %s
-                     </span>
-                     </span>
-                       </summary>
-                   <div class="card-content">
-                        <div class="log-filters">
-                               <button class="filter-btn active" data-filter="all" onclick="filterLogs('all')">`+T.FilterAll+`</button>
-                               <button class="filter-btn" data-filter="ERR" onclick="filterLogs('ERR')">`+T.FilterErrors+`</button>
-                               <button class="filter-btn" data-filter="WARN" onclick="filterLogs('WARN')">`+T.FilterWarnings+`</button>
-                               <button class="filter-btn" data-filter="UPDATE" onclick="filterLogs('UPDATE')">`+T.FilterUpdates+`</button>
-                               <button class="filter-btn" data-filter="START" onclick="filterLogs('START')">`+T.FilterStarts+`</button>
-                               <button class="filter-btn" data-filter="STOP" onclick="filterLogs('STOP')">`+T.FilterStop+`</button>
-                               <button class="filter-btn" data-filter="CREATE" onclick="filterLogs('CREATE')">`+T.FilterCreated+`</button>
-                               <button class="filter-btn" data-filter="CLEANUP" onclick="filterLogs('CLEANUP')">`+T.FilterCleanup+`</button>
-                               <button class="filter-btn" data-filter="SKIP" onclick="filterLogs('SKIP')">`+T.FilterSkip+`</button>
-							   <button class="filter-btn" data-filter="CONFIG" onclick="filterLogs('CONFIG')">`+T.FilterConfig+`</button>
-                           </div>
-                       <div id="logContainer" style="max-height: 300px; overflow-y: auto; font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 13px; padding-right: 5px;">
-                       `, T.SystemEvents, len(logs), logTimeRange)
+			<details class="card" id="logs-card">
+				<summary>
+				🧾 %s 
+			<span class="logs-summary-meta">
+				(%d `+T.EntriesLabel+`)
+			<span class="logs-summary-sep">
+			🕒 %s
+			</span>
+			</span>
+			</summary>
+			<div class="card-content">
+				<div class="log-filters">
+					<button class="filter-btn active" data-filter="all" onclick="filterLogs('all')">`+T.FilterAll+`</button>
+					<button class="filter-btn" data-filter="ERR" onclick="filterLogs('ERR')">`+T.FilterErrors+`</button>
+					<button class="filter-btn" data-filter="WARN" onclick="filterLogs('WARN')">`+T.FilterWarnings+`</button>
+					<button class="filter-btn" data-filter="UPDATE" onclick="filterLogs('UPDATE')">`+T.FilterUpdates+`</button>
+					<button class="filter-btn" data-filter="START" onclick="filterLogs('START')">`+T.FilterStarts+`</button>
+					<button class="filter-btn" data-filter="STOP" onclick="filterLogs('STOP')">`+T.FilterStop+`</button>
+					<button class="filter-btn" data-filter="CREATE" onclick="filterLogs('CREATE')">`+T.FilterCreated+`</button>
+					<button class="filter-btn" data-filter="CLEANUP" onclick="filterLogs('CLEANUP')">`+T.FilterCleanup+`</button>
+					<button class="filter-btn" data-filter="SKIP" onclick="filterLogs('SKIP')">`+T.FilterSkip+`</button>
+					<button class="filter-btn" data-filter="CONFIG" onclick="filterLogs('CONFIG')">`+T.FilterConfig+`</button>
+				</div>
+			<div id="logContainer" class="log-container">
+			`, T.SystemEvents, len(logs), logTimeRange)
 
 			for _, e := range logs {
 				displayTime := e.Timestamp
@@ -1748,17 +1803,14 @@ func createMux() *http.ServeMux {
 				}
 
 				_, _ = fmt.Fprintf(w, `
-				<div class="log-entry"
+				<div class="log-entry log-entry-row"
 					data-action="%s"
-					data-level="%s"
-					style="display: flex; align-items: flex-start; padding: 6px 8px;
-							border-radius: 4px; margin-bottom: 4px; gap: 10px;
-							background: rgba(255,255,255,0.03);">
-					<span style="flex-shrink: 0; width: 20px; text-align: center;">%s</span>
-					<span style="color: #888; white-space: nowrap; font-size: 0.85em;">%s</span>
-					<div style="flex: 1; word-break: break-word;">
+					data-level="%s">
+					<span class="log-entry-icon">%s</span>
+					<span class="log-entry-time">%s</span>
+					<div class="log-entry-body">
 						%s
-						<span style="opacity: 0.9;">%s</span>
+						<span class="log-entry-message">%s</span>
 					</div>
 				</div>
 				`,
@@ -1770,7 +1822,7 @@ func createMux() *http.ServeMux {
 						if e.Domain == "" {
 							return ""
 						}
-						return `<span style="font-weight: 600; color: #64b5f6; margin-right: 5px;">` +
+						return `<span class="log-entry-domain">` +
 							html.EscapeString(e.Domain) + `</span>`
 					}(),
 					html.EscapeString(e.Message),
@@ -1790,9 +1842,24 @@ func createMux() *http.ServeMux {
 				keys = append(keys, k)
 			}
 		}
+
 		sort.Strings(keys)
 
-		_, _ = fmt.Fprint(w, `<input type="text" class="search-box" id="domainSearch" placeholder="`+T.DomainSearchPlaceholder+`" oninput="filterDomains(this.value)"><div id="domainContainer">`)
+		_, _ = fmt.Fprint(w, `
+		<details class="card" open id="domains-card">
+			<summary>
+				🌐 Domains
+			</summary>
+
+			<div class="card-content">
+				<input type="text"
+					class="search-box"
+					id="domainSearch"
+					placeholder="`+T.DomainSearchPlaceholder+`"
+					oninput="filterDomains(this.value)">
+				
+				<div id="domainContainer">
+		`)
 
 		configuredDomains := make(map[string]struct{})
 		for _, dc := range cfg.DomainConfigs {
@@ -1832,6 +1899,7 @@ func createMux() *http.ServeMux {
 			dotClass := "domain-status-dot dot-idle"
 			dotTitle := T.DotTitleNoUpdate
 			changedBadge := `<span id="badge-` + safeID + `" class="changed-badge" style="display:none;">` + T.BadgeChanged + `</span>`
+
 			if h.LastChanged != "" {
 				if t, err := time.Parse("02.01.2006 15:04:05", h.LastChanged); err == nil {
 					switch {
@@ -1854,43 +1922,44 @@ func createMux() *http.ServeMux {
 			deleteBtn := ""
 			if isOrphan {
 				orphanStyle = ` style="border-color: rgba(248,113,113,0.5);"`
-				orphanLabel = `<span style="font-size:0.65rem; padding:1px 7px; border-radius:999px; background:rgba(248,113,113,0.15); border:1px solid rgba(248,113,113,0.4); color:#f87171; margin-left:8px; font-weight:600;">>` + T.NotConfiguredLabel + `</span>`
-				deleteBtn = `<button class="action-btn" style="background:rgba(248,113,113,0.15); color:#f87171; border-color:rgba(248,113,113,0.5); font-size:0.7rem; padding:3px 10px; margin-left:auto;" onclick="event.preventDefault(); event.stopPropagation(); deleteDomain('` + html.EscapeString(k) + `', this)">` + T.RemoveBtn + `</button>`
+				orphanLabel = `<span class="orphan-badge">` + T.NotConfiguredLabel + `</span>`
+				deleteBtn = `<button class="action-btn btn-danger-soft" onclick="event.preventDefault(); event.stopPropagation(); deleteDomain('` + html.EscapeString(k) + `', this)">` + T.RemoveBtn + `</button>`
 			}
 
 			_, _ = fmt.Fprintf(w, `
 			<details class="card domain-item" data-domain="%s"%s>
-				<summary style="display:flex; align-items:center;">
+				<summary class="domain-summary">
 					<span id="dot-%s" class="%s" title="%s"></span>
-					🌐 %s <span style="opacity:0.6; font-size:0.9em; margin-left:5px;">(%s)</span>%s%s%s
+					🌐 %s <span class="logs-summary-meta">(%s)</span>%s%s%s
 				</summary>
+				
 				<div class="card-content">
-					<div class="domain-card" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 10px;">
-						<div style="display: flex; justify-content: space-between; align-items: flex-start;">
+					<div class="domain-card domain-card-head">
+						<div class="domain-card-top">
 							<div>
 								<div class="ip-display">
 									<span class="badge v4">IPv4</span>
 									<span id="ip4-%s">%s</span>
 									<button class="copy-btn" onclick="copyIP('%s')" title="Copy">📋</button>
 								</div>
-								<div class="ip-display" style="margin-top: 8px;">
+								<div class="ip-display domain-ip-row-spaced">
 									<span class="badge v6">IPv6</span>
 									<span id="ip6-%s">%s</span>
 									<button class="copy-btn" onclick="copyIP('%s')" title="Copy">📋</button>
 								</div>
 							</div>
-							<div style="text-align: right; opacity: 0.7;">
+							<div class="domain-card-meta">
 								<small>`+T.LastShort+` %s</small>
 							</div>
 						</div>
 					</div>
 
-					<div style="max-height: 300px; overflow-y: auto; margin-top: 10px; border: 1px solid rgba(255,255,255,0.05); border-radius: 8px;">
-						<table style="width: 100%%; border-collapse: collapse; table-layout: fixed;">
-							<thead style="background: rgba(255,255,255,0.02); text-align: left; opacity: 0.5; font-size: 0.7rem;">
+					<div class="domain-history-box">
+						<table class="domain-history-table">
+							<thead class="domain-history-head">
 								<tr>
-									<th style="padding: 10px; width: 140px;">`+T.TableTime+`</th>
-									<th style="padding: 10px;">`+T.TableIPs+`</th>
+									<th class="domain-history-th-time">`+T.TableTime+`</th>
+									<th class="domain-history-th-ip">`+T.TableIPs+`</th>
 								</tr>
 							</thead>
 							<tbody>`,
@@ -1916,23 +1985,23 @@ func createMux() *http.ServeMux {
 			for i := len(h.IPs) - 2; i >= 0; i-- {
 				e := h.IPs[i]
 				_, _ = fmt.Fprintf(w, `
-				<tr style="border-top: 1px solid rgba(255,255,255,0.05);">
-					<td style="padding: 10px; vertical-align: top; font-family: monospace; font-size: 0.8rem; color: #94a3b8; white-space: nowrap;">
-						%s
-					</td>
-					<td style="padding: 10px; vertical-align: top;">
-						<div style="display: flex; flex-direction: column; gap: 6px;">
-							<div style="display: flex; align-items: center; font-family: monospace; font-size: 0.85rem;">
-								<span class="badge v4" style="width: 25px; margin-right: 8px; flex-shrink: 0; text-align: center;">v4</span>
-								<span style="color: #e2e8f0;">%s</span>
-							</div>
-							<div style="display: flex; align-items: center; font-family: monospace; font-size: 0.85rem;">
-								<span class="badge v6" style="width: 25px; margin-right: 8px; flex-shrink: 0; text-align: center;">v6</span>
-								<span style="color: #e2e8f0; word-break: break-all;">%s</span>
-							</div>
-						</div>
-					</td>
-				</tr>`,
+						<tr class="domain-history-row">
+							<td class="domain-history-td-time">
+								%s
+							</td>
+							<td class="domain-history-td-ip">
+								<div class="ip-history-stack">
+									<div class="ip-history-row">
+										<span class="badge v4 badge-fixed">v4</span>
+										<span class="ip-history-value">%s</span>
+									</div>
+									<div class="ip-history-row">
+										<span class="badge v6 badge-fixed">v6</span>
+										<span class="ip-history-value break-all">%s</span>
+									</div>
+								</div>
+							</td>
+						</tr>`,
 					html.EscapeString(e.Time),
 					func() string {
 						if e.IPv4 == "" {
@@ -1950,27 +2019,32 @@ func createMux() *http.ServeMux {
 			}
 
 			if len(h.IPs) < 2 {
-				_, _ = fmt.Fprint(w, `<tr><td colspan="2" style="text-align:center; opacity:0.5; padding: 10px;">`+T.NoMoreEntries+`</td></tr>`)
+				_, _ = fmt.Fprint(w, `<tr class="empty-history-row"><td colspan="2">`+T.NoMoreEntries+`</td></tr>`)
 			}
 
 			_, _ = fmt.Fprint(w, `
-						</tbody>
-					</table>
-				</div>
-			</div>
-		</details>`)
+								</tbody>
+							</table>
+						</div>
+					</div>
+				</details>`)
 		}
-		_, _ = fmt.Fprint(w, `</div>`)
+
+		_, _ = fmt.Fprint(w, `
+			</div>
+		</div>
+	</details>
+	`)
 
 		_, _ = fmt.Fprintf(w, `
-			<script>
-				window.I18N = %s;
-			</script>
-			<script>%s</script>
-		</div>
-		</body>
-		</html>
-		`, dashboardI18NJSON(), jsData)
+	<script>
+		window.I18N = %s;
+	</script>
+	<script>%s</script>
+	</div>
+	</body>
+	</html>
+	`, dashboardI18NJSON(), jsData)
 
 	})
 

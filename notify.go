@@ -54,6 +54,17 @@ func initNotifiers() {
 		})
 	}
 
+	if cfg.Notifications.Webhook.URL != "" {
+		newCfg.notifiers = append(newCfg.notifiers,
+			newWebhookNotifier(cfg.Notifications.Webhook.URL, cfg.Notifications.Webhook.Secret))
+		debugLog("NOTIFY", "", "✅ Webhook active: "+cfg.Notifications.Webhook.URL)
+		log(LogContext{
+			Level:   LogInfo,
+			Action:  ActionConfig,
+			Message: "✅ Webhook active",
+		})
+	}
+
 	notifyCfgMu.Lock()
 	notifyCfg = newCfg
 	notifyCfgMu.Unlock()
