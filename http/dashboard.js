@@ -172,8 +172,10 @@ function connectWS() {
 		} else if (msg.type === 'notification') {
 			showToast(msg.data.message, msg.data.level || 'info');
 		} else if (msg.type === 'debug_log') {
-			appendDebugLog(msg.data);
-		}
+        appendDebugLog(msg.data);
+    } else if (msg.type === 'ip_check_result') {
+        updateEndpointStatus(msg.data);
+    }
 	};
 	ws.onclose = () => scheduleReconnect();
 	ws.onopen = () => { reconnectDelay = 1000; if(reconnectTimer) clearTimeout(reconnectTimer); };
@@ -312,7 +314,7 @@ function openSettings() {
 	_setVal('cfg-interval',       sys.interval          || 300);
 	_setVal('cfg-health-port',    sys.health_port       || '8080');
 	_setVal('cfg-iface',          sys.iface_name        || '');
-	_setVal('cfg-dns',            (sys.dns_servers || []).join(', '));
+	_setVal('cfg-dns',            (sys.dns_servers 		|| []).join(', '));
 	_setVal('cfg-max-log',        sys.max_log_lines     || 500);
 	_setVal('cfg-max-retries',    sys.max_api_retries   || 3);
 	_setVal('cfg-max-concurrent', sys.max_concurrent    || 5);
@@ -321,17 +323,21 @@ function openSettings() {
 	_setChk('cfg-dry-run',        sys.dry_run           || false);
 	_setChk('cfg-debug',       	  sys.debug_enabled     || false);
 	_setChk('cfg-debug-http',  	  sys.debug_http_raw    || false);
+	_setVal('cfg-ipv4_endpoints', (sys.ipv4_endpoints 	|| []).join(', '));
+	_setVal('cfg-ipv6_endpoints', (sys.ipv6_endpoints 	|| []).join(', '));
 
 	// Notifications
 	_setChk('cfg-notify-enabled',  sys.notify_enabled   || false);
 	const activeEvents = new Set((sys.notify_events || []).map(e => e.toUpperCase()));
   	document.querySelectorAll('input[name="notify-event"]').forEach(cb => {
       cb.checked = activeEvents.has(cb.value);
-  });
-	_setVal('cfg-tg-token',        sys.telegram_token   || '');
-	_setVal('cfg-tg-chatid',       sys.telegram_chat_id || '');
-	_setVal('cfg-gotify-url',      sys.gotify_url        || '');
-	_setVal('cfg-gotify-token',    sys.gotify_token      || '');
+  	});
+	_setVal('cfg-tg-token',        	sys.telegram_token   	|| '');
+	_setVal('cfg-tg-chatid',       	sys.telegram_chat_id 	|| '');
+	_setVal('cfg-gotify-url',      	sys.gotify_url        	|| '');
+	_setVal('cfg-gotify-token',    	sys.gotify_token      	|| '');
+	_setVal('cfg-webhook-url',    	sys.webhook_url    		|| '');
+	_setVal('cfg-webhook-secret', 	sys.webhook_secret 		|| '');
 
 	renderSettingsDomainList();
 }
@@ -413,13 +419,12 @@ function editDomain(index) {
 	const d = tempDomainConfigs[index];
 	if (!d) return;
 
-	// Formular vorher sauber leeren
 	resetDomainForm();
 
 	_setVal('new-domain-fqdn', d.fqdn || '');
 
 	const provSel = document.getElementById('new-domain-provider');
-	if (provSel) provSel.value = d.provider || 'IONOS';
+	if (provSel) provSel.value = String(d.provider || '').toUpperCase() || 'IONOS';
 
 	toggleProviderFields();
 
@@ -497,36 +502,43 @@ function removeDomainFromList(index) {
 	renderSettingsDomainList();
 }
 
+function parseList(raw) {
+	return (raw || '')
+		.split(',')
+		.map(s => s.trim())
+		.filter(Boolean);
+}
+
 async function saveFullConfig() {
 	if (!confirm(tr('save_config_confirm', 'Alle Einstellungen in config.json speichern?'))) return;
 	const token = localStorage.getItem('triggerToken') || '';
-
-	const dnsRaw = _getVal('cfg-dns');
-	const dnsServers = dnsRaw.split(',').map(s => s.trim()).filter(Boolean);
-
-  const notifyEvents = [...document.querySelectorAll('input[name="notify-event"]:checked')]
-      .map(cb => cb.value);
+	const notifyEvents = [...document.querySelectorAll('input[name="notify-event"]:checked')]
+		.map(cb => cb.value);
 
 	const system = {
-		ip_mode:          _getVal('cfg-ip-mode') || 'BOTH',
-		interval:         parseInt(_getVal('cfg-interval'),  10) || 300,
-		health_port:       _getVal('cfg-health-port') || '8080',
-		iface_name:        _getVal('cfg-iface'),
-		dns_servers:       dnsServers,
-		max_log_lines:     parseInt(_getVal('cfg-max-log'),        10) || 500,
-		max_api_retries:   parseInt(_getVal('cfg-max-retries'), 10) || 4,
-		max_concurrent:    parseInt(_getVal('cfg-max-concurrent'), 10) || 5,
-		hourly_rate_limit: parseInt(_getVal('cfg-hourly-limit'),   10) || 1200,
-		lang:              _getVal('cfg-lang') || 'de',
-		dry_run:           document.getElementById('cfg-dry-run')?.checked || false,
-    	debug_enabled:     document.getElementById('cfg-debug')?.checked || false,
-    	debug_http_raw:    document.getElementById('cfg-debug-http')?.checked || false,
-		notify_enabled:   document.getElementById('cfg-notify-enabled')?.checked || false,
-		notify_events:    notifyEvents,
-		telegram_token:   _getVal('cfg-tg-token'),
-		telegram_chat_id: _getVal('cfg-tg-chatid'),
-		gotify_url:       _getVal('cfg-gotify-url'),
-		gotify_token:     _getVal('cfg-gotify-token'),
+		ip_mode:          	_getVal('cfg-ip-mode') || 'BOTH',
+		interval:         	parseInt(_getVal('cfg-interval'),  10) || 300,
+		health_port:       	_getVal('cfg-health-port') || '8080',
+		iface_name:        	_getVal('cfg-iface'),
+		dns_servers: 		parseList(_getVal('cfg-dns')),
+		max_log_lines:     	parseInt(_getVal('cfg-max-log'),        10) || 500,
+		max_api_retries:   	parseInt(_getVal('cfg-max-retries'), 10) || 4,
+		max_concurrent:    	parseInt(_getVal('cfg-max-concurrent'), 10) || 5,
+		hourly_rate_limit: 	parseInt(_getVal('cfg-hourly-limit'),   10) || 1200,
+		lang:              	_getVal('cfg-lang') || 'de',
+		dry_run:           	document.getElementById('cfg-dry-run')?.checked || false,
+    	debug_enabled:     	document.getElementById('cfg-debug')?.checked || false,
+    	debug_http_raw:    	document.getElementById('cfg-debug-http')?.checked || false,
+		notify_enabled:   	document.getElementById('cfg-notify-enabled')?.checked || false,
+		notify_events:    	notifyEvents,
+		telegram_token:   	_getVal('cfg-tg-token'),
+		telegram_chat_id: 	_getVal('cfg-tg-chat-id'),
+		gotify_url:       	_getVal('cfg-gotify-url'),
+		gotify_token:     	_getVal('cfg-gotify-token'),
+		webhook_url:      	_getVal('cfg-webhook-url'),
+		webhook_secret:   	_getVal('cfg-webhook-secret'),
+		ipv4_endpoints: 	parseList(_getVal('cfg-ipv4_endpoints')),
+		ipv6_endpoints: 	parseList(_getVal('cfg-ipv6_endpoints')),
 	};
 
 	try {
@@ -567,7 +579,9 @@ function resetMetrics() {
 }
 
 function filterDomains(query) {
-	document.querySelectorAll('.domain-item').forEach(d => {
+    const container = document.getElementById('domainContainer');
+    if (!container) return;
+    container.querySelectorAll('.domain-item').forEach(d => {
 		const name = (d.getAttribute('data-domain') || '').toLowerCase();
 		d.style.display = name.includes(query.toLowerCase()) ? '' : 'none';
 	});
@@ -606,13 +620,17 @@ function fallbackCopy(text) {
 }
 
 function startClock() {
-	const el = document.getElementById('clock');
-	if (!el) return;
-	const tick = () => { 
-		const d = new Date();
-		el.textContent = [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, '0')).join(':');
-	};
-	tick(); setInterval(tick, 1000);
+    const el = document.getElementById('clock');
+    const uptimeEl = document.getElementById('uptime');
+    const uptimeStart = Date.now();
+    if (!el) return;
+    const tick = () => {
+        const d = new Date();
+        el.textContent = [d.getHours(), d.getMinutes(), d.getSeconds()]
+            .map(n => String(n).padStart(2, '0')).join(':');
+        //renderEndpointStatus();
+    };
+    tick(); setInterval(tick, 1000);
 }
 
 function togglePassword(id, btn) {
@@ -735,4 +753,34 @@ function trf(key, vars = {}, fallback = '') {
 		text = text.replaceAll('{' + k + '}', String(v));
 	}
 	return text;
+}
+
+const endpointStatus = {};
+function updateEndpointStatus(data) {
+    endpointStatus[data.url] = { ok: data.ok, ts: Date.now() };
+    renderEndpointStatus();
+}
+
+function renderEndpointStatus() {
+    const el = document.getElementById('endpoint-status');
+    if (!el) return;
+    const entries = Object.entries(endpointStatus);
+    if (entries.length === 0) return;
+    el.innerHTML = entries.map(([url, s]) => {
+        let host;
+        try { host = new URL(url).hostname; } catch { host = url; }
+        const icon = s.ok ? '✅' : '❌';
+        const diff = Date.now() - s.ts;
+        let ageStr;
+        if (diff < 1000) {
+            ageStr = diff + 'ms';
+        } else if (diff < 60000) {
+            ageStr = (diff / 1000).toFixed(0) + 's';
+        } else {
+            ageStr = Math.round(diff / 60000) + 'm';
+        }
+        return `<span style="padding:3px 8px;border-radius:6px;font-size:0.78rem;font-family:monospace;`
+            + `background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);">`
+            + `${icon} ${host} <span style="opacity:0.4">${ageStr}</span></span>`;
+    }).join('');
 }
