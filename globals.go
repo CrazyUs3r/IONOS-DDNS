@@ -519,7 +519,7 @@ type Phrases struct {
 
 	// Cache & persistence
 	ErrRecordCacheNil, ErrCacheDirCreate, ErrCacheMarshal               string
-	ErrCacheWrite, ErrCacheRename                                       string
+	ErrCacheWrite, ErrCacheRename, FileCloseError, ScannerError         string
 	CacheSavedZones, CacheSavedDomains, ZoneCacheHitSkipAPI             string
 	CacheFileNotFound, CacheLoadedZones, CacheLoadedDomains             string
 	IPv64CacheNoData, CacheLoadError, CacheRecordsLoaded                string

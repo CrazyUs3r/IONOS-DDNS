@@ -467,7 +467,17 @@ func tailLines(path string, maxLines int) ([]string, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	defer file.Close()
+
+	defer func() {
+		if err := file.Close(); err != nil {
+			log(LogContext{
+				Level:    LogError,
+				Category: "FILE",
+				Action:   ActionError,
+				Message:  fmt.Sprintf("%s: %v", t(T.FileCloseError, "Failed to close file"), err),
+			})
+		}
+	}()
 
 	lines := make([]string, maxLines)
 	count := 0
@@ -482,6 +492,12 @@ func tailLines(path string, maxLines int) ([]string, int, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
+		log(LogContext{
+			Level:    LogError,
+			Category: "FILE",
+			Action:   ActionError,
+			Message:  fmt.Sprintf("%s: %v", t(T.ScannerError, "Scanner error"), err),
+		})
 		return nil, 0, err
 	}
 

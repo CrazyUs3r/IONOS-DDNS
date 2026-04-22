@@ -126,28 +126,30 @@ func loadLanguageData(lang string) ([]byte, error) {
 
 func parseTranslationsWithFallback(data []byte, lang string) (map[string]string, error) {
 	var translations map[string]string
-	if err := json.Unmarshal(data, &translations); err == nil {
+
+	err := json.Unmarshal(data, &translations)
+	if err == nil {
 		return translations, nil
-	} else {
+	}
+
+	log(LogContext{
+		Level:    LogError,
+		Category: "CONFIG",
+		Action:   ActionConfig,
+		Message:  fmt.Sprintf("%s: %v", t(T.JSONParseError, "JSON parse error"), err),
+	})
+
+	if lang != "en" {
 		log(LogContext{
-			Level:    LogError,
+			Level:    LogInfo,
 			Category: "CONFIG",
 			Action:   ActionConfig,
-			Message:  fmt.Sprintf("%s: %v", t(T.JSONParseError, "JSON parse error"), err),
+			Message:  t(T.TryingFallbackEn, "Trying fallback to English..."),
 		})
-
-		if lang != "en" {
-			log(LogContext{
-				Level:    LogInfo,
-				Category: "CONFIG",
-				Action:   ActionConfig,
-				Message:  t(T.TryingFallbackEn, "Trying fallback to English..."),
-			})
-			return loadEnglishTranslations()
-		}
-
-		return nil, fmt.Errorf("json parse error: %w", err)
+		return loadEnglishTranslations()
 	}
+
+	return nil, fmt.Errorf("json parse error: %w", err)
 }
 
 func loadEnglishTranslations() (map[string]string, error) {

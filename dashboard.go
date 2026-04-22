@@ -1548,7 +1548,16 @@ func loadLogsFromMainFile() ([]LogEntry, string) {
 	if err != nil {
 		return nil, ""
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			log(LogContext{
+				Level:    LogError,
+				Category: "FILE",
+				Action:   ActionError,
+				Message:  fmt.Sprintf("%s: %v", t(T.FileCloseError, "Failed to close file"), err),
+			})
+		}
+	}()
 
 	limit := cfg.MaxLogLines
 	ring := make([]string, limit)
@@ -1562,6 +1571,16 @@ func loadLogsFromMainFile() ([]LogEntry, string) {
 			ring[head%limit] = line
 			head++
 			count++
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		if err := scanner.Err(); err != nil {
+			log(LogContext{
+				Level:    LogError,
+				Category: "FILE",
+				Action:   ActionError,
+				Message:  fmt.Sprintf("%s: %v", t(T.ScannerError, "Scanner error"), err),
+			})
 		}
 	}
 
