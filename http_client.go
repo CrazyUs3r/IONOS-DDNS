@@ -4,7 +4,7 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/sha1"
+	"crypto/sha256"
 	"crypto/subtle"
 	"crypto/tls"
 	"encoding/hex"
@@ -17,7 +17,6 @@ import (
 	"net/http/httputil"
 	"os"
 	"strings"
-	"sync/atomic"
 	"time"
 )
 
@@ -122,109 +121,185 @@ func (t *httpTimings) String() string {
 // HTTP CLIENT & TRANSPORT
 // ============================================================================
 func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	var timings *httpTimings
-	if cfg.DebugHTTPRaw {
-		timings = &httpTimings{start: time.Now().Local()}
-		ctx := httptrace.WithClientTrace(req.Context(), timings.trace())
-		req = req.Clone(ctx)
-	}
+	req, timings := prepareHTTPTracing(req)
 
 	if cfg.DebugHTTPRaw {
-		logReq := req.Clone(req.Context())
-
-		if req.GetBody != nil {
-			if rc, err := req.GetBody(); err == nil {
-				logReq.Body = rc
-				defer func() {
-					if closeErr := rc.Close(); closeErr != nil {
-						debugLog("HTTP-RAW", "", fmt.Sprintf("Failed to close cloned body: %v", closeErr))
-					}
-				}()
-			}
-		}
-
-		if apiKey := logReq.Header.Get("X-API-Key"); apiKey != "" {
-			parts := strings.Split(apiKey, ".")
-			if len(parts) == 2 {
-				p0 := parts[0]
-				p1 := parts[1]
-
-				head := p0
-				if len(head) > 5 {
-					head = head[:5]
-				}
-
-				tail := p1
-				if len(tail) > 5 {
-					tail = tail[len(tail)-5:]
-				}
-
-				logReq.Header.Set("X-API-Key", head+"***."+"***"+tail)
-			} else {
-				logReq.Header.Set("X-API-Key", "***MASKED***")
-			}
-		}
-
-		if auth := logReq.Header.Get("Authorization"); auth != "" {
-			if strings.HasPrefix(auth, "Bearer ") {
-				logReq.Header.Set("Authorization", "Bearer ***MASKED***")
-			}
-		}
-
-		requestDump, _ := httputil.DumpRequestOut(logReq, true)
-		debugLog("HTTP-RAW", "", "\n>>> REQUEST >>>\n"+string(requestDump))
+		logHTTPRequest(req)
 	}
 
 	start := time.Now().Local()
 	resp, err := t.base.RoundTrip(req)
 	duration := time.Since(start)
 
-	if timings != nil {
-		timings.end = time.Now().Local()
-		msg := timings.String()
-		if replacer := getSecretReplacer(); replacer != nil {
-			msg = replacer.Replace(msg)
-		}
-		debugLog("HTTP-TIMING", "", fmt.Sprintf("%s %s → %s", req.Method, req.URL.String(), msg))
-	}
+	logHTTPTimings(req, timings)
 
 	if err != nil {
 		return nil, err
 	}
 
 	if cfg.DebugHTTPRaw && resp != nil {
-		var bodyBytes []byte
-		if resp.Body != nil {
-			bodyBytes, _ = io.ReadAll(resp.Body)
-			closeErr := resp.Body.Close()
-			if closeErr != nil {
-				debugLog("HTTP-RAW", "", fmt.Sprintf("Failed to close response body: %v", closeErr))
-			}
-			resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-		}
+		logHTTPResponse(resp, duration)
+	}
 
-		bodyStr := string(bodyBytes)
-		if replacer := getSecretReplacer(); replacer != nil {
-			bodyStr = replacer.Replace(bodyStr)
-		}
+	return resp, nil
+}
 
-		var prettyJSON bytes.Buffer
-		if err := json.Indent(&prettyJSON, []byte(bodyStr), "", "  "); err == nil {
-			bodyStr = prettyJSON.String()
-		}
+func prepareHTTPTracing(req *http.Request) (*http.Request, *httpTimings) {
+	if !cfg.DebugHTTPRaw {
+		return req, nil
+	}
 
-		maxDebugLen := 5000
-		if len(bodyStr) > maxDebugLen {
-			totalLen := len(bodyStr)
-			bodyStr = bodyStr[:maxDebugLen] + fmt.Sprintf("\n... (%d bytes truncated for debug log)", totalLen-maxDebugLen)
-		}
+	timings := &httpTimings{start: time.Now().Local()}
+	ctx := httptrace.WithClientTrace(req.Context(), timings.trace())
 
-		debugLog("HTTP-RAW", "", fmt.Sprintf("\n<<< RESPONSE (%.2fs) <<<\nStatus: %s\nBody:\n%s\n",
+	return req.Clone(ctx), timings
+}
+
+func logHTTPTimings(req *http.Request, timings *httpTimings) {
+	if timings == nil {
+		return
+	}
+
+	timings.end = time.Now().Local()
+	msg := timings.String()
+
+	if replacer := getSecretReplacer(); replacer != nil {
+		msg = replacer.Replace(msg)
+	}
+
+	debugLog("HTTP-TIMING", "", fmt.Sprintf("%s %s → %s", req.Method, req.URL.String(), msg))
+}
+
+func logHTTPRequest(req *http.Request) {
+	logReq, cleanup := cloneRequestForLogging(req)
+	defer cleanup()
+
+	maskSensitiveRequestHeaders(logReq)
+
+	requestDump, _ := httputil.DumpRequestOut(logReq, true)
+	debugLog("HTTP-RAW", "", "\n>>> REQUEST >>>\n"+string(requestDump))
+}
+
+func cloneRequestForLogging(req *http.Request) (*http.Request, func()) {
+	logReq := req.Clone(req.Context())
+
+	if req.GetBody == nil {
+		return logReq, func() {}
+	}
+
+	rc, err := req.GetBody()
+	if err != nil {
+		return logReq, func() {}
+	}
+
+	logReq.Body = rc
+
+	return logReq, func() {
+		if closeErr := rc.Close(); closeErr != nil {
+			debugLog("HTTP-RAW", "", fmt.Sprintf("Failed to close cloned body: %v", closeErr))
+		}
+	}
+}
+
+func maskSensitiveRequestHeaders(req *http.Request) {
+	maskAPIKeyHeader(req.Header)
+	maskAuthorizationHeader(req.Header)
+}
+
+func maskAPIKeyHeader(header http.Header) {
+	apiKey := header.Get("X-API-Key")
+	if apiKey == "" {
+		return
+	}
+
+	parts := strings.Split(apiKey, ".")
+	if len(parts) != 2 {
+		header.Set("X-API-Key", "***MASKED***")
+		return
+	}
+
+	p0 := parts[0]
+	p1 := parts[1]
+
+	head := p0
+	if len(head) > 5 {
+		head = head[:5]
+	}
+
+	tail := p1
+	if len(tail) > 5 {
+		tail = tail[len(tail)-5:]
+	}
+
+	header.Set("X-API-Key", head+"***."+"***"+tail)
+}
+
+func maskAuthorizationHeader(header http.Header) {
+	auth := header.Get("Authorization")
+	if auth == "" {
+		return
+	}
+
+	if strings.HasPrefix(auth, "Bearer ") {
+		header.Set("Authorization", "Bearer ***MASKED***")
+	}
+}
+
+func logHTTPResponse(resp *http.Response, duration time.Duration) {
+	bodyBytes := readAndRestoreResponseBody(resp)
+	bodyStr := sanitizeHTTPDebugBody(string(bodyBytes))
+	bodyStr = prettyPrintHTTPDebugJSON(bodyStr)
+	bodyStr = truncateHTTPDebugBody(bodyStr, 5000)
+
+	debugLog(
+		"HTTP-RAW",
+		"",
+		fmt.Sprintf(
+			"\n<<< RESPONSE (%.2fs) <<<\nStatus: %s\nBody:\n%s\n",
 			duration.Seconds(),
 			resp.Status,
-			bodyStr))
+			bodyStr,
+		),
+	)
+}
+
+func readAndRestoreResponseBody(resp *http.Response) []byte {
+	if resp.Body == nil {
+		return nil
 	}
-	return resp, nil
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+
+	if err := resp.Body.Close(); err != nil {
+		debugLog("HTTP-RAW", "", fmt.Sprintf("Failed to close response body: %v", err))
+	}
+
+	resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+	return bodyBytes
+}
+
+func sanitizeHTTPDebugBody(body string) string {
+	if replacer := getSecretReplacer(); replacer != nil {
+		return replacer.Replace(body)
+	}
+	return body
+}
+
+func prettyPrintHTTPDebugJSON(body string) string {
+	var prettyJSON bytes.Buffer
+	if err := json.Indent(&prettyJSON, []byte(body), "", "  "); err == nil {
+		return prettyJSON.String()
+	}
+	return body
+}
+
+func truncateHTTPDebugBody(body string, maxLen int) string {
+	if len(body) <= maxLen {
+		return body
+	}
+
+	totalLen := len(body)
+	return body[:maxLen] + fmt.Sprintf("\n... (%d bytes truncated for debug log)", totalLen-maxLen)
 }
 
 func ResetHTTPClient() {
@@ -289,7 +364,7 @@ func buildHTTPClient(dnsList []string) *http.Client {
 		PreferGo: true,
 		Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			var lastErr error
-			startIndex := int(atomic.LoadInt32(&lastSuccessfulDNS))
+			startIndex := int(lastSuccessfulDNS.Load())
 
 			for i := 0; i < len(dnsList); i++ {
 				if err := ctx.Err(); err != nil {
@@ -311,7 +386,7 @@ func buildHTTPClient(dnsList []string) *http.Client {
 
 				if err == nil {
 					if idx != startIndex {
-						atomic.StoreInt32(&lastSuccessfulDNS, int32(idx))
+						lastSuccessfulDNS.Store(int32(idx)) //nolint:gosec
 					}
 					return conn, nil
 				}
@@ -486,7 +561,7 @@ func sanitizeID(s string) string {
 
 func sanitizeIDWithHash(s string) string {
 	base := sanitizeID(s)
-	sum := sha1.Sum([]byte(s))
+	sum := sha256.Sum256([]byte(s))
 	sfx := hex.EncodeToString(sum[:])[:8]
 	if base == "" || base == "x" {
 		return "d-" + sfx
@@ -590,7 +665,7 @@ func getClientIP(r *http.Request) string {
 	trustProxy := true
 
 	if v := strings.TrimSpace(os.Getenv("TRUST_PROXY")); v != "" {
-		trustProxy = strings.ToLower(v) != "false"
+		trustProxy = strings.ToLower(v) != constFalse
 	}
 
 	if trustProxy {

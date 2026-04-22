@@ -79,7 +79,7 @@ func normalizeLang(s string) string {
 	return s
 }
 
-func detectLanguage(langDir string, preferred string) string {
+func detectLanguage(langDir, preferred string) string {
 	langs, err := getAvailableLanguages(langDir)
 	if err != nil {
 		fmt.Printf("[WARN] Konnte Sprachdateien nicht lesen: %v\n", err)
@@ -225,6 +225,11 @@ func loadZonesForDomainConfig(ctx context.Context, dc *DomainConfig) ([]Zone, er
 }
 
 func loadIONOSZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
+	cfgMu.RLock()
+	domainConfigs := make([]DomainConfig, len(cfg.DomainConfigs))
+	copy(domainConfigs, cfg.DomainConfigs)
+	cfgMu.RUnlock()
+
 	data, err := ionosAPI(ctx, dc, MethodGET, ionosBaseURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load ionos zones: %w", err)
@@ -239,11 +244,11 @@ func loadIONOSZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
 	}
 
 	needed := make(map[string]struct{})
-	for _, cfg := range cfg.DomainConfigs {
-		if cfg.Provider != ProviderIONOS {
+	for _, dc := range domainConfigs {
+		if dc.Provider != ProviderIONOS {
 			continue
 		}
-		dn := strings.TrimSuffix(strings.ToLower(cfg.FQDN), ".")
+		dn := strings.TrimSuffix(strings.ToLower(dc.FQDN), ".")
 		needed[dn] = struct{}{}
 	}
 
@@ -344,10 +349,11 @@ func doSingleflight[T any](
 		return res.Val.(T), nil
 	}
 }
+
 func calculateRetryDelay(attempt int, isServerError bool) time.Duration {
 	baseWait := min(max(time.Duration(math.Pow(RetryExponentBase, float64(attempt+1)))*RetryBaseDelay, RetryBaseDelay), RetryMaxDelay)
 
-	jitter := time.Duration(rand.Intn(RetryJitterMaxMs)) * time.Millisecond
+	jitter := time.Duration(rand.Intn(RetryJitterMaxMs)) * time.Millisecond //nolint:gosec
 	wait := baseWait + jitter
 
 	if isServerError {

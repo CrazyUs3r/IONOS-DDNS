@@ -160,7 +160,6 @@ func (m *APIMetrics) calcPercentile(p float64) time.Duration {
 		idx = count - 1
 	}
 	return time.Duration(samples[idx]) * time.Millisecond
-
 }
 
 func (m *APIMetrics) cleanupOldTimestamps(now time.Time) {
@@ -294,7 +293,7 @@ func (m *APIMetrics) getStatsUnsafe() map[string]interface{} {
 
 func ensureMetricsFile(path string) error {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 
@@ -308,7 +307,7 @@ func ensureMetricsFile(path string) error {
 
 	empty := apiMetricsSnapshot{SavedAt: time.Now().Local()}
 	b, _ := json.MarshalIndent(empty, "", "  ")
-	return os.WriteFile(path, b, 0644)
+	return os.WriteFile(path, b, 0o600)
 }
 
 func (m *APIMetrics) SaveToFile(path string) error {
@@ -361,7 +360,7 @@ func (m *APIMetrics) SaveToFile(path string) error {
 	}
 
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0644); err != nil {
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, path)

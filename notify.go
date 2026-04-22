@@ -35,8 +35,7 @@ func initNotifiers() {
 		tg := newTelegramNotifier(cfg.Notifications.Telegram.Token, cfg.Notifications.Telegram.ChatID)
 		newCfg.notifiers = append(newCfg.notifiers, tg)
 		tg.StartPolling()
-
-		debugLog("NOTIFY", "", T.NotifyTelegramActive)
+		debugLog("NOTIFY", "", fmt.Sprintf("%s %s", T.NotifyTelegramActive, cfg.Notifications.Telegram.ChatID))
 		log(LogContext{
 			Level:   LogInfo,
 			Action:  ActionConfig,
@@ -46,7 +45,7 @@ func initNotifiers() {
 
 	if cfg.Notifications.Gotify.URL != "" && cfg.Notifications.Gotify.Token != "" {
 		newCfg.notifiers = append(newCfg.notifiers, newGotifyNotifier(cfg.Notifications.Gotify.URL, cfg.Notifications.Gotify.Token))
-		debugLog("NOTIFY", "", T.NotifyGotifyActive)
+		debugLog("NOTIFY", "", fmt.Sprintf("%s %s", T.NotifyGotifyActive, cfg.Notifications.Gotify.URL))
 		log(LogContext{
 			Level:   LogInfo,
 			Action:  ActionConfig,
@@ -57,11 +56,11 @@ func initNotifiers() {
 	if cfg.Notifications.Webhook.URL != "" {
 		newCfg.notifiers = append(newCfg.notifiers,
 			newWebhookNotifier(cfg.Notifications.Webhook.URL, cfg.Notifications.Webhook.Secret))
-		debugLog("NOTIFY", "", "✅ Webhook active: "+cfg.Notifications.Webhook.URL)
+		debugLog("NOTIFY", "", fmt.Sprintf("%s %s", T.NotifyWebhookActive, cfg.Notifications.Webhook.URL))
 		log(LogContext{
 			Level:   LogInfo,
 			Action:  ActionConfig,
-			Message: "✅ Webhook active",
+			Message: t(T.NotifyWebhookActive, "✅ Webhook active"),
 		})
 	}
 

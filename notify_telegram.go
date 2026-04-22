@@ -188,7 +188,7 @@ func (t *telegramNotifier) sendText(chatID, text string, kb *tgInlineKeyboard) e
 	}
 
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", t.token)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.pollCtx, 10*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
@@ -283,7 +283,7 @@ func (t *telegramNotifier) StopPolling() {
 
 func (t *telegramNotifier) pollingLoop() {
 	debugLog("NOTIFY", "", T.TgPollingStarted)
-	defer t.deleteWebhook()
+	go t.deleteWebhook()
 	go t.registerCommands()
 
 	for {
@@ -306,8 +306,8 @@ func (t *telegramNotifier) pollingLoop() {
 		}
 
 		for _, u := range updates {
-			if int32(u.UpdateID) > t.lastOffset.Load() {
-				t.lastOffset.Store(int32(u.UpdateID))
+			if u.UpdateID > t.lastOffset.Load() {
+				t.lastOffset.Store(u.UpdateID)
 			}
 			u := u
 			if u.CallbackQuery != nil {
@@ -332,7 +332,7 @@ func (t *telegramNotifier) getUpdates(offset int) ([]tgUpdateFull, error) {
 		"https://api.telegram.org/bot%s/getUpdates?offset=%d&timeout=30",
 		t.token, offset,
 	)
-	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+	ctx, cancel := context.WithTimeout(t.pollCtx, 40*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -537,6 +537,13 @@ func (t *telegramNotifier) sendMainMenu(chatID string) {
 }
 
 func (t *telegramNotifier) sendStatus(chatID string) {
+	cfgMu.RLock()
+	ipMode := cfg.IPMode
+	domainCount := len(cfg.DomainConfigs)
+	interval := cfg.Interval
+	dryRun := cfg.DryRun
+	cfgMu.RUnlock()
+
 	stats := apiMetrics.GetStats()
 
 	status := T.TgStatusOnline
@@ -550,10 +557,10 @@ func (t *telegramNotifier) sendStatus(chatID string) {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "<b>%s</b>  <code>%s</code>\n\n", T.TgStatusHeading, t.instanceTag)
 	fmt.Fprintf(&sb, "🔸 %s      <b>%s</b>\n", T.TgStatusLabelStatus, status)
-	fmt.Fprintf(&sb, "🔸 %s    <code>%s</code>\n", T.TgStatusLabelIPMode, cfg.IPMode)
-	fmt.Fprintf(&sb, "🔸 %s     <code>%d</code>\n", T.TgStatusLabelDomains, len(cfg.DomainConfigs))
-	fmt.Fprintf(&sb, "🔸 %s   <code>%ds</code>\n", T.TgStatusLabelInterval, cfg.Interval)
-	fmt.Fprintf(&sb, "🔸 %s     <code>%v</code>\n", T.TgStatusLabelDryRun, cfg.DryRun)
+	fmt.Fprintf(&sb, "🔸 %s    <code>%s</code>\n", T.TgStatusLabelIPMode, ipMode)
+	fmt.Fprintf(&sb, "🔸 %s     <code>%d</code>\n", T.TgStatusLabelDomains, domainCount)
+	fmt.Fprintf(&sb, "🔸 %s   <code>%ds</code>\n", T.TgStatusLabelInterval, interval)
+	fmt.Fprintf(&sb, "🔸 %s     <code>%v</code>\n", T.TgStatusLabelDryRun, dryRun)
 	fmt.Fprintf(&sb, "🔸 %s    <code>%v</code>\n", T.TgStatusLabelRequests, stats["total_requests"])
 	fmt.Fprintf(&sb, "🔸 %s: <code>%v</code>\n", T.TgStatusLabelSuccessRate, stats["success_rate"])
 	fmt.Fprintf(&sb, "🔸 %s    <code>%v</code>\n", T.TgStatusLabelLatency, stats["avg_latency"])
@@ -602,13 +609,17 @@ func (t *telegramNotifier) sendMetrics(chatID string) {
 }
 
 func (t *telegramNotifier) sendDomains(chatID string) {
+	cfgMu.RLock()
+	domainConfigs := make([]DomainConfig, len(cfg.DomainConfigs))
+	copy(domainConfigs, cfg.DomainConfigs)
+	cfgMu.RUnlock()
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "<b>%s</b>  <code>%s</code>\n\n", T.TgDomainsHeading, t.instanceTag)
 
-	if len(cfg.DomainConfigs) == 0 {
+	if len(domainConfigs) == 0 {
 		sb.WriteString(T.NoDomainsConfigured)
 	} else {
-		for _, dc := range cfg.DomainConfigs {
+		for _, dc := range domainConfigs {
 			fmt.Fprintf(&sb, "🔹 <code>%s</code>  <i>(%s)</i>\n", dc.FQDN, dc.Provider)
 		}
 	}
@@ -697,10 +708,10 @@ var instanceEmojis = []string{
 
 func generateInstanceTag() string {
 	pool := instanceEmojis
-	a := pool[rand.Intn(len(pool))]
-	b := pool[rand.Intn(len(pool))]
+	a := pool[rand.Intn(len(pool))] //nolint:gosec
+	b := pool[rand.Intn(len(pool))] //nolint:gosec
 	if a == b {
-		b = pool[rand.Intn(len(pool))]
+		b = pool[rand.Intn(len(pool))] //nolint:gosec
 	}
 	return a + b
 }

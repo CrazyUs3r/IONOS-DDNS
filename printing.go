@@ -13,16 +13,23 @@ import (
 // PRINTING
 // ============================================================================
 func printGroupedDomains() {
-	fmt.Printf("\n🚀  %s [%s] (%s: %s) [Multi-Provider]:\n",
-		T.ServiceStarted, cfg.Lang, T.Mode, cfg.IPMode)
+	cfgMu.RLock()
+	lang := cfg.Lang
+	ipMode := cfg.IPMode
+	domainConfigs := make([]DomainConfig, len(cfg.DomainConfigs))
+	copy(domainConfigs, cfg.DomainConfigs)
+	cfgMu.RUnlock()
 
-	if len(cfg.DomainConfigs) == 0 {
+	fmt.Printf("\n🚀  %s [%s] (%s: %s) [Multi-Provider]:\n",
+		T.ServiceStarted, lang, T.Mode, ipMode)
+
+	if len(domainConfigs) == 0 {
 		fmt.Println("\n⚠️  " + T.NoDomains)
 		return
 	}
 
 	byProvider := make(map[ProviderType][]string)
-	for _, dc := range cfg.DomainConfigs {
+	for _, dc := range domainConfigs {
 		byProvider[dc.Provider] = append(byProvider[dc.Provider], dc.FQDN)
 	}
 
@@ -59,97 +66,184 @@ func printGroupedDomains() {
 }
 
 func printInfrastructure(ctx context.Context, zonesByProvider map[string][]Zone) {
+	domainConfigs := snapshotDomainConfigsForPrinting()
+
 	fmt.Println("\n" + T.InfraHeading)
 
+	providerTypes := sortedProviderTypes(zonesByProvider)
+	for _, pt := range providerTypes {
+		printProviderInfrastructure(ctx, ProviderType(pt), zonesByProvider[pt], domainConfigs)
+	}
+
+	fmt.Println("\n" + strings.Repeat("-", 40))
+}
+
+func snapshotDomainConfigsForPrinting() []DomainConfig {
+	cfgMu.RLock()
+	defer cfgMu.RUnlock()
+
+	domainConfigs := make([]DomainConfig, len(cfg.DomainConfigs))
+	copy(domainConfigs, cfg.DomainConfigs)
+
+	return domainConfigs
+}
+
+func sortedProviderTypes(zonesByProvider map[string][]Zone) []string {
 	pTypes := make([]string, 0, len(zonesByProvider))
 	for p := range zonesByProvider {
 		pTypes = append(pTypes, p)
 	}
 	sort.Strings(pTypes)
+	return pTypes
+}
 
-	for _, pt := range pTypes {
-		zones := zonesByProvider[pt]
-		fmt.Printf("\n📦 Provider: %s (%d zones)\n", pt, len(zones))
+func printProviderInfrastructure(
+	ctx context.Context,
+	provider ProviderType,
+	zones []Zone,
+	domainConfigs []DomainConfig,
+) {
+	fmt.Printf("\n📦 Provider: %s (%d zones)\n", provider, len(zones))
 
-		var dc *DomainConfig
-		for i := range cfg.DomainConfigs {
-			if string(cfg.DomainConfigs[i].Provider) == pt {
-				dc = &cfg.DomainConfigs[i]
-				break
-			}
-		}
+	dc := findProviderConfigForPrinting(provider, domainConfigs)
 
-		for _, z := range zones {
-			fmt.Printf("\n🌐 Zone: %s\n", z.Name)
-			var records []Record
+	for _, z := range zones {
+		printZoneInfrastructure(ctx, provider, z, dc)
+	}
+}
 
-			switch ProviderType(pt) {
-			case ProviderIPv64:
-				providerCache.RLock()
-				if data, ok := providerCache.ipv64Records[z.Name]; ok {
-					for _, ir := range data.Records {
-						name := z.Name
-						if ir.Praefix != "" {
-							name = ir.Praefix + "." + z.Name
-						}
-						records = append(records, Record{
-							Name:    name,
-							Type:    ir.Type,
-							Content: ir.Content,
-						})
-					}
-				}
-				providerCache.RUnlock()
-
-			case ProviderCloudflare:
-				if dc != nil {
-					records, _ = loadCloudflareRecords(ctx, dc, z.ID)
-				}
-
-			default:
-				if dc != nil {
-					data, _ := ionosAPI(ctx, dc, MethodGET, ionosBaseURL+"/"+z.ID, nil)
-					var detail struct{ Records []Record }
-					_ = json.Unmarshal(data, &detail)
-					records = detail.Records
-				}
-			}
-
-			var relevant []Record
-			for _, r := range records {
-				if r.Type == "A" || r.Type == "AAAA" || r.Type == "CNAME" {
-					relevant = append(relevant, r)
-				}
-			}
-
-			sort.Slice(relevant, func(i, j int) bool { return relevant[i].Name < relevant[j].Name })
-
-			if len(relevant) == 0 {
-				fmt.Printf("   └─ ⚠️ Keine relevanten Records gefunden\n")
-				continue
-			}
-
-			for i, r := range relevant {
-				char := "├"
-				if i == len(relevant)-1 {
-					char = "└"
-				}
-				fmt.Printf("   %s─ %-35s [%-5s] -> %s\n", char, r.Name, r.Type, r.Content)
-			}
+func findProviderConfigForPrinting(provider ProviderType, domainConfigs []DomainConfig) *DomainConfig {
+	for i := range domainConfigs {
+		if domainConfigs[i].Provider == provider {
+			return &domainConfigs[i]
 		}
 	}
-	fmt.Println("\n" + strings.Repeat("-", 40))
+	return nil
+}
+
+func printZoneInfrastructure(
+	ctx context.Context,
+	provider ProviderType,
+	z Zone,
+	dc *DomainConfig,
+) {
+	fmt.Printf("\n🌐 Zone: %s\n", z.Name)
+
+	records := loadInfrastructureRecords(ctx, provider, z, dc)
+	relevant := filterRelevantInfrastructureRecords(records)
+
+	sort.Slice(relevant, func(i, j int) bool {
+		return relevant[i].Name < relevant[j].Name
+	})
+
+	if len(relevant) == 0 {
+		fmt.Printf("   └─ ⚠️ Keine relevanten Records gefunden\n")
+		return
+	}
+
+	printRelevantInfrastructureRecords(relevant)
+}
+
+func loadInfrastructureRecords(
+	ctx context.Context,
+	provider ProviderType,
+	z Zone,
+	dc *DomainConfig,
+) []Record {
+	switch provider {
+	case ProviderIPv64:
+		return loadIPv64InfrastructureRecords(z)
+
+	case ProviderCloudflare:
+		if dc == nil {
+			return nil
+		}
+		records, _ := loadCloudflareRecords(ctx, dc, z.ID)
+		return records
+
+	default:
+		if dc == nil {
+			return nil
+		}
+		return loadIonosInfrastructureRecords(ctx, dc, z.ID)
+	}
+}
+
+func loadIPv64InfrastructureRecords(z Zone) []Record {
+	providerCache.RLock()
+	defer providerCache.RUnlock()
+
+	var records []Record
+	if data, ok := providerCache.ipv64Records[z.Name]; ok {
+		for _, ir := range data.Records {
+			name := z.Name
+			if ir.Praefix != "" {
+				name = ir.Praefix + "." + z.Name
+			}
+			records = append(records, Record{
+				Name:    name,
+				Type:    ir.Type,
+				Content: ir.Content,
+			})
+		}
+	}
+
+	return records
+}
+
+func loadIonosInfrastructureRecords(ctx context.Context, dc *DomainConfig, zoneID string) []Record {
+	data, _ := ionosAPI(ctx, dc, MethodGET, ionosBaseURL+"/"+zoneID, nil)
+
+	var detail struct {
+		Records []Record `json:"records"`
+	}
+	_ = json.Unmarshal(data, &detail)
+
+	return detail.Records
+}
+
+func filterRelevantInfrastructureRecords(records []Record) []Record {
+	relevant := make([]Record, 0, len(records))
+	for _, r := range records {
+		if r.Type == "A" || r.Type == "AAAA" || r.Type == "CNAME" {
+			relevant = append(relevant, r)
+		}
+	}
+	return relevant
+}
+
+func printRelevantInfrastructureRecords(records []Record) {
+	for i, r := range records {
+		char := "├"
+		if i == len(records)-1 {
+			char = "└"
+		}
+		fmt.Printf("   %s─ %-35s [%-5s] -> %s\n", char, r.Name, r.Type, r.Content)
+	}
 }
 
 func logHTTPClientStats() {
-	if !cfg.DebugEnabled {
+	cfgMu.RLock()
+	debugEnabled := cfg.DebugEnabled
+	domainConfigs := make([]DomainConfig, len(cfg.DomainConfigs))
+	copy(domainConfigs, cfg.DomainConfigs)
+	interval := cfg.Interval
+	ipMode := cfg.IPMode
+	ifaceName := cfg.IfaceName
+	healthPort := cfg.HealthPort
+	dryRun := cfg.DryRun
+	logDir := cfg.LogDir
+	lang := cfg.Lang
+	cfgMu.RUnlock()
+
+	if !debugEnabled {
 		return
 	}
 
 	debugLog("CONFIG", "", "========== "+T.ConfigHeading+" ==========")
 
 	providerCounts := make(map[ProviderType]int)
-	for _, dc := range cfg.DomainConfigs {
+	for _, dc := range domainConfigs {
 		providerCounts[dc.Provider]++
 	}
 
@@ -157,12 +251,12 @@ func logHTTPClientStats() {
 		debugLog("CONFIG", "", fmt.Sprintf("Provider: %s (%d domains)", provider, count))
 	}
 
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %ds", T.ConfigInterval, cfg.Interval))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", T.ConfigIPMode, cfg.IPMode))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", T.ConfigInterface, cfg.IfaceName))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", T.ConfigHealthPort, cfg.HealthPort))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %v", T.ConfigDryRun, cfg.DryRun))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", T.ConfigLogDir, cfg.LogDir))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", T.ConfigLanguage, cfg.Lang))
+	debugLog("CONFIG", "", fmt.Sprintf("%s: %ds", T.ConfigInterval, interval))
+	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", T.ConfigIPMode, ipMode))
+	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", T.ConfigInterface, ifaceName))
+	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", T.ConfigHealthPort, healthPort))
+	debugLog("CONFIG", "", fmt.Sprintf("%s: %v", T.ConfigDryRun, dryRun))
+	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", T.ConfigLogDir, logDir))
+	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", T.ConfigLanguage, lang))
 	debugLog("CONFIG", "", "===================================")
 }

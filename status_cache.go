@@ -2,7 +2,7 @@
 package main
 
 import (
-	"crypto/md5"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -60,7 +60,7 @@ func updateStatusFile(fqdn, ipv4, ipv6, provider string) {
 
 	tmp := updatePath + ".tmp"
 
-	if err := os.WriteFile(tmp, js, 0644); err != nil {
+	if err := os.WriteFile(tmp, js, 0o600); err != nil {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionError,
@@ -116,7 +116,8 @@ func updateDomainsCache() error {
 		return err
 	}
 
-	etag := fmt.Sprintf(`"%x"`, md5.Sum(data))
+	sum := sha256.Sum256(data)
+	etag := fmt.Sprintf(`"%x"`, sum)
 
 	domainsCache.mu.Lock()
 	domainsCache.Data = data
@@ -136,7 +137,8 @@ func updateMetricsCache() error {
 		return err
 	}
 
-	etag := fmt.Sprintf(`"%x"`, md5.Sum(data))
+	sum := sha256.Sum256(data)
+	etag := fmt.Sprintf(`"%x"`, sum)
 
 	metricsCache.mu.Lock()
 	metricsCache.Data = data

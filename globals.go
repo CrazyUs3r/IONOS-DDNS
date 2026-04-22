@@ -2,11 +2,13 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -34,13 +36,16 @@ var (
 	cloudflareAPIBase = "https://api.cloudflare.com/client/v4"
 	ipv64APIBase      = "https://ipv64.net/api.php"
 
-	lastOk           atomic.Bool
-	schedulerRanOnce atomic.Bool
-	cfgMu            sync.RWMutex
-	phraseMu         sync.RWMutex
-	logMutex         sync.Mutex
-	statusMutex      sync.Mutex
-	lastErrorMsg     = &SafeErrorMsg{}
+	lastOk             atomic.Bool
+	schedulerRanOnce   atomic.Bool
+	cfgMu              sync.RWMutex
+	phraseMu           sync.RWMutex
+	logMutex           sync.Mutex
+	logFile            *os.File
+	logWriter          *bufio.Writer
+	closeLogWriterOnce sync.Once
+	statusMutex        sync.Mutex
+	lastErrorMsg       = &SafeErrorMsg{}
 
 	httpClient   *http.Client
 	clientMu     sync.RWMutex
@@ -91,13 +96,13 @@ var (
 
 	metricsPersistPath = ""
 
-	rotationQueue = make(chan rotationJob, 4)
-	logWriteQueue = make(chan LogEntry, 500)
+	rotationQueue   = make(chan rotationJob, 4)
+	logWriteQueue   = make(chan LogEntry, 500)
+	logFlushTimeout = 2 * time.Second
 
-	rotationMutex sync.Mutex
 	activeUpdates atomic.Int32
 
-	lastSuccessfulDNS int32
+	lastSuccessfulDNS atomic.Int32
 
 	providerCache = &ProviderDataCache{
 		ionosRecords: make(map[string][]Record),
@@ -198,6 +203,49 @@ var persistOnOtherLevels = map[string]struct{}{
 }
 
 // ============================================================================
+// Dashboard
+// ============================================================================
+const (
+	IconDefault = "🔹"
+	IconStart   = "🚀"
+	IconStop    = "🛑"
+	IconUpdate  = "🔄"
+	IconCreate  = "🆕"
+	IconCurrent = "✓"
+	IconRetry   = "🔁"
+	IconError   = "❌"
+	IconConfig  = "⚙️"
+	IconZone    = "🌐"
+	IconDryRun  = "🔍"
+	IconCleanup = "🧹"
+	IconSkip    = "⏭️"
+	IconAPI     = "🔌"
+	IconServer  = "🖥️"
+	IconSuccess = "✅"
+	HTMLChecked = " checked"
+)
+
+var actionIcons = map[string]string{
+	"START":   IconStart,
+	"STOP":    IconStop,
+	"UPDATE":  IconUpdate,
+	"CREATE":  IconCreate,
+	"CURRENT": IconCurrent,
+	"RETRY":   IconRetry,
+	"ERROR":   IconError,
+	"FAIL":    IconError,
+	"CONFIG":  IconConfig,
+	"ZONE":    IconZone,
+	"DRY-RUN": IconDryRun,
+	"CLEANUP": IconCleanup,
+	"SKIP":    IconSkip,
+	"API":     IconAPI,
+	"SERVER":  IconServer,
+	"SUCCESS": IconSuccess,
+	"ADDED":   IconSuccess,
+}
+
+// ============================================================================
 // DEFAULTS
 // ============================================================================
 const (
@@ -243,6 +291,14 @@ const (
 	IPAny IPVersion = 0
 	IPV4  IPVersion = 4
 	IPV6  IPVersion = 6
+)
+
+const (
+	RecordTypeA    = "A"
+	RecordTypeAAAA = "AAAA"
+	IPModeBoth     = "BOTH"
+	IPModeV4       = "IPV4"
+	IPModeV6       = "IPV6"
 )
 
 // ============================================================================
@@ -301,6 +357,11 @@ const (
 	tgQueueSize    = 64
 	tgQueueMaxAge  = 5 * time.Minute
 	tgSendInterval = 500 * time.Millisecond
+)
+
+const (
+	constTrue  = "TRUE"
+	constFalse = "FALSE"
 )
 
 // ============================================================================
@@ -433,7 +494,7 @@ type Phrases struct {
 	NotifyEventStartLabel, NotifyEventStartDesc                                string
 	NotifyEventStopLabel, NotifyEventStopDesc                                  string
 	NotifyEventCleanupLabel, NotifyEventCleanupDesc                            string
-	NotifyTelegramActive, NotifyGotifyActive                                   string
+	NotifyTelegramActive, NotifyGotifyActive, NotifyWebhookActive              string
 	TgCmdStart, TgCmdStatus, TgCmdMetrics, TgCmdDomains                        string
 	TgCmdUpdate, TgCmdHealth, TgCmdHelp, TgMenuPrompt                          string
 	TgUpdateAlreadyRunning, TgUpdateStarting, TgUpdateDone                     string
@@ -1059,7 +1120,7 @@ type tgCallbackQuery struct {
 }
 
 type tgUpdateFull struct {
-	UpdateID      int              `json:"update_id"`
+	UpdateID      int64            `json:"update_id"`
 	Message       *tgMessage       `json:"message,omitempty"`
 	CallbackQuery *tgCallbackQuery `json:"callback_query,omitempty"`
 }
@@ -1070,7 +1131,7 @@ type telegramNotifier struct {
 	pollOnce       sync.Once
 	pollClientOnce sync.Once
 	pollClient     *http.Client
-	lastOffset     atomic.Int32
+	lastOffset     atomic.Int64
 	sendQueue      chan tgQueuedMsg
 	pollCtx        context.Context
 	pollCancel     context.CancelFunc

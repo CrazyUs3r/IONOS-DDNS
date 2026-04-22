@@ -135,7 +135,7 @@ func broadcastUpdate(updateType string, data interface{}) {
 	}
 }
 
-func broadcastNotification(message string, level string) {
+func broadcastNotification(message, level string) {
 	if level == "" {
 		level = "info"
 	}

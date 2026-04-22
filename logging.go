@@ -12,43 +12,84 @@ import (
 	"time"
 )
 
+const (
+	LogTDbg  = "DBG"
+	LogTInfo = "INFO"
+	LogTWarn = "WARN"
+	LogTErr  = "ERR"
+)
+
+const (
+	IconDBG  = "🐞"
+	IconInfo = "ℹ️"
+	IconWarn = "⚠️"
+	IconErr  = "❌"
+)
+
 // ============================================================================
 // LOGGING
 // ============================================================================
 func log(ctx LogContext) {
-	if ctx.Level == LogDebug && !cfg.DebugEnabled && !cfg.DebugHTTPRaw {
+	if shouldSkipLog(ctx) {
 		return
 	}
 
-	var levelStr, icon string
-	switch ctx.Level {
-	case LogDebug:
-		levelStr, icon = "DBG", "🐞"
-	case LogInfo:
-		levelStr, icon = "INFO", "ℹ️"
-	case LogWarn:
-		levelStr, icon = "WARN", "⚠️"
-	case LogError:
-		levelStr, icon = "ERR", "❌"
+	levelStr, icon := logLevelPresentation(ctx)
+	ts := time.Now().Local().Format("02.01.2006 15:04:05")
+	msg := buildLogMessage(ctx)
+	icon = overrideLogIcon(icon, ctx)
+
+	printLogLine(ts, levelStr, icon, ctx, msg)
+
+	if shouldPersistLevel(ctx.Level, ctx.Action) {
+		persistLog(ctx)
 	}
 
+	broadcastDebugLogIfNeeded(ctx, msg, icon)
+}
+
+func shouldSkipLog(ctx LogContext) bool {
+	cfgMu.RLock()
+	debugEnabled := cfg.DebugEnabled
+	debugHTTPRaw := cfg.DebugHTTPRaw
+	cfgMu.RUnlock()
+
+	return ctx.Level == LogDebug && !debugEnabled && !debugHTTPRaw
+}
+
+func logLevelPresentation(ctx LogContext) (string, string) {
+	switch ctx.Level {
+	case LogDebug:
+		return LogTDbg, IconDBG
+	case LogInfo:
+		return LogTInfo, IconInfo
+	case LogWarn:
+		return LogTWarn, IconWarn
+	case LogError:
+		return LogTErr, IconErr
+	default:
+		return LogTInfo, IconInfo
+	}
+}
+
+func buildLogMessage(ctx LogContext) string {
+	if ctx.Error != nil {
+		return fmt.Sprintf("%s: %v", ctx.Message, ctx.Error)
+	}
+	return ctx.Message
+}
+
+func overrideLogIcon(icon string, ctx LogContext) string {
 	if ctx.Level == LogInfo && ctx.Action == ActionCurrent {
 		icon = "✅"
 	}
-
-	ts := time.Now().Local().Format("02.01.2006 15:04:05")
-
-	var msg string
-	if ctx.Error != nil {
-		msg = fmt.Sprintf("%s: %v", ctx.Message, ctx.Error)
-	} else {
-		msg = ctx.Message
-	}
-
 	if ctx.Category != "" {
 		icon = getCategoryIcon(ctx.Category)
 	}
+	return icon
+}
 
+func printLogLine(ts, levelStr, icon string, ctx LogContext, msg string) {
 	switch {
 	case ctx.Domain != "" && ctx.Category != "":
 		fmt.Printf("[%s] [%-4s] %s %-12s | %-35s: %s\n",
@@ -66,14 +107,11 @@ func log(ctx LogContext) {
 		fmt.Printf("[%s] [%-4s] %s %s\n",
 			ts, levelStr, icon, msg)
 	}
+}
 
-	if shouldPersistLevel(ctx.Level, ctx.Action) {
-		persistLog(ctx)
-	}
-
+func broadcastDebugLogIfNeeded(ctx LogContext, msg, icon string) {
 	switch ctx.Level {
 	case LogDebug, LogWarn, LogError:
-
 		broadcastUpdate("debug_log", map[string]string{
 			"timestamp": time.Now().Local().Format("02.01.2006 15:04:05"),
 			"category":  ctx.Category,
@@ -193,121 +231,154 @@ func ipLog(msg string) {
 // LOG WRITER
 // ============================================================================
 func startLogWriter() {
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				log(LogContext{
-					Level:      LogError,
-					Category:   "SYSTEM",
-					Action:     ActionError,
-					Message:    t(T.LogWriterPanic, "Log writer panic"),
-					Error:      fmt.Errorf("%v", r),
-					SkipNotify: true,
-				})
-			}
-		}()
+	go runLogWriterLoop()
+}
 
-		var file *os.File
-		var writer *bufio.Writer
+func runLogWriterLoop() {
+	defer recoverLogWriterPanic()
 
-		ensureOpen := func() error {
-			if writer != nil && file != nil {
-				return nil
-			}
+	flushTicker := time.NewTicker(2 * time.Second)
+	defer flushTicker.Stop()
 
-			dir := filepath.Dir(logPath)
-			if err := os.MkdirAll(dir, 0755); err != nil {
-				return err
-			}
+	batchCount := 0
+	const maxBatchSize = 1000
 
-			f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-			if err != nil {
-				return err
-			}
-
-			file = f
-			writer = bufio.NewWriterSize(file, 256*1024)
-			return nil
-		}
-
-		flushTicker := time.NewTicker(2 * time.Second)
-		defer flushTicker.Stop()
-
-		batchCount := 0
-		const maxBatchSize = 1000
-
-		for {
-			select {
-			case entry, ok := <-logWriteQueue:
-				if !ok {
-					if writer != nil {
-						_ = writer.Flush()
-						_ = file.Close()
-					}
-					return
-				}
-
-				logMutex.Lock()
-				if err := ensureOpen(); err != nil {
-					log(LogContext{
-						Level:      LogError,
-						Category:   "SYSTEM",
-						Action:     ActionError,
-						Message:    fmt.Sprintf(t(T.LogCannotOpenFile, "Cannot open log file %s"), logPath),
-						Error:      err,
-						SkipNotify: true,
-					})
-					logMutex.Unlock()
-					continue
-				}
-
-				data, err := json.Marshal(entry)
-				if err != nil {
-					logMutex.Unlock()
-					continue
-				}
-
-				_, err = writer.Write(append(data, '\n'))
-				if err != nil {
-					log(LogContext{
-						Level:      LogError,
-						Category:   "SYSTEM",
-						Action:     ActionError,
-						Message:    t(T.LogWriteFailed, "Write failed"),
-						Error:      err,
-						SkipNotify: true,
-					})
-					_ = file.Close()
-					writer = nil
-					file = nil
-				} else {
-					batchCount++
-					if entry.Level == "ERR" || entry.Level == "WARN" || batchCount >= maxBatchSize {
-						_ = writer.Flush()
-						batchCount = 0
-					}
-				}
-				logMutex.Unlock()
-
-			case <-flushTicker.C:
-				logMutex.Lock()
-				if writer != nil && batchCount > 0 {
-					_ = writer.Flush()
-					batchCount = 0
-				}
-				logMutex.Unlock()
-
-			case <-shutdownCtx.Done():
-				logMutex.Lock()
-				if writer != nil {
-					_ = writer.Flush()
-					_ = file.Close()
-				}
-				logMutex.Unlock()
+	for {
+		select {
+		case entry, ok := <-logWriteQueue:
+			if !ok {
+				closeLogWriterResources()
 				return
 			}
+
+			batchCount = handleLogWriterEntry(entry, batchCount, maxBatchSize)
+
+		case <-flushTicker.C:
+			batchCount = flushLogWriterBatch(batchCount)
+
+		case <-shutdownCtx.Done():
+			closeLogWriterResources()
+			return
 		}
-	}()
+	}
+}
+
+func recoverLogWriterPanic() {
+	if r := recover(); r != nil {
+		log(LogContext{
+			Level:      LogError,
+			Category:   "SYSTEM",
+			Action:     ActionError,
+			Message:    t(T.LogWriterPanic, "Log writer panic"),
+			Error:      fmt.Errorf("%v", r),
+			SkipNotify: true,
+		})
+	}
+}
+
+func handleLogWriterEntry(entry LogEntry, batchCount, maxBatchSize int) int {
+	logMutex.Lock()
+
+	if err := ensureLogWriterOpen(); err != nil {
+		logMutex.Unlock()
+		log(LogContext{
+			Level:      LogError,
+			Category:   "SYSTEM",
+			Action:     ActionError,
+			Message:    fmt.Sprintf(t(T.LogCannotOpenFile, "Cannot open log file %s"), logPath),
+			Error:      err,
+			SkipNotify: true,
+		})
+		return batchCount
+	}
+
+	data, err := json.Marshal(entry)
+	if err != nil {
+		logMutex.Unlock()
+		return batchCount
+	}
+
+	if err := writeLogEntry(data); err != nil {
+		closeLogWriterUnsafe()
+		logMutex.Unlock()
+
+		log(LogContext{
+			Level:      LogError,
+			Category:   "SYSTEM",
+			Action:     ActionError,
+			Message:    t(T.LogWriteFailed, "Write failed"),
+			Error:      err,
+			SkipNotify: true,
+		})
+		return batchCount
+	}
+
+	batchCount++
+	if shouldFlushLogBatch(entry, batchCount, maxBatchSize) {
+		_ = logWriter.Flush()
+		batchCount = 0
+	}
+
+	logMutex.Unlock()
+	return batchCount
+}
+
+func ensureLogWriterOpen() error {
+	if logWriter != nil && logFile != nil {
+		return nil
+	}
+
+	dir := filepath.Dir(logPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+
+	logFile = f
+	logWriter = bufio.NewWriterSize(logFile, 256*1024)
+	return nil
+}
+
+func writeLogEntry(data []byte) error {
+	_, err := logWriter.Write(append(data, '\n'))
+	return err
+}
+
+func shouldFlushLogBatch(entry LogEntry, batchCount, maxBatchSize int) bool {
+	return entry.Level == "ERR" || entry.Level == "WARN" || batchCount >= maxBatchSize
+}
+
+func flushLogWriterBatch(batchCount int) int {
+	logMutex.Lock()
+	defer logMutex.Unlock()
+
+	if logWriter != nil && batchCount > 0 {
+		_ = logWriter.Flush()
+		return 0
+	}
+
+	return batchCount
+}
+
+func closeLogWriterResources() {
+	logMutex.Lock()
+	defer logMutex.Unlock()
+	closeLogWriterUnsafe()
+}
+
+func closeLogWriterUnsafe() {
+	if logWriter != nil {
+		_ = logWriter.Flush()
+		logWriter = nil
+	}
+	if logFile != nil {
+		_ = logFile.Close()
+		logFile = nil
+	}
 }
 
 func startLogRotationWorker() {
@@ -340,83 +411,89 @@ func startLogRotationWorker() {
 }
 
 func doLogRotation(path string, maxLines int) {
-	rotationMutex.Lock()
-	defer rotationMutex.Unlock()
+	logMutex.Lock()
+	defer logMutex.Unlock()
 
-	file, err := os.Open(path)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			log(LogContext{
-				Level:    LogWarn,
-				Category: "MAINTENANCE",
-				Action:   ActionError,
-				Message:  t(T.LogRotationError, "Log rotation error"),
-				Error:    err,
-			})
+	if filepath.Clean(path) == filepath.Clean(logPath) {
+		if logWriter != nil {
+			_ = logWriter.Flush()
+			logWriter = nil
 		}
+		if logFile != nil {
+			_ = logFile.Close()
+			logFile = nil
+		}
+	}
+
+	newLines, totalCount, err := tailLines(path, maxLines)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "log rotation error: %v\n", err)
 		return
 	}
 
-	var lines []string
-	scanner := bufio.NewScanner(file)
-	buf := make([]byte, 1024*1024)
-	scanner.Buffer(buf, len(buf))
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
-	}
-	if err := scanner.Err(); err != nil {
-		log(LogContext{
-			Level:    LogWarn,
-			Category: "MAINTENANCE",
-			Action:   ActionError,
-			Message:  fmt.Sprintf("%s: ", t(T.RotationScannerError, "Rotation scanner error")),
-			Error:    err,
-		})
-	}
-	if closeErr := file.Close(); closeErr != nil {
-		log(LogContext{
-			Level:      LogWarn,
-			Category:   "MAINTENANCE",
-			Action:     ActionError,
-			Message:    t(T.LogFileCloseFailed, "Failed to close file"),
-			Error:      closeErr,
-			SkipNotify: true,
-		})
-	}
-
-	if len(lines) <= maxLines {
+	if totalCount <= maxLines {
 		return
 	}
 
-	startIdx := len(lines) - maxLines
-	newLines := lines[startIdx:]
 	output := strings.Join(newLines, "\n") + "\n"
+	tmpPath := path + ".tmp." + strconv.FormatInt(time.Now().UnixNano(), 10)
 
-	tmpPath := path + ".tmp." + strconv.FormatInt(time.Now().Local().UnixNano(), 10)
-	if err := os.WriteFile(tmpPath, []byte(output), 0644); err != nil {
-		log(LogContext{
-			Level:    LogWarn,
-			Category: "MAINTENANCE",
-			Action:   ActionError,
-			Message:  t(T.LogRotationError, "Log rotation error"),
-			Error:    err,
-		})
+	if err := os.WriteFile(tmpPath, []byte(output), 0o600); err != nil {
+		fmt.Fprintf(os.Stderr, "log rotation write error: %v\n", err)
 		return
 	}
 
-	if err := os.Rename(tmpPath, path); err != nil {
-		log(LogContext{
-			Level:    LogWarn,
-			Category: "MAINTENANCE",
-			Action:   ActionError,
-			Message:  t(T.LogRotationError, "Log rotation rename failed"),
-			Error:    err,
-		})
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		fmt.Fprintf(os.Stderr, "log rotation remove failed: %v\n", err)
 		_ = os.Remove(tmpPath)
 		return
 	}
 
-	debugLog("MAINTENANCE", "", fmt.Sprintf("✅ %s: %d → %d", T.LogRotated, len(lines), len(newLines)))
+	if err := os.Rename(tmpPath, path); err != nil {
+		fmt.Fprintf(os.Stderr, "log rotation rename failed: %v\n", err)
+		_ = os.Remove(tmpPath)
+		return
+	}
+
+	debugLog("MAINTENANCE", "", fmt.Sprintf("✅ %s: %d → %d", T.LogRotated, totalCount, len(newLines)))
+}
+
+func tailLines(path string, maxLines int) ([]string, int, error) {
+	if maxLines <= 0 {
+		return nil, 0, fmt.Errorf("maxLines must be > 0")
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer file.Close()
+
+	lines := make([]string, maxLines)
+	count := 0
+
+	scanner := bufio.NewScanner(file)
+	buf := make([]byte, 64*1024)
+	scanner.Buffer(buf, 8*1024*1024)
+
+	for scanner.Scan() {
+		lines[count%maxLines] = scanner.Text()
+		count++
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	if count <= maxLines {
+		return lines[:count], count, nil
+	}
+
+	start := count % maxLines
+	out := make([]string, 0, maxLines)
+	out = append(out, lines[start:]...)
+	out = append(out, lines[:start]...)
+	return out, count, nil
 }
 
 func rotateLogFile(path string, maxLines int) {
@@ -431,8 +508,8 @@ func rotateLogFile(path string, maxLines int) {
 // ============================================================================
 // LOG QUEUE FLUSH
 // ============================================================================
-func flushLogQueue(timeout time.Duration) {
-	timer := time.NewTimer(timeout)
+func flushLogQueue() {
+	timer := time.NewTimer(logFlushTimeout)
 	defer timer.Stop()
 
 	for {

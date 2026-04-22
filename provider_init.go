@@ -13,7 +13,7 @@ import (
 // ============================================================================
 func saveConfigToFile() error {
 	dir := filepath.Dir(configPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionError,
@@ -34,7 +34,7 @@ func saveConfigToFile() error {
 
 	tmp := configPath + ".tmp"
 
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionError,
@@ -144,87 +144,124 @@ func normalizeDomain(d string) string {
 }
 
 func initLegacyConfig() error {
-	providerEnv := strings.ToUpper(os.Getenv("PROVIDER"))
-	if providerEnv == "" {
-		providerEnv = "IONOS"
+	providerEnv := legacyProviderEnv()
+	domains, err := legacyDomainsFromEnv()
+	if err != nil {
+		return err
 	}
 
-	domainsEnv := os.Getenv("DOMAINS")
-	if domainsEnv == "" {
-		return fmt.Errorf("%s", T.NoDomainsConfigured)
-	}
-
-	domains := strings.Split(domainsEnv, ",")
-	var configs []DomainConfig
-
-	switch providerEnv {
-	case "IONOS":
-		apiPrefix := os.Getenv("API_PREFIX")
-		apiSecret := os.Getenv("API_SECRET")
-
-		if apiPrefix == "" || apiSecret == "" {
-			return fmt.Errorf("%s", T.IonosRequiresAPIPrefixAndAPISecret)
-		}
-
-		for _, d := range domains {
-			d = strings.TrimSpace(strings.ToLower(d))
-			if d == "" {
-				continue
-			}
-			configs = append(configs, DomainConfig{
-				FQDN:      d,
-				Provider:  ProviderIONOS,
-				APIPrefix: apiPrefix,
-				APISecret: apiSecret,
-			})
-		}
-
-	case "CLOUDFLARE":
-		cfToken := os.Getenv("CLOUDFLARE_TOKEN")
-		cfEmail := os.Getenv("CLOUDFLARE_EMAIL")
-		cfSecret := os.Getenv("CLOUDFLARE_API_SECRET")
-
-		if cfToken == "" && (cfEmail == "" || cfSecret == "") {
-			return fmt.Errorf("%s", T.CloudflareRequiresTokenOrEmailAndAPISecret)
-		}
-
-		for _, d := range domains {
-			d = strings.TrimSpace(strings.ToLower(d))
-			if d == "" {
-				continue
-			}
-			configs = append(configs, DomainConfig{
-				FQDN:     d,
-				Provider: ProviderCloudflare,
-				CFToken:  cfToken,
-				CFEmail:  cfEmail,
-				CFSecret: cfSecret,
-			})
-		}
-
-	case "IPV64":
-		token := os.Getenv("IPV64_TOKEN")
-
-		if token == "" {
-			return fmt.Errorf("%s", T.Ipv64RequiresToken)
-		}
-
-		for _, d := range domains {
-			d = strings.TrimSpace(strings.ToLower(d))
-			if d == "" {
-				continue
-			}
-			configs = append(configs, DomainConfig{
-				FQDN:       d,
-				Provider:   ProviderIPv64,
-				IPv64Token: token,
-			})
-		}
-
-	default:
-		return fmt.Errorf(T.UnknownProviderFormat, providerEnv)
+	configs, err := buildLegacyDomainConfigs(providerEnv, domains)
+	if err != nil {
+		return err
 	}
 
 	cfg.DomainConfigs = configs
 	return validateDomainConfigs()
+}
+
+func legacyProviderEnv() string {
+	providerEnv := strings.ToUpper(os.Getenv("PROVIDER"))
+	if providerEnv == "" {
+		return "IONOS"
+	}
+	return providerEnv
+}
+
+func legacyDomainsFromEnv() ([]string, error) {
+	domainsEnv := os.Getenv("DOMAINS")
+	if domainsEnv == "" {
+		return nil, fmt.Errorf("%s", T.NoDomainsConfigured)
+	}
+
+	rawDomains := strings.Split(domainsEnv, ",")
+	domains := make([]string, 0, len(rawDomains))
+
+	for _, d := range rawDomains {
+		d = normalizeLegacyDomain(d)
+		if d != "" {
+			domains = append(domains, d)
+		}
+	}
+
+	return domains, nil
+}
+
+func normalizeLegacyDomain(domain string) string {
+	return strings.TrimSpace(strings.ToLower(domain))
+}
+
+func buildLegacyDomainConfigs(providerEnv string, domains []string) ([]DomainConfig, error) {
+	switch providerEnv {
+	case "IONOS":
+		return buildLegacyIONOSConfigs(domains)
+	case "CLOUDFLARE":
+		return buildLegacyCloudflareConfigs(domains)
+	case "IPV64":
+		return buildLegacyIPv64Configs(domains)
+	default:
+		return nil, fmt.Errorf(T.UnknownProviderFormat, providerEnv)
+	}
+}
+
+func buildLegacyIONOSConfigs(domains []string) ([]DomainConfig, error) {
+	apiPrefix := os.Getenv("API_PREFIX")
+	apiSecret := os.Getenv("API_SECRET")
+
+	if apiPrefix == "" || apiSecret == "" {
+		return nil, fmt.Errorf("%s", T.IonosRequiresAPIPrefixAndAPISecret)
+	}
+
+	configs := make([]DomainConfig, 0, len(domains))
+	for _, d := range domains {
+		configs = append(configs, DomainConfig{
+			FQDN:      d,
+			Provider:  ProviderIONOS,
+			APIPrefix: apiPrefix,
+			APISecret: apiSecret,
+		})
+	}
+
+	return configs, nil
+}
+
+func buildLegacyCloudflareConfigs(domains []string) ([]DomainConfig, error) {
+	cfToken := os.Getenv("CLOUDFLARE_TOKEN")
+	cfEmail := os.Getenv("CLOUDFLARE_EMAIL")
+	cfSecret := os.Getenv("CLOUDFLARE_API_SECRET")
+
+	if cfToken == "" && (cfEmail == "" || cfSecret == "") {
+		return nil, fmt.Errorf("%s", T.CloudflareRequiresTokenOrEmailAndAPISecret)
+	}
+
+	configs := make([]DomainConfig, 0, len(domains))
+	for _, d := range domains {
+		configs = append(configs, DomainConfig{
+			FQDN:     d,
+			Provider: ProviderCloudflare,
+			CFToken:  cfToken,
+			CFEmail:  cfEmail,
+			CFSecret: cfSecret,
+		})
+	}
+
+	return configs, nil
+}
+
+func buildLegacyIPv64Configs(domains []string) ([]DomainConfig, error) {
+	token := os.Getenv("IPV64_TOKEN")
+
+	if token == "" {
+		return nil, fmt.Errorf("%s", T.Ipv64RequiresToken)
+	}
+
+	configs := make([]DomainConfig, 0, len(domains))
+	for _, d := range domains {
+		configs = append(configs, DomainConfig{
+			FQDN:       d,
+			Provider:   ProviderIPv64,
+			IPv64Token: token,
+		})
+	}
+
+	return configs, nil
 }

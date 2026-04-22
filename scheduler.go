@@ -20,6 +20,42 @@ func runUpdate(firstRun bool) {
 
 	debugLog("SCHEDULER", "", fmt.Sprintf(T.SchedulerStarted, firstRun))
 
+	ctx, ipCtx, cancel, ipCancel := createRunUpdateContexts()
+	defer cancel()
+	defer ipCancel()
+
+	currentIPv4, currentIPv6, ok := resolveCurrentIPs(ipCtx, firstRun)
+	if !ok {
+		return
+	}
+
+	zonesByProvider, ok := loadRunUpdateZones(ctx, forced)
+	if !ok {
+		return
+	}
+
+	logMissingProviderZones(zonesByProvider)
+
+	cache, ok := loadRunUpdateRecords(ctx, zonesByProvider, forced)
+	if !ok {
+		return
+	}
+
+	refreshIPv64DomainsIfNeeded(ctx, forced)
+	saveCachesToDisk(zonesByProvider, cache)
+
+	if firstRun {
+		printGroupedDomains()
+		printInfrastructure(ctx, zonesByProvider)
+	}
+
+	successCount := processDomains(ctx, zonesByProvider, cache, currentIPv4, currentIPv6)
+	debugLog("SCHEDULER", "", fmt.Sprintf(T.SchedulerCompleted, successCount))
+
+	runCleanupIfNeeded(ctx, zonesByProvider, cache)
+}
+
+func createRunUpdateContexts() (context.Context, context.Context, context.CancelFunc, context.CancelFunc) {
 	cfgMu.RLock()
 	domainCount := len(cfg.DomainConfigs)
 	cfgMu.RUnlock()
@@ -32,67 +68,80 @@ func runUpdate(firstRun bool) {
 	debugLog("SCHEDULER", "", fmt.Sprintf(T.ContextTimeoutForDomains, totalTimeout, domainCount))
 
 	ctx, cancel := context.WithTimeout(shutdownCtx, totalTimeout)
-	defer cancel()
-
 	ipCtx, ipCancel := context.WithTimeout(shutdownCtx, 60*time.Second)
-	defer ipCancel()
 
+	return ctx, ipCtx, cancel, ipCancel
+}
+
+func resolveCurrentIPs(ipCtx context.Context, firstRun bool) (string, string, bool) {
 	type ipPair struct{ v4, v6 string }
+
 	ips, err := doSingleflight(ipCtx, &ipLoadGroup, "current_ips", func() (ipPair, error) {
 		v4, v6, err := fetchCurrentIPs(ipCtx)
 		return ipPair{v4: v4, v6: v6}, err
 	})
-
-	var currentIPv4, currentIPv6 string
-
 	if err != nil {
-		if firstRun {
-			fallbackV4, fallbackV6 := loadLastKnownIPs()
-			if fallbackV4 != "" || fallbackV6 != "" {
-				log(LogContext{
-					Level:   LogWarn,
-					Action:  ActionError,
-					Message: fmt.Sprintf(T.IPFetchFailed, err) + " – nutze letzten bekannten Stand als Fallback",
-				})
-				currentIPv4, currentIPv6 = fallbackV4, fallbackV6
-			} else {
-				lastOk.Store(false)
-				log(LogContext{
-					Level:   LogError,
-					Action:  ActionError,
-					Message: fmt.Sprintf(T.IPFetchFailed, err),
-				})
-				return
-			}
-		} else {
-			lastOk.Store(false)
-			log(LogContext{
-				Level:   LogError,
-				Action:  ActionError,
-				Message: fmt.Sprintf(T.IPFetchFailed, err),
-			})
-			return
-		}
-	} else {
-		currentIPv4, currentIPv6 = ips.v4, ips.v6
-
-		lastV4, lastV6 := loadLastKnownIPs()
-		if lastV4 != "" && currentIPv4 != "" && lastV4 != currentIPv4 {
-			log(LogContext{
-				Level:   LogWarn,
-				Action:  ActionUpdate,
-				Message: fmt.Sprintf("🔄 IPv4 geändert: %s → %s", lastV4, currentIPv4),
-			})
-		}
-		if lastV6 != "" && currentIPv6 != "" && lastV6 != currentIPv6 {
-			log(LogContext{
-				Level:   LogWarn,
-				Action:  ActionUpdate,
-				Message: fmt.Sprintf("🔄 IPv6 geändert: %s → %s", lastV6, currentIPv6),
-			})
-		}
+		return handleCurrentIPsError(err, firstRun)
 	}
 
+	currentIPv4, currentIPv6 := ips.v4, ips.v6
+	logChangedIPs(currentIPv4, currentIPv6)
+
+	return currentIPv4, currentIPv6, true
+}
+
+func handleCurrentIPsError(err error, firstRun bool) (string, string, bool) {
+	if !firstRun {
+		lastOk.Store(false)
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: fmt.Sprintf(T.IPFetchFailed, err),
+		})
+		return "", "", false
+	}
+
+	fallbackV4, fallbackV6 := loadLastKnownIPs()
+	if fallbackV4 == "" && fallbackV6 == "" {
+		lastOk.Store(false)
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: fmt.Sprintf(T.IPFetchFailed, err),
+		})
+		return "", "", false
+	}
+
+	log(LogContext{
+		Level:   LogWarn,
+		Action:  ActionError,
+		Message: fmt.Sprintf(T.IPFetchFailed, err) + " – nutze letzten bekannten Stand als Fallback",
+	})
+
+	return fallbackV4, fallbackV6, true
+}
+
+func logChangedIPs(currentIPv4, currentIPv6 string) {
+	lastV4, lastV6 := loadLastKnownIPs()
+
+	if lastV4 != "" && currentIPv4 != "" && lastV4 != currentIPv4 {
+		log(LogContext{
+			Level:   LogWarn,
+			Action:  ActionUpdate,
+			Message: fmt.Sprintf("🔄 IPv4 geändert: %s → %s", lastV4, currentIPv4),
+		})
+	}
+
+	if lastV6 != "" && currentIPv6 != "" && lastV6 != currentIPv6 {
+		log(LogContext{
+			Level:   LogWarn,
+			Action:  ActionUpdate,
+			Message: fmt.Sprintf("🔄 IPv6 geändert: %s → %s", lastV6, currentIPv6),
+		})
+	}
+}
+
+func loadRunUpdateZones(ctx context.Context, forced bool) (map[string][]Zone, bool) {
 	zonesByProvider, err := loadZonesWithCache(ctx, forced)
 	if err != nil {
 		lastOk.Store(false)
@@ -102,54 +151,63 @@ func runUpdate(firstRun bool) {
 			Message: t(T.NoZoneFound, "No zone found"),
 			Error:   fmt.Errorf("%s: %w", T.ZoneLoadingFailed, err),
 		})
-		return
+		return nil, false
 	}
+
+	return zonesByProvider, true
+}
+
+func logMissingProviderZones(zonesByProvider map[string][]Zone) {
 	cfgMu.RLock()
+	defer cfgMu.RUnlock()
+
 	for i := range cfg.DomainConfigs {
 		providerKey := string(cfg.DomainConfigs[i].Provider)
 		zones, exists := zonesByProvider[providerKey]
-		if !exists || len(zones) == 0 {
-			log(LogContext{
-				Level:   LogWarn,
-				Action:  ActionZone,
-				Domain:  cfg.DomainConfigs[i].FQDN,
-				Message: fmt.Sprintf(T.ProviderReturnedNoZonesCheckAPIKey, providerKey),
-			})
+		if exists && len(zones) > 0 {
+			continue
 		}
+
+		log(LogContext{
+			Level:   LogWarn,
+			Action:  ActionZone,
+			Domain:  cfg.DomainConfigs[i].FQDN,
+			Message: fmt.Sprintf(T.ProviderReturnedNoZonesCheckAPIKey, providerKey),
+		})
 	}
+}
 
-	cfgMu.RUnlock()
-
+func loadRunUpdateRecords(
+	ctx context.Context,
+	zonesByProvider map[string][]Zone,
+	forced bool,
+) (*ZoneRecordCache, bool) {
 	cache, err := loadRecordsWithCache(ctx, zonesByProvider, forced)
 	if err != nil {
 		lastOk.Store(false)
 		debugLog("CACHE", "", fmt.Sprintf(T.CacheLoadFailed, err))
-		return
+		return nil, false
 	}
 
+	return cache, true
+}
+
+func refreshIPv64DomainsIfNeeded(ctx context.Context, forced bool) {
 	cfgMu.RLock()
-
-	for i := range cfg.DomainConfigs {
-		if cfg.DomainConfigs[i].Provider == ProviderIPv64 {
-			if err := ensureIPv64DomainsFresh(ctx, &cfg.DomainConfigs[i], forced); err != nil {
-				debugLog("CACHE", "", fmt.Sprintf(T.IPv64CacheError, err))
-			}
-			break
-		}
-	}
-
+	domainConfigs := make([]DomainConfig, len(cfg.DomainConfigs))
+	copy(domainConfigs, cfg.DomainConfigs)
 	cfgMu.RUnlock()
 
-	saveCachesToDisk(zonesByProvider, cache)
+	for i := range domainConfigs {
+		if domainConfigs[i].Provider != ProviderIPv64 {
+			continue
+		}
 
-	if firstRun {
-		printGroupedDomains()
-		printInfrastructure(ctx, zonesByProvider)
+		if err := ensureIPv64DomainsFresh(ctx, &domainConfigs[i], forced); err != nil {
+			debugLog("CACHE", "", fmt.Sprintf(T.IPv64CacheError, err))
+		}
+		break
 	}
-
-	successCount := processDomains(ctx, zonesByProvider, cache, currentIPv4, currentIPv6)
-	debugLog("SCHEDULER", "", fmt.Sprintf(T.SchedulerCompleted, successCount))
-	runCleanupIfNeeded(ctx, zonesByProvider, cache)
 }
 
 func loadLastKnownIPs() (ipv4, ipv6 string) {
@@ -496,49 +554,12 @@ func loadRecordCacheFromDisk(zonesByProvider map[string][]Zone) (*ZoneRecordCach
 	for providerStr, zones := range zonesByProvider {
 		pType := ProviderType(providerStr)
 
-		switch pType {
-		case ProviderIONOS:
-			_, recordCache, err := loadIONOSCacheFromFile()
-			if err == nil && recordCache != nil {
-				for _, zone := range zones {
-					if records, exists := recordCache.Get(zone.ID); exists {
-						cache.Set(zone.ID, records)
-						loadedAny = true
-					}
-				}
-			}
-		case ProviderCloudflare:
-			_, recordCache, err := loadCloudflareCacheFromFile()
-			if err == nil && recordCache != nil {
-				for _, zone := range zones {
-					if records, exists := recordCache.Get(zone.ID); exists {
-						cache.Set(zone.ID, records)
-						loadedAny = true
-					}
-				}
-			}
-		case ProviderIPv64:
-			providerCache.RLock()
-			for _, z := range zones {
-				domain, ok := providerCache.ipv64Records[z.Name]
-				if !ok {
-					continue
-				}
-
-				records := make([]Record, 0, len(domain.Records))
-				for _, rec := range domain.Records {
-					records = append(records, Record{
-						ID:      fmt.Sprintf("%d", rec.RecordID),
-						Type:    rec.Type,
-						Content: rec.Content,
-					})
-				}
-
-				cache.Set(z.ID, records)
-				loadedAny = true
-			}
-			providerCache.RUnlock()
-
+		providerLoaded, err := loadProviderRecordCacheFromDisk(cache, pType, zones)
+		if err != nil {
+			continue
+		}
+		if providerLoaded {
+			loadedAny = true
 		}
 	}
 
@@ -547,4 +568,70 @@ func loadRecordCacheFromDisk(zonesByProvider map[string][]Zone) (*ZoneRecordCach
 	}
 
 	return cache, nil
+}
+
+func loadProviderRecordCacheFromDisk(
+	cache *ZoneRecordCache,
+	pType ProviderType,
+	zones []Zone,
+) (bool, error) {
+	switch pType {
+	case ProviderIONOS:
+		return loadProviderRecordCache(cache, zones, loadIONOSCacheFromFile)
+
+	case ProviderCloudflare:
+		return loadProviderRecordCache(cache, zones, loadCloudflareCacheFromFile)
+
+	case ProviderIPv64:
+		return loadIPv64RecordCacheFromDisk(cache, zones), nil
+
+	default:
+		return false, nil
+	}
+}
+
+type providerCacheLoader func() ([]Zone, *ZoneRecordCache, error)
+
+func loadProviderRecordCache(
+	cache *ZoneRecordCache,
+	zones []Zone,
+	loader providerCacheLoader,
+) (bool, error) {
+	_, recordCache, err := loader()
+	if err != nil || recordCache == nil {
+		return false, err
+	}
+
+	loadedAny := false
+	for _, zone := range zones {
+		records, exists := recordCache.Get(zone.ID)
+		if !exists {
+			continue
+		}
+
+		cache.Set(zone.ID, records)
+		loadedAny = true
+	}
+
+	return loadedAny, nil
+}
+
+func loadIPv64RecordCacheFromDisk(cache *ZoneRecordCache, zones []Zone) bool {
+	providerCache.RLock()
+	defer providerCache.RUnlock()
+
+	loadedAny := false
+
+	for _, z := range zones {
+		domain, ok := providerCache.ipv64Records[z.Name]
+		if !ok {
+			continue
+		}
+
+		records := convertIPv64DomainRecords(domain)
+		cache.Set(z.ID, records)
+		loadedAny = true
+	}
+
+	return loadedAny
 }

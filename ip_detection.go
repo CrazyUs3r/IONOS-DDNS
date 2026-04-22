@@ -179,9 +179,9 @@ func getIPv6FromInterface(ifaceName string) (string, error) {
 	return "", errors.New(T.NoIPv6OnInterface)
 }
 
-func getIPv6(ctx context.Context) (string, error) {
-	if cfg.IfaceName != "" {
-		if ip, err := getIPv6FromInterface(cfg.IfaceName); err == nil {
+func getIPv6(ctx context.Context, ifaceName string) (string, error) {
+	if ifaceName != "" {
+		if ip, err := getIPv6FromInterface(ifaceName); err == nil {
 			return ip, nil
 		}
 	}
@@ -191,66 +191,103 @@ func getIPv6(ctx context.Context) (string, error) {
 }
 
 func fetchCurrentIPs(ctx context.Context) (ipv4, ipv6 string, err error) {
+	cfgMu.RLock()
+	ipMode := cfg.IPMode
+	ifaceName := cfg.IfaceName
+	cfgMu.RUnlock()
+
 	var errV4, errV6 error
 	var resV4, resV6 string
 	var wg sync.WaitGroup
 
-	if cfg.IPMode != "IPV6" {
+	if ipMode != IPModeV6 {
 		ipLog("🔎 " + T.CheckingIPv4 + " ...")
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			resV4, errV4 = getPublicIPFromAny(ctx, activeIPv4Endpoints(), IPV4)
 			if errV4 != nil {
-				log(LogContext{Level: LogError, Action: ActionError, Message: T.IPv4CheckFailed, Error: errV4})
+				log(LogContext{
+					Level:   LogError,
+					Action:  ActionError,
+					Message: T.IPv4CheckFailed,
+					Error:   errV4,
+				})
 			}
 		}()
 	}
 
-	if cfg.IPMode != "IPV4" {
+	if ipMode != IPModeV4 {
 		ipLog("🔎 " + T.CheckingIPv6 + " ...")
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			resV6, errV6 = getIPv6(ctx)
+			resV6, errV6 = getIPv6(ctx, ifaceName)
 			if errV6 != nil {
-				log(LogContext{Level: LogError, Action: ActionError, Message: T.IPv6CheckFailed, Error: errV6})
+				log(LogContext{
+					Level:   LogError,
+					Action:  ActionError,
+					Message: T.IPv6CheckFailed,
+					Error:   errV6,
+				})
 			}
 		}()
 	}
 
 	wg.Wait()
 
-	ipv4, ipv6 = resV4, resV6
+	return finalizeFetchedIPs(ipMode, resV4, resV6, errV4, errV6)
+}
 
-	switch cfg.IPMode {
-	case "IPV4":
-		if errV4 != nil {
-			return "", "", fmt.Errorf("%s: %w", T.IPv4RequiredButFailed, errV4)
-		}
-		if ipv4 != "" {
-			ipLog(fmt.Sprintf(T.IPv4Current, ipv4))
-		}
-	case "IPV6":
-		if errV6 != nil {
-			return "", "", fmt.Errorf("%s: %w", T.IPv6RequiredButFailed, errV6)
-		}
-		if ipv6 != "" {
-			ipLog(fmt.Sprintf(T.IPv6Current, ipv6))
-		}
-	case "BOTH":
-		if errV4 != nil && errV6 != nil {
-			return "", "", fmt.Errorf("%s: v4=%v, v6=%v", T.BothIPVersionsFailed, errV4, errV6)
-		}
-		if ipv4 != "" {
-			ipLog(fmt.Sprintf(T.IPv4Current, ipv4))
-		}
-		if ipv6 != "" {
-			ipLog(fmt.Sprintf(T.IPv6Current, ipv6))
-		}
+func finalizeFetchedIPs(ipMode, ipv4, ipv6 string, errV4, errV6 error) (string, string, error) {
+	switch ipMode {
+	case IPModeV4:
+		return finalizeIPv4Only(ipv4, errV4)
+	case IPModeV6:
+		return finalizeIPv6Only(ipv6, errV6)
+	case IPModeBoth:
+		return finalizeBothIPs(ipv4, ipv6, errV4, errV6)
+	default:
+		logFetchedIPs(ipv4, ipv6)
+		return ipv4, ipv6, nil
 	}
+}
 
+func finalizeIPv4Only(ipv4 string, errV4 error) (string, string, error) {
+	if errV4 != nil {
+		return "", "", fmt.Errorf("%s: %w", T.IPv4RequiredButFailed, errV4)
+	}
+	if ipv4 != "" {
+		ipLog(fmt.Sprintf(T.IPv4Current, ipv4))
+	}
+	return ipv4, "", nil
+}
+
+func finalizeIPv6Only(ipv6 string, errV6 error) (string, string, error) {
+	if errV6 != nil {
+		return "", "", fmt.Errorf("%s: %w", T.IPv6RequiredButFailed, errV6)
+	}
+	if ipv6 != "" {
+		ipLog(fmt.Sprintf(T.IPv6Current, ipv6))
+	}
+	return "", ipv6, nil
+}
+
+func finalizeBothIPs(ipv4, ipv6 string, errV4, errV6 error) (string, string, error) {
+	if errV4 != nil && errV6 != nil {
+		return "", "", fmt.Errorf("%s: v4=%v, v6=%v", T.BothIPVersionsFailed, errV4, errV6)
+	}
+	logFetchedIPs(ipv4, ipv6)
 	return ipv4, ipv6, nil
+}
+
+func logFetchedIPs(ipv4, ipv6 string) {
+	if ipv4 != "" {
+		ipLog(fmt.Sprintf(T.IPv4Current, ipv4))
+	}
+	if ipv6 != "" {
+		ipLog(fmt.Sprintf(T.IPv6Current, ipv6))
+	}
 }
 
 func activeIPv4Endpoints() []string {
