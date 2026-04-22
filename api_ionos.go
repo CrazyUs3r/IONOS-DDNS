@@ -468,7 +468,7 @@ func handleIonosDNSAPIError(fqdn, recordType, newIP string, apiErrPtr *APIError,
 			Level:   LogError,
 			Action:  ActionError,
 			Domain:  fqdn,
-			Message: fmt.Sprintf("%s: %s!", recordType, T.Forbidden),
+			Message: fmt.Sprintf("%s: %s!", recordType, T.APIErrorForbidden),
 		})
 		return fmt.Errorf("%s: %w", T.ErrAuthFailed, err)
 
@@ -477,7 +477,7 @@ func handleIonosDNSAPIError(fqdn, recordType, newIP string, apiErrPtr *APIError,
 			Level:   LogError,
 			Action:  ActionZone,
 			Domain:  fqdn,
-			Message: fmt.Sprintf("%s: %s!", recordType, T.NotFound),
+			Message: fmt.Sprintf("%s: %s!", recordType, T.APIErrorNotFound),
 		})
 		return fmt.Errorf("%s: %w", T.ErrResourceNotFound, err)
 
@@ -486,7 +486,7 @@ func handleIonosDNSAPIError(fqdn, recordType, newIP string, apiErrPtr *APIError,
 			Level:   LogError,
 			Action:  ActionError,
 			Domain:  fqdn,
-			Message: fmt.Sprintf("%s: %s (IP: %s)", recordType, T.UnprocessableEntity, newIP),
+			Message: fmt.Sprintf("%s: %s (IP: %s)", recordType, T.APIErrorUnprocessableEntity, newIP),
 		})
 		return fmt.Errorf("%s: %w", T.ErrValidationFailed, err)
 
@@ -495,7 +495,7 @@ func handleIonosDNSAPIError(fqdn, recordType, newIP string, apiErrPtr *APIError,
 			Level:   LogWarn,
 			Action:  ActionRetry,
 			Domain:  fqdn,
-			Message: fmt.Sprintf("⏳ %s: %s...", recordType, T.RateLimitExceeded),
+			Message: fmt.Sprintf("⏳ %s: %s...", recordType, T.APIErrorRateLimitExceeded),
 		})
 		return err
 

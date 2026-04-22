@@ -394,12 +394,20 @@ type Phrases struct {
 	MetricIPLatency, MetricLastCheck, MetricAvgFrom, MetricsResetBtn, MetricsResetNotification string
 
 	// Validierung & allgemeine Fehler
-	NoDomains, InvalidPort, IntervalTooSmall, ShortIntervalWarning       string
-	InvalidIPMode, InvalidToken, BadRequest, Unauthorized, Forbidden     string
-	NotFound, UnprocessableEntity, RateLimitExceeded                     string
-	InternalServerError, BadGateway, ServiceUnavailable, GatewayTimeout  string
-	ConfigErrorPrefix, DomainIsEmpty, DomainTooLong, InvalidDomainFormat string
-	LabelTooLong, InvalidLabel                                           string
+	NoDomains, InvalidPort, IntervalTooSmall, ShortIntervalWarning                           string
+	InvalidIPMode, InvalidToken, ConfigErrorPrefix                                           string
+	DomainIsEmpty, DomainTooLong, InvalidDomainFormat                                        string
+	LabelTooLong, InvalidLabel                                                               string
+	APIErrorBadRequest, APIErrorUnauthorized, APIErrorForbidden                              string
+	APIErrorNotFound, APIErrorUnprocessableEntity, APIErrorRateLimitExceeded                 string
+	APIErrorInternalServerError, APIErrorBadGateway, APIErrorServiceUnavailable              string
+	APIErrorGatewayTimeout, APIErrorMethodNotAllowed, APIErrorRequestTimeout                 string
+	APIErrorConflict, APIErrorGone, APIErrorPreconditionFailed                               string
+	APIErrorPayloadTooLarge, APIErrorUnsupportedMediaType, APIErrorTooEarly                  string
+	APIErrorPreconditionRequired, APIErrorRequestHeaderFieldsTooLarge                        string
+	APIErrorUnavailableForLegalReasons, APIErrorNotImplemented                               string
+	APIErrorInsufficientStorage, APIErrorLoopDetected, APIErrorNetworkAuthenticationRequired string
+	APIErrorServerErrorGeneric, APIErrorClientErrorGeneric                                   string
 
 	// Logging
 	LogRotated, LogRotationError                                    string

@@ -285,18 +285,13 @@ func buildSettingsCollapsibleSection(title, body string, open bool) string {
 		`</details>`
 }
 
-func buildSettingsSubSection(id, title, body string, open bool) string {
-	openAttr := ""
-	if open {
-		openAttr = " open"
-	}
-
+func buildSettingsSubSection(id, title, body string) string {
 	idAttr := ""
 	if id != "" {
 		idAttr = ` id="` + id + `"`
 	}
 
-	return `<details class="s-subsection"` + idAttr + openAttr + `>` +
+	return `<details class="s-subsection"` + idAttr + `>` +
 		`<summary class="s-subsection-summary">` +
 		`<span>` + title + `</span>` +
 		`<span class="s-subsection-chevron">▾</span>` +
@@ -501,7 +496,7 @@ func buildSettingsDomainsSection() string {
 		`</div>`
 
 	return `<div id="settings-domain-list" class="settings-domain-list"></div>` +
-		buildSettingsSubSection("add-domain-section", T.SettingsAddDomain, addDomainForm, false)
+		buildSettingsSubSection("add-domain-section", T.SettingsAddDomain, addDomainForm)
 }
 
 func buildSettingsNotifySection(c Config) string {
@@ -561,10 +556,10 @@ func buildSettingsNotifySection(c Config) string {
 		checkedAttr(c.Notifications.Enabled),
 		checkboxLabel(c.Notifications.Enabled),
 	) +
-		buildSettingsSubSection("", T.SettingsNotifyEvents, notifyEventsSection, false) +
-		buildSettingsSubSection("", T.SettingsTelegramHeading, telegramSection, false) +
-		buildSettingsSubSection("", T.SettingsGotifyHeading, gotifySection, false) +
-		buildSettingsSubSection("", T.SettingsWebhookHeading, webhookSection, false)
+		buildSettingsSubSection("", T.SettingsNotifyEvents, notifyEventsSection) +
+		buildSettingsSubSection("", T.SettingsTelegramHeading, telegramSection) +
+		buildSettingsSubSection("", T.SettingsGotifyHeading, gotifySection) +
+		buildSettingsSubSection("", T.SettingsWebhookHeading, webhookSection)
 }
 
 func buildSettingsSaveSection() string {
@@ -1231,7 +1226,7 @@ func handleAPITriggerStatus(w http.ResponseWriter, r *http.Request) {
 	ipLimiter := ipTriggerLimiter.GetLimiter(clientIP)
 
 	if !ipLimiter.Allow() {
-		http.Error(w, T.RateLimitExceeded, http.StatusTooManyRequests)
+		http.Error(w, T.APIErrorRateLimitExceeded, http.StatusTooManyRequests)
 		return
 	}
 
