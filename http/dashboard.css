@@ -224,8 +224,24 @@ details.card[open] > summary::after {
 }
 
 @media (max-width: 768px) {
-	.header {flex-direction: column; gap: 10px;}
-	.status-banner {flex-direction: column; text-align: center;}
+	  .header {flex-direction: column; gap: 10px;}
+	  .status-banner {flex-direction: column; text-align: center;}
+    .notify-box .s-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 5px;
+    }
+
+    .notify-box .s-input, 
+    .notify-box .input-with-action {
+        max-width: 100% !important;
+        width: 100%;
+    }
+    .notify-box .s-label {
+        min-width: unset;
+        width: 100%;
+        text-align: left;
+    }
 }
 
 .domain-card {
@@ -340,7 +356,7 @@ details.card[open] > summary::after {
     flex: 1;
     min-width: 0;
 }
-.s-val { font-family: monospace; color: var(--btn-text); text-align: right; word-break: break-all; }
+
 .s-input {
     width: 100%;
     padding: 8px 11px;
@@ -1021,10 +1037,6 @@ select.s-input optgroup {
 	border-color: rgba(168,85,247,0.3);
 }
 
-.notify-hint {
-	font-size: 0.7rem;
-	opacity: 0.6;
-}
 .notify-box .s-row {
 	display: flex;
 	align-items: center;
@@ -1051,37 +1063,13 @@ select.s-input optgroup {
 	width: 100%;
 }
 
-.settings-save-box {
-	margin-top: 20px;
-	padding: 15px;
-	border-radius: 8px;
-	background: rgba(34,197,94,0.08);
-	border: 1px solid rgba(34,197,94,0.3);
-	text-align: center;
-}
-
-.settings-save-btn {
-	margin-top: 10px;
-	width: 100%;
-}
-
-.header-actions {
-	display: flex;
-	gap: 8px;
-}
-
-.status-sep {
-	margin: 0 8px;
-	opacity: 0.4;
-}
-
 .endpoint-status {
 	font-size: 0.8rem;
 	opacity: 0.7;
-}
-
-.endpoint-waiting {
-	opacity: 0.5;
+	display:flex;
+	flex-wrap:wrap;
+	gap:8px;
+	padding:4px 0;
 }
 
 #add-domain-section {

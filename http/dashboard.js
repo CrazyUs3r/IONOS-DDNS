@@ -269,9 +269,13 @@ function sanitizeBase(s) {
 async function shortHash8(str) {
 	if (!(window.crypto && crypto.subtle)) return '00000000';
 	const data = new TextEncoder().encode(str || '');
-	const buf = await crypto.subtle.digest('SHA-1', data);
-	return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 8);
+	const buf = await crypto.subtle.digest('SHA-256', data);
+	return Array.from(new Uint8Array(buf))
+		.map(b => b.toString(16).padStart(2, '0'))
+		.join('')
+		.slice(0, 8);
 }
+
 
 async function makeSafeID(domain) {
 	const base = sanitizeBase(domain);
@@ -333,7 +337,7 @@ function openSettings() {
       cb.checked = activeEvents.has(cb.value);
   	});
 	_setVal('cfg-tg-token',        	sys.telegram_token   	|| '');
-	_setVal('cfg-tg-chatid',       	sys.telegram_chat_id 	|| '');
+	_setVal('cfg-tg-chat-id',       	sys.telegram_chat_id 	|| '');
 	_setVal('cfg-gotify-url',      	sys.gotify_url        	|| '');
 	_setVal('cfg-gotify-token',    	sys.gotify_token      	|| '');
 	_setVal('cfg-webhook-url',    	sys.webhook_url    		|| '');
@@ -511,57 +515,72 @@ function parseList(raw) {
 
 async function saveFullConfig() {
 	if (!confirm(tr('save_config_confirm', 'Alle Einstellungen in config.json speichern?'))) return;
+
 	const token = localStorage.getItem('triggerToken') || '';
+
 	const notifyEvents = [...document.querySelectorAll('input[name="notify-event"]:checked')]
 		.map(cb => cb.value);
 
 	const system = {
-		ip_mode:          	_getVal('cfg-ip-mode') || 'BOTH',
-		interval:         	parseInt(_getVal('cfg-interval'),  10) || 300,
-		health_port:       	_getVal('cfg-health-port') || '8080',
-		iface_name:        	_getVal('cfg-iface'),
-		dns_servers: 		parseList(_getVal('cfg-dns')),
-		max_log_lines:     	parseInt(_getVal('cfg-max-log'),        10) || 500,
-		max_api_retries:   	parseInt(_getVal('cfg-max-retries'), 10) || 4,
-		max_concurrent:    	parseInt(_getVal('cfg-max-concurrent'), 10) || 5,
-		hourly_rate_limit: 	parseInt(_getVal('cfg-hourly-limit'),   10) || 1200,
-		lang:              	_getVal('cfg-lang') || 'de',
-		dry_run:           	document.getElementById('cfg-dry-run')?.checked || false,
-    	debug_enabled:     	document.getElementById('cfg-debug')?.checked || false,
-    	debug_http_raw:    	document.getElementById('cfg-debug-http')?.checked || false,
-		notify_enabled:   	document.getElementById('cfg-notify-enabled')?.checked || false,
-		notify_events:    	notifyEvents,
-		telegram_token:   	_getVal('cfg-tg-token'),
-		telegram_chat_id: 	_getVal('cfg-tg-chat-id'),
-		gotify_url:       	_getVal('cfg-gotify-url'),
-		gotify_token:     	_getVal('cfg-gotify-token'),
-		webhook_url:      	_getVal('cfg-webhook-url'),
-		webhook_secret:   	_getVal('cfg-webhook-secret'),
-		ipv4_endpoints: 	parseList(_getVal('cfg-ipv4_endpoints')),
-		ipv6_endpoints: 	parseList(_getVal('cfg-ipv6_endpoints')),
+		ip_mode: _getVal('cfg-ip-mode') || 'BOTH',
+		interval: parseInt(_getVal('cfg-interval'), 10) || 300,
+		health_port: _getVal('cfg-health-port') || '8080',
+		iface_name: _getVal('cfg-iface'),
+		dns_servers: parseList(_getVal('cfg-dns')),
+		max_log_lines: parseInt(_getVal('cfg-max-log'), 10) || 500,
+		max_api_retries: parseInt(_getVal('cfg-max-retries'), 10) || 4,
+		max_concurrent: parseInt(_getVal('cfg-max-concurrent'), 10) || 5,
+		hourly_rate_limit: parseInt(_getVal('cfg-hourly-limit'), 10) || 1200,
+		lang: _getVal('cfg-lang') || 'de',
+		dry_run: document.getElementById('cfg-dry-run')?.checked || false,
+		debug_enabled: document.getElementById('cfg-debug')?.checked || false,
+		debug_http_raw: document.getElementById('cfg-debug-http')?.checked || false,
+		notify_enabled: document.getElementById('cfg-notify-enabled')?.checked || false,
+		notify_events: notifyEvents,
+		telegram_token: _getVal('cfg-tg-token'),
+		telegram_chat_id: _getVal('cfg-tg-chat-id'),
+		gotify_url: _getVal('cfg-gotify-url'),
+		gotify_token: _getVal('cfg-gotify-token'),
+		webhook_url: _getVal('cfg-webhook-url'),
+		webhook_secret: _getVal('cfg-webhook-secret'),
+		ipv4_endpoints: parseList(_getVal('cfg-ipv4_endpoints')),
+		ipv6_endpoints: parseList(_getVal('cfg-ipv6_endpoints')),
 	};
+
+	showLoadingToast('⏳ Speichere Konfiguration...');
 
 	try {
 		const r = await fetch('/api/save-config', {
 			method: 'POST',
-			headers: { 'Content-Type': 'application/json', ...(token ? {'X-Trigger-Token': token} : {}) },
+			headers: {
+				'Content-Type': 'application/json',
+				...(token ? { 'X-Trigger-Token': token } : {})
+			},
 			body: JSON.stringify({ domain_configs: tempDomainConfigs, system })
 		});
-    const newLang = _getVal('cfg-lang');
-    if (newLang && newLang !== (initialSystem?.lang || 'de')) {
-        await fetch('/api/set-language?lang=' + encodeURIComponent(newLang), {
-            method: 'POST',
-            headers: token ? { 'X-Trigger-Token': token } : {}
-        });
-    }
-		if (r.ok) {
-			showToast(tr('saved_reload', '✅ Gespeichert! Seite wird neu geladen...'), 'success');
-			setTimeout(() => location.reload(), 1800);
-		} else {
+
+		if (!r.ok) {
 			const txt = await r.text();
 			showToast(tr('error_prefix', '❌ Fehler: ') + txt, 'error');
+			return;
 		}
-	} catch (e) { showToast('❌ Netzwerkfehler', 'error'); }
+
+		const newLang = _getVal('cfg-lang');
+		if (newLang && newLang !== (initialSystem?.lang || 'de')) {
+			await fetch('/api/set-language?lang=' + encodeURIComponent(newLang), {
+				method: 'POST',
+				headers: token ? { 'X-Trigger-Token': token } : {}
+			});
+		}
+
+		showToast(tr('saved_reload', '✅ Gespeichert! Seite wird neu geladen...'), 'success');
+		setTimeout(() => location.reload(), 1500);
+
+	} catch (e) {
+		showToast('❌ Netzwerkfehler', 'error');
+	} finally {
+		hideLoadingToast();
+	}
 }
 
 function resetMetrics() {
@@ -783,4 +802,64 @@ function renderEndpointStatus() {
             + `background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);">`
             + `${icon} ${host} <span style="opacity:0.4">${ageStr}</span></span>`;
     }).join('');
+}
+
+function showLoadingToast(text = '⏳ Speichere...') {
+	let el = document.getElementById('loading-toast');
+	if (!el) {
+		el = document.createElement('div');
+		el.id = 'loading-toast';
+		el.style = `
+			position: fixed;
+			bottom: 20px;
+			right: 20px;
+			background: #222;
+			color: #fff;
+			padding: 14px 18px;
+			border-radius: 8px;
+			box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+			font-family: sans-serif;
+			min-width: 250px;
+			z-index: 9999;
+		`;
+
+		el.innerHTML = `
+			<div id="loading-text">${text}</div>
+			<div style="margin-top:8px;height:4px;background:#444;border-radius:2px;overflow:hidden;">
+				<div id="loading-bar" style="
+					height:100%;
+					width:30%;
+					background:#4caf50;
+					animation: loadingAnim 1.2s infinite linear;
+				"></div>
+			</div>
+		`;
+
+		document.body.appendChild(el);
+
+		const style = document.createElement('style');
+		style.innerHTML = `
+			@keyframes loadingAnim {
+				0% { margin-left: -30%; width: 30%; }
+				50% { width: 60%; }
+				100% { margin-left: 100%; width: 30%; }
+			}
+		`;
+		document.head.appendChild(style);
+	} else {
+		el.style.display = 'block';
+		document.getElementById('loading-text').textContent = text;
+	}
+	el._timeout = setTimeout(() => {
+		const txt = document.getElementById('loading-text');
+		if (txt) txt.textContent = '⚠️ Dauert länger als erwartet...';
+	}, 5000);
+}
+
+function hideLoadingToast() {
+	const el = document.getElementById('loading-toast');
+	if (!el) return;
+
+	clearTimeout(el._timeout);
+	el.style.display = 'none';
 }
