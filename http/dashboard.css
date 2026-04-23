@@ -1036,7 +1036,10 @@ select.s-input optgroup {
 	background: rgba(168,85,247,0.08);
 	border-color: rgba(168,85,247,0.3);
 }
-
+.notify-mqtt {
+	background: rgba(85, 247, 139, 0.08);
+	border-color: rgba(131, 50, 206, 0.3);
+}
 .notify-box .s-row {
 	display: flex;
 	align-items: center;

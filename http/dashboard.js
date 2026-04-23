@@ -256,7 +256,7 @@ function exportData() {
 }
 
 function sanitizeBase(s) {
-	s = (s || '').toLowerCase();
+	s = (s || '').trim().toLowerCase();
 	let out = '';
 	for (const ch of s) {
 		const code = ch.charCodeAt(0);
@@ -278,6 +278,7 @@ async function shortHash8(str) {
 
 
 async function makeSafeID(domain) {
+	domain = (domain || '').trim();
 	const base = sanitizeBase(domain);
 	const sfx = await shortHash8(domain);
 	return (base === 'x' ? 'd-' : base + '-') + sfx;
@@ -314,6 +315,7 @@ function openSettings() {
 	if (inp) inp.placeholder = saved ? '●●●●●● (gespeichert)' : 'Token eingeben...';
 
 	const sys = (typeof initialSystem !== 'undefined' && initialSystem) ? initialSystem : {};
+	const mqtt = sys.mqtt || {};
 	_setVal('cfg-ip-mode',        sys.ip_mode           || 'BOTH');
 	_setVal('cfg-interval',       sys.interval          || 300);
 	_setVal('cfg-health-port',    sys.health_port       || '8080');
@@ -342,6 +344,15 @@ function openSettings() {
 	_setVal('cfg-gotify-token',    	sys.gotify_token      	|| '');
 	_setVal('cfg-webhook-url',    	sys.webhook_url    		|| '');
 	_setVal('cfg-webhook-secret', 	sys.webhook_secret 		|| '');
+	_setVal('cfg-mqtt-broker',            mqtt.broker || '');
+	_setVal('cfg-mqtt-clientid',          mqtt.client_id || '');
+	_setVal('cfg-mqtt-username',          mqtt.username || '');
+	_setVal('cfg-mqtt-password',          mqtt.password || '');
+	_setVal('cfg-mqtt-topic',             mqtt.topic || '');
+	_setVal('cfg-mqtt-qos',               mqtt.qos ?? 0);
+	_setChk('cfg-mqtt-retain',            mqtt.retain || false);
+	_setChk('cfg-mqtt-discovery',         mqtt.discovery || false);
+	_setVal('cfg-mqtt-discovery-prefix',  mqtt.discovery_prefix || 'homeassistant');
 
 	renderSettingsDomainList();
 }
@@ -543,6 +554,17 @@ async function saveFullConfig() {
 		gotify_token: _getVal('cfg-gotify-token'),
 		webhook_url: _getVal('cfg-webhook-url'),
 		webhook_secret: _getVal('cfg-webhook-secret'),
+		mqtt: {
+			broker: _getVal('cfg-mqtt-broker'),
+			client_id: _getVal('cfg-mqtt-clientid'),
+			username: _getVal('cfg-mqtt-username'),
+			password: _getVal('cfg-mqtt-password'),
+			topic: _getVal('cfg-mqtt-topic'),
+			qos: parseInt(_getVal('cfg-mqtt-qos'), 10) || 0,
+			retain: document.getElementById('cfg-mqtt-retain')?.checked || false,
+			discovery: document.getElementById('cfg-mqtt-discovery')?.checked || false,
+			discovery_prefix: _getVal('cfg-mqtt-discovery-prefix') || 'homeassistant'
+		},
 		ipv4_endpoints: parseList(_getVal('cfg-ipv4_endpoints')),
 		ipv6_endpoints: parseList(_getVal('cfg-ipv6_endpoints')),
 	};
