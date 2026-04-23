@@ -72,7 +72,7 @@ func newMQTTNotifier(
 	opts.SetConnectRetry(true)
 	opts.SetConnectRetryInterval(5 * time.Second)
 
-	opts.OnConnect = func(c mqtt.Client) {
+	opts.OnConnect = func(_ mqtt.Client) {
 		log(LogContext{
 			Level:   LogInfo,
 			Action:  ActionConfig,
@@ -90,7 +90,7 @@ func newMQTTNotifier(
 		}
 	}
 
-	opts.OnConnectionLost = func(c mqtt.Client, err error) {
+	opts.OnConnectionLost = func(_ mqtt.Client, err error) {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionError,
