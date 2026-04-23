@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"net/http/httptrace"
@@ -386,7 +387,10 @@ func buildHTTPClient(dnsList []string) *http.Client {
 
 				if err == nil {
 					if idx != startIndex {
-						lastSuccessfulDNS.Store(int32(idx)) //nolint:gosec
+						if idx > math.MaxInt32 {
+							return nil, fmt.Errorf("dns index %d exceeds int64 range", idx)
+						}
+						lastSuccessfulDNS.Store(int64(idx))
 					}
 					return conn, nil
 				}

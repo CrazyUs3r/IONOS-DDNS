@@ -353,7 +353,7 @@ func doSingleflight[T any](
 func calculateRetryDelay(attempt int, isServerError bool) time.Duration {
 	baseWait := min(max(time.Duration(math.Pow(RetryExponentBase, float64(attempt+1)))*RetryBaseDelay, RetryBaseDelay), RetryMaxDelay)
 
-	jitter := time.Duration(rand.Intn(RetryJitterMaxMs)) * time.Millisecond //nolint:gosec
+	jitter := time.Duration(rand.Intn(RetryJitterMaxMs)) * time.Millisecond // #nosec G404
 	wait := baseWait + jitter
 
 	if isServerError {

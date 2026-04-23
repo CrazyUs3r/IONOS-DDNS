@@ -272,7 +272,7 @@ func buildSnakeCase(s string) string {
 	return string(result)
 }
 
-func copyEmbeddedLangFiles(dir string) {
+func copyEmbeddedLangFiles(dir string) error {
 	entries, err := embeddedLang.ReadDir("lang")
 	if err != nil {
 		log(LogContext{
@@ -281,7 +281,7 @@ func copyEmbeddedLangFiles(dir string) {
 			Action:   ActionConfig,
 			Message:  fmt.Sprintf("%s: %v", t(T.CannotReadEmbeddedDir, "cannot read embedded lang dir"), err),
 		})
-		return
+		return err
 	}
 
 	for _, e := range entries {
@@ -325,13 +325,16 @@ func copyEmbeddedLangFiles(dir string) {
 				Action:   ActionConfig,
 				Message:  fmt.Sprintf("%s: %s: %v", t(T.WriteFailed, "write failed"), dst, err),
 			})
-		} else {
-			log(LogContext{
-				Level:    LogInfo,
-				Category: "CONFIG",
-				Action:   ActionConfig,
-				Message:  fmt.Sprintf("%s: %s", t(T.FileSaved, "saved"), dst),
-			})
+			continue
 		}
+
+		log(LogContext{
+			Level:    LogInfo,
+			Category: "CONFIG",
+			Action:   ActionConfig,
+			Message:  fmt.Sprintf("%s: %s", t(T.FileSaved, "saved"), dst),
+		})
 	}
+
+	return nil
 }

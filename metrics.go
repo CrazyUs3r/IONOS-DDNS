@@ -100,14 +100,20 @@ func (m *APIMetrics) updateLatency(duration time.Duration, hour int) {
 }
 
 func (m *APIMetrics) incrementDailyMethod(method string, now time.Time) {
-	if !m.DailyReset.IsZero() && now.Day() != m.DailyReset.Day() {
+	if !m.DailyReset.IsZero() &&
+		(now.Year() != m.DailyReset.Year() ||
+			now.Month() != m.DailyReset.Month() ||
+			now.Day() != m.DailyReset.Day()) {
+
 		m.DailyGET = 0
 		m.DailyPOST = 0
 		m.DailyPUT = 0
 		m.DailyDELETE = 0
 		m.DailyNIC = 0
 	}
+
 	m.DailyReset = now
+
 	switch method {
 	case MethodGET:
 		m.DailyGET++

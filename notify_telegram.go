@@ -708,10 +708,10 @@ var instanceEmojis = []string{
 
 func generateInstanceTag() string {
 	pool := instanceEmojis
-	a := pool[rand.Intn(len(pool))] //nolint:gosec
-	b := pool[rand.Intn(len(pool))] //nolint:gosec
+	a := pool[rand.Intn(len(pool))] // #nosec G404
+	b := pool[rand.Intn(len(pool))] // #nosec G404
 	if a == b {
-		b = pool[rand.Intn(len(pool))] //nolint:gosec
+		b = pool[rand.Intn(len(pool))] // #nosec G404
 	}
 	return a + b
 }

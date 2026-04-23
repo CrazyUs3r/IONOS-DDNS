@@ -12,7 +12,7 @@ import (
 // ============================================================================
 
 type apiErrorSpec struct {
-	messageKey string
+	messageKey func() string
 	fallback   string
 	logLevel   LogLevel
 	action     string
@@ -22,31 +22,31 @@ type apiErrorSpec struct {
 }
 
 var apiErrorSpecs = map[int]apiErrorSpec{
-	400: {T.APIErrorBadRequest, "Bad Request (check payload)", LogError, ActionError, false, false, 0},
-	401: {T.APIErrorUnauthorized, "Unauthorized - API key invalid", LogError, ActionConfig, false, false, 0},
-	403: {T.APIErrorForbidden, "Forbidden - No permission", LogError, ActionError, false, false, 0},
-	404: {T.APIErrorNotFound, "Not Found - Resource does not exist", LogWarn, ActionZone, false, false, 0},
-	405: {T.APIErrorMethodNotAllowed, "Method Not Allowed", LogError, ActionError, false, false, 0},
-	408: {T.APIErrorRequestTimeout, "Request Timeout", LogWarn, ActionRetry, true, false, ServerErrorRetryDelay},
-	409: {T.APIErrorConflict, "Conflict", LogError, ActionError, false, false, 0},
-	410: {T.APIErrorGone, "Gone", LogWarn, ActionError, false, false, 0},
-	412: {T.APIErrorPreconditionFailed, "Precondition Failed", LogError, ActionError, false, false, 0},
-	413: {T.APIErrorPayloadTooLarge, "Payload Too Large", LogError, ActionError, false, false, 0},
-	415: {T.APIErrorUnsupportedMediaType, "Unsupported Media Type", LogError, ActionError, false, false, 0},
-	422: {T.APIErrorUnprocessableEntity, "Validation error (TTL/Format)", LogError, ActionError, false, false, 0},
-	425: {T.APIErrorTooEarly, "Too Early", LogWarn, ActionRetry, true, false, ServerErrorRetryDelay},
-	428: {T.APIErrorPreconditionRequired, "Precondition Required", LogError, ActionError, false, false, 0},
-	429: {T.APIErrorRateLimitExceeded, "Rate limit exceeded", LogWarn, ActionRetry, true, true, RateLimitRetryDelay},
-	431: {T.APIErrorRequestHeaderFieldsTooLarge, "Request Header Fields Too Large", LogError, ActionError, false, false, 0},
-	451: {T.APIErrorUnavailableForLegalReasons, "Unavailable For Legal Reasons", LogError, ActionError, false, false, 0},
-	500: {T.APIErrorInternalServerError, "Ionos API server error", LogError, ActionError, true, false, ServerErrorRetryDelay},
-	501: {T.APIErrorNotImplemented, "Not Implemented", LogError, ActionError, false, false, 0},
-	502: {T.APIErrorBadGateway, "Ionos Gateway error", LogError, ActionRetry, true, false, ServerErrorRetryDelay},
-	503: {T.APIErrorServiceUnavailable, "Ionos service unavailable", LogError, ActionRetry, true, true, ServerErrorRetryDelay},
-	504: {T.APIErrorGatewayTimeout, "Ionos timeout", LogError, ActionRetry, true, false, ServerErrorRetryDelay},
-	507: {T.APIErrorInsufficientStorage, "Insufficient Storage", LogError, ActionRetry, true, false, ServerErrorRetryDelay},
-	508: {T.APIErrorLoopDetected, "Loop Detected", LogError, ActionRetry, true, false, 0},
-	511: {T.APIErrorNetworkAuthenticationRequired, "Network Authentication Required", LogError, ActionError, false, false, 0},
+	400: {func() string { return T.APIErrorBadRequest }, "Bad Request (check payload)", LogError, ActionError, false, false, 0},
+	401: {func() string { return T.APIErrorUnauthorized }, "Unauthorized - API key invalid", LogError, ActionConfig, false, false, 0},
+	403: {func() string { return T.APIErrorForbidden }, "Forbidden - No permission", LogError, ActionError, false, false, 0},
+	404: {func() string { return T.APIErrorNotFound }, "Not Found - Resource does not exist", LogWarn, ActionZone, false, false, 0},
+	405: {func() string { return T.APIErrorMethodNotAllowed }, "Method Not Allowed", LogError, ActionError, false, false, 0},
+	408: {func() string { return T.APIErrorRequestTimeout }, "Request Timeout", LogWarn, ActionRetry, true, false, ServerErrorRetryDelay},
+	409: {func() string { return T.APIErrorConflict }, "Conflict", LogError, ActionError, false, false, 0},
+	410: {func() string { return T.APIErrorGone }, "Gone", LogWarn, ActionError, false, false, 0},
+	412: {func() string { return T.APIErrorPreconditionFailed }, "Precondition Failed", LogError, ActionError, false, false, 0},
+	413: {func() string { return T.APIErrorPayloadTooLarge }, "Payload Too Large", LogError, ActionError, false, false, 0},
+	415: {func() string { return T.APIErrorUnsupportedMediaType }, "Unsupported Media Type", LogError, ActionError, false, false, 0},
+	422: {func() string { return T.APIErrorUnprocessableEntity }, "Validation error (TTL/Format)", LogError, ActionError, false, false, 0},
+	425: {func() string { return T.APIErrorTooEarly }, "Too Early", LogWarn, ActionRetry, true, false, ServerErrorRetryDelay},
+	428: {func() string { return T.APIErrorPreconditionRequired }, "Precondition Required", LogError, ActionError, false, false, 0},
+	429: {func() string { return T.APIErrorRateLimitExceeded }, "Rate limit exceeded", LogWarn, ActionRetry, true, true, RateLimitRetryDelay},
+	431: {func() string { return T.APIErrorRequestHeaderFieldsTooLarge }, "Request Header Fields Too Large", LogError, ActionError, false, false, 0},
+	451: {func() string { return T.APIErrorUnavailableForLegalReasons }, "Unavailable For Legal Reasons", LogError, ActionError, false, false, 0},
+	500: {func() string { return T.APIErrorInternalServerError }, "Ionos API server error", LogError, ActionError, true, false, ServerErrorRetryDelay},
+	501: {func() string { return T.APIErrorNotImplemented }, "Not Implemented", LogError, ActionError, false, false, 0},
+	502: {func() string { return T.APIErrorBadGateway }, "Ionos Gateway error", LogError, ActionRetry, true, false, ServerErrorRetryDelay},
+	503: {func() string { return T.APIErrorServiceUnavailable }, "Ionos service unavailable", LogError, ActionRetry, true, true, ServerErrorRetryDelay},
+	504: {func() string { return T.APIErrorGatewayTimeout }, "Ionos timeout", LogError, ActionRetry, true, false, ServerErrorRetryDelay},
+	507: {func() string { return T.APIErrorInsufficientStorage }, "Insufficient Storage", LogError, ActionRetry, true, false, ServerErrorRetryDelay},
+	508: {func() string { return T.APIErrorLoopDetected }, "Loop Detected", LogError, ActionRetry, true, false, 0},
+	511: {func() string { return T.APIErrorNetworkAuthenticationRequired }, "Network Authentication Required", LogError, ActionError, false, false, 0},
 }
 
 func (e *APIError) Error() string {
@@ -119,7 +119,7 @@ func applyAPIErrorSpec(
 	responseBody string,
 	headers http.Header,
 ) {
-	apiErr.Message = withBody(t(spec.messageKey, spec.fallback), responseBody)
+	apiErr.Message = withBody(t(spec.messageKey(), spec.fallback), responseBody)
 	apiErr.Retryable = spec.retryable
 	apiErr.RetryAfter = resolveRetryAfter(spec, headers)
 }

@@ -547,6 +547,59 @@ func buildSettingsNotifySection(c Config) string {
 			html.EscapeString(c.Notifications.Webhook.Secret)) +
 		`</div>`
 
+	mqttSection := `<div class="notify-box notify-mqtt">` +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Broker</span>`+
+			`<input type="text" id="cfg-mqtt-broker" class="s-input s-input-lg"`+
+			` placeholder="tcp://192.168.1.10:1883" value="%s"></div>`,
+			html.EscapeString(c.Notifications.MQTTConfig.Broker)) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Client ID</span>`+
+			`<input type="text" id="cfg-mqtt-clientid" class="s-input s-input-lg"`+
+			` placeholder="go-dyndns" value="%s"></div>`,
+			html.EscapeString(c.Notifications.MQTTConfig.ClientID)) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Username</span>`+
+			`<input type="text" id="cfg-mqtt-username" class="s-input s-input-lg"`+
+			` placeholder="optional" value="%s"></div>`,
+			html.EscapeString(c.Notifications.MQTTConfig.Username)) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Secret <small class="s-label-hint-inline">Password</small></span>`+
+			`<div class="input-with-action">`+
+			`<input type="password" id="cfg-mqtt-password" class="s-input s-input-lg"`+
+			` placeholder="`+T.SettingsTokenUnchanged+`" value="%s">`+
+			`<button type="button" class="input-action-btn" onclick="togglePassword('cfg-mqtt-password', this)">👁️</button>`+
+			`</div></div>`,
+			html.EscapeString(c.Notifications.MQTTConfig.Password)) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Topic</span>`+
+			`<input type="text" id="cfg-mqtt-topic" class="s-input s-input-lg"`+
+			` placeholder="dyndns/ip" value="%s"></div>`,
+			html.EscapeString(c.Notifications.MQTTConfig.Topic)) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">QoS</span>`+
+			`<input type="number" min="0" max="2" id="cfg-mqtt-qos" class="s-input s-input-sm"`+
+			` value="%d"></div>`,
+			c.Notifications.MQTTConfig.QoS) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Retain</span>`+
+			`<label class="s-checkbox-container">`+
+			`<input type="checkbox" id="cfg-mqtt-retain" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)"`+
+			` data-label-on="%s" data-label-off="%s"%s>`+
+			`<span class="s-checkbox-text">%s</span></label></div>`,
+			T.SettingsCheckboxActive,
+			T.SettingsCheckboxDeactive,
+			checkedAttr(c.Notifications.MQTTConfig.Retain),
+			checkboxLabel(c.Notifications.MQTTConfig.Retain),
+		) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Auto Discovery <small class="s-label-hint-inline">Home Assistant</small></span>`+
+			`<label class="s-checkbox-container">`+
+			`<input type="checkbox" id="cfg-mqtt-discovery" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)"`+
+			` data-label-on="%s" data-label-off="%s"%s>`+
+			`<span class="s-checkbox-text">%s</span></label></div>`,
+			T.SettingsCheckboxActive,
+			T.SettingsCheckboxDeactive,
+			checkedAttr(c.Notifications.MQTTConfig.Discovery),
+			checkboxLabel(c.Notifications.MQTTConfig.Discovery),
+		) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Discovery Prefix</span>`+
+			`<input type="text" id="cfg-mqtt-discovery-prefix" class="s-input s-input-lg"`+
+			` placeholder="homeassistant" value="%s"></div>`,
+			html.EscapeString(c.Notifications.MQTTConfig.DiscoveryPrefix)) +
+		`</div>`
 	return fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsNotifyEnabled+`</span>`+
 		`<label class="s-checkbox-container">`+
 		`<input type="checkbox" id="cfg-notify-enabled" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)"`+
@@ -559,7 +612,8 @@ func buildSettingsNotifySection(c Config) string {
 		buildSettingsSubSection("", T.SettingsNotifyEvents, notifyEventsSection) +
 		buildSettingsSubSection("", T.SettingsTelegramHeading, telegramSection) +
 		buildSettingsSubSection("", T.SettingsGotifyHeading, gotifySection) +
-		buildSettingsSubSection("", T.SettingsWebhookHeading, webhookSection)
+		buildSettingsSubSection("", T.SettingsWebhookHeading, webhookSection) +
+		buildSettingsSubSection("", T.SettingsMqttHeading, mqttSection)
 }
 
 func buildSettingsSaveSection() string {
@@ -585,30 +639,43 @@ type safeDomainConfig struct {
 	CFProxied  bool   `json:"cf_proxied,omitempty"`
 }
 
+type safeMQTTConfig struct {
+	Broker          string `json:"broker"`
+	ClientID        string `json:"client_id"`
+	Username        string `json:"username"`
+	Password        string `json:"password"`
+	Topic           string `json:"topic"`
+	QoS             byte   `json:"qos"`
+	Retain          bool   `json:"retain"`
+	Discovery       bool   `json:"discovery"`
+	DiscoveryPrefix string `json:"discovery_prefix"`
+}
+
 type safeSystemConfig struct {
-	IPMode          string   `json:"ip_mode"`
-	IfaceName       string   `json:"iface_name"`
-	HealthPort      string   `json:"health_port"`
-	DNSServers      []string `json:"dns_servers"`
-	Interval        int      `json:"interval"`
-	DryRun          bool     `json:"dry_run"`
-	HourlyRateLimit int      `json:"hourly_rate_limit"`
-	MaxConcurrent   int      `json:"max_concurrent"`
-	MaxLogLines     int      `json:"max_log_lines"`
-	MaxAPIRetries   int      `json:"max_api_retries"`
-	Lang            string   `json:"lang"`
-	NotifyEnabled   bool     `json:"notify_enabled"`
-	NotifyEvents    []string `json:"notify_events"`
-	TelegramToken   string   `json:"telegram_token"`
-	TelegramChatID  string   `json:"telegram_chat_id"`
-	GotifyURL       string   `json:"gotify_url"`
-	GotifyToken     string   `json:"gotify_token"`
-	WebhookURL      string   `json:"webhook_url"`
-	WebhookSecret   string   `json:"webhook_secret"`
-	DebugEnabled    bool     `json:"debug_enabled"`
-	DebugHTTPRaw    bool     `json:"debug_http_raw"`
-	IPv4Endpoints   []string `json:"ipv4_endpoints"`
-	IPv6Endpoints   []string `json:"ipv6_endpoints"`
+	IPMode          string         `json:"ip_mode"`
+	IfaceName       string         `json:"iface_name"`
+	HealthPort      string         `json:"health_port"`
+	DNSServers      []string       `json:"dns_servers"`
+	Interval        int            `json:"interval"`
+	DryRun          bool           `json:"dry_run"`
+	HourlyRateLimit int            `json:"hourly_rate_limit"`
+	MaxConcurrent   int            `json:"max_concurrent"`
+	MaxLogLines     int            `json:"max_log_lines"`
+	MaxAPIRetries   int            `json:"max_api_retries"`
+	Lang            string         `json:"lang"`
+	NotifyEnabled   bool           `json:"notify_enabled"`
+	NotifyEvents    []string       `json:"notify_events"`
+	TelegramToken   string         `json:"telegram_token"`
+	TelegramChatID  string         `json:"telegram_chat_id"`
+	GotifyURL       string         `json:"gotify_url"`
+	GotifyToken     string         `json:"gotify_token"`
+	WebhookURL      string         `json:"webhook_url"`
+	WebhookSecret   string         `json:"webhook_secret"`
+	MQTT            safeMQTTConfig `json:"mqtt"`
+	DebugEnabled    bool           `json:"debug_enabled"`
+	DebugHTTPRaw    bool           `json:"debug_http_raw"`
+	IPv4Endpoints   []string       `json:"ipv4_endpoints"`
+	IPv6Endpoints   []string       `json:"ipv6_endpoints"`
 }
 
 type dashboardConfigPayload struct {
@@ -656,10 +723,21 @@ func currentSystemConfig() safeSystemConfig {
 		GotifyToken:     cfg.Notifications.Gotify.Token,
 		WebhookURL:      cfg.Notifications.Webhook.URL,
 		WebhookSecret:   cfg.Notifications.Webhook.Secret,
-		DebugEnabled:    cfg.DebugEnabled,
-		DebugHTTPRaw:    cfg.DebugHTTPRaw,
-		IPv4Endpoints:   cfg.IPv4Endpoints,
-		IPv6Endpoints:   cfg.IPv6Endpoints,
+		MQTT: safeMQTTConfig{
+			Broker:          cfg.Notifications.MQTTConfig.Broker,
+			ClientID:        cfg.Notifications.MQTTConfig.ClientID,
+			Username:        cfg.Notifications.MQTTConfig.Username,
+			Password:        cfg.Notifications.MQTTConfig.Password,
+			Topic:           cfg.Notifications.MQTTConfig.Topic,
+			QoS:             cfg.Notifications.MQTTConfig.QoS,
+			Retain:          cfg.Notifications.MQTTConfig.Retain,
+			Discovery:       cfg.Notifications.MQTTConfig.Discovery,
+			DiscoveryPrefix: cfg.Notifications.MQTTConfig.DiscoveryPrefix,
+		},
+		DebugEnabled:  cfg.DebugEnabled,
+		DebugHTTPRaw:  cfg.DebugHTTPRaw,
+		IPv4Endpoints: cfg.IPv4Endpoints,
+		IPv6Endpoints: cfg.IPv6Endpoints,
 	}
 }
 
@@ -919,16 +997,14 @@ func handleAPISaveConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func applySystemConfigPayload(sys safeSystemConfig) {
-	if sys.IPMode != "" {
-		validModes := map[string]bool{
-			IPModeV4:   true,
-			IPModeV6:   true,
-			IPModeBoth: true,
-		}
-		if validModes[strings.ToUpper(sys.IPMode)] {
-			cfg.IPMode = strings.ToUpper(sys.IPMode)
-		}
-	}
+	applySystemCoreConfig(sys)
+	applySystemRuntimeConfig(sys)
+	applyNotificationConfig(sys)
+	ensureNotificationsEnabled()
+}
+
+func applySystemCoreConfig(sys safeSystemConfig) {
+	applyIPMode(sys.IPMode)
 
 	if sys.Interval >= 30 {
 		cfg.Interval = sys.Interval
@@ -957,29 +1033,59 @@ func applySystemConfigPayload(sys safeSystemConfig) {
 	if sys.Lang != "" {
 		cfg.Lang = sys.Lang
 	}
+}
 
+func applySystemRuntimeConfig(sys safeSystemConfig) {
 	cfg.DryRun = sys.DryRun
 	cfg.DebugEnabled = sys.DebugEnabled
 	cfg.DebugHTTPRaw = sys.DebugHTTPRaw
 	cfg.IPv4Endpoints = sys.IPv4Endpoints
 	cfg.IPv6Endpoints = sys.IPv6Endpoints
+}
 
+func applyNotificationConfig(sys safeSystemConfig) {
 	cfg.Notifications.Enabled = sys.NotifyEnabled
+
 	if sys.NotifyEvents != nil {
 		cfg.Notifications.Events = sys.NotifyEvents
 	}
 
 	cfg.Notifications.Telegram.Token = sys.TelegramToken
 	cfg.Notifications.Telegram.ChatID = sys.TelegramChatID
+
 	cfg.Notifications.Gotify.URL = sys.GotifyURL
 	cfg.Notifications.Gotify.Token = sys.GotifyToken
+
 	cfg.Notifications.Webhook.URL = sys.WebhookURL
 	cfg.Notifications.Webhook.Secret = sys.WebhookSecret
 
-	if !cfg.Notifications.Enabled {
-		cfg.Notifications.Enabled = cfg.Notifications.Telegram.Token != "" ||
-			cfg.Notifications.Gotify.URL != ""
+	cfg.Notifications.MQTTConfig.Broker = sys.MQTT.Broker
+	cfg.Notifications.MQTTConfig.ClientID = sys.MQTT.ClientID
+	cfg.Notifications.MQTTConfig.Username = sys.MQTT.Username
+	cfg.Notifications.MQTTConfig.Password = sys.MQTT.Password
+	cfg.Notifications.MQTTConfig.Topic = sys.MQTT.Topic
+	cfg.Notifications.MQTTConfig.QoS = sys.MQTT.QoS
+	cfg.Notifications.MQTTConfig.Retain = sys.MQTT.Retain
+	cfg.Notifications.MQTTConfig.Discovery = sys.MQTT.Discovery
+	cfg.Notifications.MQTTConfig.DiscoveryPrefix = sys.MQTT.DiscoveryPrefix
+}
+
+func applyIPMode(mode string) {
+	switch strings.ToUpper(mode) {
+	case IPModeV4, IPModeV6, IPModeBoth:
+		cfg.IPMode = strings.ToUpper(mode)
 	}
+}
+
+func ensureNotificationsEnabled() {
+	if cfg.Notifications.Enabled {
+		return
+	}
+
+	cfg.Notifications.Enabled = (cfg.Notifications.Telegram.Token != "" && cfg.Notifications.Telegram.ChatID != "") ||
+		(cfg.Notifications.Gotify.URL != "" && cfg.Notifications.Gotify.Token != "") ||
+		(cfg.Notifications.Webhook.URL != "") ||
+		(cfg.Notifications.MQTTConfig.Broker != "" && cfg.Notifications.MQTTConfig.Topic != "")
 }
 
 func cleanDNSServers(in []string) []string {
@@ -1239,6 +1345,11 @@ func handleAPITriggerStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAPIExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Metode not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
 	if !validateTriggerToken(r) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return

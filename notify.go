@@ -63,6 +63,26 @@ func initNotifiers() {
 			Message: t(T.NotifyWebhookActive, "✅ Webhook active"),
 		})
 	}
+	if cfg.Notifications.MQTTConfig.Broker != "" && cfg.Notifications.MQTTConfig.Topic != "" {
+		newCfg.notifiers = append(newCfg.notifiers, newMQTTNotifier(
+			cfg.Notifications.MQTTConfig.Broker,
+			cfg.Notifications.MQTTConfig.ClientID,
+			cfg.Notifications.MQTTConfig.Username,
+			cfg.Notifications.MQTTConfig.Password,
+			cfg.Notifications.MQTTConfig.Topic,
+			cfg.Notifications.MQTTConfig.QoS,
+			cfg.Notifications.MQTTConfig.Retain,
+			cfg.Notifications.MQTTConfig.CAFile,
+			cfg.Notifications.MQTTConfig.Discovery,
+			cfg.Notifications.MQTTConfig.DiscoveryPrefix,
+		))
+		debugLog("NOTIFY", "", fmt.Sprintf("%s %s", T.NotifyMqttActive, cfg.Notifications.MQTTConfig.Broker))
+		log(LogContext{
+			Level:   LogInfo,
+			Action:  ActionConfig,
+			Message: t(T.NotifyMqttActive, "✅ MQTT active"),
+		})
+	}
 
 	notifyCfgMu.Lock()
 	notifyCfg = newCfg

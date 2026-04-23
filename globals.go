@@ -102,7 +102,7 @@ var (
 
 	activeUpdates atomic.Int32
 
-	lastSuccessfulDNS atomic.Int32
+	lastSuccessfulDNS atomic.Int64
 
 	providerCache = &ProviderDataCache{
 		ionosRecords: make(map[string][]Record),
@@ -590,8 +590,8 @@ type Phrases struct {
 	SettingsSaveBtn, SettingsSaveHint, SettingsRestartHint                   string
 	SettingsDebugVerboseHint, SettingsDebugHTTPHint                          string
 	SettingsIfacePlaceholder, SettingsAPIPrefix, SettingsAPISecret           string
-	SettingsCFEmail, SettingsCFGlobalKey                                     string
-	SettingsIPv64Token, SettingsTelegramHeading                              string
+	SettingsCFEmail, SettingsCFGlobalKey, NotifyMqttActive                   string
+	SettingsIPv64Token, SettingsTelegramHeading, SettingsMqttHeading         string
 	SettingsGotifyHeading, SettingsDomainPlaceholder, SettingsWebhookHeading string
 	SettingsCFTokenHint, SettingsGotifyURL, SettingsGotifyToken              string
 	SettingsIPv4Endpoints, SettingsIPv6Endpoints                             string
@@ -738,6 +738,18 @@ type Config struct {
 			URL    string `json:"url"`
 			Secret string `json:"secret"`
 		} `json:"webhook"`
+		MQTTConfig struct {
+			Broker          string `json:"broker"`
+			ClientID        string `json:"client_id"`
+			Username        string `json:"username"`
+			Password        string `json:"password"`
+			Topic           string `json:"topic"`
+			QoS             byte   `json:"qos"`
+			Retain          bool   `json:"retain"`
+			CAFile          string `json:"ca_file"`
+			Discovery       bool   `json:"discovery"`
+			DiscoveryPrefix string `json:"discovery_prefix"`
+		} `json:"mqtt"`
 	} `json:"notifications"`
 	IPv4Endpoints []string `json:"ipv4_endpoints,omitempty"`
 	IPv6Endpoints []string `json:"ipv6_endpoints,omitempty"`

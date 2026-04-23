@@ -24,7 +24,7 @@ func runUpdate(firstRun bool) {
 	defer cancel()
 	defer ipCancel()
 
-	currentIPv4, currentIPv6, ok := resolveCurrentIPs(ipCtx, firstRun)
+	currentIPv4, currentIPv6, ok := resolveCurrentIPs(ipCtx, firstRun, forced)
 	if !ok {
 		return
 	}
@@ -73,13 +73,25 @@ func createRunUpdateContexts() (context.Context, context.Context, context.Cancel
 	return ctx, ipCtx, cancel, ipCancel
 }
 
-func resolveCurrentIPs(ipCtx context.Context, firstRun bool) (string, string, bool) {
+func resolveCurrentIPs(ipCtx context.Context, firstRun, forced bool) (string, string, bool) {
 	type ipPair struct{ v4, v6 string }
 
-	ips, err := doSingleflight(ipCtx, &ipLoadGroup, "current_ips", func() (ipPair, error) {
-		v4, v6, err := fetchCurrentIPs(ipCtx)
-		return ipPair{v4: v4, v6: v6}, err
-	})
+	var (
+		ips ipPair
+		err error
+	)
+
+	if forced {
+		v4, v6, fetchErr := fetchCurrentIPs(ipCtx)
+		ips = ipPair{v4: v4, v6: v6}
+		err = fetchErr
+	} else {
+		ips, err = doSingleflight(ipCtx, &ipLoadGroup, "current_ips", func() (ipPair, error) {
+			v4, v6, err := fetchCurrentIPs(ipCtx)
+			return ipPair{v4: v4, v6: v6}, err
+		})
+	}
+
 	if err != nil {
 		return handleCurrentIPsError(err, firstRun)
 	}
@@ -431,7 +443,6 @@ func saveCachesToDisk(zonesByProvider map[string][]Zone, cache *ZoneRecordCache)
 				savedZone = true
 				savedRecord = true
 			}
-
 		}
 	}
 

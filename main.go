@@ -155,14 +155,16 @@ func initRuntimePaths() runtimePaths {
 }
 
 func prepareRuntimeDirectories(paths runtimePaths) error {
-	copyEmbeddedLangFiles(paths.langDir)
-
 	if err := os.MkdirAll(paths.langDir, 0o755); err != nil {
 		log(LogContext{
 			Level:    LogError,
 			Category: "CONFIG",
 			Message:  fmt.Sprintf(t(T.LanguageDirCreateFailed, "Failed to create language directory: %v"), err),
 		})
+		return err
+	}
+
+	if err := copyEmbeddedLangFiles(paths.langDir); err != nil {
 		return err
 	}
 
