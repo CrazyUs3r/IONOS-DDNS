@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"crypto/tls"
@@ -21,9 +21,9 @@ type mqttNotifier struct {
 	discoveryPrefix string
 	stateTopic      string
 	clientID        string
-	connected     bool
-	discoverySent bool
-	mu            sync.RWMutex
+	connected       bool
+	discoverySent   bool
+	mu              sync.RWMutex
 }
 
 // ============================================================================
@@ -183,6 +183,8 @@ func (m *mqttNotifier) Send(msg NotifyMessage) error {
 	if err != nil {
 		return err
 	}
+
+	logMQTTPublish(m.topic, m.qos, m.retain, data)
 
 	token := m.client.Publish(m.topic, m.qos, m.retain, data)
 
