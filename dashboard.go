@@ -988,7 +988,7 @@ func handleAPISaveConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ResetHTTPClient()
-	initNotifiers()
+	go initNotifiers()
 	forceNextUpdate.Store(true)
 	lastCleanupNano.Store(0)
 

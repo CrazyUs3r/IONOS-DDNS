@@ -1,5 +1,4 @@
-// Package main
-package main
+﻿package main
 
 import (
 	"crypto/tls"
@@ -7,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -21,6 +21,9 @@ type mqttNotifier struct {
 	discoveryPrefix string
 	stateTopic      string
 	clientID        string
+	connected     bool
+	discoverySent bool
+	mu            sync.RWMutex
 }
 
 // ============================================================================
@@ -28,6 +31,18 @@ type mqttNotifier struct {
 // ============================================================================
 func (m *mqttNotifier) Name() string {
 	return "mqtt"
+}
+
+func (m *mqttNotifier) isConnected() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.connected
+}
+
+func (m *mqttNotifier) setConnected(v bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.connected = v
 }
 
 func newMQTTNotifier(
@@ -42,9 +57,11 @@ func newMQTTNotifier(
 	discovery bool,
 	discoveryPrefix string,
 ) *mqttNotifier {
+
 	if clientID == "" {
 		clientID = "go-dyndns"
 	}
+
 	if discoveryPrefix == "" {
 		discoveryPrefix = "homeassistant"
 	}
@@ -59,77 +76,70 @@ func newMQTTNotifier(
 		clientID:        clientID,
 	}
 
-	if broker == "" {
-		log(LogContext{
-			Level:   LogError,
-			Action:  ActionError,
-			Message: "MQTT broker is empty",
-		})
-		return n
-	}
-
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(broker)
-	opts.SetClientID(clientID)
 
-	if username != "" {
-		opts.SetUsername(username)
-		opts.SetPassword(password)
-	}
+	opts.SetClientID(fmt.Sprintf("%s-%d", clientID, time.Now().UnixNano()))
+
+	opts.SetUsername(username)
+	opts.SetPassword(password)
 
 	opts.SetAutoReconnect(true)
-	opts.SetConnectTimeout(5 * time.Second)
 	opts.SetConnectRetry(true)
-	opts.SetConnectRetryInterval(5 * time.Second)
+	opts.SetConnectRetryInterval(3 * time.Second)
+
+	opts.SetConnectTimeout(5 * time.Second)
+	opts.SetKeepAlive(30 * time.Second)
+	opts.SetPingTimeout(5 * time.Second)
+
+	if caFile != "" {
+		certpool := x509.NewCertPool()
+		ca, err := os.ReadFile(caFile)
+		if err == nil && certpool.AppendCertsFromPEM(ca) {
+			opts.SetTLSConfig(&tls.Config{
+				RootCAs:    certpool,
+				MinVersion: tls.VersionTLS12,
+			})
+		}
+	}
 
 	opts.OnConnect = func(c mqtt.Client) {
+		n.setConnected(true)
+
 		log(LogContext{
 			Level:   LogInfo,
 			Action:  ActionConfig,
 			Message: "MQTT connected",
 		})
 
-		if n.discovery {
+		time.Sleep(200 * time.Millisecond)
+
+		if n.discovery && !n.discoverySent {
 			if err := n.publishDiscovery(c); err != nil {
 				log(LogContext{
 					Level:   LogError,
 					Action:  ActionError,
-					Message: fmt.Sprintf("MQTT discovery publish error: %v", err),
+					Message: fmt.Sprintf("MQTT discovery error: %v", err),
+				})
+			} else {
+				n.discoverySent = true
+				log(LogContext{
+					Level:   LogInfo,
+					Action:  ActionConfig,
+					Message: "MQTT discovery published",
 				})
 			}
 		}
 	}
 
 	opts.OnConnectionLost = func(_ mqtt.Client, err error) {
+		n.setConnected(false)
+
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionError,
 			Message: fmt.Sprintf("MQTT connection lost: %v", err),
 		})
-	}
-
-	if caFile != "" {
-		certpool := x509.NewCertPool()
-
-		ca, err := os.ReadFile(caFile)
-		if err != nil {
-			log(LogContext{
-				Level:   LogError,
-				Action:  ActionError,
-				Message: fmt.Sprintf("MQTT CA file read error: %v", err),
-			})
-		} else if ok := certpool.AppendCertsFromPEM(ca); !ok {
-			log(LogContext{
-				Level:   LogError,
-				Action:  ActionError,
-				Message: "MQTT CA file contains no valid certificates",
-			})
-		} else {
-			opts.SetTLSConfig(&tls.Config{
-				RootCAs:    certpool,
-				MinVersion: tls.VersionTLS12,
-			})
-		}
 	}
 
 	client := mqtt.NewClient(opts)
@@ -141,22 +151,22 @@ func newMQTTNotifier(
 		Message: fmt.Sprintf("MQTT connecting to %s", broker),
 	})
 
-	go func() {
-		token := client.Connect()
-		if token.Wait() && token.Error() != nil {
-			log(LogContext{
-				Level:   LogError,
-				Action:  ActionError,
-				Message: fmt.Sprintf("MQTT background connect error: %v", token.Error()),
-			})
-		}
-	}()
+	token := client.Connect()
+	if token.Wait() && token.Error() != nil {
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: fmt.Sprintf("MQTT connect failed: %v", token.Error()),
+		})
+		return n
+	}
+
 	return n
 }
 
 func (m *mqttNotifier) Send(msg NotifyMessage) error {
-	if m.client == nil || !m.client.IsConnected() {
-		return fmt.Errorf("mqtt client not connected")
+	if !m.isConnected() {
+		return fmt.Errorf("mqtt not connected")
 	}
 
 	payload := map[string]interface{}{
@@ -164,7 +174,8 @@ func (m *mqttNotifier) Send(msg NotifyMessage) error {
 		"domain":    msg.Domain,
 		"message":   msg.Message,
 		"level":     msg.Level,
-		"timestamp": time.Now().Unix(),
+		"emoji":     levelEmoji(msg.Level),
+		"timestamp": time.Now().Format("02.01.2006 15:04:05"),
 		"source":    ManagedComment,
 	}
 
@@ -173,33 +184,40 @@ func (m *mqttNotifier) Send(msg NotifyMessage) error {
 		return err
 	}
 
-	logMQTTPublish(m.topic, m.qos, m.retain, data)
-
 	token := m.client.Publish(m.topic, m.qos, m.retain, data)
 
-	if !token.WaitTimeout(5 * time.Second) {
-		return fmt.Errorf("mqtt publish timeout")
+	if m.qos > 0 {
+		if ok := token.WaitTimeout(3 * time.Second); !ok {
+			return fmt.Errorf("mqtt publish timeout")
+		}
+		if token.Error() != nil {
+			return token.Error()
+		}
 	}
 
-	return token.Error()
+	return nil
 }
 
 func (m *mqttNotifier) publishDiscovery(client mqtt.Client) error {
-	configTopic := fmt.Sprintf("%s/sensor/%s_ip/config", m.discoveryPrefix, m.clientID)
+
+	configTopic := fmt.Sprintf("%s/sensor/%s_ip/config",
+		m.discoveryPrefix,
+		m.clientID,
+	)
 
 	payload := map[string]interface{}{
-		"name":                  "Go DynDNS IP",
+		"name":                  "Go DynDNS",
 		"unique_id":             fmt.Sprintf("%s_ip", m.clientID),
 		"state_topic":           m.stateTopic,
 		"value_template":        "{{ value_json.message }}",
 		"json_attributes_topic": m.stateTopic,
+		"icon":                  "mdi:dns",
 		"device": map[string]interface{}{
 			"name":         "Go DynDNS",
 			"identifiers":  []string{m.clientID},
 			"manufacturer": "custom",
-			"model":        "dyndns-notifier",
+			"model":        "Go-DynDNS-Service",
 		},
-		"icon": "mdi:wan",
 	}
 
 	data, err := json.Marshal(payload)
@@ -207,13 +225,14 @@ func (m *mqttNotifier) publishDiscovery(client mqtt.Client) error {
 		return err
 	}
 
-	logMQTTPublish(configTopic, 1, true, data)
-
 	token := client.Publish(configTopic, 1, true, data)
 
-	if !token.WaitTimeout(5 * time.Second) {
-		return fmt.Errorf("mqtt discovery publish timeout")
+	if ok := token.WaitTimeout(3 * time.Second); !ok {
+		return fmt.Errorf("discovery timeout")
+	}
+	if token.Error() != nil {
+		return token.Error()
 	}
 
-	return token.Error()
+	return nil
 }

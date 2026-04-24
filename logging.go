@@ -42,7 +42,7 @@ func log(ctx LogContext) {
 	printLogLine(ts, levelStr, icon, ctx, msg)
 
 	if shouldPersistLevel(ctx.Level, ctx.Action) {
-		persistLog(ctx)
+	   persistLog(ctx)
 	}
 
 	broadcastDebugLogIfNeeded(ctx, msg, icon)
