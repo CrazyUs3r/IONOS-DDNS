@@ -104,7 +104,7 @@ func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body in
 	maxRetries := cfg.MaxAPIRetries
 	var lastErr error
 
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := range maxRetries {
 		respBody, retry, err := ionosAPIAttempt(ctx, dc, method, url, body, attempt, maxRetries)
 		if err == nil {
 			return respBody, nil

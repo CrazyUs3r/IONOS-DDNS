@@ -165,7 +165,7 @@ func prepareRuntimeDirectories(paths runtimePaths) error {
 	}
 
 	if err := copyEmbeddedLangFiles(paths.langDir); err != nil {
-		return err
+		return fmt.Errorf("copy embedded lang files: %w", err)
 	}
 
 	return nil

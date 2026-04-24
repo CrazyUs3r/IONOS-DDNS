@@ -341,11 +341,18 @@ func (t *telegramNotifier) getUpdates(offset int) ([]tgUpdateFull, error) {
 	}
 	req.Header.Set("User-Agent", ManagedComment)
 
+	logHTTPRequest(req)
+
+	start := time.Now()
 	resp, err := t.getPollClient().Do(req)
+	duration := time.Since(start)
+
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
+
+	logHTTPResponse(resp, duration)
 
 	var result struct {
 		OK          bool           `json:"ok"`

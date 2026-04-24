@@ -59,6 +59,15 @@ func newMQTTNotifier(
 		clientID:        clientID,
 	}
 
+	if broker == "" {
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: "MQTT broker is empty",
+		})
+		return n
+	}
+
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(broker)
 	opts.SetClientID(clientID)
@@ -69,10 +78,11 @@ func newMQTTNotifier(
 	}
 
 	opts.SetAutoReconnect(true)
+	opts.SetConnectTimeout(5 * time.Second)
 	opts.SetConnectRetry(true)
 	opts.SetConnectRetryInterval(5 * time.Second)
 
-	opts.OnConnect = func(_ mqtt.Client) {
+	opts.OnConnect = func(c mqtt.Client) {
 		log(LogContext{
 			Level:   LogInfo,
 			Action:  ActionConfig,
@@ -80,7 +90,7 @@ func newMQTTNotifier(
 		})
 
 		if n.discovery {
-			if err := n.publishDiscovery(); err != nil {
+			if err := n.publishDiscovery(c); err != nil {
 				log(LogContext{
 					Level:   LogError,
 					Action:  ActionError,
@@ -100,6 +110,7 @@ func newMQTTNotifier(
 
 	if caFile != "" {
 		certpool := x509.NewCertPool()
+
 		ca, err := os.ReadFile(caFile)
 		if err != nil {
 			log(LogContext{
@@ -107,8 +118,13 @@ func newMQTTNotifier(
 				Action:  ActionError,
 				Message: fmt.Sprintf("MQTT CA file read error: %v", err),
 			})
+		} else if ok := certpool.AppendCertsFromPEM(ca); !ok {
+			log(LogContext{
+				Level:   LogError,
+				Action:  ActionError,
+				Message: "MQTT CA file contains no valid certificates",
+			})
 		} else {
-			certpool.AppendCertsFromPEM(ca)
 			opts.SetTLSConfig(&tls.Config{
 				RootCAs:    certpool,
 				MinVersion: tls.VersionTLS12,
@@ -119,26 +135,46 @@ func newMQTTNotifier(
 	client := mqtt.NewClient(opts)
 	n.client = client
 
+	log(LogContext{
+		Level:   LogInfo,
+		Action:  ActionConfig,
+		Message: fmt.Sprintf("MQTT connecting to %s", broker),
+	})
+
 	token := client.Connect()
-	if token.Wait() && token.Error() != nil {
+
+	if !token.WaitTimeout(10 * time.Second) {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionError,
-			Message: fmt.Sprintf("MQTT connect error: %v", token.Error()),
+			Message: "MQTT connect timeout",
 		})
+		return n
 	}
 
+	if err := token.Error(); err != nil {
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: fmt.Sprintf("MQTT connect error: %v", err),
+		})
+		return n
+	}
 	return n
 }
 
 func (m *mqttNotifier) Send(msg NotifyMessage) error {
+	if m.client == nil || !m.client.IsConnected() {
+		return fmt.Errorf("mqtt client not connected")
+	}
+
 	payload := map[string]interface{}{
 		"action":    msg.Action,
 		"domain":    msg.Domain,
 		"message":   msg.Message,
 		"level":     msg.Level,
 		"timestamp": time.Now().Unix(),
-		"source":    "go-dyndns",
+		"source":    ManagedComment,
 	}
 
 	data, err := json.Marshal(payload)
@@ -146,13 +182,18 @@ func (m *mqttNotifier) Send(msg NotifyMessage) error {
 		return err
 	}
 
+	logMQTTPublish(m.topic, m.qos, m.retain, data)
+
 	token := m.client.Publish(m.topic, m.qos, m.retain, data)
-	token.Wait()
+
+	if !token.WaitTimeout(5 * time.Second) {
+		return fmt.Errorf("mqtt publish timeout")
+	}
 
 	return token.Error()
 }
 
-func (m *mqttNotifier) publishDiscovery() error {
+func (m *mqttNotifier) publishDiscovery(client mqtt.Client) error {
 	configTopic := fmt.Sprintf("%s/sensor/%s_ip/config", m.discoveryPrefix, m.clientID)
 
 	payload := map[string]interface{}{
@@ -175,8 +216,13 @@ func (m *mqttNotifier) publishDiscovery() error {
 		return err
 	}
 
-	token := m.client.Publish(configTopic, 1, true, data)
-	token.Wait()
+	logMQTTPublish(configTopic, 1, true, data)
+
+	token := client.Publish(configTopic, 1, true, data)
+
+	if !token.WaitTimeout(5 * time.Second) {
+		return fmt.Errorf("mqtt discovery publish timeout")
+	}
 
 	return token.Error()
 }

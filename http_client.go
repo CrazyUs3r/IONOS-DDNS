@@ -171,16 +171,6 @@ func logHTTPTimings(req *http.Request, timings *httpTimings) {
 	debugLog("HTTP-TIMING", "", fmt.Sprintf("%s %s → %s", req.Method, req.URL.String(), msg))
 }
 
-func logHTTPRequest(req *http.Request) {
-	logReq, cleanup := cloneRequestForLogging(req)
-	defer cleanup()
-
-	maskSensitiveRequestHeaders(logReq)
-
-	requestDump, _ := httputil.DumpRequestOut(logReq, true)
-	debugLog("HTTP-RAW", "", "\n>>> REQUEST >>>\n"+string(requestDump))
-}
-
 func cloneRequestForLogging(req *http.Request) (*http.Request, func()) {
 	logReq := req.Clone(req.Context())
 
@@ -246,7 +236,25 @@ func maskAuthorizationHeader(header http.Header) {
 	}
 }
 
+func logHTTPRequest(req *http.Request) {
+	if !cfg.DebugHTTPRaw {
+		return
+	}
+
+	logReq, cleanup := cloneRequestForLogging(req)
+	defer cleanup()
+
+	maskSensitiveRequestHeaders(logReq)
+
+	requestDump, _ := httputil.DumpRequestOut(logReq, true)
+	debugLog("HTTP-RAW", "", "\n>>> REQUEST >>>\n"+string(requestDump))
+}
+
 func logHTTPResponse(resp *http.Response, duration time.Duration) {
+	if !cfg.DebugHTTPRaw {
+		return
+	}
+
 	bodyBytes := readAndRestoreResponseBody(resp)
 	bodyStr := sanitizeHTTPDebugBody(string(bodyBytes))
 	bodyStr = prettyPrintHTTPDebugJSON(bodyStr)
@@ -260,6 +268,28 @@ func logHTTPResponse(resp *http.Response, duration time.Duration) {
 			duration.Seconds(),
 			resp.Status,
 			bodyStr,
+		),
+	)
+}
+
+func logMQTTPublish(topic string, qos byte, retain bool, payload []byte) {
+	if !cfg.DebugHTTPRaw {
+		return
+	}
+
+	body := sanitizeHTTPDebugBody(string(payload))
+	body = prettyPrintHTTPDebugJSON(body)
+	body = truncateHTTPDebugBody(body, 5000)
+
+	debugLog(
+		"MQTT-RAW",
+		"",
+		fmt.Sprintf(
+			"\n>>> PUBLISH >>>\nTopic: %s\nQoS: %d\nRetain: %t\nPayload:\n%s\n",
+			topic,
+			qos,
+			retain,
+			body,
 		),
 	)
 }

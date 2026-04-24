@@ -116,7 +116,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 	maxRetries := cfg.MaxAPIRetries
 
 	var lastErr error
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := range maxRetries {
 		respBody, retry, err := cloudflareAPIAttempt(ctx, dc, method, fullURL, body, attempt, maxRetries)
 		if err == nil {
 			return respBody, nil
