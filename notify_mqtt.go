@@ -141,25 +141,16 @@ func newMQTTNotifier(
 		Message: fmt.Sprintf("MQTT connecting to %s", broker),
 	})
 
-	token := client.Connect()
-
-	if !token.WaitTimeout(10 * time.Second) {
-		log(LogContext{
-			Level:   LogError,
-			Action:  ActionError,
-			Message: "MQTT connect timeout",
-		})
-		return n
-	}
-
-	if err := token.Error(); err != nil {
-		log(LogContext{
-			Level:   LogError,
-			Action:  ActionError,
-			Message: fmt.Sprintf("MQTT connect error: %v", err),
-		})
-		return n
-	}
+	go func() {
+		token := client.Connect()
+		if token.Wait() && token.Error() != nil {
+			log(LogContext{
+				Level:   LogError,
+				Action:  ActionError,
+				Message: fmt.Sprintf("MQTT background connect error: %v", token.Error()),
+			})
+		}
+	}()
 	return n
 }
 
