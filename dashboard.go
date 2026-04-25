@@ -1789,67 +1789,76 @@ func buildNotifierStatusHTML() string {
 
 	var sb strings.Builder
 	sb.WriteString(`<span class="status-sep">|</span><span class="status-item" style="gap:6px;">`)
+
 	for _, n := range notifiers {
 		name := n.Name()
 		icon := icons[name]
 		if icon == "" {
 			icon = "🔔"
 		}
+
 		connected := true
 		if m, ok := n.(*mqttNotifier); ok {
 			connected = m.isConnected()
 		}
+
 		color := "#4ade80"
 		title := name + " aktiv"
 		if !connected {
 			color = "#f87171"
 			title = name + " getrennt"
 		}
-		sb.WriteString(fmt.Sprintf(
+
+		fmt.Fprintf(&sb,
 			`<span title="%s" onclick="showNotifierTooltip(this, '%s')" style="font-size:0.85rem;opacity:0.85;filter:drop-shadow(0 0 3px %s);cursor:pointer;">%s</span>`,
 			title, title, color, icon,
-		))
+		)
 	}
+
 	sb.WriteString(`</span>`)
 	return sb.String()
 }
 
 func writeDashboardTop(w http.ResponseWriter, statusClass, statusText string) {
-	_, _ = fmt.Fprintf(w, `
-		<div class="status-banner `+statusClass+`">
-			<div class="status-banner-left">
-				<span>`+statusText+`</span>
-			</div>
-			<div class="status-banner-meta">
-				<span class="status-item">
-					`+T.LastUpdate+`: 
-					<span id="lastUpdate">`+time.Now().Local().Format("15:04:05")+`</span>
-				</span>
-				<span class="status-sep">|</span>
-				<span class="status-item">
-					🕒 <span id="clock">--:--:--</span>
-				</span>
-				<span class="status-sep">|</span>
-				<span class="status-item status-uptime">
-					⏱️ <span id="uptime">--</span>
-				</span>
-         `+buildNotifierStatusHTML()+`
-			</div>
+	fmt.Fprintf(w, `
+<div class="status-banner %s">
+	<div class="status-banner-left">
+		<span>%s</span>
+	</div>
+	<div class="status-banner-meta">
+		<span class="status-item">
+			%s:
+			<span id="lastUpdate">%s</span>
+		</span>
+		<span class="status-sep">|</span>
+		<span class="status-item">
+			🕒 <span id="clock">--:--:--</span>
+		</span>
+		<span class="status-sep">|</span>
+		<span class="status-item status-uptime">
+			⏱️ <span id="uptime">--</span>
+		</span>
+		%s
+	</div>
+</div>
+<div id="toast" class="toast"></div>
+<details class="card" id="endpoint-card">
+	<summary>📡 IP-Endpunkt Status</summary>
+	<div class="card-content">
+		<div id="endpoint-status" class="endpoint-status">
+			<span style="opacity:0.4;font-size:0.82rem;">
+				Warte auf ersten Check...
+			</span>
 		</div>
-
-		<div id="toast" class="toast"></div>
-
-		<details class="card" id="endpoint-card">
-			<summary>📡 IP-Endpunkt Status</summary>
-			<div class="card-content">
-				<div id="endpoint-status" class="endpoint-status">
-					<span style="opacity:0.4;font-size:0.82rem;">
-						Warte auf ersten Check...
-					</span>
-				</div>
-			</div>
-		</details>
-	`)
+	</div>
+</details>
+`,
+		statusClass,
+		statusText,
+		T.LastUpdate,
+		time.Now().Local().Format("15:04:05"),
+		buildNotifierStatusHTML(),
+	)
 }
 
 func writeDashboardConfigCard(w http.ResponseWriter) {
