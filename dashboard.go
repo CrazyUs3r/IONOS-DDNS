@@ -780,20 +780,6 @@ func dashboardI18NJSON() string {
 	return string(b)
 }
 
-func formatUptime(d time.Duration) string {
-	d = d.Round(time.Second)
-	h := int(d.Hours())
-	m := int(d.Minutes()) % 60
-	s := int(d.Seconds()) % 60
-	if h > 0 {
-		return fmt.Sprintf("%dh %dm", h, m)
-	}
-	if m > 0 {
-		return fmt.Sprintf("%dm %ds", m, s)
-	}
-	return fmt.Sprintf("%ds", s)
-}
-
 func createMux() *http.ServeMux {
 	mux := http.NewServeMux()
 
@@ -1346,7 +1332,7 @@ func handleAPITriggerStatus(w http.ResponseWriter, r *http.Request) {
 
 func handleAPIExport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Metode not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -1368,6 +1354,21 @@ func handleAPIExport(w http.ResponseWriter, r *http.Request) {
 		if err := json.Unmarshal(b, &domains); err == nil {
 			exportData["domains"] = domains
 		}
+	}
+
+	if b, err := os.ReadFile(logPath); err == nil {
+		var logEntries []LogEntry
+		for _, line := range strings.Split(string(b), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			var entry LogEntry
+			if json.Unmarshal([]byte(line), &entry) == nil {
+				logEntries = append(logEntries, entry)
+			}
+		}
+		exportData["logs"] = logEntries
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1770,17 +1771,70 @@ func writeDashboardHeader(w http.ResponseWriter, jsConfigSafe, jsSystemCfg []byt
 	)
 }
 
+func buildNotifierStatusHTML() string {
+	notifyCfgMu.RLock()
+	notifiers := notifyCfg.notifiers
+	notifyCfgMu.RUnlock()
+
+	if len(notifiers) == 0 {
+		return ""
+	}
+
+	icons := map[string]string{
+		"Telegram": "✈️",
+		"Gotify":   "📬",
+		"Webhook":  "🔗",
+		"mqtt":     "📡",
+	}
+
+	var sb strings.Builder
+	sb.WriteString(`<span class="status-sep">|</span><span class="status-item" style="gap:6px;">`)
+	for _, n := range notifiers {
+		name := n.Name()
+		icon := icons[name]
+		if icon == "" {
+			icon = "🔔"
+		}
+		connected := true
+		if m, ok := n.(*mqttNotifier); ok {
+			connected = m.isConnected()
+		}
+		color := "#4ade80"
+		title := name + " aktiv"
+		if !connected {
+			color = "#f87171"
+			title = name + " getrennt"
+		}
+		sb.WriteString(fmt.Sprintf(
+			`<span title="%s" onclick="showNotifierTooltip(this, '%s')" style="font-size:0.85rem;opacity:0.85;filter:drop-shadow(0 0 3px %s);cursor:pointer;">%s</span>`,
+			title, title, color, icon,
+		))
+	}
+	sb.WriteString(`</span>`)
+	return sb.String()
+}
+
 func writeDashboardTop(w http.ResponseWriter, statusClass, statusText string) {
 	_, _ = fmt.Fprintf(w, `
 		<div class="status-banner `+statusClass+`">
-			<span>`+statusText+`</span>
-			<span>
-				`+T.LastUpdate+`: <span id="lastUpdate">`+time.Now().Local().Format("15:04:05")+`</span>
-				<span style="opacity:0.6; margin: 0 8px;">|</span>
-				🕒 <span id="clock">--:--:--</span>
-				<span style="opacity:0.6; margin: 0 8px;">|</span>
-				⏱️ <span id="uptime">%s</span>
-			</span>
+			<div class="status-banner-left">
+				<span>`+statusText+`</span>
+			</div>
+			<div class="status-banner-meta">
+				<span class="status-item">
+					`+T.LastUpdate+`: 
+					<span id="lastUpdate">`+time.Now().Local().Format("15:04:05")+`</span>
+				</span>
+				<span class="status-sep">|</span>
+				<span class="status-item">
+					🕒 <span id="clock">--:--:--</span>
+				</span>
+				<span class="status-sep">|</span>
+				<span class="status-item status-uptime">
+					⏱️ <span id="uptime">--</span>
+				</span>
+         `+buildNotifierStatusHTML()+`
+			</div>
 		</div>
 
 		<div id="toast" class="toast"></div>
@@ -1789,11 +1843,13 @@ func writeDashboardTop(w http.ResponseWriter, statusClass, statusText string) {
 			<summary>📡 IP-Endpunkt Status</summary>
 			<div class="card-content">
 				<div id="endpoint-status" class="endpoint-status">
-					<span style="opacity:0.4;font-size:0.82rem;">Warte auf ersten Check...</span>
+					<span style="opacity:0.4;font-size:0.82rem;">
+						Warte auf ersten Check...
+					</span>
 				</div>
 			</div>
 		</details>
-	`, formatUptime(time.Since(startTime)))
+	`)
 }
 
 func writeDashboardConfigCard(w http.ResponseWriter) {
@@ -1860,7 +1916,7 @@ func writeDashboardMetricsCard(w http.ResponseWriter, stats map[string]interface
 					`+T.UsageLast60Min+`
 				</div>
 			</div>
-			<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px;">
+			<div class="metrics-bottom-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px;">
 				<div style="padding:12px 14px; background:rgba(56,189,248,0.08); border:1px solid rgba(56,189,248,0.2); border-radius:8px;">
 					<div style="font-size:0.68rem; color:#94a3b8; letter-spacing:0.06em; margin-bottom:8px; font-weight:600; text-transform:uppercase;">`+T.MetricHTTPMethods+`</div>
 					<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
@@ -1972,6 +2028,8 @@ func writeLogsCard(w http.ResponseWriter, logs []LogEntry, logTimeRange string) 
 				<button class="filter-btn" data-filter="CLEANUP" onclick="filterLogs('CLEANUP')">`+T.FilterCleanup+`</button>
 				<button class="filter-btn" data-filter="SKIP" onclick="filterLogs('SKIP')">`+T.FilterSkip+`</button>
 				<button class="filter-btn" data-filter="CONFIG" onclick="filterLogs('CONFIG')">`+T.FilterConfig+`</button>
+				<button class="filter-btn" style="margin-left:auto;" onclick="exportLogs('txt')" title="Als .txt exportieren">📄 TXT</button>
+				<button class="filter-btn" onclick="exportLogs('json')" title="Als .json exportieren">📋 JSON</button>
 			</div>
 			<div id="logContainer" class="log-container">
 	`, T.SystemEvents, len(logs), logTimeRange)
@@ -1993,18 +2051,26 @@ func writeLogsCard(w http.ResponseWriter, logs []LogEntry, logTimeRange string) 
 			domainHTML = `<span class="log-entry-domain">` + html.EscapeString(e.Domain) + `</span>`
 		}
 
+		copyText := displayTime
+		if e.Domain != "" {
+			copyText += " [" + e.Domain + "]"
+		}
+		copyText += " " + e.Message
+
 		_, _ = fmt.Fprintf(w, `
-		<div class="log-entry log-entry-row" data-action="%s" data-level="%s">
+			<div class="log-entry log-entry-row" data-action="%s" data-level="%s" data-copy="%s">
 			<span class="log-entry-icon">%s</span>
 			<span class="log-entry-time">%s</span>
 			<div class="log-entry-body">
 				%s
 				<span class="log-entry-message">%s</span>
 			</div>
+			<button class="copy-btn log-copy-btn" onclick="copyLogEntry(this)" title="Kopieren">📋</button>
 		</div>
 		`,
 			actionUpper,
 			e.Level,
+			html.EscapeString(copyText),
 			icon,
 			displayTime,
 			domainHTML,
@@ -2031,6 +2097,8 @@ func writeDomainsCard(w http.ResponseWriter, data map[string]interface{}) {
 			<input type="text"
 				class="search-box"
 				id="domainSearch"
+				inputmode="search"
+				autocomplete="off"
 				placeholder="`+T.DomainSearchPlaceholder+`"
 				oninput="filterDomains(this.value)">
 			<div id="domainContainer">
