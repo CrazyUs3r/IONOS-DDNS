@@ -12,7 +12,12 @@ if (typeof initialConfig !== 'undefined' && initialConfig !== null) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-	const savedTheme = localStorage.getItem('theme') || 'dark';
+   if (!localStorage.getItem('theme')) {
+       localStorage.setItem('theme',
+           window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+       );
+   }
+   const savedTheme = localStorage.getItem('theme');
 	document.documentElement.setAttribute('data-theme', savedTheme);
 
 	renderSettingsDomainList();
@@ -152,13 +157,27 @@ function updateMetrics(m) {
 	setTxt('mIPLatency', m.ip_latency_avg);
 	setTxt('mIPCount', m.ip_latency_count);
 	setTxt('mLastIPCheck', m.last_ip_check);
+
+	const u = m.uptime_secs || 0;
+	const days = Math.floor(u / 86400);
+	const h = Math.floor((u % 86400) / 3600);
+	const min = Math.floor((u % 3600) / 60);
+	const s = u % 60;
+
+	let uptime;
+	if (days > 0)     uptime = days + 'd ' + h + 'h ' + min + 'm';
+	else if (h > 0)   uptime = h + 'h ' + min + 'm';
+	else if (min > 0) uptime = min + 'm ' + s + 's';
+	else              uptime = s + 's';
+	setTxt('uptime', uptime);
 }
 
 function connectWS() {
 	const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
 	ws = new WebSocket(proto + location.host + '/ws');
 	ws.onmessage = (e) => {
-		const msg = JSON.parse(e.data);
+		let msg;
+     try { msg = JSON.parse(e.data); } catch { return; }
 		if (msg.type === 'initial' || msg.type === 'metrics') {
 			updateMetrics(msg.data);
 			const theme = localStorage.getItem('theme') || 'dark';
@@ -187,9 +206,11 @@ function scheduleReconnect() {
 	reconnectDelay = Math.min(reconnectDelay * 2, reconnectDelayMax);
 }
 
+let _toastTimer = null;
 function showToast(message, type = 'success') {
 	const toast = document.getElementById('toast');
-	if(!toast) return;
+  if (!toast) return;
+  if (_toastTimer) clearTimeout(_toastTimer);
 	toast.textContent = message;
 	let borderColor = 'var(--success)';
 	let duration = 4000;
@@ -197,8 +218,11 @@ function showToast(message, type = 'success') {
 	else if(type === 'warning') { borderColor = '#facc15'; duration = 4000; }
 	else if(type === 'info') { borderColor = '#3b82f6'; duration = 2500; }
 	toast.style.borderLeft = '4px solid ' + borderColor;
-	toast.classList.add('show');
-	setTimeout(() => toast.classList.remove('show'), duration);
+  toast.classList.add('show');
+  _toastTimer = setTimeout(() => {
+    toast.classList.remove('show');
+    _toastTimer = null;
+  }, duration);
 }
 
 function copyIP(text) {
@@ -233,13 +257,27 @@ function filterLogs(filter) {
 }
 
 function triggerUpdate() {
-	const token = localStorage.getItem('triggerToken') || '';
-	showToast(tr('update_starting', '⏳ Update wird gestartet...'), 'info');
-	fetch('/api/trigger', { method: 'POST', headers: token ? {'X-Trigger-Token': token} : {} })
-	.then(r => r.json().then(j => {
-		if (j.error) showToast('⚠️ ' + j.error, 'warning');
-		else showToast(tr('update_started', '✅ Update gestartet'), 'success');
-	})).catch(() => showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'));
+  const btn = document.getElementById('update-button');
+  const token = localStorage.getItem('triggerToken') || '';
+  if (btn) btn.disabled = true;
+  showToast(tr('update_starting', '⏳ Update wird gestartet...'), 'info');
+  fetch('/api/trigger', { 
+    method: 'POST', 
+    headers: token ? {'X-Trigger-Token': token} : {} 
+  })
+  .then(r => r.json().then(j => {
+    if (j.error) {
+      showToast('⚠️ ' + j.error, 'warning');
+    } else {
+      showToast(tr('update_started', '✅ Update gestartet'), 'success');
+    }
+  }))
+  .catch(() => {
+    showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error');
+  })
+  .finally(() => {
+    if (btn) btn.disabled = false;
+  });
 }
 
 function exportData() {
@@ -619,14 +657,117 @@ function resetMetrics() {
 	.catch(() => showToast('❌ Verbindungsfehler', 'error'));
 }
 
+function showNotifierTooltip(el, text) {
+	const existing = document.getElementById('notifier-tooltip');
+	if (existing) existing.remove();
+	if (existing && existing._source === el) return;
+
+	const tip = document.createElement('div');
+	tip.id = 'notifier-tooltip';
+	tip._source = el;
+	tip.textContent = text;
+	tip.style.cssText = `
+		position: fixed;
+		background: var(--card);
+		color: var(--text);
+		border: 1px solid var(--border);
+		padding: 5px 10px;
+		border-radius: 6px;
+		font-size: 0.78rem;
+		font-family: system-ui, sans-serif;
+		box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+		pointer-events: none;
+		z-index: 9999;
+		white-space: nowrap;
+	`;
+	document.body.appendChild(tip);
+
+	const rect = el.getBoundingClientRect();
+	const tipW = tip.offsetWidth;
+	let left = rect.left + rect.width / 2 - tipW / 2;
+	if (left < 8) left = 8;
+	if (left + tipW > window.innerWidth - 8) left = window.innerWidth - tipW - 8;
+	tip.style.left = left + 'px';
+	tip.style.top = (rect.bottom + 6) + 'px';
+
+	const close = () => { tip.remove(); document.removeEventListener('click', close); };
+	setTimeout(() => document.addEventListener('click', close), 10);
+	setTimeout(() => tip.remove(), 2500);
+}
+
+function copyLogEntry(btn) {
+	const row = btn.closest('.log-entry-row');
+	const text = row ? (row.dataset.copy || '') : '';
+	if (!text) return;
+	const fallback = (t) => {
+		const ta = document.createElement('textarea');
+		ta.value = t; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+		document.body.appendChild(ta); ta.focus(); ta.select();
+		try { document.execCommand('copy'); showToast(tr('copied', '✓ Kopiert: ') + t.slice(0, 60)); }
+		catch { showToast('❌ Kopieren fehlgeschlagen', 'error'); }
+		document.body.removeChild(ta);
+	};
+	if (navigator.clipboard && window.isSecureContext) {
+		navigator.clipboard.writeText(text)
+			.then(() => showToast(tr('copied', '✓ Kopiert: ') + text.slice(0, 60)))
+			.catch(() => fallback(text));
+	} else fallback(text);
+}
+
+function exportLogs(format) {
+	const rows = [...document.querySelectorAll('#logContainer .log-entry-row')]
+		.filter(r => r.style.display !== 'none');
+
+	if (rows.length === 0) {
+		showToast('Keine Log-Einträge sichtbar', 'warning');
+		return;
+	}
+
+	const filename = 'dyndns-logs-' + new Date().toISOString().split('T')[0];
+
+	if (format === 'txt') {
+		const lines = rows.map(r => {
+			const time = r.querySelector('.log-entry-time')?.textContent.trim() || '';
+			const domain = r.querySelector('.log-entry-domain')?.textContent.trim() || '';
+			const msg = r.querySelector('.log-entry-message')?.textContent.trim() || '';
+			const action = r.dataset.action || '';
+			return [time, action, domain, msg].filter(Boolean).join(' | ');
+		});
+		const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+		_downloadBlob(blob, filename + '.txt');
+	} else {
+		const entries = rows.map(r => ({
+			time:   r.querySelector('.log-entry-time')?.textContent.trim() || '',
+			action: r.dataset.action || '',
+			level:  r.dataset.level || '',
+			domain: r.querySelector('.log-entry-domain')?.textContent.trim() || '',
+			message: r.querySelector('.log-entry-message')?.textContent.trim() || '',
+		}));
+		const blob = new Blob([JSON.stringify(entries, null, 2)], { type: 'application/json' });
+		_downloadBlob(blob, filename + '.json');
+	}
+	showToast('✓ Export gestartet', 'success');
+}
+
+function _downloadBlob(blob, filename) {
+	const url = URL.createObjectURL(blob);
+	const a = document.createElement('a');
+	a.href = url; a.download = filename;
+	document.body.appendChild(a); a.click();
+	document.body.removeChild(a);
+	URL.revokeObjectURL(url);
+}
+
 function filterDomains(query) {
     const container = document.getElementById('domainContainer');
     if (!container) return;
+    const search = query.toLowerCase();
     container.querySelectorAll('.domain-item').forEach(d => {
-		const name = (d.getAttribute('data-domain') || '').toLowerCase();
-		d.style.display = name.includes(query.toLowerCase()) ? '' : 'none';
-	});
+        const name = (d.getAttribute('data-domain') || '').toLowerCase();
+        d.classList.toggle('hidden', !name.includes(search));
+    });
 }
+
 
 function deleteDomain(domain, btn) {
 	if (!confirm(trf('delete_domain_confirm', { domain }, 'Domain "{domain}" wirklich aus dem Status entfernen?'))) return;
@@ -662,14 +803,11 @@ function fallbackCopy(text) {
 
 function startClock() {
     const el = document.getElementById('clock');
-    const uptimeEl = document.getElementById('uptime');
-    const uptimeStart = Date.now();
     if (!el) return;
     const tick = () => {
         const d = new Date();
         el.textContent = [d.getHours(), d.getMinutes(), d.getSeconds()]
             .map(n => String(n).padStart(2, '0')).join(':');
-        //renderEndpointStatus();
     };
     tick(); setInterval(tick, 1000);
 }
@@ -831,12 +969,13 @@ function showLoadingToast(text = '⏳ Speichere...') {
 	if (!el) {
 		el = document.createElement('div');
 		el.id = 'loading-toast';
-		el.style = `
+		el.style.cssText = `
+			background: var(--card);
+			color: var(--text);
+			border: 1px solid var(--border);
 			position: fixed;
 			bottom: 20px;
 			right: 20px;
-			background: #222;
-			color: #fff;
 			padding: 14px 18px;
 			border-radius: 8px;
 			box-shadow: 0 4px 12px rgba(0,0,0,0.3);
@@ -847,11 +986,11 @@ function showLoadingToast(text = '⏳ Speichere...') {
 
 		el.innerHTML = `
 			<div id="loading-text">${text}</div>
-			<div style="margin-top:8px;height:4px;background:#444;border-radius:2px;overflow:hidden;">
+			<div style="margin-top:8px;height:4px;background:var(--border);border-radius:2px;overflow:hidden;">
 				<div id="loading-bar" style="
 					height:100%;
 					width:30%;
-					background:#4caf50;
+					background:var(--success);
 					animation: loadingAnim 1.2s infinite linear;
 				"></div>
 			</div>
