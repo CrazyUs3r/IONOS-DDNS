@@ -235,7 +235,7 @@ function copyIP(text) {
 		ta.style.position = "fixed"; ta.style.left = "-9999px";
 		document.body.appendChild(ta); ta.focus(); ta.select();
 		try { document.execCommand('copy'); showToast(tr('copied', '✓ Copied: ') + text);} 
-		catch (err) { showToast('❌ Fehler', 'error'); }
+		catch (err) { showToast(tr('copy_failed', '❌ Copy failed'), 'error'); }
 		document.body.removeChild(ta);
 	};
 	if (navigator.clipboard && window.isSecureContext) {
@@ -289,8 +289,8 @@ function exportData() {
 		a.click(); 
 		document.body.removeChild(a);
 		URL.revokeObjectURL(url);
-		showToast('✓ Export gestartet');
-	}).catch(() => showToast('Export fehlgeschlagen', 'error'));
+		showToast(tr('export_started', '✓ Export gestartet'));
+	}).catch(() => showToast(tr('export_failed', 'Export fehlgeschlagen'), 'error'));
 }
 
 function sanitizeBase(s) {
@@ -333,7 +333,7 @@ async function updateDomainDisplay(data) {
 		dotEl.className = 'domain-status-dot dot-ok dot-recent';
 		setTimeout(() => { if(dotEl) dotEl.classList.remove('dot-recent'); }, 3600000);
 	}
-	showToast('✓ ' + data.domain + ' updated');
+	showToast(trf('domain_updated', {domain: data.domain}, '✓ {domain} updated'));
 }
 
 function _getVal(id) { const el = document.getElementById(id); return el ? el.value : ''; }
@@ -350,7 +350,7 @@ function openSettings() {
 
 	const saved = localStorage.getItem('triggerToken') || '';
 	const inp = document.getElementById('s-token');
-	if (inp) inp.placeholder = saved ? '●●●●●● (gespeichert)' : 'Token eingeben...';
+	if (inp) inp.placeholder = saved ? tr('token_saved_masked', '●●●●●● (gespeichert)') : tr('token_enter', 'Token eingeben...');
 
 	const sys = (typeof initialSystem !== 'undefined' && initialSystem) ? initialSystem : {};
 	const mqtt = sys.mqtt || {};
@@ -407,12 +407,12 @@ function saveToken() {
 	if (val) {
 		localStorage.setItem('triggerToken', val);
 		document.getElementById('s-token').value = '';
-		document.getElementById('s-token').placeholder = '●●●●●● (gespeichert)';
-		showToast('✅ Token gespeichert', 'success');
+		document.getElementById('s-token').placeholder = tr('token_saved_masked', '●●●●●● (gespeichert)');
+		showToast(tr('token_saved', '✅ Token gespeichert'), 'success');
 	} else {
 		localStorage.removeItem('triggerToken');
-		document.getElementById('s-token').placeholder = 'Token eingeben...';
-		showToast('🗑️ Token gelöscht', 'info');
+		document.getElementById('s-token').placeholder = tr('token_enter', 'Token eingeben...');
+		showToast(tr('token_deleted', '🗑️ Token gelöscht'), 'info');
 	}
 }
 
@@ -607,7 +607,7 @@ async function saveFullConfig() {
 		ipv6_endpoints: parseList(_getVal('cfg-ipv6_endpoints')),
 	};
 
-	showLoadingToast('⏳ Speichere Konfiguration...');
+	showLoadingToast(tr('loading_saving', '⏳ Speichere Konfiguration...'));
 
 	try {
 		const r = await fetch('/api/save-config', {
@@ -621,7 +621,7 @@ async function saveFullConfig() {
 
 		if (!r.ok) {
 			const txt = await r.text();
-			showToast(tr('error_prefix', '❌ Fehler: ') + txt, 'error');
+			showToast(tr('error_prefix', tr('connection_error', '❌ Verbindungsfehler')) + txt, 'error');
 			return;
 		}
 
@@ -637,7 +637,7 @@ async function saveFullConfig() {
 		setTimeout(() => location.reload(), 1500);
 
 	} catch (e) {
-		showToast('❌ Netzwerkfehler', 'error');
+		showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error');
 	} finally {
 		hideLoadingToast();
 	}
@@ -652,9 +652,9 @@ function resetMetrics() {
 	})
 	.then(r => {
 		if (r.ok) { showToast(tr('metrics_reset_ok', '✅ Metriken zurückgesetzt'), 'success'); }
-		else { showToast('❌ Reset fehlgeschlagen', 'error'); }
+		else { showToast(tr('metrics_reset_failed', '❌ Reset fehlgeschlagen'), 'error'); }
 	})
-	.catch(() => showToast('❌ Verbindungsfehler', 'error'));
+	.catch(() => showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'));
 }
 
 function showNotifierTooltip(el, text) {
@@ -704,7 +704,7 @@ function copyLogEntry(btn) {
 		ta.value = t; ta.style.position = 'fixed'; ta.style.left = '-9999px';
 		document.body.appendChild(ta); ta.focus(); ta.select();
 		try { document.execCommand('copy'); showToast(tr('copied', '✓ Kopiert: ') + t.slice(0, 60)); }
-		catch { showToast('❌ Kopieren fehlgeschlagen', 'error'); }
+		catch { showToast(tr('copy_failed', '❌ Copy failed'), 'error'); }
 		document.body.removeChild(ta);
 	};
 	if (navigator.clipboard && window.isSecureContext) {
@@ -719,7 +719,7 @@ function exportLogs(format) {
 		.filter(r => r.style.display !== 'none');
 
 	if (rows.length === 0) {
-		showToast('Keine Log-Einträge sichtbar', 'warning');
+		showToast(tr('no_log_entries', 'Keine Log-Einträge sichtbar'), 'warning');
 		return;
 	}
 
@@ -746,7 +746,7 @@ function exportLogs(format) {
 		const blob = new Blob([JSON.stringify(entries, null, 2)], { type: 'application/json' });
 		_downloadBlob(blob, filename + '.json');
 	}
-	showToast('✓ Export gestartet', 'success');
+	showToast(tr('export_started', '✓ Export gestartet'), 'success');
 }
 
 function _downloadBlob(blob, filename) {
@@ -785,11 +785,11 @@ function deleteDomain(domain, btn) {
 			if (card) { card.style.transition = 'opacity 0.4s'; card.style.opacity = '0'; setTimeout(() => card.remove(), 400); }
 			showToast(trf('domain_removed', { domain }, '🗑️ {domain} entfernt'), 'success');
 		} else {
-			btn.disabled = false; btn.textContent = '🗑️ Entfernen';
+			btn.disabled = false; btn.textContent = tr('remove_btn', '🗑️ Entfernen');
 			showToast('❌ ' + (j.error || 'Fehler beim Löschen'), 'error');
 		}
 	})
-	.catch(() => { btn.disabled = false; btn.textContent = tr('remove_btn', '🗑️ Entfernen'); showToast('❌ Verbindungsfehler', 'error'); });
+	.catch(() => { btn.disabled = false; btn.textContent = tr('remove_btn', '🗑️ Entfernen'); showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'); });
 }
 
 function fallbackCopy(text) {
@@ -1013,7 +1013,7 @@ function showLoadingToast(text = '⏳ Speichere...') {
 	}
 	el._timeout = setTimeout(() => {
 		const txt = document.getElementById('loading-text');
-		if (txt) txt.textContent = '⚠️ Dauert länger als erwartet...';
+		if (txt) txt.textContent = tr('loading_slow', '⚠️ Dauert länger als erwartet...');
 	}, 5000);
 }
 
