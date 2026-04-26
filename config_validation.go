@@ -105,7 +105,7 @@ func validateDomain(domain string) error {
 		return fmt.Errorf(T.InvalidDomainFormat, domain)
 	}
 
-	for _, label := range strings.Split(domain, ".") {
+	for label := range strings.SplitSeq(domain, ".") {
 		if len(label) > 63 {
 			return fmt.Errorf(T.LabelTooLong, label, len(label))
 		}

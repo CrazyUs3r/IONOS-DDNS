@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -36,7 +37,7 @@ func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) (
 	maxRetries := cfg.MaxAPIRetries
 
 	var lastErr error
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := range maxRetries {
 		respBody, retry, err := ipv64APIAttempt(ctx, dc, method, apiURL, bodyData, attempt, maxRetries)
 		if err == nil {
 			return respBody, nil
@@ -401,9 +402,7 @@ func saveIPv64Cache() error {
 
 	providerCache.RLock()
 	snapshot := make(map[string]IPv64Domain, len(providerCache.ipv64Records))
-	for k, v := range providerCache.ipv64Records {
-		snapshot[k] = v
-	}
+	maps.Copy(snapshot, providerCache.ipv64Records)
 	providerCache.RUnlock()
 
 	jsonData, err := json.MarshalIndent(snapshot, "", " ")

@@ -189,7 +189,7 @@ func buildCloudflareRequest(
 
 func cloudflareRequestBodyReader(body interface{}) (io.Reader, error) {
 	if body == nil {
-		return nil, nil
+		return bytes.NewReader([]byte{}), nil
 	}
 
 	bodyBytes, err := json.Marshal(body)
@@ -952,5 +952,5 @@ func findCloudflareRecord(ctx context.Context, dc *DomainConfig, zoneID, fqdn, r
 		page++
 	}
 
-	return nil, nil
+	return nil, fmt.Errorf("%s", T.ErrRecordNotFound)
 }

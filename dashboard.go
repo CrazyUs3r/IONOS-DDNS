@@ -481,7 +481,7 @@ func buildSettingsDomainsSection() string {
 		`<button type="button" class="input-action-btn" onclick="togglePassword('new-cf-secret', this)">👁️</button>` +
 		`</div>` +
 		`<label class="inline-check">` +
-		`<input type="checkbox" id="new-cf-proxied"> Cloudflare Proxy aktivieren` +
+		`<input type="checkbox" id="new-cf-proxied"> ` + T.SettingsCFProxyLabel +
 		`</label>` +
 		`</div>` +
 		`<div id="fields-ipv64" class="is-hidden">` +
@@ -771,6 +771,9 @@ func dashboardI18NJSON() string {
 		"cleared":               t(T.ClearedJS, "Gelöscht."),
 		"active":                t(T.ActiveJS, "Aktiv"),
 		"inactive":              t(T.InactiveJS, "Inaktiv"),
+		"loading_saving":        t(T.LoadingSaving, "⏳ Speichere Configuration..."),
+		"loading_slow":          t(T.LoadingSlow, "⚠️ Dauert länger als erwartet..."),
+		"no_log_entries":        t(T.NoLogEntries, "Keine Log-Einträge sichtbar"),
 	}
 
 	b, err := json.Marshal(m)
@@ -1803,10 +1806,10 @@ func buildNotifierStatusHTML() string {
 		}
 
 		color := "#4ade80"
-		title := name + " aktiv"
+		title := name + " " + T.NotifierActive
 		if !connected {
 			color = "#f87171"
-			title = name + " getrennt"
+			title = name + " " + T.NotifierDisconnected
 		}
 
 		fmt.Fprintf(&sb,
@@ -1826,16 +1829,25 @@ func writeDashboardTop(w http.ResponseWriter, statusClass, statusText string) {
 		    <span>%s</span>
 	    </div>
 	<div class="status-banner-meta">
-		<span class="status-item">
+		<span class="status-item" 
+        		title="`+T.TooltipLastCheck+`"
+				onclick="showNotifierTooltip(this, '`+T.TooltipLastCheck+`')"
+        		style="cursor:pointer;">
 			%s:
 			<span id="lastUpdate">%s</span>
 		</span>
 		<span class="status-sep">|</span>
-		<span class="status-item">
+		<span class="status-item" 
+        		title="`+T.TooltipClock+`"
+				onclick="showNotifierTooltip(this, '`+T.TooltipClock+`')"
+        		style="cursor:pointer;">
 			🕒 <span id="clock">--:--:--</span>
 		</span>
 		<span class="status-sep">|</span>
-		<span class="status-item status-uptime">
+		<span class="status-item status-uptime" 
+        		title="`+T.TooltipUptime+`"
+				onclick="showNotifierTooltip(this, '`+T.TooltipUptime+`')"
+        		style="cursor:pointer;">
 			⏱️ <span id="uptime">--</span>
 		</span>
 		%s
@@ -1843,12 +1855,12 @@ func writeDashboardTop(w http.ResponseWriter, statusClass, statusText string) {
         </div>
         <div id="toast" class="toast"></div>
         <details class="card" id="endpoint-card">
-	<summary>📡 IP-Endpunkt Status</summary>
+	<summary>`+T.IPEndpointStatusTitle+`</summary>
 	<div class="card-content">
 		<div id="endpoint-status" class="endpoint-status">
 			<span style="opacity:0.4;font-size:0.82rem;">
-				Warte auf ersten Check...
-			</span>
+				`+T.IPEndpointStatusWaiting+`
+			</span>s
 		</div>
 	</div>
         </details>
@@ -1993,20 +2005,20 @@ func writeDashboardMetricsCard(w http.ResponseWriter, stats map[string]interface
 func writeDebugCard(w http.ResponseWriter) {
 	_, _ = fmt.Fprint(w, `
 		<details class="card" id="debug-log-card" open>
-			<summary>🐞 Debug Log <span id="debug-badge" class="debug-badge">LIVE</span></summary>
+			<summary>🐞 `+T.DebugLogTitle+` <span id="debug-badge" class="debug-badge">`+T.DebugLogLive+`</span></summary>
 			<div class="card-content">
 				<div class="debug-toolbar">
-					<input type="text" id="debug-filter" placeholder="Filter..." 
+					<input type="text" id="debug-filter" placeholder="`+T.DebugFilterPlaceholder+`"
 						oninput="filterDebugLog(this.value)"
 						class="debug-filter-input">
-					<button onclick="clearDebugLog()" class="action-btn debug-clear-btn">🗑️ Clear</button>
-					<label class="debug-autoscroll-label">
+					<button onclick="clearDebugLog()" class="action-btn debug-clear-btn">`+T.DebugClearBtn+`</button>
+					<label class=`+T.DebugAutoscroll+`>
 						<input type="checkbox" id="debug-autoscroll" checked>
 						Auto-scroll
 					</label>
 				</div>
 				<div id="debug-log-container" class="debug-log-box">
-					<span class="debug-placeholder">Waiting for debug messages...</span>
+					<span class="debug-placeholder">`+T.DebugWaitingMsg+`</span>
 				</div>
 			</div>
 		</details>

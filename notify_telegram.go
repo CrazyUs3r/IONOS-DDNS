@@ -149,7 +149,7 @@ func (t *telegramNotifier) sendTextWithRetry(chatID, text string, kb *tgInlineKe
 	const maxRetries = 3
 	wait := 5 * time.Second
 
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := range maxRetries {
 		err := t.sendText(chatID, text, kb)
 		if err == nil {
 			return nil
@@ -268,11 +268,9 @@ func (t *telegramNotifier) answerCallback(callbackID string) {
 // ============================================================================
 func (t *telegramNotifier) StartPolling() {
 	t.pollOnce.Do(func() {
-		t.wg.Add(1)
-		go func() {
-			defer t.wg.Done()
+		t.wg.Go(func() {
 			t.pollingLoop()
-		}()
+		})
 	})
 }
 

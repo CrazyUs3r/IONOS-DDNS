@@ -294,7 +294,7 @@ func (m *APIMetrics) getStatsUnsafe() map[string]interface{} {
 		"ip_latency_avg":        ipAvg,
 		"ip_latency_count":      m.IPLatencyCount,
 		"last_ip_check":         lastIPCheck,
-		"uptime_secs": int64(time.Since(startTime).Seconds()),
+		"uptime_secs":           int64(time.Since(startTime).Seconds()),
 	}
 }
 

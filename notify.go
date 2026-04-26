@@ -109,7 +109,6 @@ func notify(ctx LogContext) {
 	nm := buildNotifyMessage(ctx)
 
 	for _, n := range notifiers {
-		n := n
 		go func() {
 			if err := n.Send(nm); err != nil {
 				debugLog("NOTIFY", "", fmt.Sprintf(T.NotifyFailed, n.Name(), err))
@@ -141,10 +140,7 @@ func notifySync(ctx LogContext) {
 
 	var wg sync.WaitGroup
 	for _, n := range notifiers {
-		n := n // Shadowing für die Goroutine
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 
 			var err error
 			if s, ok := n.(syncSender); ok {
@@ -156,7 +152,7 @@ func notifySync(ctx LogContext) {
 			if err != nil {
 				debugLog("NOTIFY", "", fmt.Sprintf(T.NotifyFailed, n.Name(), err))
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }

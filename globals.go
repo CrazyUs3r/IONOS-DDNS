@@ -387,6 +387,11 @@ type Phrases struct {
 	TryingFallbackEn, JSONParseError, LanguageLoaded, MissingTranslationKey       string
 	HTTPPool, HourlyLimitEst, RequestsLabel, UsageLast60Min                       string
 	MaxLogLines, MaxAPIRetries, MaxConcurrent, Interval, EmptyTranslationValue    string
+	IPEndpointStatusTitle, IPEndpointStatusWaiting                                string
+	DebugLogTitle, DebugLogLive, DebugFilterPlaceholder, DebugClearBtn            string
+	DebugAutoscroll, DebugWaitingMsg, SettingsCFProxyLabel, NotifierActive        string
+	NotifierDisconnected, TooltipLastCheck, TooltipClock, TooltipUptime           string
+	LoadingSaving, LoadingSlow, NoLogEntries                                      string
 
 	// Statistiken & Metriken
 	SuccessRate, AvgLatency, Errors, RequestHistory, LatencyHistory, APIPerformance            string
@@ -541,7 +546,7 @@ type Phrases struct {
 	ErrContextError, ErrJSONMarshal, ErrRequestCreate, ErrNetworkError string
 	ErrBodyClose, ErrBodyRead, ErrRateLimit, ErrContextCancelled       string
 	ErrAuthFailed, ErrResourceNotFound, ErrValidationFailed            string
-	ErrZoneNameEmpty, ErrAPIGeneric                                    string
+	ErrZoneNameEmpty, ErrAPIGeneric, ErrRecordNotFound                 string
 
 	// Cleanup
 	CleanupStartIonos, CleanupStartCF, CleanupStartIPv64           string
