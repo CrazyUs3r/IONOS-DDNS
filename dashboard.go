@@ -1820,10 +1820,11 @@ func buildNotifierStatusHTML() string {
 }
 
 func writeDashboardTop(w http.ResponseWriter, statusClass, statusText string) {
-	_, err := fmt.Fprintf(w, `<div class="status-banner %s">
-	<div class="status-banner-left">
-		<span>%s</span>
-	</div>
+	_, _ = fmt.Fprintf(w, `
+        <div class="status-banner %s">
+	    <div class="status-banner-left">
+		    <span>%s</span>
+	    </div>
 	<div class="status-banner-meta">
 		<span class="status-item">
 			%s:
@@ -1839,9 +1840,9 @@ func writeDashboardTop(w http.ResponseWriter, statusClass, statusText string) {
 		</span>
 		%s
 	</div>
-</div>
-<div id="toast" class="toast"></div>
-<details class="card" id="endpoint-card">
+        </div>
+        <div id="toast" class="toast"></div>
+        <details class="card" id="endpoint-card">
 	<summary>📡 IP-Endpunkt Status</summary>
 	<div class="card-content">
 		<div id="endpoint-status" class="endpoint-status">
@@ -1850,17 +1851,14 @@ func writeDashboardTop(w http.ResponseWriter, statusClass, statusText string) {
 			</span>
 		</div>
 	</div>
-</details>`,
+        </details>
+             `,
 		statusClass,
 		statusText,
 		T.LastUpdate,
 		time.Now().Local().Format("15:04:05"),
 		buildNotifierStatusHTML(),
 	)
-
-	if err != nil {
-		log.Printf("writeDashboardTop failed: %v", err)
-	}
 }
 
 func writeDashboardConfigCard(w http.ResponseWriter) {
