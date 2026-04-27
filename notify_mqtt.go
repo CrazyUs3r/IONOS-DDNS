@@ -57,7 +57,6 @@ func newMQTTNotifier(
 	discovery bool,
 	discoveryPrefix string,
 ) *mqttNotifier {
-
 	if clientID == "" {
 		clientID = "go-dyndns"
 	}
@@ -201,7 +200,6 @@ func (m *mqttNotifier) Send(msg NotifyMessage) error {
 }
 
 func (m *mqttNotifier) publishDiscovery(client mqtt.Client) error {
-
 	configTopic := fmt.Sprintf("%s/sensor/%s_ip/config",
 		m.discoveryPrefix,
 		m.clientID,
