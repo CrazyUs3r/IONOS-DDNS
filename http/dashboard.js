@@ -344,6 +344,15 @@ function _setChk(id, v) {
     el.checked = !!v;
     updateCheckboxLabel(el);
 }
+function escHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  }[c]));
+}
 
 function openSettings() {
 	document.getElementById('settingsOverlay').classList.add('open');
@@ -1023,4 +1032,79 @@ function hideLoadingToast() {
 
 	clearTimeout(el._timeout);
 	el.style.display = 'none';
+}
+async function logout() {
+  await fetch('/api/logout', {method:'POST'});
+  location.href = '/login';
+}
+
+async function openUserModal() {
+  document.getElementById('userOverlay')?.classList.add('open');
+  await loadUsers();
+}
+
+function closeUserModal() {
+  document.getElementById('userOverlay')?.classList.remove('open');
+}
+
+async function loadUsers() {
+  const r = await fetch('/api/users');
+  if (!r.ok) return;
+
+  const users = await r.json();
+  const box = document.getElementById('userList');
+
+  box.innerHTML = '<h3>Benutzer</h3>' + users.map(u =>
+    `<div class="s-row">
+      <span>${escHtml(u.username)} · ${escHtml(u.role)}</span>
+      <span>
+        <button class="action-btn" onclick="fillUser('${escHtml(u.username)}','${escHtml(u.role)}')">Edit</button>
+        <button class="action-btn" onclick="deleteUser('${escHtml(u.username)}')">Löschen</button>
+      </span>
+    </div>`
+  ).join('');
+}
+
+function fillUser(name, role) {
+  _setVal('u-name', name);
+  _setVal('u-role', role);
+  _setVal('u-pass', '');
+}
+
+async function saveUser(update) {
+  const body = {
+    username: _getVal('u-name'),
+    password: _getVal('u-pass'),
+    role: _getVal('u-role')
+  };
+
+  const r = await fetch(update ? '/api/users/update' : '/api/users', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body)
+  });
+
+  showToast(
+    r.ok ? '✅ Benutzer gespeichert' : '❌ Benutzer konnte nicht gespeichert werden',
+    r.ok ? 'success' : 'error'
+  );
+
+  if (r.ok) loadUsers();
+}
+
+async function deleteUser(username) {
+  if (!confirm(username + ' löschen?')) return;
+
+  const r = await fetch('/api/users/delete', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({username})
+  });
+
+  showToast(
+    r.ok ? '🗑️ Benutzer gelöscht' : '❌ Löschen fehlgeschlagen',
+    r.ok ? 'success' : 'error'
+  );
+
+  if (r.ok) loadUsers();
 }
