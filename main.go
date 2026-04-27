@@ -30,6 +30,12 @@ func run() int {
 	paths := initRuntimePaths()
 
 	if err := prepareRuntimeDirectories(paths); err != nil {
+		fmt.Printf("[FATAL] Runtime directories failed: %v\n", err)
+		return 1
+	}
+
+	if err := initAuthStore(paths.configDir); err != nil {
+		fmt.Printf("[FATAL] Auth init failed: %v\n", err)
 		return 1
 	}
 

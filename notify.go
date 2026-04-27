@@ -141,7 +141,6 @@ func notifySync(ctx LogContext) {
 	var wg sync.WaitGroup
 	for _, n := range notifiers {
 		wg.Go(func() {
-
 			var err error
 			if s, ok := n.(syncSender); ok {
 				err = s.SendSync(nm)

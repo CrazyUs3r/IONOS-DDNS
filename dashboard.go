@@ -801,20 +801,27 @@ func registerStaticRoutes(mux *http.ServeMux) {
 }
 
 func registerAPIroutes(mux *http.ServeMux) {
-	mux.HandleFunc("/api/domains", handleAPIDomains)
-	mux.HandleFunc("/api/config", handleAPIConfig)
-	mux.HandleFunc("/api/languages", handleAPILanguages)
-	mux.HandleFunc("/api/save-config", handleAPISaveConfig)
-	mux.HandleFunc("/api/set-language", handleAPISetLanguage)
-	mux.HandleFunc("/api/domain/delete", handleAPIDomainDelete)
-	mux.HandleFunc("/api/trigger", handleAPITrigger)
-	mux.HandleFunc("/api/trigger/status", handleAPITriggerStatus)
-	mux.HandleFunc("/api/export", handleAPIExport)
-	mux.HandleFunc("/api/metrics/reset", handleMetricsReset)
+	mux.HandleFunc("/api/login", handleAPILogin)
+	mux.HandleFunc("/api/logout", requireLogin(handleAPILogout))
+	mux.HandleFunc("/api/me", requireLogin(handleAPIMe))
+	mux.HandleFunc("/api/users", requireRole(RoleAdmin)(handleAPIUsers))
+	mux.HandleFunc("/api/users/update", requireRole(RoleAdmin)(handleAPIUserUpdate))
+	mux.HandleFunc("/api/users/delete", requireRole(RoleAdmin)(handleAPIUserDelete))
+	mux.HandleFunc("/api/domains", requireLogin(handleAPIDomains))
+	mux.HandleFunc("/api/config", requireRole(RoleAdmin, RoleEditor)(handleAPIConfig))
+	mux.HandleFunc("/api/languages", requireLogin(handleAPILanguages))
+	mux.HandleFunc("/api/save-config", requireRole(RoleAdmin)(handleAPISaveConfig))
+	mux.HandleFunc("/api/set-language", requireRole(RoleAdmin)(handleAPISetLanguage))
+	mux.HandleFunc("/api/domain/delete", requireRole(RoleAdmin)(handleAPIDomainDelete))
+	mux.HandleFunc("/api/trigger", requireRole(RoleAdmin)(handleAPITrigger))
+	mux.HandleFunc("/api/trigger/status", requireLogin(handleAPITriggerStatus))
+	mux.HandleFunc("/api/export", requireLogin(handleAPIExport))
+	mux.HandleFunc("/api/metrics/reset", requireRole(RoleAdmin)(handleMetricsReset))
 }
 
 func registerPageRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/", handleDashboard)
+	mux.HandleFunc("/login", handleLoginPage)
+	mux.HandleFunc("/", requireLogin(handleDashboard))
 }
 
 func handleFavicon(w http.ResponseWriter, r *http.Request) {
@@ -1516,9 +1523,11 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	writeDashboardHeader(w, jsConfigSafe, jsSystemCfg)
+	writeDashboardHeader(w, r, jsConfigSafe, jsSystemCfg)
 	writeDashboardTop(w, statusClass, statusText)
-	_, _ = fmt.Fprintf(w, "%s", buildSettingsModal(cfg))
+	if u, ok := currentUserFromRequest(r); ok && canViewSettings(u.Role) {
+		_, _ = fmt.Fprintf(w, "%s", buildSettingsModal(cfg))
+	}
 	writeDashboardConfigCard(w)
 	writeDashboardMetricsCard(w, stats, nicHTML, chartSVG, latencySVG)
 
@@ -1530,6 +1539,9 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeDomainsCard(w, statusData)
+
+	_, _ = fmt.Fprint(w, userManagementModalHTML())
+
 	writeDashboardFooter(w)
 	_ = r
 }
@@ -1746,7 +1758,7 @@ func formatDashboardLogTimestamp(ts string) string {
 	return t.Format("02.01.2006 15:04:05")
 }
 
-func writeDashboardHeader(w http.ResponseWriter, jsConfigSafe, jsSystemCfg []byte) {
+func writeDashboardHeader(w http.ResponseWriter, r *http.Request, jsConfigSafe, jsSystemCfg []byte) {
 	_, _ = fmt.Fprintf(w, `<!DOCTYPE html><html><head>
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1763,6 +1775,7 @@ func writeDashboardHeader(w http.ResponseWriter, jsConfigSafe, jsSystemCfg []byt
 				<button class="action-btn" onclick="triggerUpdate()">🔄 `+T.Update+`</button>
 				<button class="action-btn" onclick="exportData()">📥 `+T.ExportBtn+`</button>
 				<button class="theme-toggle" onclick="toggleTheme()">🌓</button>
+				`+authTopHTML(r)+`
 				<button class="menu-btn" onclick="openSettings()" title="`+T.SettingsTitle+`">⋮</button>
 			</div>
 		</div>`,
