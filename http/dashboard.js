@@ -235,7 +235,7 @@ function copyIP(text) {
 		ta.style.position = "fixed"; ta.style.left = "-9999px";
 		document.body.appendChild(ta); ta.focus(); ta.select();
 		try { document.execCommand('copy'); showToast(tr('copied', '✓ Copied: ') + text);} 
-		catch (err) { showToast(tr('copy_failed', '❌ Copy failed'), 'error'); }
+		catch (err) { showToast(tr('copy_error', '❌ Fehler'), 'error'); }
 		document.body.removeChild(ta);
 	};
 	if (navigator.clipboard && window.isSecureContext) {
@@ -344,15 +344,6 @@ function _setChk(id, v) {
     el.checked = !!v;
     updateCheckboxLabel(el);
 }
-function escHtml(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#039;'
-  }[c]));
-}
 
 function openSettings() {
 	document.getElementById('settingsOverlay').classList.add('open');
@@ -402,6 +393,7 @@ function openSettings() {
 	_setVal('cfg-mqtt-discovery-prefix',  mqtt.discovery_prefix || 'homeassistant');
 
 	renderSettingsDomainList();
+	loadUsers();
 }
 
 function closeSettings() { 
@@ -795,7 +787,7 @@ function deleteDomain(domain, btn) {
 			showToast(trf('domain_removed', { domain }, '🗑️ {domain} entfernt'), 'success');
 		} else {
 			btn.disabled = false; btn.textContent = tr('remove_btn', '🗑️ Entfernen');
-			showToast('❌ ' + (j.error || 'Fehler beim Löschen'), 'error');
+			showToast('❌ ' + (j.error || tr('delete_failed', 'Fehler beim Löschen')), 'error');
 		}
 	})
 	.catch(() => { btn.disabled = false; btn.textContent = tr('remove_btn', '🗑️ Entfernen'); showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'); });
@@ -806,7 +798,7 @@ function fallbackCopy(text) {
 	ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px';
 	document.body.appendChild(ta); ta.focus(); ta.select();
 	try { document.execCommand('copy'); showToast('✓ Kopiert: ' + text, 'success'); }
-	catch { showToast('❌ Kopieren fehlgeschlagen', 'error'); }
+	catch { showToast(tr('copy_failed', '❌ Copy failed'), 'error'); }
 	document.body.removeChild(ta);
 }
 
@@ -929,6 +921,114 @@ function clearDebugLog() {
     container.appendChild(placeholder);
 }
 
+// ============================================================================
+// USER MANAGEMENT
+// ============================================================================
+function loadUsers() {
+	fetch('/api/users')
+		.then(r => {
+			if (!r.ok) throw new Error('HTTP ' + r.status);
+			return r.json();
+		})
+		.then(users => renderUsersList(users))
+		.catch(err => {
+			document.getElementById('users-list').innerHTML =
+				'<div style="color:red;font-size:0.8rem;">' + tr('user_load_failed', 'Fehler beim Laden') + '</div>';
+			console.error(err);
+		});
+}
+
+function renderUsersList(users) {
+	const container = document.getElementById('users-list');
+	if (!container) return;
+	if (!users || users.length === 0) {
+		container.innerHTML = '<div style="font-size:0.8rem;opacity:0.5;">' + tr('no_users_found', 'Keine Benutzer gefunden.') + '</div>';
+		return;
+	}
+
+	const roleIcon = { admin: '👑', editor: '✏️', viewer: '👁️' };
+	const roleLabel = {admin: tr('role_admin', 'Admin'),editor: tr('role_editor', 'Editor'),viewer: tr('role_viewer', 'Viewer')};
+
+	container.innerHTML = users.map(u => `
+		<div class="domain-pill" style="margin-bottom:6px;">
+			<div style="flex:1;min-width:0;">
+				<span style="font-weight:600;">${escHtml(u.username)}</span>
+				<span class="provider-badge" style="margin-left:6px;background:rgba(99,102,241,0.15);color:#818cf8;border:1px solid rgba(99,102,241,0.3);">
+					${roleIcon[u.role] || '?'} ${roleLabel[u.role] || u.role}
+				</span>
+				${u.last_login ? `<span style="font-size:0.7rem;opacity:0.4;margin-left:6px;">Letzter Login: ${new Date(u.last_login).toLocaleString()}</span>` : ''}
+			</div>
+			<div style="display:flex;gap:6px;flex-shrink:0;">
+				<select onchange="changeUserRole('${u.id}', this.value)"
+					style="font-size:0.75rem;padding:3px 6px;background:var(--border);border:1px solid var(--border);border-radius:5px;color:var(--text);cursor:pointer;">
+					<option value="viewer" ${u.role==='viewer'?'selected':''}>👁️ ${tr('role_viewer', 'Viewer')}</option>
+					<option value="editor" ${u.role==='editor'?'selected':''}>✏️ ${tr('role_editor', 'Editor')}</option>
+					<option value="admin" ${u.role==='admin'?'selected':''}>👑 ${tr('role_admin', 'Admin')}</option>
+				</select>
+				<button onclick="deleteUser('${u.id}', '${escHtml(u.username)}')"
+					style="background:none;border:none;color:var(--error);cursor:pointer;font-weight:bold;font-size:1rem;padding:0 4px;">✕</button>
+			</div>
+		</div>`
+	).join('');
+}
+
+function addUser() {
+	const username = (document.getElementById('new-user-name')?.value || '').trim();
+	const password = document.getElementById('new-user-pass')?.value || '';
+	const role     = document.getElementById('new-user-role')?.value || 'viewer';
+
+	if (username.length < 3) return showToast('Benutzername min. 3 Zeichen', 'error');
+	if (password.length < 8) return showToast('Passwort min. 8 Zeichen', 'error');
+
+	const token = localStorage.getItem('triggerToken') || '';
+	fetch('/api/users', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json', ...(token ? {'X-Trigger-Token': token} : {}) },
+		body: JSON.stringify({ username, password, role })
+	})
+	.then(r => r.json().then(j => ({ ok: r.ok, j })))
+	.then(({ ok, j }) => {
+		if (!ok) return showToast('❌ ' + (j.error || 'Fehler'), 'error');
+		showToast('✅ ' + tr('user_created', 'Benutzer erstellt'), 'success');
+		document.getElementById('new-user-name').value = '';
+		document.getElementById('new-user-pass').value = '';
+		loadUsers();
+	})
+	.catch(() => showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'));
+}
+
+function changeUserRole(id, role) {
+	const token = localStorage.getItem('triggerToken') || '';
+	fetch('/api/users/' + id, {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json', ...(token ? {'X-Trigger-Token': token} : {}) },
+		body: JSON.stringify({ role })
+	})
+	.then(r => r.json().then(j => ({ ok: r.ok, j })))
+	.then(({ ok, j }) => {
+		if (!ok) return showToast('❌ ' + (j.error || tr('generic_error', 'Fehler')), 'error');
+		showToast('✅ ' + tr('role_changed', 'Rolle geändert'), 'success');
+		loadUsers();
+	})
+	.catch(() => showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'));
+}
+
+function deleteUser(id, username) {
+	if (!confirm(`Benutzer "${username}" wirklich löschen?`)) return;
+	const token = localStorage.getItem('triggerToken') || '';
+	fetch('/api/users/' + id, {
+		method: 'DELETE',
+		headers: token ? {'X-Trigger-Token': token} : {}
+	})
+	.then(r => r.json().then(j => ({ ok: r.ok, j })))
+	.then(({ ok, j }) => {
+		if (!ok) return showToast('❌ ' + (j.error || tr('generic_error', 'Fehler')), 'error');
+		showToast('🗑️ ' + tr('user_deleted', 'Benutzer gelöscht'), 'success');
+		loadUsers();
+	})
+	.catch(() => showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'));
+}
+
 function tr(key, fallback = '') {
 	const dict = (typeof window !== 'undefined' && window.I18N) ? window.I18N : {};
 	const val = dict[key];
@@ -1032,79 +1132,4 @@ function hideLoadingToast() {
 
 	clearTimeout(el._timeout);
 	el.style.display = 'none';
-}
-async function logout() {
-  await fetch('/api/logout', {method:'POST'});
-  location.href = '/login';
-}
-
-async function openUserModal() {
-  document.getElementById('userOverlay')?.classList.add('open');
-  await loadUsers();
-}
-
-function closeUserModal() {
-  document.getElementById('userOverlay')?.classList.remove('open');
-}
-
-async function loadUsers() {
-  const r = await fetch('/api/users');
-  if (!r.ok) return;
-
-  const users = await r.json();
-  const box = document.getElementById('userList');
-
-  box.innerHTML = '<h3>Benutzer</h3>' + users.map(u =>
-    `<div class="s-row">
-      <span>${escHtml(u.username)} · ${escHtml(u.role)}</span>
-      <span>
-        <button class="action-btn" onclick="fillUser('${escHtml(u.username)}','${escHtml(u.role)}')">Edit</button>
-        <button class="action-btn" onclick="deleteUser('${escHtml(u.username)}')">Löschen</button>
-      </span>
-    </div>`
-  ).join('');
-}
-
-function fillUser(name, role) {
-  _setVal('u-name', name);
-  _setVal('u-role', role);
-  _setVal('u-pass', '');
-}
-
-async function saveUser(update) {
-  const body = {
-    username: _getVal('u-name'),
-    password: _getVal('u-pass'),
-    role: _getVal('u-role')
-  };
-
-  const r = await fetch(update ? '/api/users/update' : '/api/users', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify(body)
-  });
-
-  showToast(
-    r.ok ? '✅ Benutzer gespeichert' : '❌ Benutzer konnte nicht gespeichert werden',
-    r.ok ? 'success' : 'error'
-  );
-
-  if (r.ok) loadUsers();
-}
-
-async function deleteUser(username) {
-  if (!confirm(username + ' löschen?')) return;
-
-  const r = await fetch('/api/users/delete', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({username})
-  });
-
-  showToast(
-    r.ok ? '🗑️ Benutzer gelöscht' : '❌ Löschen fehlgeschlagen',
-    r.ok ? 'success' : 'error'
-  );
-
-  if (r.ok) loadUsers();
 }
