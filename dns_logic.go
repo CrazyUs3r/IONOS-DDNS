@@ -362,6 +362,6 @@ func updateDomainRecord(
 	case ProviderCloudflare:
 		return updateCloudflareDNS(ctx, dc, job.Domain, recordType, ip, job.Records, job.ZoneID)
 	default:
-		return updateDNS(ctx, dc, job.Domain, recordType, ip, job.Records, job.ZoneID, job.ZoneName, cache)
+		return updateIonosDNS(ctx, dc, job.Domain, recordType, ip, job.Records, job.ZoneID, job.ZoneName, cache)
 	}
 }

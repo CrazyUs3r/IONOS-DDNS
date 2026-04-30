@@ -30,12 +30,6 @@ func run() int {
 	paths := initRuntimePaths()
 
 	if err := prepareRuntimeDirectories(paths); err != nil {
-		fmt.Printf("[FATAL] Runtime directories failed: %v\n", err)
-		return 1
-	}
-
-	if err := initAuthStore(paths.configDir); err != nil {
-		fmt.Printf("[FATAL] Auth init failed: %v\n", err)
 		return 1
 	}
 
@@ -67,6 +61,8 @@ func run() int {
 
 	initShutdownContext()
 	defer shutdownCancel()
+
+	initAuth(paths.logsDir)
 
 	workerSemaphore = make(chan struct{}, cfg.MaxConcurrent)
 
@@ -518,9 +514,16 @@ func startMaintenanceWorkers() {
 }
 
 func newHTTPServer() *http.Server {
+	mux := createMux()
+
+	var handler http.Handler = mux
+	if authEnabled {
+		handler = authMiddleware(mux)
+	}
+
 	return &http.Server{
 		Addr:              ":" + cfg.HealthPort,
-		Handler:           createMux(),
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 }

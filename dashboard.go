@@ -246,28 +246,32 @@ func toDur24(v any) ([24]time.Duration, bool) {
 // ============================================================================
 // DASHBOARD HTTP HANDLER
 // ============================================================================
-func buildSettingsModal(c Config) string {
+func buildSettingsModal(c Config, isAdmin bool) string {
 	securitySection := buildSettingsSecuritySection()
 	systemSection := buildSettingsSystemSection(c)
 	domainsSection := buildSettingsDomainsSection()
 	notifySection := buildSettingsNotifySection(c)
 
-	return `<div id="settingsOverlay" class="modal-overlay" onclick="closeSettingsOutside(event)">` +
+	modal := `<div id="settingsOverlay" class="modal-overlay" onclick="closeSettingsOutside(event)">` +
 		`<div class="modal">` +
 		`<div class="modal-header">` +
 		`<h2>⚙️ ` + T.SettingsTitle + `</h2>` +
 		`<button class="modal-close" onclick="closeSettings()">✕</button>` +
 		`</div>` +
 		`<div class="modal-body">` +
-
 		buildSettingsCollapsibleSection(T.SettingsSecurity, securitySection, false) +
 		buildSettingsCollapsibleSection(T.SettingsSystem, systemSection, true) +
 		buildSettingsCollapsibleSection(T.SettingsDomains, domainsSection, false) +
-		buildSettingsCollapsibleSection(T.SettingsNotify, notifySection, false) +
+		buildSettingsCollapsibleSection(T.SettingsNotify, notifySection, false)
 
-		buildSettingsSaveSection() +
+	if isAdmin {
+		modal += buildSettingsCollapsibleSection("👥 Benutzerverwaltung", buildUsersSection(), false)
+	}
 
+	modal += buildSettingsSaveSection() +
 		`</div></div></div>`
+
+	return modal
 }
 
 func buildSettingsCollapsibleSection(title, body string, open bool) string {
@@ -774,6 +778,15 @@ func dashboardI18NJSON() string {
 		"loading_saving":        t(T.LoadingSaving, "⏳ Speichere Configuration..."),
 		"loading_slow":          t(T.LoadingSlow, "⚠️ Dauert länger als erwartet..."),
 		"no_log_entries":        t(T.NoLogEntries, "Keine Log-Einträge sichtbar"),
+		"user_load_failed":      t(T.UserLoadFailedJS, "Fehler beim Laden"),
+		"no_users_found":        t(T.NoUsersFoundJS, "Keine Benutzer gefunden."),
+		"user_created":          t(T.UserCreatedJS, "Benutzer erstellt"),
+		"role_changed":          t(T.RoleChangedJS, "Rolle geändert"),
+		"user_deleted":          t(T.UserDeletedJS, "Benutzer gelöscht"),
+		"generic_error":         t(T.GenericErrorJS, "Fehler"),
+		"role_admin":            t(T.RoleAdminJS, "Admin"),
+		"role_editor":           t(T.RoleEditorJS, "Editor"),
+		"role_viewer":           t(T.RoleViewerJS, "Viewer"),
 	}
 
 	b, err := json.Marshal(m)
@@ -801,27 +814,25 @@ func registerStaticRoutes(mux *http.ServeMux) {
 }
 
 func registerAPIroutes(mux *http.ServeMux) {
-	mux.HandleFunc("/api/login", handleAPILogin)
-	mux.HandleFunc("/api/logout", requireLogin(handleAPILogout))
-	mux.HandleFunc("/api/me", requireLogin(handleAPIMe))
-	mux.HandleFunc("/api/users", requireRole(RoleAdmin)(handleAPIUsers))
-	mux.HandleFunc("/api/users/update", requireRole(RoleAdmin)(handleAPIUserUpdate))
-	mux.HandleFunc("/api/users/delete", requireRole(RoleAdmin)(handleAPIUserDelete))
-	mux.HandleFunc("/api/domains", requireLogin(handleAPIDomains))
-	mux.HandleFunc("/api/config", requireRole(RoleAdmin, RoleEditor)(handleAPIConfig))
-	mux.HandleFunc("/api/languages", requireLogin(handleAPILanguages))
-	mux.HandleFunc("/api/save-config", requireRole(RoleAdmin)(handleAPISaveConfig))
-	mux.HandleFunc("/api/set-language", requireRole(RoleAdmin)(handleAPISetLanguage))
-	mux.HandleFunc("/api/domain/delete", requireRole(RoleAdmin)(handleAPIDomainDelete))
-	mux.HandleFunc("/api/trigger", requireRole(RoleAdmin)(handleAPITrigger))
-	mux.HandleFunc("/api/trigger/status", requireLogin(handleAPITriggerStatus))
-	mux.HandleFunc("/api/export", requireLogin(handleAPIExport))
-	mux.HandleFunc("/api/metrics/reset", requireRole(RoleAdmin)(handleMetricsReset))
+	mux.HandleFunc("/api/domains", handleAPIDomains)
+	mux.HandleFunc("/api/config", handleAPIConfig)
+	mux.HandleFunc("/api/languages", handleAPILanguages)
+	mux.HandleFunc("/api/save-config", handleAPISaveConfig)
+	mux.HandleFunc("/api/set-language", handleAPISetLanguage)
+	mux.HandleFunc("/api/domain/delete", handleAPIDomainDelete)
+	mux.HandleFunc("/api/trigger", handleAPITrigger)
+	mux.HandleFunc("/api/trigger/status", handleAPITriggerStatus)
+	mux.HandleFunc("/api/export", handleAPIExport)
+	mux.HandleFunc("/api/metrics/reset", handleMetricsReset)
+	mux.HandleFunc("/api/users", handleAPIUsers)
+	mux.HandleFunc("/api/users/", handleAPIUsersID)
 }
 
 func registerPageRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/login", handleLoginPage)
-	mux.HandleFunc("/", requireLogin(handleDashboard))
+	mux.HandleFunc("/login", handleLogin)
+	mux.HandleFunc("/logout", handleLogout)
+	mux.HandleFunc("/setup", handleSetup)
+	mux.HandleFunc("/", handleDashboard)
 }
 
 func handleFavicon(w http.ResponseWriter, r *http.Request) {
@@ -1504,6 +1515,10 @@ func readLastUpdateTimeFromStatusFile() string {
 }
 
 func handleDashboard(w http.ResponseWriter, r *http.Request) {
+	sess, _ := sessionFromRequest(r)
+	isAdmin := !authEnabled || (sess != nil && sess.Role == RoleAdmin)
+	isViewer := authEnabled && sess != nil && sess.Role == RoleViewer
+
 	statusData := loadStatusData()
 	statusClass, statusText := dashboardStatus()
 	logs, logTimeRange := loadDashboardLogs()
@@ -1523,13 +1538,11 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	writeDashboardHeader(w, r, jsConfigSafe, jsSystemCfg)
+	writeDashboardHeader(w, jsConfigSafe, jsSystemCfg, sess)
 	writeDashboardTop(w, statusClass, statusText)
-	if u, ok := currentUserFromRequest(r); ok && canViewSettings(u.Role) {
-		_, _ = fmt.Fprintf(w, "%s", buildSettingsModal(cfg))
-	}
+	_, _ = fmt.Fprintf(w, "%s", buildSettingsModal(cfg, isAdmin))
 	writeDashboardConfigCard(w)
-	writeDashboardMetricsCard(w, stats, nicHTML, chartSVG, latencySVG)
+	writeDashboardMetricsCard(w, stats, nicHTML, chartSVG, latencySVG, isViewer)
 
 	if cfg.DebugEnabled || cfg.DebugHTTPRaw {
 		writeDebugCard(w)
@@ -1539,9 +1552,6 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeDomainsCard(w, statusData)
-
-	_, _ = fmt.Fprint(w, userManagementModalHTML())
-
 	writeDashboardFooter(w)
 	_ = r
 }
@@ -1758,7 +1768,19 @@ func formatDashboardLogTimestamp(ts string) string {
 	return t.Format("02.01.2006 15:04:05")
 }
 
-func writeDashboardHeader(w http.ResponseWriter, r *http.Request, jsConfigSafe, jsSystemCfg []byte) {
+func writeDashboardHeader(w http.ResponseWriter, jsConfigSafe, jsSystemCfg []byte, sess *Session) {
+	logoutBtn := ""
+	userInfo := ""
+	if authEnabled && sess != nil {
+		roleIcon := map[UserRole]string{
+			RoleAdmin:  "👑",
+			RoleEditor: "✏️",
+			RoleViewer: "👁️",
+		}[sess.Role]
+		userInfo = fmt.Sprintf(`<span style="font-size:0.8rem;opacity:0.6;">%s %s</span>`, roleIcon, html.EscapeString(sess.Username))
+		logoutBtn = `<a href="/logout" class="action-btn" style="text-decoration:none;font-size:0.82rem;padding:8px 14px;">🚪 Logout</a>`
+	}
+
 	_, _ = fmt.Fprintf(w, `<!DOCTYPE html><html><head>
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1771,19 +1793,22 @@ func writeDashboardHeader(w http.ResponseWriter, r *http.Request, jsConfigSafe, 
 	<div class="container">
 		<div class="header">
 			<h1>🌐 %s</h1>
-			<div style="display: flex; gap: 10px; align-items: center;">
-				<button class="action-btn" onclick="triggerUpdate()">🔄 `+T.Update+`</button>
+			<div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+				<button class="action-btn" onclick="triggerUpdate()" id="update-button">🔄 `+T.Update+`</button>
 				<button class="action-btn" onclick="exportData()">📥 `+T.ExportBtn+`</button>
 				<button class="theme-toggle" onclick="toggleTheme()">🌓</button>
-				`+authTopHTML(r)+`
 				<button class="menu-btn" onclick="openSettings()" title="`+T.SettingsTitle+`">⋮</button>
+				%s
+				%s
 			</div>
 		</div>`,
-		html.EscapeString(T.DashTitle),
+		html.EscapeString(T.DashboardTitle),
 		cssData,
 		string(jsConfigSafe),
 		string(jsSystemCfg),
-		html.EscapeString(T.DashTitle),
+		html.EscapeString(T.DashboardTitle),
+		userInfo,
+		logoutBtn,
 	)
 }
 
@@ -1907,10 +1932,31 @@ func writeDashboardConfigCard(w http.ResponseWriter) {
 	)
 }
 
-func writeDashboardMetricsCard(w http.ResponseWriter, stats map[string]interface{}, nicHTML, chartSVG, latencySVG string) {
+func buildUsersSection() string {
+	return `<div id="users-list" style="margin-bottom:12px;">
+		<div style="font-size:0.75rem;opacity:0.5;margin-bottom:8px;">Lädt...</div>
+	</div>
+	<div class="add-domain-box">
+		<div style="font-size:0.8rem;font-weight:600;margin-bottom:10px;">➕ Neuer Benutzer</div>
+		<input type="text" id="new-user-name" class="s-input mb-8" placeholder="Benutzername (min. 3 Zeichen)">
+		<input type="password" id="new-user-pass" class="s-input mb-8" placeholder="Passwort (min. 8 Zeichen)">
+		<select id="new-user-role" class="s-input mb-8">
+			<option value="viewer">👁️ Viewer — nur lesen</option>
+			<option value="editor">✏️ Editor — lesen + triggering</option>
+			<option value="admin">👑 Admin — voller Zugriff</option>
+		</select>
+		<button class="s-btn s-btn-success-full" onclick="addUser()">➕ Benutzer erstellen</button>
+	</div>`
+}
+
+func writeDashboardMetricsCard(w http.ResponseWriter, stats map[string]interface{}, nicHTML, chartSVG, latencySVG string, isViewer bool) {
+	resetBtn := `<button class="action-btn" style="background:var(--error); font-size:0.7rem; padding:3px 10px; margin-left:auto;" onclick="event.preventDefault(); resetMetrics()">🗑️ ` + T.MetricsResetBtn + `</button>`
+	if isViewer {
+		resetBtn = ""
+	}
 	_, _ = fmt.Fprintf(w, `
 	<details class="card" open id="metrics-card">
-		<summary style="display:flex; justify-content:space-between; align-items:center;">📊 %s<button class="action-btn" style="background:var(--error); font-size:0.7rem; padding:3px 10px; margin-left:auto;" onclick="event.preventDefault(); resetMetrics()">🗑️ `+T.MetricsResetBtn+`</button></summary>
+		<summary style="display:flex; justify-content:space-between; align-items:center;">📊 %s`+resetBtn+`</summary>
 		<div class="card-content">
 			<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-top: 10px;">
 				<div><strong>`+T.TotalRequests+`:</strong> <span id="mTotal">%v</span></div>

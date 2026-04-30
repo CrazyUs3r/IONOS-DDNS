@@ -380,18 +380,28 @@ type ProviderType string
 // ============================================================================
 type Phrases struct {
 	// Basis & Dashboard
-	Startup, Shutdown, NoZones, Update, Current                                   string
-	DashTitle, StatusOk, StatusErr, LastUpdate, InfraHeading                      string
-	ServiceStarted, DashboardStarted, ServerError, SystemEvents, CriticalAPIError string
-	PanicLoadingLanguage, TryingLoadLanguage, LanguageFileNotFound                string
-	TryingFallbackEn, JSONParseError, LanguageLoaded, MissingTranslationKey       string
-	HTTPPool, HourlyLimitEst, RequestsLabel, UsageLast60Min                       string
-	MaxLogLines, MaxAPIRetries, MaxConcurrent, Interval, EmptyTranslationValue    string
-	IPEndpointStatusTitle, IPEndpointStatusWaiting                                string
-	DebugLogTitle, DebugLogLive, DebugFilterPlaceholder, DebugClearBtn            string
-	DebugAutoscroll, DebugWaitingMsg, SettingsCFProxyLabel, NotifierActive        string
-	NotifierDisconnected, TooltipLastCheck, TooltipClock, TooltipUptime           string
-	LoadingSaving, LoadingSlow, NoLogEntries                                      string
+	Startup, Shutdown, NoZones, Update, Current, LoginSubtitle, Username             string
+	DashboardTitle, StatusOk, StatusErr, LastUpdate, InfraHeading                    string
+	ServiceStarted, DashboardStarted, ServerError, SystemEvents, CriticalAPIError    string
+	PanicLoadingLanguage, TryingLoadLanguage, LanguageFileNotFound                   string
+	TryingFallbackEn, JSONParseError, LanguageLoaded, MissingTranslationKey          string
+	HTTPPool, HourlyLimitEst, RequestsLabel, UsageLast60Min                          string
+	MaxLogLines, MaxAPIRetries, MaxConcurrent, Interval, EmptyTranslationValue       string
+	IPEndpointStatusTitle, IPEndpointStatusWaiting, Password, LoginButton            string
+	DebugLogTitle, DebugLogLive, DebugFilterPlaceholder, LoginHint, LoginTitle       string
+	DebugClearBtn, DebugAutoscroll, DebugWaitingMsg, SetupHeading, SetupSubtitle     string
+	SettingsCFProxyLabel, SetupToken, PasswordMinHint, PasswordConfirm, SetupButton  string
+	NotifierActive, NotifierDisconnected, SetupHint, SetupTitle                      string
+	TooltipLastCheck, TooltipClock, TooltipUptime, FirstAdminCreatedLog              string
+	LoadingSaving, LoadingSlow, NoLogEntries, AuthDisabled, SetupRequired            string
+	SetupTokenLabel, SetupOpenURL, LoginSuccessLog, LoginFailedLog                   string
+	ErrInvalidLogin, ErrInvalidSetupToken, ErrUsernameTooShort                       string
+	ErrPasswordTooShort, ErrPasswordsMismatch, ErrAccountCreate, ErrAccountSave      string
+	ErrInvalidJSON, ErrUsernamePasswordMin, ErrHash, ErrSave, UserCreatedLog         string
+	StatusCreated, ErrInvalidRole, ErrUsernameTaken, ErrMissingID                    string
+	ErrUserNotFound, StatusUpdated, ErrForbidden, ErrOwnAccountDelete, StatusDeleted string
+	UserLoadFailedJS, NoUsersFoundJS, UserCreatedJS, RoleChangedJS, UserDeletedJS    string
+	GenericErrorJS, RoleAdminJS, RoleEditorJS, RoleViewerJS                          string
 
 	// Statistiken & Metriken
 	SuccessRate, AvgLatency, Errors, RequestHistory, LatencyHistory, APIPerformance            string
@@ -756,8 +766,9 @@ type Config struct {
 			DiscoveryPrefix string `json:"discovery_prefix"`
 		} `json:"mqtt"`
 	} `json:"notifications"`
-	IPv4Endpoints []string `json:"ipv4_endpoints,omitempty"`
-	IPv6Endpoints []string `json:"ipv6_endpoints,omitempty"`
+	IPv4Endpoints []string        `json:"ipv4_endpoints,omitempty"`
+	IPv6Endpoints []string        `json:"ipv6_endpoints,omitempty"`
+	Users         []DashboardUser `json:"users,omitempty"`
 }
 
 type Zone struct {

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -23,100 +22,20 @@ func getIONOSCachePath() string {
 }
 
 func saveIONOSCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error {
-	if recordCache == nil {
-		return fmt.Errorf("%s", T.ErrRecordCacheNil)
-	}
-
-	cachePath := getIONOSCachePath()
-	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
-		return fmt.Errorf("%s: %w", T.ErrCacheDirCreate, err)
-	}
-
-	cache := IONOSCache{
-		Zones:      zones,
-		Records:    make(map[string][]Record),
-		LastUpdate: time.Now().Local(),
-	}
-
-	totalRecords := 0
-	for _, zone := range zones {
-		if records, exists := recordCache.Get(zone.ID); exists {
-			cache.Records[zone.ID] = records
-			totalRecords += len(records)
-		}
-	}
-
-	jsonData, err := json.MarshalIndent(cache, "", "  ")
-	if err != nil {
-		return fmt.Errorf("%s: %w", T.ErrCacheMarshal, err)
-	}
-
-	tmpPath := cachePath + ".tmp"
-	if err := os.WriteFile(tmpPath, jsonData, 0o600); err != nil {
-		return fmt.Errorf("%s: %w", T.ErrCacheWrite, err)
-	}
-
-	if err := os.Rename(tmpPath, cachePath); err != nil {
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("%s: %w", T.ErrCacheRename, err)
-	}
-
-	debugLog("CACHE", "", fmt.Sprintf(T.CacheSavedZones, "IONOS", len(zones), totalRecords))
-	return nil
+	return saveDNSProviderCacheToFile("IONOS", getIONOSCachePath(), zones, recordCache)
 }
 
 func loadIONOSCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
-	cachePath := getIONOSCachePath()
-
-	data, err := os.ReadFile(cachePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			debugLog("CACHE", "", fmt.Sprintf(T.CacheFileNotFound, "IONOS"))
-			return nil, nil, nil
-		}
-		return nil, nil, fmt.Errorf("failed to read cache: %w", err)
-	}
-
-	var cache IONOSCache
-	if err := json.Unmarshal(data, &cache); err != nil {
-		return nil, nil, fmt.Errorf("failed to unmarshal cache: %w", err)
-	}
-
-	recordCache := NewZoneRecordCache()
-	for zoneID, records := range cache.Records {
-		recordCache.Set(zoneID, records)
-	}
-
-	age := time.Since(cache.LastUpdate)
-	debugLog("CACHE", "", fmt.Sprintf(T.CacheLoadedZones, "IONOS", len(cache.Zones), age.Round(time.Second)))
-
-	return cache.Zones, recordCache, nil
+	return loadDNSProviderCacheFromFile("IONOS", getIONOSCachePath())
 }
 
 // ============================================================================
 // API - IONOS
 // ============================================================================
 func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body interface{}) ([]byte, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("%s: %w", T.ErrContextError, err)
-	}
-
-	maxRetries := cfg.MaxAPIRetries
-	var lastErr error
-
-	for attempt := range maxRetries {
-		respBody, retry, err := ionosAPIAttempt(ctx, dc, method, url, body, attempt, maxRetries)
-		if err == nil {
-			return respBody, nil
-		}
-
-		lastErr = err
-		if !retry {
-			return nil, err
-		}
-	}
-
-	return nil, fmt.Errorf("%s: %w", fmt.Sprintf(T.IonosAPIFailed, maxRetries), lastErr)
+	return apiWithRetry(ctx, "IONOS", T.IonosAPIFailed, func(attempt, maxRetries int) ([]byte, bool, error) {
+		return ionosAPIAttempt(ctx, dc, method, url, body, attempt, maxRetries)
+	})
 }
 
 func ionosAPIAttempt(
@@ -324,7 +243,7 @@ func ionosRetryWait(apiErr *APIError, attempt, statusCode int) time.Duration {
 // ============================================================================
 // DNS LOGIC - IONOS
 // ============================================================================
-func updateDNS(
+func updateIonosDNS(
 	ctx context.Context,
 	dc *DomainConfig,
 	fqdn, recordType, newIP string,
