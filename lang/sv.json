@@ -113,7 +113,7 @@
   "create_config_directory_format": "Skapar konfigurationskatalog: %v",
   "critical_api_error": "KRITISKT API-FEL",
   "current": "är aktuell",
-  "dashboard_started": "Dashboard startad på port %v",
+  "dashboard_started": "Dashboard startad på",
   "dashboard_title": "DynDNS Dashboard",
   "debug_autoscroll": "Autoscroll",
   "debug_clear_btn": "🗑️ Rensa",

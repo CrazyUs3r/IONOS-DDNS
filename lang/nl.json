@@ -113,7 +113,7 @@
   "create_config_directory_format": "Configuratiemap aanmaken: %v",
   "critical_api_error": "KRITIEKE API-FOUT",
   "current": "is up-to-date",
-  "dashboard_started": "Dashboard gestart op poort %v",
+  "dashboard_started": "Dashboard gestart op",
   "dashboard_title": "DynDNS Dashboard",
   "debug_autoscroll": "Autoscroll",
   "debug_clear_btn": "🗑️ Wissen",

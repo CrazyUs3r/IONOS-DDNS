@@ -113,7 +113,7 @@
   "create_config_directory_format": "Creazione directory di configurazione: %v",
   "critical_api_error": "ERRORE API CRITICO",
   "current": "è aggiornato",
-  "dashboard_started": "Dashboard avviata sulla porta %v",
+  "dashboard_started": "Dashboard avviata sulla",
   "dashboard_title": "Dashboard DynDNS",
   "debug_autoscroll": "Scorrimento automatico",
   "debug_clear_btn": "🗑️ Cancella",

@@ -113,7 +113,7 @@
   "create_config_directory_format": "Vytváření konfiguračního adresáře: %v",
   "critical_api_error": "KRITICKÁ CHYBA API",
   "current": "je aktuální",
-  "dashboard_started": "Dashboard spuštěn na portu %v",
+  "dashboard_started": "Dashboard spuštěn na",
   "dashboard_title": "DynDNS Dashboard",
   "debug_autoscroll": "Automatické posouvání",
   "debug_clear_btn": "🗑️ Vymazat",

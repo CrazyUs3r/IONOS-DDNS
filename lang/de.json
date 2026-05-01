@@ -113,7 +113,7 @@
   "create_config_directory_format": "Erstelle Konfigurationsverzeichnis: %v",
   "critical_api_error": "KRITISCHER API-FEHLER",
   "current": "ist aktuell",
-  "dashboard_started": "Dashboard gestartet auf Port %v",
+  "dashboard_started": "Dashboard gestartet auf",
   "dashboard_title": "DynDNS Dashboard",
   "debug_autoscroll": "Auto-Scroll",
   "debug_clear_btn": "🗑️ Leeren",

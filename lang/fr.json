@@ -113,7 +113,7 @@
   "create_config_directory_format": "Création du répertoire de configuration : %v",
   "critical_api_error": "ERREUR API CRITIQUE",
   "current": "est à jour",
-  "dashboard_started": "Tableau de bord démarré sur le port %v",
+  "dashboard_started": "Tableau de bord démarré sur le",
   "dashboard_title": "Tableau de bord DynDNS",
   "debug_autoscroll": "Défilement auto",
   "debug_clear_btn": "🗑️ Effacer",

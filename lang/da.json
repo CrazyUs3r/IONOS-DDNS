@@ -113,7 +113,7 @@
   "create_config_directory_format": "Opretter konfigurationsmappe: %v",
   "critical_api_error": "KRITISK API-FEJL",
   "current": "er opdateret",
-  "dashboard_started": "Dashboard startet på port %v",
+  "dashboard_started": "Dashboard startet på",
   "dashboard_title": "DynDNS Dashboard",
   "debug_autoscroll": "Autoscroll",
   "debug_clear_btn": "🗑️ Ryd",
