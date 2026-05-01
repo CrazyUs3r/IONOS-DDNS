@@ -1790,6 +1790,11 @@ func writeDashboardHeader(w http.ResponseWriter, jsConfigSafe, jsSystemCfg []byt
 		<script>const initialConfig = %s; const initialSystem = %s;</script>
 	</head>
 	<body>
+	<div class="auth-bg">
+		<div class="auth-sun"></div>
+		<div class="auth-mountains"></div>
+		<div class="auth-grid-floor"></div>
+	</div>
 	<div class="container">
 		<div class="header">
 			<h1>🌐 %s</h1>

@@ -529,12 +529,13 @@ func newHTTPServer() *http.Server {
 }
 
 func startHTTPServer(srv *http.Server) {
+	ip := getLocalIP()
 	go func() {
-		debugLog("SYSTEM", "", fmt.Sprintf(T.DashboardStarted, cfg.HealthPort))
+		debugLog("SYSTEM", "", fmt.Sprintf("%s (http://%s:%s)", T.DashboardStarted, ip, cfg.HealthPort))
 		log(LogContext{
 			Level:   LogInfo,
 			Action:  ActionServer,
-			Message: fmt.Sprintf(T.DashboardStarted, cfg.HealthPort),
+			Message: fmt.Sprintf("%s (http://%s:%s)", T.DashboardStarted, ip, cfg.HealthPort),
 		})
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
