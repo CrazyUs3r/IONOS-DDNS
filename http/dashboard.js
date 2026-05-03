@@ -3,6 +3,7 @@ let currentLevel = 'ok';
 let ws = null;
 let reconnectTimer = null;
 let reconnectDelay = 1000;
+let editIndex = null;
 const reconnectDelayMax = 10000;
 
 let tempDomainConfigs = [];
@@ -430,6 +431,7 @@ function renderSettingsDomainList() {
 				'<span style="font-weight:600;word-break:break-all;">' + escHtml(d.fqdn) + '</span>' +
 				'<span class="provider-badge" style="background:' + providerColor + '20;color:' + providerColor + ';border:1px solid ' + providerColor + '40;margin-left:6px;">' + escHtml(d.provider) + '</span>' +
 				(d.ttl ? '<span class="provider-badge" style="margin-left:6px;">TTL ' + escHtml(d.ttl) + '</span>' : '') +
+				(d.ip_mode ? '<span class="provider-badge" style="margin-left:6px;">' + escHtml(d.ip_mode) + '</span>' : '') +
 				(d.provider === 'CLOUDFLARE' && d.cf_proxied ? '<span class="provider-badge" style="margin-left:6px;">proxied</span>' : '') +
 			'</div>' +
 			'<div style="display:flex;gap:6px;flex-shrink:0;">' +
@@ -455,6 +457,7 @@ function openAddDomainSection() {
 function resetDomainForm() {
 	_setVal('new-domain-fqdn', '');
 	_setVal('new-domain-ttl', '');
+  _setVal('new-domain-ip-mode', '');
 	_setVal('new-ionos-prefix', '');
 	_setVal('new-ionos-secret', '');
 	_setVal('new-cf-token', '');
@@ -473,6 +476,7 @@ function editDomain(index) {
 	const d = tempDomainConfigs[index];
 	if (!d) return;
 
+  editIndex = index;
 	resetDomainForm();
 
 	_setVal('new-domain-fqdn', d.fqdn || '');
@@ -483,6 +487,8 @@ function editDomain(index) {
 	toggleProviderFields();
 
 	_setVal('new-domain-ttl', d.ttl || '');
+
+  _setVal('new-domain-ip-mode', d.ip_mode || '');
 
 	if (d.provider === 'IONOS') {
 		_setVal('new-ionos-prefix', d.api_prefix || '');
@@ -496,10 +502,10 @@ function editDomain(index) {
 		_setVal('new-ipv64-token', d.ipv64_token || '');
 	}
 
-	tempDomainConfigs.splice(index, 1);
 	renderSettingsDomainList();
 	openAddDomainSection();
-
+  const addBtn = document.querySelector('#add-domain-section button[onclick="addDomainToList()"]');
+  if (addBtn) addBtn.textContent = tr('edit_domain_saved', 'Änderungen übernehmen');
 	document.getElementById('new-domain-fqdn')?.focus();
 }
 
@@ -514,13 +520,15 @@ function addDomainToList() {
 	const fqdn = document.getElementById('new-domain-fqdn').value.trim().toLowerCase();
 	const provider = document.getElementById('new-domain-provider').value;
 	const ttlRaw = _getVal('new-domain-ttl').trim();
+  const ipMode = _getVal('new-domain-ip-mode').trim();
 	const ttl = ttlRaw === '' ? 0 : parseInt(ttlRaw, 10);
 	if (!fqdn) return showToast(tr('fqdn_missing', 'FQDN fehlt'), 'error');
 
 	let entry = {
 		fqdn: fqdn,
 		provider: provider,
-		ttl: Number.isFinite(ttl) && ttl > 0 ? ttl : 0
+		ttl: Number.isFinite(ttl) && ttl > 0 ? ttl : 0,
+		ip_mode: ipMode || ''
 	};
 	if(provider === 'IONOS') {
 		entry.api_prefix = _getVal('new-ionos-prefix');
@@ -533,7 +541,14 @@ function addDomainToList() {
 	} else if(provider === 'IPV64') {
 		entry.ipv64_token = _getVal('new-ipv64-token');
 	}
-	tempDomainConfigs.push(entry);
+
+  if (editIndex !== null) {
+      tempDomainConfigs[editIndex] = entry;
+      editIndex = null;
+  } else {
+      tempDomainConfigs.push(entry);
+  }
+
 	renderSettingsDomainList();
 	resetDomainForm();
 
@@ -549,6 +564,18 @@ function addDomainToList() {
 	].forEach(id => _setVal(id,''));
 
 	_setChk('new-cf-proxied', false);
+  const addBtn = document.querySelector('#add-domain-section button[onclick="addDomainToList()"]');
+    if (addBtn) addBtn.textContent = tr('settings_add_btn', 'Hinzufügen');
+}
+
+function cancelEdit() {
+    editIndex = null;
+    resetDomainForm();
+    const addBtn = document.querySelector('#add-domain-section button[onclick="addDomainToList()"]');
+    if (addBtn) addBtn.textContent = tr('settings_add_btn', 'Hinzufügen');
+    const section = document.getElementById('add-domain-section');
+    if (section) section.open = false;
+    showToast(tr('edit_domain_cancelled', 'Edit cancelled'), 'info');
 }
 
 function removeDomainFromList(index) {
@@ -769,7 +796,6 @@ function filterDomains(query) {
     });
 }
 
-
 function deleteDomain(domain, btn) {
 	if (!confirm(trf('delete_domain_confirm', { domain }, 'Domain "{domain}" wirklich aus dem Status entfernen?'))) return;
 	const token = localStorage.getItem('triggerToken') || '';
@@ -977,8 +1003,8 @@ function addUser() {
 	const password = document.getElementById('new-user-pass')?.value || '';
 	const role     = document.getElementById('new-user-role')?.value || 'viewer';
 
-	if (username.length < 3) return showToast('Benutzername min. 3 Zeichen', 'error');
-	if (password.length < 8) return showToast('Passwort min. 8 Zeichen', 'error');
+  if (username.length < 3) return showToast(tr('auth_user_min', 'Benutzername min. 3 Zeichen'), 'error');
+  if (password.length < 8) return showToast(tr('auth_pass_min', 'Passwort min. 8 Zeichen'), 'error');
 
 	const token = localStorage.getItem('triggerToken') || '';
 	fetch('/api/users', {
