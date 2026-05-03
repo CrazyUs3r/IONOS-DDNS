@@ -62,7 +62,7 @@ ENV PROVIDER="IONOS" \
     MAX_CONCURRENT=7 \
     MAX_API_RETRIES=3 \
     TZ="Europe/Berlin" \
-    DASHBOARD_AUTH=true
+    DASHBOARD_AUTH=false
 
 WORKDIR /app
 

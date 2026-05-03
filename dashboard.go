@@ -464,6 +464,12 @@ func buildSettingsDomainsSection() string {
 	addDomainForm := `<div class="add-domain-box">` +
 		`<input type="text" id="new-domain-fqdn" class="s-input mb-8" placeholder="` + T.SettingsDomainPlaceholder + `">` +
 		`<input type="number" id="new-domain-ttl" class="s-input mb-8" placeholder="TTL (z. B. 60)" min="1" step="1">` +
+		`<select id="new-domain-ip-mode" class="s-input mb-8">` +
+		`<option value="">` + T.SettingsIPMode + ` (` + T.SettingsIPMode + ` global)</option>` +
+		`<option value="BOTH">BOTH – IPv4 + IPv6</option>` +
+		`<option value="IPV4">IPV4 – nur IPv4</option>` +
+		`<option value="IPV6">IPV6 – nur IPv6</option>` +
+		`</select>` +
 		`<select id="new-domain-provider" class="s-input mb-8" onchange="toggleProviderFields()">` +
 		`<option value="IONOS">IONOS</option>` +
 		`<option value="CLOUDFLARE">Cloudflare</option>` +
@@ -494,8 +500,12 @@ func buildSettingsDomainsSection() string {
 		`<button type="button" class="input-action-btn" onclick="togglePassword('new-ipv64-token', this)">👁️</button>` +
 		`</div>` +
 		`</div>` +
+		`<div style="display:flex; gap:10px; margin-top:15px;">` +
 		`<button class="s-btn s-btn-success-full" onclick="addDomainToList()">` +
 		T.SettingsAddBtn +
+		`</button>` +
+		`<button type="button" class="s-btn" style="background:none; border:1px solid var(--border); color:var(--text);" onclick="cancelEdit()">` +
+		T.SettingsCancelBtn +
 		`</button>` +
 		`</div>`
 
@@ -641,6 +651,7 @@ type safeDomainConfig struct {
 	IPv64Token string `json:"ipv64_token,omitempty"`
 	TTL        int    `json:"ttl,omitempty"`
 	CFProxied  bool   `json:"cf_proxied,omitempty"`
+	IPMode     string `json:"ip_mode,omitempty"`
 }
 
 type safeMQTTConfig struct {
@@ -701,6 +712,7 @@ func safeDomainConfigs(dcs []DomainConfig) []safeDomainConfig {
 			IPv64Token: dc.IPv64Token,
 			TTL:        dc.TTL,
 			CFProxied:  dc.CFProxied,
+			IPMode:     dc.IPMode,
 		}
 	}
 	return out
@@ -747,46 +759,50 @@ func currentSystemConfig() safeSystemConfig {
 
 func dashboardI18NJSON() string {
 	m := map[string]string{
-		"theme":                 t(T.ThemeLabel, "Theme"),
-		"no_ip_to_copy":         t(T.NoIPToCopy, "❌ No IP to copy"),
-		"copied":                t(T.Copied, "✓ Copied: "),
-		"copy_failed":           t(T.CopyFailed, "❌ Copy failed"),
-		"update_starting":       t(T.UpdateStartingJS, "⏳ Update wird gestartet..."),
-		"update_started":        t(T.UpdateStartedJS, "✅ Update gestartet"),
-		"connection_error":      t(T.ConnectionErrorJS, "❌ Verbindungsfehler"),
-		"export_started":        t(T.ExportStartedJS, "✓ Export gestartet"),
-		"export_failed":         t(T.ExportFailedJS, "Export fehlgeschlagen"),
-		"fqdn_missing":          t(T.FQDNMissingJS, "FQDN fehlt"),
-		"save_config_confirm":   t(T.SaveConfigConfirmJS, "Alle Einstellungen in config.json speichern?"),
-		"saved_reload":          t(T.SavedReloadJS, "✅ Gespeichert! Seite wird neu geladen..."),
-		"error_prefix":          t(T.ErrorPrefixJS, "❌ Fehler: "),
-		"reset_metrics_confirm": t(T.ResetMetricsConfirmJS, "Möchtest du wirklich alle Metriken (Statistiken) löschen?"),
-		"metrics_reset_ok":      t(T.MetricsResetOKJS, "✅ Metriken zurückgesetzt"),
-		"metrics_reset_failed":  t(T.MetricsResetFailedJS, "❌ Reset fehlgeschlagen"),
-		"delete_domain_confirm": t(T.DeleteDomainConfirmJS, `Domain "{domain}" wirklich aus dem Status entfernen?`),
-		"domain_removed":        t(T.DomainRemovedJS, "🗑️ {domain} entfernt"),
-		"delete_failed":         t(T.DeleteFailedJS, "Fehler beim Löschen"),
-		"remove_btn":            t(T.RemoveBtn, "🗑️ Entfernen"),
-		"token_saved":           t(T.TokenSavedJS, "✅ Token gespeichert"),
-		"token_deleted":         t(T.TokenDeletedJS, "🗑️ Token gelöscht"),
-		"token_saved_masked":    t(T.TokenSavedMaskedJS, "●●●●●● (gespeichert)"),
-		"token_enter":           t(T.TokenEnterJS, "Token eingeben..."),
+		"theme":                 t(T.ThemeLabelJS, "Theme"),
+		"no_ip_to_copy":         t(T.NoIPToCopyJS, "❌ No IP to copy"),
+		"copied":                t(T.CopiedJS, "✓ Copied: "),
+		"copy_failed":           t(T.CopyFailedJS, "❌ Copy failed"),
+		"copy_error":            t(T.CopyFailedJS, "❌ Copy failed"),
+		"update_starting":       t(T.UpdateStartingJS, "⏳ Starting update..."),
+		"update_started":        t(T.UpdateStartedJS, "✅ Update started"),
+		"connection_error":      t(T.ConnectionErrorJS, "❌ Connection error"),
+		"export_started":        t(T.ExportStartedJS, "✓ Export started"),
+		"export_failed":         t(T.ExportFailedJS, "Export failed"),
+		"fqdn_missing":          t(T.FQDNMissingJS, "FQDN missing"),
 		"domain_updated":        t(T.DomainUpdatedJS, "✓ {domain} updated"),
-		"cleared":               t(T.ClearedJS, "Gelöscht."),
-		"active":                t(T.ActiveJS, "Aktiv"),
-		"inactive":              t(T.InactiveJS, "Inaktiv"),
-		"loading_saving":        t(T.LoadingSaving, "⏳ Speichere Configuration..."),
-		"loading_slow":          t(T.LoadingSlow, "⚠️ Dauert länger als erwartet..."),
-		"no_log_entries":        t(T.NoLogEntries, "Keine Log-Einträge sichtbar"),
-		"user_load_failed":      t(T.UserLoadFailedJS, "Fehler beim Laden"),
-		"no_users_found":        t(T.NoUsersFoundJS, "Keine Benutzer gefunden."),
-		"user_created":          t(T.UserCreatedJS, "Benutzer erstellt"),
-		"role_changed":          t(T.RoleChangedJS, "Rolle geändert"),
-		"user_deleted":          t(T.UserDeletedJS, "Benutzer gelöscht"),
-		"generic_error":         t(T.GenericErrorJS, "Fehler"),
+		"delete_domain_confirm": t(T.DeleteDomainConfirmJS, `Domain "{domain}" remove from status?`),
+		"domain_removed":        t(T.DomainRemovedJS, "🗑️ {domain} removed"),
+		"delete_failed":         t(T.DeleteFailedJS, "Deletion failed"),
+		"remove_btn":            t(T.RemoveBtn, "🗑️ Remove"),
+		"save_config_confirm":   t(T.SaveConfigConfirmJS, "Save all settings to config.json?"),
+		"saved_reload":          t(T.SavedReloadJS, "✅ Saved! Reloading..."),
+		"error_prefix":          t(T.ErrorPrefixJS, "❌ Error: "),
+		"loading_saving":        t(T.LoadingSavingJS, "⏳ Saving configuration..."),
+		"loading_slow":          t(T.LoadingSlowJS, "⚠️ Taking longer than expected..."),
+		"reset_metrics_confirm": t(T.ResetMetricsConfirmJS, "Clear all metrics?"),
+		"metrics_reset_ok":      t(T.MetricsResetOKJS, "✅ Metrics reset"),
+		"metrics_reset_failed":  t(T.MetricsResetFailedJS, "❌ Reset failed"),
+		"token_saved":           t(T.TokenSavedJS, "✅ Token saved"),
+		"token_deleted":         t(T.TokenDeletedJS, "🗑️ Token deleted"),
+		"token_saved_masked":    t(T.TokenSavedMaskedJS, "●●●●●● (saved)"),
+		"token_enter":           t(T.TokenEnterJS, "Enter token..."),
+		"cleared":               t(T.ClearedJS, "Cleared."),
+		"no_log_entries":        t(T.NoLogEntries, "No log entries visible"),
+		"user_load_failed":      t(T.UserLoadFailedJS, "Failed to load"),
+		"no_users_found":        t(T.NoUsersFoundJS, "No users found."),
+		"user_created":          t(T.UserCreatedJS, "User created"),
+		"user_deleted":          t(T.UserDeletedJS, "User deleted"),
+		"role_changed":          t(T.RoleChangedJS, "Role changed"),
 		"role_admin":            t(T.RoleAdminJS, "Admin"),
 		"role_editor":           t(T.RoleEditorJS, "Editor"),
 		"role_viewer":           t(T.RoleViewerJS, "Viewer"),
+		"generic_error":         t(T.GenericErrorJS, "Error"),
+		"auth_user_min":         t(T.AuthUserMinJS, "Username min. 3 characters"),
+		"auth_pass_min":         t(T.AuthPassMinJS, "Password min. 8 characters"),
+		"edit_domain_cancelled": t(T.EditDomainCancelledJS, "Edit cancelled"),
+		"edit_domain_saved":     t(T.EditDomainSavedJS, "Changes saved"),
+		"settings_add_btn":      t(T.SettingsAddBtnJS, "➕ Add to list"),
 	}
 
 	b, err := json.Marshal(m)
@@ -1142,6 +1158,7 @@ func mergeDomainConfigs(existingCfg []DomainConfig, incoming []safeDomainConfig)
 
 			found.TTL = sc.TTL
 			found.CFProxied = sc.CFProxied
+			found.IPMode = sc.IPMode
 			newConfigs = append(newConfigs, found)
 			continue
 		}
@@ -1157,6 +1174,7 @@ func mergeDomainConfigs(existingCfg []DomainConfig, incoming []safeDomainConfig)
 			IPv64Token: sc.IPv64Token,
 			TTL:        sc.TTL,
 			CFProxied:  sc.CFProxied,
+			IPMode:     sc.IPMode,
 		})
 	}
 
@@ -2407,16 +2425,34 @@ func writeDomainHistoryRows(w http.ResponseWriter, h DomainHistory) {
 
 func writeDashboardFooter(w http.ResponseWriter) {
 	_, _ = fmt.Fprintf(w, `
-	<script>
-		window.I18N = %s;
-	</script>
-	<script>%s</script>
-	</div>
-	</body>
-	</html>
-	`, dashboardI18NJSON(), jsData)
+        	<footer style="
+				text-align: center;
+				padding: 20px;
+				margin-top: 10px;
+				font-size: 0.75rem;
+				opacity: 0.4;
+				color: var(--text);
+			">
+            <div class="container">
+                <span>&copy; %d IONOS-DDNS Made with ❤️ by</span>
+                <span style="margin: 0 10px; opacity: 0.3;">|</span>
+                <a href="https://github.com/CrazyUs3r/IONOS-DDNS" 
+                   target="_blank" 
+                   rel="noopener noreferrer" 
+                   style="color: var(--btn-text); text-decoration: none; font-weight: 600; transition: color 0.2s;">
+                   CrazyUs3r
+                </a>
+            </div>
+        </footer>`, time.Now().Year())
+	_, _ = fmt.Fprintf(w, `
+    <script>
+        window.I18N = %s;
+    </script>
+    <script>%s</script>
+    </body>
+    </html>
+    `, dashboardI18NJSON(), jsData)
 }
-
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

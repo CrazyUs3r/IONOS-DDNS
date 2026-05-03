@@ -35,7 +35,7 @@ func processDomains(
 }
 
 func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdateJob, cache *ZoneRecordCache) domainUpdateResult {
-	ipMode := currentIPMode()
+	ipMode := domainIPMode(dc)
 
 	result := domainUpdateResult{
 		Domain: job.Domain,
@@ -364,4 +364,14 @@ func updateDomainRecord(
 	default:
 		return updateIonosDNS(ctx, dc, job.Domain, recordType, ip, job.Records, job.ZoneID, job.ZoneName, cache)
 	}
+}
+
+func domainIPMode(dc *DomainConfig) string {
+	if dc != nil && dc.IPMode != "" {
+		m := strings.ToUpper(dc.IPMode)
+		if m == IPModeV4 || m == IPModeV6 || m == IPModeBoth {
+			return m
+		}
+	}
+	return currentIPMode()
 }
