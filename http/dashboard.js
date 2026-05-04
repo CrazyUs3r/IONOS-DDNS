@@ -419,27 +419,34 @@ function saveToken() {
 }
 
 function renderSettingsDomainList() {
-	const container = document.getElementById('settings-domain-list');
-	if (!container) return;
-	container.innerHTML = '';
-	tempDomainConfigs.forEach((d, index) => {
-		const providerColor = {IONOS:'#3b82f6', CLOUDFLARE:'#f97316', IPV64:'#a855f7'}[d.provider] || '#64748b';
-		const div = document.createElement('div');
-		div.className = 'domain-pill';
-		div.innerHTML =
-			'<div style="flex:1;min-width:0;">' +
-				'<span style="font-weight:600;word-break:break-all;">' + escHtml(d.fqdn) + '</span>' +
-				'<span class="provider-badge" style="background:' + providerColor + '20;color:' + providerColor + ';border:1px solid ' + providerColor + '40;margin-left:6px;">' + escHtml(d.provider) + '</span>' +
-				(d.ttl ? '<span class="provider-badge" style="margin-left:6px;">TTL ' + escHtml(d.ttl) + '</span>' : '') +
-				(d.ip_mode ? '<span class="provider-badge" style="margin-left:6px;">' + escHtml(d.ip_mode) + '</span>' : '') +
-				(d.provider === 'CLOUDFLARE' && d.cf_proxied ? '<span class="provider-badge" style="margin-left:6px;">proxied</span>' : '') +
-			'</div>' +
-			'<div style="display:flex;gap:6px;flex-shrink:0;">' +
-				'<button onclick="editDomain(' + index + ')" style="background:none;border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:0.75rem;">✏️</button>' +
-				'<button onclick="removeDomainFromList(' + index + ')" style="background:none;border:none;color:var(--error);cursor:pointer;font-weight:bold;font-size:1rem;padding:0 4px;">✕</button>' +
-			'</div>';
-		container.appendChild(div);
-	});
+    const container = document.getElementById('settings-domain-list');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const sorted = [...tempDomainConfigs].sort((a, b) => {
+        if (a.provider !== b.provider) return a.provider.localeCompare(b.provider);
+        return a.fqdn.localeCompare(b.fqdn);
+    });
+
+    sorted.forEach((d) => {
+        const origIndex = tempDomainConfigs.indexOf(d);
+        const providerColor = {IONOS:'#3b82f6', CLOUDFLARE:'#f97316', IPV64:'#a855f7'}[d.provider] || '#64748b';
+        const div = document.createElement('div');
+        div.className = 'domain-pill';
+        div.innerHTML =
+            '<div style="flex:1;min-width:0;">' +
+                '<span style="font-weight:600;word-break:break-all;">' + escHtml(d.fqdn) + '</span>' +
+                '<span class="provider-badge" style="background:' + providerColor + '20;color:' + providerColor + ';border:1px solid ' + providerColor + '40;margin-left:6px;">' + escHtml(d.provider) + '</span>' +
+                (d.ttl ? '<span class="provider-badge" style="margin-left:6px;">TTL ' + escHtml(d.ttl) + '</span>' : '') +
+                (d.ip_mode ? '<span class="provider-badge" style="margin-left:6px;">' + escHtml(d.ip_mode) + '</span>' : '') +
+                (d.provider === 'CLOUDFLARE' && d.cf_proxied ? '<span class="provider-badge" style="margin-left:6px;">proxied</span>' : '') +
+            '</div>' +
+            '<div style="display:flex;gap:6px;flex-shrink:0;">' +
+                '<button onclick="editDomain(' + origIndex + ')" style="background:none;border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:0.75rem;">✏️</button>' +
+                '<button onclick="removeDomainFromList(' + origIndex + ')" style="background:none;border:none;color:var(--error);cursor:pointer;font-weight:bold;font-size:1rem;padding:0 4px;">✕</button>' +
+            '</div>';
+        container.appendChild(div);
+    });
 }
 
 function escHtml(s) {

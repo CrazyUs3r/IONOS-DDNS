@@ -1054,6 +1054,34 @@ select.s-input optgroup {
 	opacity: 0.9;
 }
 
+.dashboard-footer {
+	text-align: center;
+	padding: 20px;
+	margin-top: 10px;
+	font-size: 0.75rem;
+	color: #64748b;
+}
+
+[data-theme="light"] .dashboard-footer {
+	color: #94a3b8;
+}
+
+.dashboard-footer-sep {
+	margin: 0 10px;
+	opacity: 0.3;
+}
+
+.dashboard-footer-link {
+	color: var(--btn-text);
+	text-decoration: none;
+	font-weight: 600;
+	transition: color 0.2s;
+}
+
+.dashboard-footer-link:hover {
+	color: var(--btn-border);
+}
+
 .domain-card-head {
 	border-bottom: 1px solid rgba(255,255,255,0.1);
 	padding-bottom: 15px;
