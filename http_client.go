@@ -401,7 +401,7 @@ func buildHTTPClient(dnsList []string) *http.Client {
 
 			startIndex := int(lastSuccessfulDNS.Load())
 			if len(dnsList) > 0 {
-				startIndex = startIndex % len(dnsList)
+				startIndex %= len(dnsList)
 			}
 
 			for i := 0; i < len(dnsList); i++ {

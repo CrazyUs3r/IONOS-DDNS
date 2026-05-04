@@ -712,8 +712,8 @@ var instanceEmojis = []string{
 	"🚀", "🌍", "⚡", "🔥", "❄️", "🌊", "🌈", "☀️",
 }
 
-func secureRandInt(max int) (int, error) {
-	n, err := crand.Int(crand.Reader, big.NewInt(int64(max)))
+func secureRandInt(limit int) (int, error) {
+	n, err := crand.Int(crand.Reader, big.NewInt(int64(limit)))
 	if err != nil {
 		return 0, err
 	}

@@ -128,13 +128,11 @@ func initAuth(logsDir string) {
 }
 
 func maxLen(values ...string) int {
-	max := 0
+	maxVal := 0
 	for _, v := range values {
-		if len(v) > max {
-			max = len(v)
-		}
+		maxVal = max(maxVal, len(v))
 	}
-	return max
+	return maxVal
 }
 
 // ============================================================================
