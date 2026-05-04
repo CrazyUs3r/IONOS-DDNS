@@ -1178,12 +1178,12 @@ func mergeDomainConfigs(existingCfg []DomainConfig, incoming []safeDomainConfig)
 		})
 	}
 
-  sort.Slice(newConfigs, func(i, j int) bool {
-      if newConfigs[i].Provider != newConfigs[j].Provider {
-          return string(newConfigs[i].Provider) < string(newConfigs[j].Provider)
-      }
-      return newConfigs[i].FQDN < newConfigs[j].FQDN
-  })
+	sort.Slice(newConfigs, func(i, j int) bool {
+		if newConfigs[i].Provider != newConfigs[j].Provider {
+			return string(newConfigs[i].Provider) < string(newConfigs[j].Provider)
+		}
+		return newConfigs[i].FQDN < newConfigs[j].FQDN
+	})
 
 	return newConfigs
 }
