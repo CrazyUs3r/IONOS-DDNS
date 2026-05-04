@@ -1178,6 +1178,13 @@ func mergeDomainConfigs(existingCfg []DomainConfig, incoming []safeDomainConfig)
 		})
 	}
 
+  sort.Slice(newConfigs, func(i, j int) bool {
+      if newConfigs[i].Provider != newConfigs[j].Provider {
+          return string(newConfigs[i].Provider) < string(newConfigs[j].Provider)
+      }
+      return newConfigs[i].FQDN < newConfigs[j].FQDN
+  })
+
 	return newConfigs
 }
 
@@ -2425,34 +2432,28 @@ func writeDomainHistoryRows(w http.ResponseWriter, h DomainHistory) {
 
 func writeDashboardFooter(w http.ResponseWriter) {
 	_, _ = fmt.Fprintf(w, `
-        	<footer style="
-				text-align: center;
-				padding: 20px;
-				margin-top: 10px;
-				font-size: 0.75rem;
-				opacity: 0.4;
-				color: var(--text);
-			">
-            <div class="container">
-                <span>&copy; %d IONOS-DDNS Made with ❤️ by</span>
-                <span style="margin: 0 10px; opacity: 0.3;">|</span>
-                <a href="https://github.com/CrazyUs3r/IONOS-DDNS" 
-                   target="_blank" 
-                   rel="noopener noreferrer" 
-                   style="color: var(--btn-text); text-decoration: none; font-weight: 600; transition: color 0.2s;">
-                   CrazyUs3r
-                </a>
-            </div>
-        </footer>`, time.Now().Year())
+	<footer class="dashboard-footer">
+		<div class="container">
+			<span>&copy; %d IONOS-DDNS Made with ❤️ by</span>
+			<span class="dashboard-footer-sep">|</span>
+			<a href="https://github.com/CrazyUs3r/IONOS-DDNS"
+				target="_blank"
+				rel="noopener noreferrer"
+				class="dashboard-footer-link">
+				CrazyUs3r
+			</a>
+		</div>
+	</footer>`, time.Now().Year())
 	_, _ = fmt.Fprintf(w, `
-    <script>
-        window.I18N = %s;
-    </script>
-    <script>%s</script>
-    </body>
-    </html>
-    `, dashboardI18NJSON(), jsData)
+	<script>
+		window.I18N = %s;
+	</script>
+	<script>%s</script>
+	</body>
+	</html>
+	`, dashboardI18NJSON(), jsData)
 }
+
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
