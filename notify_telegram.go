@@ -4,12 +4,13 @@ package main
 import (
 	"bytes"
 	"context"
+	crand "crypto/rand"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
+	"math/big"
 	"net"
 	"net/http"
 	"os"
@@ -711,14 +712,38 @@ var instanceEmojis = []string{
 	"🚀", "🌍", "⚡", "🔥", "❄️", "🌊", "🌈", "☀️",
 }
 
+func secureRandInt(max int) (int, error) {
+	n, err := crand.Int(crand.Reader, big.NewInt(int64(max)))
+	if err != nil {
+		return 0, err
+	}
+	return int(n.Int64()), nil
+}
+
 func generateInstanceTag() string {
 	pool := instanceEmojis
-	a := pool[rand.Intn(len(pool))] // #nosec G404
-	b := pool[rand.Intn(len(pool))] // #nosec G404
-	if a == b {
-		b = pool[rand.Intn(len(pool))] // #nosec G404
+	if len(pool) < 2 {
+		return ""
 	}
-	return a + b
+
+	aIdx, err := secureRandInt(len(pool))
+	if err != nil {
+		return pool[0] + pool[1]
+	}
+
+	bIdx, err := secureRandInt(len(pool))
+	if err != nil {
+		return pool[0] + pool[1]
+	}
+
+	for aIdx == bIdx {
+		bIdx, err = secureRandInt(len(pool))
+		if err != nil {
+			return pool[0] + pool[1]
+		}
+	}
+
+	return pool[aIdx] + pool[bIdx]
 }
 
 func formatTelegramMessage(msg NotifyMessage, instanceTag string) string {

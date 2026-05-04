@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -24,111 +23,22 @@ func getCloudflareCachePath() string {
 }
 
 func saveCloudflareCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error {
-	if recordCache == nil {
-		return fmt.Errorf("%s", T.ErrRecordCacheNil)
-	}
-
-	if err := os.MkdirAll(cfg.LogDir, 0o755); err != nil {
-		return fmt.Errorf("%s: %w", T.ErrCacheDirCreate, err)
-	}
-
-	cachePath := getCloudflareCachePath()
-
-	cache := CloudflareCache{
-		Version:    1,
-		Zones:      zones,
-		Records:    make(map[string][]Record),
-		LastUpdate: time.Now().Local(),
-	}
-
-	totalRecords := 0
-	for _, zone := range zones {
-		if records, exists := recordCache.Get(zone.ID); exists {
-			cache.Records[zone.ID] = records
-			totalRecords += len(records)
-		}
-	}
-
-	jsonData, err := json.MarshalIndent(cache, "", "  ")
-	if err != nil {
-		return fmt.Errorf("%s: %w", T.ErrCacheMarshal, err)
-	}
-
-	tmpPath := cachePath + ".tmp"
-	if err := os.WriteFile(tmpPath, jsonData, 0o600); err != nil {
-		return fmt.Errorf("%s: %w", T.ErrCacheWrite, err)
-	}
-
-	if err := os.Rename(tmpPath, cachePath); err != nil {
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("%s: %w", T.ErrCacheRename, err)
-	}
-
-	debugLog("CACHE", "", fmt.Sprintf(T.CacheSavedZones, "Cloudflare", len(zones), totalRecords))
-	return nil
+	return saveDNSProviderCacheToFile("Cloudflare", getCloudflareCachePath(), zones, recordCache)
 }
 
 func loadCloudflareCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
-	cachePath := getCloudflareCachePath()
-
-	data, err := os.ReadFile(cachePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			debugLog("CACHE", "", fmt.Sprintf(T.CacheFileNotFound, "Cloudflare"))
-			return nil, nil, nil
-		}
-		return nil, nil, fmt.Errorf("%s: %w", T.ErrBodyRead, err)
-	}
-
-	var cache CloudflareCache
-	if err := json.Unmarshal(data, &cache); err != nil {
-		return nil, nil, fmt.Errorf("%s: %w", T.ErrCacheMarshal, err)
-	}
-
-	if cache.Version == 0 {
-		cache.Version = 1
-	}
-
-	if cache.Version != 1 {
-		return nil, nil, fmt.Errorf(T.ErrAPIGeneric+": unsupported version %d", cache.Version)
-	}
-
-	recordCache := NewZoneRecordCache()
-	for zoneID, records := range cache.Records {
-		recordCache.Set(zoneID, records)
-	}
-
-	age := time.Since(cache.LastUpdate)
-	debugLog("CACHE", "", fmt.Sprintf(T.CacheLoadedZones, "Cloudflare", len(cache.Zones), age.Round(time.Second)))
-
-	return cache.Zones, recordCache, nil
+	return loadDNSProviderCacheFromFile("Cloudflare", getCloudflareCachePath())
 }
 
 // ============================================================================
 // API - CLOUDFLARE
 // ============================================================================
 func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint string, body interface{}) ([]byte, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("%s: %w", T.ErrContextError, err)
-	}
-
 	fullURL := cloudflareAPIBase + endpoint
-	maxRetries := cfg.MaxAPIRetries
 
-	var lastErr error
-	for attempt := range maxRetries {
-		respBody, retry, err := cloudflareAPIAttempt(ctx, dc, method, fullURL, body, attempt, maxRetries)
-		if err == nil {
-			return respBody, nil
-		}
-
-		lastErr = err
-		if !retry {
-			return nil, err
-		}
-	}
-
-	return nil, fmt.Errorf("%s: %w", fmt.Sprintf(T.CFAPIFailed, maxRetries), lastErr)
+	return apiWithRetry(ctx, "Cloudflare", T.CFAPIFailed, func(attempt, maxRetries int) ([]byte, bool, error) {
+		return cloudflareAPIAttempt(ctx, dc, method, fullURL, body, attempt, maxRetries)
+	})
 }
 
 func cloudflareAPIAttempt(

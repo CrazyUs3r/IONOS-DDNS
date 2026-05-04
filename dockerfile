@@ -5,7 +5,7 @@ FROM --platform=${BUILDPLATFORM} golang:1.26.2-alpine AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
-ARG VERSION=2.3.8
+ARG VERSION=2.4.0
 ARG BUILD_DATE
 ARG VCS_REF
 
@@ -38,7 +38,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # =============================================================================
 FROM busybox:stable-musl
 
-ARG VERSION=2.3.8
+ARG VERSION=2.4.0
 ARG BUILD_DATE
 
 LABEL org.opencontainers.image.title="Go-DynDNS" \
@@ -61,7 +61,8 @@ ENV PROVIDER="IONOS" \
     HOURLY_RATE_LIMIT=1200 \
     MAX_CONCURRENT=7 \
     MAX_API_RETRIES=3 \
-    TZ="Europe/Berlin"
+    TZ="Europe/Berlin" \
+    DASHBOARD_AUTH=false
 
 WORKDIR /app
 

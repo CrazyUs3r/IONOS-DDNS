@@ -3,6 +3,7 @@ let currentLevel = 'ok';
 let ws = null;
 let reconnectTimer = null;
 let reconnectDelay = 1000;
+let editIndex = null;
 const reconnectDelayMax = 10000;
 
 let tempDomainConfigs = [];
@@ -235,7 +236,7 @@ function copyIP(text) {
 		ta.style.position = "fixed"; ta.style.left = "-9999px";
 		document.body.appendChild(ta); ta.focus(); ta.select();
 		try { document.execCommand('copy'); showToast(tr('copied', '✓ Copied: ') + text);} 
-		catch (err) { showToast(tr('copy_failed', '❌ Copy failed'), 'error'); }
+		catch (err) { showToast(tr('copy_error', '❌ Fehler'), 'error'); }
 		document.body.removeChild(ta);
 	};
 	if (navigator.clipboard && window.isSecureContext) {
@@ -393,6 +394,7 @@ function openSettings() {
 	_setVal('cfg-mqtt-discovery-prefix',  mqtt.discovery_prefix || 'homeassistant');
 
 	renderSettingsDomainList();
+	loadUsers();
 }
 
 function closeSettings() { 
@@ -417,26 +419,34 @@ function saveToken() {
 }
 
 function renderSettingsDomainList() {
-	const container = document.getElementById('settings-domain-list');
-	if (!container) return;
-	container.innerHTML = '';
-	tempDomainConfigs.forEach((d, index) => {
-		const providerColor = {IONOS:'#3b82f6', CLOUDFLARE:'#f97316', IPV64:'#a855f7'}[d.provider] || '#64748b';
-		const div = document.createElement('div');
-		div.className = 'domain-pill';
-		div.innerHTML =
-			'<div style="flex:1;min-width:0;">' +
-				'<span style="font-weight:600;word-break:break-all;">' + escHtml(d.fqdn) + '</span>' +
-				'<span class="provider-badge" style="background:' + providerColor + '20;color:' + providerColor + ';border:1px solid ' + providerColor + '40;margin-left:6px;">' + escHtml(d.provider) + '</span>' +
-				(d.ttl ? '<span class="provider-badge" style="margin-left:6px;">TTL ' + escHtml(d.ttl) + '</span>' : '') +
-				(d.provider === 'CLOUDFLARE' && d.cf_proxied ? '<span class="provider-badge" style="margin-left:6px;">proxied</span>' : '') +
-			'</div>' +
-			'<div style="display:flex;gap:6px;flex-shrink:0;">' +
-				'<button onclick="editDomain(' + index + ')" style="background:none;border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:0.75rem;">✏️</button>' +
-				'<button onclick="removeDomainFromList(' + index + ')" style="background:none;border:none;color:var(--error);cursor:pointer;font-weight:bold;font-size:1rem;padding:0 4px;">✕</button>' +
-			'</div>';
-		container.appendChild(div);
-	});
+    const container = document.getElementById('settings-domain-list');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const sorted = [...tempDomainConfigs].sort((a, b) => {
+        if (a.provider !== b.provider) return a.provider.localeCompare(b.provider);
+        return a.fqdn.localeCompare(b.fqdn);
+    });
+
+    sorted.forEach((d) => {
+        const origIndex = tempDomainConfigs.indexOf(d);
+        const providerColor = {IONOS:'#3b82f6', CLOUDFLARE:'#f97316', IPV64:'#a855f7'}[d.provider] || '#64748b';
+        const div = document.createElement('div');
+        div.className = 'domain-pill';
+        div.innerHTML =
+            '<div style="flex:1;min-width:0;">' +
+                '<span style="font-weight:600;word-break:break-all;">' + escHtml(d.fqdn) + '</span>' +
+                '<span class="provider-badge" style="background:' + providerColor + '20;color:' + providerColor + ';border:1px solid ' + providerColor + '40;margin-left:6px;">' + escHtml(d.provider) + '</span>' +
+                (d.ttl ? '<span class="provider-badge" style="margin-left:6px;">TTL ' + escHtml(d.ttl) + '</span>' : '') +
+                (d.ip_mode ? '<span class="provider-badge" style="margin-left:6px;">' + escHtml(d.ip_mode) + '</span>' : '') +
+                (d.provider === 'CLOUDFLARE' && d.cf_proxied ? '<span class="provider-badge" style="margin-left:6px;">proxied</span>' : '') +
+            '</div>' +
+            '<div style="display:flex;gap:6px;flex-shrink:0;">' +
+                '<button onclick="editDomain(' + origIndex + ')" style="background:none;border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:0.75rem;">✏️</button>' +
+                '<button onclick="removeDomainFromList(' + origIndex + ')" style="background:none;border:none;color:var(--error);cursor:pointer;font-weight:bold;font-size:1rem;padding:0 4px;">✕</button>' +
+            '</div>';
+        container.appendChild(div);
+    });
 }
 
 function escHtml(s) {
@@ -454,6 +464,7 @@ function openAddDomainSection() {
 function resetDomainForm() {
 	_setVal('new-domain-fqdn', '');
 	_setVal('new-domain-ttl', '');
+  _setVal('new-domain-ip-mode', '');
 	_setVal('new-ionos-prefix', '');
 	_setVal('new-ionos-secret', '');
 	_setVal('new-cf-token', '');
@@ -472,6 +483,7 @@ function editDomain(index) {
 	const d = tempDomainConfigs[index];
 	if (!d) return;
 
+  editIndex = index;
 	resetDomainForm();
 
 	_setVal('new-domain-fqdn', d.fqdn || '');
@@ -482,6 +494,8 @@ function editDomain(index) {
 	toggleProviderFields();
 
 	_setVal('new-domain-ttl', d.ttl || '');
+
+  _setVal('new-domain-ip-mode', d.ip_mode || '');
 
 	if (d.provider === 'IONOS') {
 		_setVal('new-ionos-prefix', d.api_prefix || '');
@@ -495,10 +509,10 @@ function editDomain(index) {
 		_setVal('new-ipv64-token', d.ipv64_token || '');
 	}
 
-	tempDomainConfigs.splice(index, 1);
 	renderSettingsDomainList();
 	openAddDomainSection();
-
+  const addBtn = document.querySelector('#add-domain-section button[onclick="addDomainToList()"]');
+  if (addBtn) addBtn.textContent = tr('edit_domain_saved', 'Änderungen übernehmen');
 	document.getElementById('new-domain-fqdn')?.focus();
 }
 
@@ -513,13 +527,15 @@ function addDomainToList() {
 	const fqdn = document.getElementById('new-domain-fqdn').value.trim().toLowerCase();
 	const provider = document.getElementById('new-domain-provider').value;
 	const ttlRaw = _getVal('new-domain-ttl').trim();
+  const ipMode = _getVal('new-domain-ip-mode').trim();
 	const ttl = ttlRaw === '' ? 0 : parseInt(ttlRaw, 10);
 	if (!fqdn) return showToast(tr('fqdn_missing', 'FQDN fehlt'), 'error');
 
 	let entry = {
 		fqdn: fqdn,
 		provider: provider,
-		ttl: Number.isFinite(ttl) && ttl > 0 ? ttl : 0
+		ttl: Number.isFinite(ttl) && ttl > 0 ? ttl : 0,
+		ip_mode: ipMode || ''
 	};
 	if(provider === 'IONOS') {
 		entry.api_prefix = _getVal('new-ionos-prefix');
@@ -532,7 +548,14 @@ function addDomainToList() {
 	} else if(provider === 'IPV64') {
 		entry.ipv64_token = _getVal('new-ipv64-token');
 	}
-	tempDomainConfigs.push(entry);
+
+  if (editIndex !== null) {
+      tempDomainConfigs[editIndex] = entry;
+      editIndex = null;
+  } else {
+      tempDomainConfigs.push(entry);
+  }
+
 	renderSettingsDomainList();
 	resetDomainForm();
 
@@ -548,6 +571,18 @@ function addDomainToList() {
 	].forEach(id => _setVal(id,''));
 
 	_setChk('new-cf-proxied', false);
+  const addBtn = document.querySelector('#add-domain-section button[onclick="addDomainToList()"]');
+    if (addBtn) addBtn.textContent = tr('settings_add_btn', 'Hinzufügen');
+}
+
+function cancelEdit() {
+    editIndex = null;
+    resetDomainForm();
+    const addBtn = document.querySelector('#add-domain-section button[onclick="addDomainToList()"]');
+    if (addBtn) addBtn.textContent = tr('settings_add_btn', 'Hinzufügen');
+    const section = document.getElementById('add-domain-section');
+    if (section) section.open = false;
+    showToast(tr('edit_domain_cancelled', 'Edit cancelled'), 'info');
 }
 
 function removeDomainFromList(index) {
@@ -768,7 +803,6 @@ function filterDomains(query) {
     });
 }
 
-
 function deleteDomain(domain, btn) {
 	if (!confirm(trf('delete_domain_confirm', { domain }, 'Domain "{domain}" wirklich aus dem Status entfernen?'))) return;
 	const token = localStorage.getItem('triggerToken') || '';
@@ -786,7 +820,7 @@ function deleteDomain(domain, btn) {
 			showToast(trf('domain_removed', { domain }, '🗑️ {domain} entfernt'), 'success');
 		} else {
 			btn.disabled = false; btn.textContent = tr('remove_btn', '🗑️ Entfernen');
-			showToast('❌ ' + (j.error || 'Fehler beim Löschen'), 'error');
+			showToast('❌ ' + (j.error || tr('delete_failed', 'Fehler beim Löschen')), 'error');
 		}
 	})
 	.catch(() => { btn.disabled = false; btn.textContent = tr('remove_btn', '🗑️ Entfernen'); showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'); });
@@ -797,7 +831,7 @@ function fallbackCopy(text) {
 	ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px';
 	document.body.appendChild(ta); ta.focus(); ta.select();
 	try { document.execCommand('copy'); showToast('✓ Kopiert: ' + text, 'success'); }
-	catch { showToast('❌ Kopieren fehlgeschlagen', 'error'); }
+	catch { showToast(tr('copy_failed', '❌ Copy failed'), 'error'); }
 	document.body.removeChild(ta);
 }
 
@@ -920,6 +954,114 @@ function clearDebugLog() {
     container.appendChild(placeholder);
 }
 
+// ============================================================================
+// USER MANAGEMENT
+// ============================================================================
+function loadUsers() {
+	fetch('/api/users')
+		.then(r => {
+			if (!r.ok) throw new Error('HTTP ' + r.status);
+			return r.json();
+		})
+		.then(users => renderUsersList(users))
+		.catch(err => {
+			document.getElementById('users-list').innerHTML =
+				'<div style="color:red;font-size:0.8rem;">' + tr('user_load_failed', 'Fehler beim Laden') + '</div>';
+			console.error(err);
+		});
+}
+
+function renderUsersList(users) {
+	const container = document.getElementById('users-list');
+	if (!container) return;
+	if (!users || users.length === 0) {
+		container.innerHTML = '<div style="font-size:0.8rem;opacity:0.5;">' + tr('no_users_found', 'Keine Benutzer gefunden.') + '</div>';
+		return;
+	}
+
+	const roleIcon = { admin: '👑', editor: '✏️', viewer: '👁️' };
+	const roleLabel = {admin: tr('role_admin', 'Admin'),editor: tr('role_editor', 'Editor'),viewer: tr('role_viewer', 'Viewer')};
+
+	container.innerHTML = users.map(u => `
+		<div class="domain-pill" style="margin-bottom:6px;">
+			<div style="flex:1;min-width:0;">
+				<span style="font-weight:600;">${escHtml(u.username)}</span>
+				<span class="provider-badge" style="margin-left:6px;background:rgba(99,102,241,0.15);color:#818cf8;border:1px solid rgba(99,102,241,0.3);">
+					${roleIcon[u.role] || '?'} ${roleLabel[u.role] || u.role}
+				</span>
+				${u.last_login ? `<span style="font-size:0.7rem;opacity:0.4;margin-left:6px;">Letzter Login: ${new Date(u.last_login).toLocaleString()}</span>` : ''}
+			</div>
+			<div style="display:flex;gap:6px;flex-shrink:0;">
+				<select onchange="changeUserRole('${u.id}', this.value)"
+					style="font-size:0.75rem;padding:3px 6px;background:var(--border);border:1px solid var(--border);border-radius:5px;color:var(--text);cursor:pointer;">
+					<option value="viewer" ${u.role==='viewer'?'selected':''}>👁️ ${tr('role_viewer', 'Viewer')}</option>
+					<option value="editor" ${u.role==='editor'?'selected':''}>✏️ ${tr('role_editor', 'Editor')}</option>
+					<option value="admin" ${u.role==='admin'?'selected':''}>👑 ${tr('role_admin', 'Admin')}</option>
+				</select>
+				<button onclick="deleteUser('${u.id}', '${escHtml(u.username)}')"
+					style="background:none;border:none;color:var(--error);cursor:pointer;font-weight:bold;font-size:1rem;padding:0 4px;">✕</button>
+			</div>
+		</div>`
+	).join('');
+}
+
+function addUser() {
+	const username = (document.getElementById('new-user-name')?.value || '').trim();
+	const password = document.getElementById('new-user-pass')?.value || '';
+	const role     = document.getElementById('new-user-role')?.value || 'viewer';
+
+  if (username.length < 3) return showToast(tr('auth_user_min', 'Benutzername min. 3 Zeichen'), 'error');
+  if (password.length < 8) return showToast(tr('auth_pass_min', 'Passwort min. 8 Zeichen'), 'error');
+
+	const token = localStorage.getItem('triggerToken') || '';
+	fetch('/api/users', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json', ...(token ? {'X-Trigger-Token': token} : {}) },
+		body: JSON.stringify({ username, password, role })
+	})
+	.then(r => r.json().then(j => ({ ok: r.ok, j })))
+	.then(({ ok, j }) => {
+		if (!ok) return showToast('❌ ' + (j.error || 'Fehler'), 'error');
+		showToast('✅ ' + tr('user_created', 'Benutzer erstellt'), 'success');
+		document.getElementById('new-user-name').value = '';
+		document.getElementById('new-user-pass').value = '';
+		loadUsers();
+	})
+	.catch(() => showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'));
+}
+
+function changeUserRole(id, role) {
+	const token = localStorage.getItem('triggerToken') || '';
+	fetch('/api/users/' + id, {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json', ...(token ? {'X-Trigger-Token': token} : {}) },
+		body: JSON.stringify({ role })
+	})
+	.then(r => r.json().then(j => ({ ok: r.ok, j })))
+	.then(({ ok, j }) => {
+		if (!ok) return showToast('❌ ' + (j.error || tr('generic_error', 'Fehler')), 'error');
+		showToast('✅ ' + tr('role_changed', 'Rolle geändert'), 'success');
+		loadUsers();
+	})
+	.catch(() => showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'));
+}
+
+function deleteUser(id, username) {
+	if (!confirm(`Benutzer "${username}" wirklich löschen?`)) return;
+	const token = localStorage.getItem('triggerToken') || '';
+	fetch('/api/users/' + id, {
+		method: 'DELETE',
+		headers: token ? {'X-Trigger-Token': token} : {}
+	})
+	.then(r => r.json().then(j => ({ ok: r.ok, j })))
+	.then(({ ok, j }) => {
+		if (!ok) return showToast('❌ ' + (j.error || tr('generic_error', 'Fehler')), 'error');
+		showToast('🗑️ ' + tr('user_deleted', 'Benutzer gelöscht'), 'success');
+		loadUsers();
+	})
+	.catch(() => showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'));
+}
+
 function tr(key, fallback = '') {
 	const dict = (typeof window !== 'undefined' && window.I18N) ? window.I18N : {};
 	const val = dict[key];
@@ -1024,3 +1166,66 @@ function hideLoadingToast() {
 	clearTimeout(el._timeout);
 	el.style.display = 'none';
 }
+// ============================================================================
+// ANIMATED BACKGROUND — sky/sun/moon init (mirrors auth page)
+// ============================================================================
+(function () {
+	const sun = document.querySelector('.auth-sun');
+	if (!sun) return;
+
+	const now = new Date();
+	const h = now.getHours();
+	const minutes = h * 60 + now.getMinutes();
+	const root = document.documentElement;
+
+	let vars;
+	if (h >= 5 && h < 11) {
+		vars = {
+			'--sky-1': '#9be7ff', '--sky-2': '#5b7cff', '--floor': '#172554',
+			'--sun-core': 'rgba(255,230,120,0.95)', '--sun-glow': 'rgba(255,184,77,0.55)',
+			'--grid-color': 'rgba(34,211,238,0.36)', '--horizon': 'rgba(56,189,248,0.75)',
+			'--mountain': '#172554', '--mountain-dark': '#0f172a'
+		};
+	} else if (h >= 11 && h < 17) {
+		vars = {
+			'--sky-1': '#60a5fa', '--sky-2': '#3730a3', '--floor': '#111827',
+			'--sun-core': 'rgba(34,211,238,0.95)', '--sun-glow': 'rgba(59,130,246,0.65)',
+			'--grid-color': 'rgba(125,211,252,0.36)', '--horizon': 'rgba(59,130,246,0.8)',
+			'--mountain': '#1e1b4b', '--mountain-dark': '#020617'
+		};
+	} else if (h >= 17 && h < 21) {
+		vars = {
+			'--sky-1': '#312e81', '--sky-2': '#db2777', '--floor': '#020617',
+			'--sun-core': 'rgba(251,191,36,0.98)', '--sun-glow': 'rgba(236,72,153,0.7)',
+			'--grid-color': 'rgba(244,114,182,0.42)', '--horizon': 'rgba(236,72,153,0.9)',
+			'--mountain': '#1e1b4b', '--mountain-dark': '#020617'
+		};
+	} else {
+		vars = {
+			'--sky-1': '#020617', '--sky-2': '#1e1b4b', '--floor': '#020617',
+			'--sun-core': 'rgba(34,211,238,0.98)', '--sun-glow': 'rgba(168,85,247,0.75)',
+			'--grid-color': 'rgba(34,211,238,0.46)', '--horizon': 'rgba(34,211,238,0.95)',
+			'--mountain': '#0f172a', '--mountain-dark': '#020617'
+		};
+	}
+
+	for (const k in vars) root.style.setProperty(k, vars[k]);
+
+	const dayStart = 5 * 60, dayEnd = 21 * 60;
+	let progress;
+	if (minutes >= dayStart && minutes <= dayEnd) {
+		progress = (minutes - dayStart) / (dayEnd - dayStart);
+		sun.classList.add('is-sun');
+		sun.classList.remove('is-moon');
+	} else {
+		const nightMinutes = minutes < dayStart
+			? minutes + (24 * 60 - dayEnd)
+			: minutes - dayEnd;
+		progress = nightMinutes / ((24 * 60 - dayEnd) + dayStart);
+		sun.classList.add('is-moon');
+		sun.classList.remove('is-sun');
+	}
+
+	root.style.setProperty('--sun-x', (12 + progress * 76) + '%');
+	root.style.setProperty('--sun-y', (30 - Math.sin(progress * Math.PI) * 24) + '%');
+})();

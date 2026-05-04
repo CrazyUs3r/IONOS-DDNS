@@ -1,3 +1,4 @@
+// Pachage main
 package main
 
 import (
@@ -177,17 +178,13 @@ func legacyDomainsFromEnv() ([]string, error) {
 	domains := make([]string, 0, len(rawDomains))
 
 	for _, d := range rawDomains {
-		d = normalizeLegacyDomain(d)
+		d = normalizeDomain(d)
 		if d != "" {
 			domains = append(domains, d)
 		}
 	}
 
 	return domains, nil
-}
-
-func normalizeLegacyDomain(domain string) string {
-	return strings.TrimSpace(strings.ToLower(domain))
 }
 
 func buildLegacyDomainConfigs(providerEnv string, domains []string) ([]DomainConfig, error) {
@@ -203,6 +200,18 @@ func buildLegacyDomainConfigs(providerEnv string, domains []string) ([]DomainCon
 	}
 }
 
+func buildLegacyConfigs(domains []string, base DomainConfig) []DomainConfig {
+	configs := make([]DomainConfig, 0, len(domains))
+
+	for _, d := range domains {
+		dc := base
+		dc.FQDN = d
+		configs = append(configs, dc)
+	}
+
+	return configs
+}
+
 func buildLegacyIONOSConfigs(domains []string) ([]DomainConfig, error) {
 	apiPrefix := os.Getenv("API_PREFIX")
 	apiSecret := os.Getenv("API_SECRET")
@@ -211,17 +220,11 @@ func buildLegacyIONOSConfigs(domains []string) ([]DomainConfig, error) {
 		return nil, fmt.Errorf("%s", T.IonosRequiresAPIPrefixAndAPISecret)
 	}
 
-	configs := make([]DomainConfig, 0, len(domains))
-	for _, d := range domains {
-		configs = append(configs, DomainConfig{
-			FQDN:      d,
-			Provider:  ProviderIONOS,
-			APIPrefix: apiPrefix,
-			APISecret: apiSecret,
-		})
-	}
-
-	return configs, nil
+	return buildLegacyConfigs(domains, DomainConfig{
+		Provider:  ProviderIONOS,
+		APIPrefix: apiPrefix,
+		APISecret: apiSecret,
+	}), nil
 }
 
 func buildLegacyCloudflareConfigs(domains []string) ([]DomainConfig, error) {
@@ -233,18 +236,12 @@ func buildLegacyCloudflareConfigs(domains []string) ([]DomainConfig, error) {
 		return nil, fmt.Errorf("%s", T.CloudflareRequiresTokenOrEmailAndAPISecret)
 	}
 
-	configs := make([]DomainConfig, 0, len(domains))
-	for _, d := range domains {
-		configs = append(configs, DomainConfig{
-			FQDN:     d,
-			Provider: ProviderCloudflare,
-			CFToken:  cfToken,
-			CFEmail:  cfEmail,
-			CFSecret: cfSecret,
-		})
-	}
-
-	return configs, nil
+	return buildLegacyConfigs(domains, DomainConfig{
+		Provider: ProviderCloudflare,
+		CFToken:  cfToken,
+		CFEmail:  cfEmail,
+		CFSecret: cfSecret,
+	}), nil
 }
 
 func buildLegacyIPv64Configs(domains []string) ([]DomainConfig, error) {
@@ -254,14 +251,8 @@ func buildLegacyIPv64Configs(domains []string) ([]DomainConfig, error) {
 		return nil, fmt.Errorf("%s", T.Ipv64RequiresToken)
 	}
 
-	configs := make([]DomainConfig, 0, len(domains))
-	for _, d := range domains {
-		configs = append(configs, DomainConfig{
-			FQDN:       d,
-			Provider:   ProviderIPv64,
-			IPv64Token: token,
-		})
-	}
-
-	return configs, nil
+	return buildLegacyConfigs(domains, DomainConfig{
+		Provider:   ProviderIPv64,
+		IPv64Token: token,
+	}), nil
 }

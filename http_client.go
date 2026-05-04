@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"net"
 	"net/http"
 	"net/http/httptrace"
@@ -175,16 +174,17 @@ func cloneRequestForLogging(req *http.Request) (*http.Request, func()) {
 	logReq := req.Clone(req.Context())
 
 	if req.GetBody == nil {
+		logReq.Body = nil
 		return logReq, func() {}
 	}
 
 	rc, err := req.GetBody()
 	if err != nil {
+		logReq.Body = nil
 		return logReq, func() {}
 	}
 
 	logReq.Body = rc
-
 	return logReq, func() {
 		if closeErr := rc.Close(); closeErr != nil {
 			debugLog("HTTP-RAW", "", fmt.Sprintf("Failed to close cloned body: %v", closeErr))
@@ -231,9 +231,12 @@ func maskAuthorizationHeader(header http.Header) {
 		return
 	}
 
-	if strings.HasPrefix(auth, "Bearer ") {
+	if strings.HasPrefix(strings.ToLower(auth), "bearer ") {
 		header.Set("Authorization", "Bearer ***MASKED***")
+		return
 	}
+
+	header.Set("Authorization", "***MASKED***")
 }
 
 func logHTTPRequest(req *http.Request) {
@@ -395,7 +398,11 @@ func buildHTTPClient(dnsList []string) *http.Client {
 		PreferGo: true,
 		Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			var lastErr error
+
 			startIndex := int(lastSuccessfulDNS.Load())
+			if len(dnsList) > 0 {
+				startIndex = startIndex % len(dnsList)
+			}
 
 			for i := 0; i < len(dnsList); i++ {
 				if err := ctx.Err(); err != nil {
@@ -403,6 +410,7 @@ func buildHTTPClient(dnsList []string) *http.Client {
 				}
 
 				idx := (startIndex + i) % len(dnsList)
+
 				targetAddr := dnsList[idx]
 				if !strings.Contains(targetAddr, ":") {
 					targetAddr += ":53"
@@ -417,9 +425,6 @@ func buildHTTPClient(dnsList []string) *http.Client {
 
 				if err == nil {
 					if idx != startIndex {
-						if idx > math.MaxInt32 {
-							return nil, fmt.Errorf("dns index %d exceeds int64 range", idx)
-						}
 						lastSuccessfulDNS.Store(int64(idx))
 					}
 					return conn, nil
@@ -439,7 +444,6 @@ func buildHTTPClient(dnsList []string) *http.Client {
 	baseDialer := &net.Dialer{
 		Timeout:       DNSResolverTimeout,
 		KeepAlive:     DNSKeepalive,
-		DualStack:     true,
 		FallbackDelay: 250 * time.Millisecond,
 	}
 
@@ -510,8 +514,8 @@ func getSecretReplacer() *strings.Replacer {
 	}
 	{
 		replacements := []string{}
-
-		for _, dc := range cfg.DomainConfigs {
+		domainConfigs := snapshotDomainConfigs()
+		for _, dc := range domainConfigs {
 			switch dc.Provider {
 			case ProviderIONOS:
 				if dc.APIPrefix != "" && dc.APISecret != "" {
@@ -658,7 +662,7 @@ func (c *dnsCache) getIPAddrs(ctx context.Context, host string) ([]net.IPAddr, e
 	if err == nil && len(addrs) > 0 {
 		c.entries[host] = dnsCacheEntry{
 			ips:    addrs,
-			expiry: now.Add(c.ttl),
+			expiry: time.Now().Local().Add(c.ttl),
 		}
 	}
 	c.mu.Unlock()

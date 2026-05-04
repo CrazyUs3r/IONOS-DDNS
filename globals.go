@@ -380,18 +380,28 @@ type ProviderType string
 // ============================================================================
 type Phrases struct {
 	// Basis & Dashboard
-	Startup, Shutdown, NoZones, Update, Current                                   string
-	DashTitle, StatusOk, StatusErr, LastUpdate, InfraHeading                      string
-	ServiceStarted, DashboardStarted, ServerError, SystemEvents, CriticalAPIError string
-	PanicLoadingLanguage, TryingLoadLanguage, LanguageFileNotFound                string
-	TryingFallbackEn, JSONParseError, LanguageLoaded, MissingTranslationKey       string
-	HTTPPool, HourlyLimitEst, RequestsLabel, UsageLast60Min                       string
-	MaxLogLines, MaxAPIRetries, MaxConcurrent, Interval, EmptyTranslationValue    string
-	IPEndpointStatusTitle, IPEndpointStatusWaiting                                string
-	DebugLogTitle, DebugLogLive, DebugFilterPlaceholder, DebugClearBtn            string
-	DebugAutoscroll, DebugWaitingMsg, SettingsCFProxyLabel, NotifierActive        string
-	NotifierDisconnected, TooltipLastCheck, TooltipClock, TooltipUptime           string
-	LoadingSaving, LoadingSlow, NoLogEntries                                      string
+	Startup, Shutdown, NoZones, Update, Current, LoginSubtitle, Username                  string
+	DashboardTitle, StatusOk, StatusErr, LastUpdate, InfraHeading                         string
+	ServiceStarted, DashboardStarted, ServerError, SystemEvents, CriticalAPIError         string
+	PanicLoadingLanguage, TryingLoadLanguage, LanguageFileNotFound                        string
+	TryingFallbackEn, JSONParseError, LanguageLoaded, MissingTranslationKey               string
+	HTTPPool, HourlyLimitEst, RequestsLabel, UsageLast60Min                               string
+	MaxLogLines, MaxAPIRetries, MaxConcurrent, Interval, EmptyTranslationValue            string
+	IPEndpointStatusTitle, IPEndpointStatusWaiting, Password, LoginButton                 string
+	DebugLogTitle, DebugLogLive, DebugFilterPlaceholder, LoginHint, LoginTitle            string
+	DebugClearBtn, DebugAutoscroll, DebugWaitingMsg, SetupHeading, SetupSubtitle          string
+	SettingsCFProxyLabel, SetupToken, PasswordMinHint, PasswordConfirm, SetupButton       string
+	NotifierActive, NotifierDisconnected, SetupHint, SetupTitle                           string
+	TooltipLastCheck, TooltipClock, TooltipUptime, FirstAdminCreatedLog                   string
+	LoadingSavingJS, LoadingSlowJS, NoLogEntries, AuthDisabled, SetupRequired             string
+	SetupTokenLabel, SetupOpenURL, LoginSuccessLog, LoginFailedLog                        string
+	ErrInvalidLogin, ErrInvalidSetupToken, ErrUsernameTooShort                            string
+	ErrPasswordTooShort, ErrPasswordsMismatch, ErrAccountCreate, ErrAccountSave           string
+	ErrInvalidJSON, ErrUsernamePasswordMin, ErrHash, ErrSave, UserCreatedLog              string
+	StatusCreated, ErrInvalidRole, ErrUsernameTaken, ErrMissingID                         string
+	ErrUserNotFound, StatusUpdated, ErrForbidden, ErrOwnAccountDelete, StatusDeleted      string
+	UserLoadFailedJS, NoUsersFoundJS, UserCreatedJS, RoleChangedJS, UserDeletedJS         string
+	GenericErrorJS, RoleAdminJS, RoleEditorJS, RoleViewerJS, AuthUserMinJS, AuthPassMinJS string
 
 	// Statistiken & Metriken
 	SuccessRate, AvgLatency, Errors, RequestHistory, LatencyHistory, APIPerformance            string
@@ -470,14 +480,14 @@ type Phrases struct {
 	BadgeChanged, FilterAll, FilterErrors, FilterWarnings                 string
 	FilterUpdates, FilterStarts, FilterStop, FilterCreated, FilterCleanup string
 	FilterSkip, FilterConfig, NoDomainsConfigured, DomainContext          string
-	ThemeLabel, NoIPToCopy, Copied, CopyFailed                            string
+	ThemeLabelJS, NoIPToCopyJS, CopiedJS, CopyFailedJS                    string
 	UpdateStartingJS, UpdateStartedJS, ConnectionErrorJS                  string
 	ExportStartedJS, ExportFailedJS, FQDNMissingJS                        string
 	SaveConfigConfirmJS, SavedReloadJS, ErrorPrefixJS                     string
 	ResetMetricsConfirmJS, MetricsResetOKJS, MetricsResetFailedJS         string
 	DeleteDomainConfirmJS, DomainRemovedJS, DeleteFailedJS                string
 	TokenSavedJS, TokenDeletedJS, TokenSavedMaskedJS, TokenEnterJS        string
-	DomainUpdatedJS, ClearedJS, ActiveJS, InactiveJS                      string
+	DomainUpdatedJS, ClearedJS                                            string
 
 	// Provider-Hinweise / Config
 	IonosAPIRequired, Ipv64TokenRequired, CloudflareAuthRequired, UnknownProvider  string
@@ -588,7 +598,7 @@ type Phrases struct {
 	SettingsMaxConcurrent, SettingsHourlyLimit                               string
 	SettingsLanguage, SettingsDryRun, SettingsDryRunHint                     string
 	SettingsCheckboxActive, SettingsCheckboxDeactive, SettingsAddDomain      string
-	SettingsDomains, SettingsAddBtn, SettingsCFOr                            string
+	SettingsDomains, SettingsAddBtn, SettingsCancelBtn, SettingsCFOr         string
 	SettingsNotify, SettingsNotifyEnabled, SettingsNotifyOn                  string
 	SettingsNotifyEvents, SettingsTGToken, SettingsTGChatID                  string
 	SettingsTokenUnchanged, SettingsDNSHint                                  string
@@ -600,6 +610,8 @@ type Phrases struct {
 	SettingsGotifyHeading, SettingsDomainPlaceholder, SettingsWebhookHeading string
 	SettingsCFTokenHint, SettingsGotifyURL, SettingsGotifyToken              string
 	SettingsIPv4Endpoints, SettingsIPv6Endpoints                             string
+	SettingsAddBtnJS                                                         string
+	EditDomainTitleJS, EditDomainSavedJS, EditDomainCancelledJS              string
 
 	// Domain display
 	DotTitleNoUpdate, DotTitleChanged, DotTitleLast string
@@ -683,6 +695,7 @@ type DomainConfig struct {
 	IPv64Token string       `json:"ipv64_token,omitempty"`
 	TTL        int          `json:"ttl,omitempty"`
 	CFProxied  bool         `json:"cf_proxied,omitempty"`
+	IPMode     string       `json:"ip_mode,omitempty"`
 }
 
 type rawEntry struct {
@@ -756,8 +769,9 @@ type Config struct {
 			DiscoveryPrefix string `json:"discovery_prefix"`
 		} `json:"mqtt"`
 	} `json:"notifications"`
-	IPv4Endpoints []string `json:"ipv4_endpoints,omitempty"`
-	IPv6Endpoints []string `json:"ipv6_endpoints,omitempty"`
+	IPv4Endpoints []string        `json:"ipv4_endpoints,omitempty"`
+	IPv6Endpoints []string        `json:"ipv6_endpoints,omitempty"`
+	Users         []DashboardUser `json:"users,omitempty"`
 }
 
 type Zone struct {

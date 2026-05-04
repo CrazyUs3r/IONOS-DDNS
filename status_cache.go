@@ -14,6 +14,24 @@ import (
 // STATUS FILE
 // ============================================================================
 func updateStatusFile(fqdn, ipv4, ipv6, provider string) {
+	newEntry, ok := writeStatusFileLocked(fqdn, ipv4, ipv6, provider)
+	if !ok {
+		return
+	}
+
+	if err := updateDomainsCache(); err != nil {
+		debugLog("CACHE", "", fmt.Sprintf(t(T.ErrUpdateDomainsCache, "updateDomainsCache failed: %v"), err))
+	}
+
+	broadcastUpdate("domain_update", map[string]interface{}{
+		"domain": fqdn,
+		"ipv4":   ipv4,
+		"ipv6":   ipv6,
+		"time":   newEntry.Time,
+	})
+}
+
+func writeStatusFileLocked(fqdn, ipv4, ipv6, provider string) (IPEntry, bool) {
 	statusMutex.Lock()
 	defer statusMutex.Unlock()
 
@@ -26,12 +44,13 @@ func updateStatusFile(fqdn, ipv4, ipv6, provider string) {
 				Action:  ActionError,
 				Message: fmt.Sprintf(t(T.ErrParseStatusFile, "Failed to parse status file: %v"), err),
 			})
-			return
+			return IPEntry{}, false
 		}
 	}
 
 	h := domains[fqdn]
 	h.Provider = provider
+
 	now := time.Now().Local().Format("02.01.2006 15:04:05")
 	h.LastChanged = now
 
@@ -55,7 +74,7 @@ func updateStatusFile(fqdn, ipv4, ipv6, provider string) {
 			Action:  ActionError,
 			Message: fmt.Sprintf(t(T.ErrMarshalStatusFile, "Failed to marshal status file: %v"), err),
 		})
-		return
+		return IPEntry{}, false
 	}
 
 	tmp := updatePath + ".tmp"
@@ -66,7 +85,7 @@ func updateStatusFile(fqdn, ipv4, ipv6, provider string) {
 			Action:  ActionError,
 			Message: fmt.Sprintf(t(T.ErrWriteTempStatusFile, "Failed to write temp status file: %v"), err),
 		})
-		return
+		return IPEntry{}, false
 	}
 
 	if err := os.Rename(tmp, updatePath); err != nil {
@@ -75,23 +94,10 @@ func updateStatusFile(fqdn, ipv4, ipv6, provider string) {
 			Action:  ActionError,
 			Message: fmt.Sprintf(t(T.ErrReplaceStatusFile, "Failed to replace status file: %v"), err),
 		})
-		return
+		return IPEntry{}, false
 	}
 
-	go func() {
-		if err := updateDomainsCache(); err != nil {
-			debugLog("CACHE", "", fmt.Sprintf(t(T.ErrUpdateDomainsCache, "updateDomainsCache failed: %v"), err))
-		}
-	}()
-
-	go func(data map[string]interface{}) {
-		broadcastUpdate("domain_update", data)
-	}(map[string]interface{}{
-		"domain": fqdn,
-		"ipv4":   ipv4,
-		"ipv6":   ipv6,
-		"time":   newEntry.Time,
-	})
+	return newEntry, true
 }
 
 // ============================================================================

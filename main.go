@@ -62,6 +62,8 @@ func run() int {
 	initShutdownContext()
 	defer shutdownCancel()
 
+	initAuth(paths.logsDir)
+
 	workerSemaphore = make(chan struct{}, cfg.MaxConcurrent)
 
 	if err := initializeProvidersAndNotifiers(); err != nil {
@@ -512,20 +514,28 @@ func startMaintenanceWorkers() {
 }
 
 func newHTTPServer() *http.Server {
+	mux := createMux()
+
+	var handler http.Handler = mux
+	if authEnabled {
+		handler = authMiddleware(mux)
+	}
+
 	return &http.Server{
 		Addr:              ":" + cfg.HealthPort,
-		Handler:           createMux(),
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 }
 
 func startHTTPServer(srv *http.Server) {
+	ip := getLocalIP()
 	go func() {
-		debugLog("SYSTEM", "", fmt.Sprintf(T.DashboardStarted, cfg.HealthPort))
+		debugLog("SYSTEM", "", fmt.Sprintf("%s (http://%s:%s)", T.DashboardStarted, ip, cfg.HealthPort))
 		log(LogContext{
 			Level:   LogInfo,
 			Action:  ActionServer,
-			Message: fmt.Sprintf(T.DashboardStarted, cfg.HealthPort),
+			Message: fmt.Sprintf("%s (http://%s:%s)", T.DashboardStarted, ip, cfg.HealthPort),
 		})
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

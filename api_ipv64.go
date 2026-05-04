@@ -29,27 +29,11 @@ func splitIPv64FQDN(fqdn string) (baseDomain, praefix string) {
 }
 
 func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) ([]byte, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("%s: %w", T.ErrContextError, err)
-	}
-
 	method, apiURL, bodyData := buildIPv64RequestData(params)
-	maxRetries := cfg.MaxAPIRetries
 
-	var lastErr error
-	for attempt := range maxRetries {
-		respBody, retry, err := ipv64APIAttempt(ctx, dc, method, apiURL, bodyData, attempt, maxRetries)
-		if err == nil {
-			return respBody, nil
-		}
-
-		lastErr = err
-		if !retry {
-			return nil, err
-		}
-	}
-
-	return nil, fmt.Errorf("%s: %w", fmt.Sprintf(T.IPv64APIFailed, maxRetries), lastErr)
+	return apiWithRetry(ctx, "IPv64", T.IPv64APIFailed, func(attempt, maxRetries int) ([]byte, bool, error) {
+		return ipv64APIAttempt(ctx, dc, method, apiURL, bodyData, attempt, maxRetries)
+	})
 }
 
 func buildIPv64RequestData(params map[string]string) (method, apiURL, bodyData string) {
