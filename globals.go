@@ -206,23 +206,24 @@ var persistOnOtherLevels = map[string]struct{}{
 // Dashboard
 // ============================================================================
 const (
-	IconDefault = "🔹"
-	IconStart   = "🚀"
-	IconStop    = "🛑"
-	IconUpdate  = "🔄"
-	IconCreate  = "🆕"
-	IconCurrent = "✓"
-	IconRetry   = "🔁"
-	IconError   = "❌"
-	IconConfig  = "⚙️"
-	IconZone    = "🌐"
-	IconDryRun  = "🔍"
-	IconCleanup = "🧹"
-	IconSkip    = "⏭️"
-	IconAPI     = "🔌"
-	IconServer  = "🖥️"
-	IconSuccess = "✅"
+	IconDefault  = "🔹"
+	IconStart    = "🚀"
+	IconStop     = "🛑"
+	IconUpdate   = "🔄"
+	IconCreate   = "🆕"
+	IconCurrent  = "✓"
+	IconRetry    = "🔁"
+	IconError    = "❌"
+	IconConfig   = "⚙️"
+	IconZone     = "🌐"
+	IconDryRun   = "🔍"
+	IconCleanup  = "🧹"
+	IconSkip     = "⏭️"
+	IconAPI      = "🔌"
+	IconServer   = "🖥️"
+	IconSuccess  = "✅"
 	HTMLChecked = " checked"
+	HTMLSelected = " selected"
 )
 
 var actionIcons = map[string]string{
@@ -360,8 +361,8 @@ const (
 )
 
 const (
-	constTrue  = "TRUE"
-	constFalse = "FALSE"
+	constTrue  string = "true"
+	constFalse string = "false"
 )
 
 // ============================================================================
@@ -402,6 +403,8 @@ type Phrases struct {
 	ErrUserNotFound, StatusUpdated, ErrForbidden, ErrOwnAccountDelete, StatusDeleted      string
 	UserLoadFailedJS, NoUsersFoundJS, UserCreatedJS, RoleChangedJS, UserDeletedJS         string
 	GenericErrorJS, RoleAdminJS, RoleEditorJS, RoleViewerJS, AuthUserMinJS, AuthPassMinJS string
+	UserLoading, UserNewTitle, UserPlaceholderName, UserPlaceholderPass                   string
+	UserRoleViewer, UserRoleEditor, UserRoleAdmin, UserBtnCreate, NotifyTestDesc          string
 
 	// Statistiken & Metriken
 	SuccessRate, AvgLatency, Errors, RequestHistory, LatencyHistory, APIPerformance            string
@@ -518,6 +521,9 @@ type Phrases struct {
 	NotifyEventStopLabel, NotifyEventStopDesc                                  string
 	NotifyEventCleanupLabel, NotifyEventCleanupDesc                            string
 	NotifyTelegramActive, NotifyGotifyActive, NotifyWebhookActive              string
+	NotifyTestSuccess, NotifyTestUnauthorized, NotifyTestError                 string
+	NotifyTestConnError, NotifyTestBody, NotifyBtnSending                      string
+	NotifyBtnTest, NotifyNoNotifier, NotifyStatSuccess                         string
 	TgCmdStart, TgCmdStatus, TgCmdMetrics, TgCmdDomains                        string
 	TgCmdUpdate, TgCmdHealth, TgCmdHelp, TgMenuPrompt                          string
 	TgUpdateAlreadyRunning, TgUpdateStarting, TgUpdateDone                     string
@@ -610,8 +616,9 @@ type Phrases struct {
 	SettingsGotifyHeading, SettingsDomainPlaceholder, SettingsWebhookHeading string
 	SettingsCFTokenHint, SettingsGotifyURL, SettingsGotifyToken              string
 	SettingsIPv4Endpoints, SettingsIPv6Endpoints                             string
-	SettingsAddBtnJS                                                         string
+	SettingsAddBtnJS, NotifyEmailActive, SettingsEmailHeading                string
 	EditDomainTitleJS, EditDomainSavedJS, EditDomainCancelledJS              string
+	SettingsUserManagement                                                   string
 
 	// Domain display
 	DotTitleNoUpdate, DotTitleChanged, DotTitleLast string
@@ -768,6 +775,16 @@ type Config struct {
 			Discovery       bool   `json:"discovery"`
 			DiscoveryPrefix string `json:"discovery_prefix"`
 		} `json:"mqtt"`
+		Email struct {
+			Host          string `json:"host"`
+			Port          int    `json:"port"`
+			Username      string `json:"username"`
+			Password      string `json:"password"`
+			From          string `json:"from"`
+			To            string `json:"to"`
+			SubjectPrefix string `json:"subject_prefix"`
+			TLSMode       string `json:"tls_mode"`
+		} `json:"email"`
 	} `json:"notifications"`
 	IPv4Endpoints []string        `json:"ipv4_endpoints,omitempty"`
 	IPv6Endpoints []string        `json:"ipv6_endpoints,omitempty"`

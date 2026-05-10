@@ -252,20 +252,14 @@ func buildSettingsModal(c Config, isAdmin bool) string {
 	domainsSection := buildSettingsDomainsSection()
 	notifySection := buildSettingsNotifySection(c)
 
-	modal := `<div id="settingsOverlay" class="modal-overlay" onclick="closeSettingsOutside(event)">` +
-		`<div class="modal">` +
-		`<div class="modal-header">` +
-		`<h2>⚙️ ` + T.SettingsTitle + `</h2>` +
-		`<button class="modal-close" onclick="closeSettings()">✕</button>` +
-		`</div>` +
-		`<div class="modal-body">` +
+	modal := `<div id="settingsOverlay" class="modal-overlay" onclick="closeSettingsOutside(event)"><div class="modal"><div class="modal-header"><h2>⚙️ ` + T.SettingsTitle + `</h2><button class="modal-close" onclick="closeSettings()">✕</button></div><div class="modal-body">` +
 		buildSettingsCollapsibleSection(T.SettingsSecurity, securitySection, false) +
 		buildSettingsCollapsibleSection(T.SettingsSystem, systemSection, true) +
 		buildSettingsCollapsibleSection(T.SettingsDomains, domainsSection, false) +
 		buildSettingsCollapsibleSection(T.SettingsNotify, notifySection, false)
 
 	if isAdmin {
-		modal += buildSettingsCollapsibleSection("👥 Benutzerverwaltung", buildUsersSection(), false)
+		modal += buildSettingsCollapsibleSection(T.SettingsUserManagement, buildUsersSection(), false)
 	}
 
 	modal += buildSettingsSaveSection() +
@@ -280,13 +274,7 @@ func buildSettingsCollapsibleSection(title, body string, open bool) string {
 		openAttr = " open"
 	}
 
-	return `<details class="s-section s-collapsible"` + openAttr + `>` +
-		`<summary class="s-section-summary">` +
-		`<span>` + title + `</span>` +
-		`<span class="s-section-chevron">▾</span>` +
-		`</summary>` +
-		`<div class="s-section-content">` + body + `</div>` +
-		`</details>`
+	return `<details class="s-section s-collapsible"` + openAttr + `><summary class="s-section-summary"><span>` + title + `</span><span class="s-section-chevron">▾</span></summary><div class="s-section-content">` + body + `</div></details>`
 }
 
 func buildSettingsSubSection(id, title, body string) string {
@@ -295,13 +283,7 @@ func buildSettingsSubSection(id, title, body string) string {
 		idAttr = ` id="` + id + `"`
 	}
 
-	return `<details class="s-subsection"` + idAttr + `>` +
-		`<summary class="s-subsection-summary">` +
-		`<span>` + title + `</span>` +
-		`<span class="s-subsection-chevron">▾</span>` +
-		`</summary>` +
-		`<div class="s-subsection-content">` + body + `</div>` +
-		`</details>`
+	return `<details class="s-subsection"` + idAttr + `><summary class="s-subsection-summary"><span>` + title + `</span><span class="s-subsection-chevron">▾</span></summary><div class="s-subsection-content">` + body + `</div></details>`
 }
 
 func buildSettingsIPModeOptions(current string) string {
@@ -342,12 +324,7 @@ func buildSettingsNotifyEventCheckboxes(current []string) string {
 			chk = HTMLChecked
 		}
 
-		fmt.Fprintf(&out, `<label class="notify-event-item">`+
-			`<input type="checkbox" name="notify-event" value="%s"%s>`+
-			`<span class="notify-event-text">`+
-			`<span class="notify-event-title">%s</span>`+
-			`<span class="notify-event-desc">%s</span>`+
-			`</span></label>`,
+		fmt.Fprintf(&out, `<label class="notify-event-item"><input type="checkbox" name="notify-event" value="%s"%s><span class="notify-event-text"><span class="notify-event-title">%s</span><span class="notify-event-desc">%s</span></span></label>`,
 			ev.code, chk, ev.label, ev.desc)
 	}
 
@@ -369,91 +346,65 @@ func checkboxLabel(v bool) string {
 	return T.SettingsCheckboxDeactive
 }
 
+func selected(v bool) string {
+	if v {
+		return HTMLSelected
+	}
+	return ""
+}
+
 func buildSettingsSecuritySection() string {
-	return `<div class="s-row s-row-stack s-gap-8">` +
-		`<span class="s-label">` + T.SettingsTriggerToken + `</span>` +
-		`<div class="input-with-action">` +
-		`<input type="password" id="s-token" class="s-input" placeholder="` + T.SettingsTokenPlaceholder + `" autocomplete="off">` +
-		`<button type="button" class="input-action-btn" onclick="togglePassword('s-token', this)">👁️</button>` +
-		`</div>` +
-		`<button class="s-btn" onclick="saveToken()">` + T.SettingsTokenSave + `</button>` +
-		`</div>`
+	return `<div class="s-row s-row-stack s-gap-8"><span class="s-label">` + T.SettingsTriggerToken + `</span><div class="input-with-action"><input type="password" id="s-token" class="s-input" placeholder="` + T.SettingsTokenPlaceholder + `" autocomplete="off"><button type="button" class="input-action-btn" onclick="togglePassword('s-token', this)">👁️</button></div><button class="s-btn" onclick="saveToken()">` + T.SettingsTokenSave + `</button></div>`
 }
 
 func buildSettingsSystemSection(c Config) string {
-	return `<div class="s-row">` +
-		`<span class="s-label">` + T.SettingsIPMode + `</span>` +
-		`<select id="cfg-ip-mode" class="s-input s-select-auto-sm">` +
+	return `<div class="s-row"><span class="s-label">` + T.SettingsIPMode + `</span><select id="cfg-ip-mode" class="s-input s-select-auto-sm">` +
 		buildSettingsIPModeOptions(c.IPMode) +
-		`</select>` +
-		`</div>` +
+		`</select></div>` +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsInterval+`</span>`+
-			`<input type="number" id="cfg-interval" class="s-input s-input-sm-right" min="30" max="86400" value="%d"></div>`, c.Interval) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsInterval+`</span><input type="number" id="cfg-interval" class="s-input s-input-sm-right" min="30" max="86400" value="%d"></div>`, c.Interval) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsHealthPort+`</span>`+
-			`<input type="text" id="cfg-health-port" class="s-input s-input-sm-right" value="%s"></div>`, html.EscapeString(c.HealthPort)) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsHealthPort+`</span><input type="text" id="cfg-health-port" class="s-input s-input-sm-right" value="%s"></div>`, html.EscapeString(c.HealthPort)) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsIface+` <small class="s-label-hint-inline">`+T.SettingsIfaceHint+`</small></span>`+
-			`<input type="text" id="cfg-iface" class="s-input s-input-md" placeholder="`+T.SettingsIfacePlaceholder+`" value="%s"></div>`, html.EscapeString(c.IfaceName)) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsIface+` <small class="s-label-hint-inline">`+T.SettingsIfaceHint+`</small></span><input type="text" id="cfg-iface" class="s-input s-input-md" placeholder="`+T.SettingsIfacePlaceholder+`" value="%s"></div>`, html.EscapeString(c.IfaceName)) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsDNS+` <small class="s-label-hint-inline">(`+T.SettingsDNSHint+`)</small></span>`+
-			`<input type="text" id="cfg-dns" class="s-input s-input-lg" placeholder="1.1.1.1:53, 8.8.8.8:53" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsDNS+` <small class="s-label-hint-inline">(`+T.SettingsDNSHint+`)</small></span><input type="text" id="cfg-dns" class="s-input s-input-lg" placeholder="1.1.1.1:53, 8.8.8.8:53" value="%s"></div>`,
 			html.EscapeString(strings.Join(c.DNSServers, ", ")),
 		) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsMaxLog+`</span>`+
-			`<input type="number" id="cfg-max-log" class="s-input s-input-sm-right" min="100" max="50000" value="%d"></div>`, c.MaxLogLines) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsMaxLog+`</span><input type="number" id="cfg-max-log" class="s-input s-input-sm-right" min="100" max="50000" value="%d"></div>`, c.MaxLogLines) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsMaxRetries+`</span>`+
-			`<input type="number" id="cfg-max-retries" class="s-input s-input-sm-right" min="0" max="20" value="%d"></div>`, c.MaxAPIRetries) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsMaxRetries+`</span><input type="number" id="cfg-max-retries" class="s-input s-input-sm-right" min="0" max="20" value="%d"></div>`, c.MaxAPIRetries) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsMaxConcurrent+`</span>`+
-			`<input type="number" id="cfg-max-concurrent" class="s-input s-input-sm-right" min="1" max="20" value="%d"></div>`, c.MaxConcurrent) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsMaxConcurrent+`</span><input type="number" id="cfg-max-concurrent" class="s-input s-input-sm-right" min="1" max="20" value="%d"></div>`, c.MaxConcurrent) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsHourlyLimit+`</span>`+
-			`<input type="number" id="cfg-hourly-limit" class="s-input s-input-sm-right" min="100" max="100000" value="%d"></div>`, c.HourlyRateLimit) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsHourlyLimit+`</span><input type="number" id="cfg-hourly-limit" class="s-input s-input-sm-right" min="100" max="100000" value="%d"></div>`, c.HourlyRateLimit) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsIPv4Endpoints+`<small class="s-label-hint-block">(`+T.SettingsDNSHint+`)</small></span>`+
-			`<input type="text" id="cfg-ipv4_endpoints" class="s-input s-input-lg" placeholder="https://4.ident.me/, https://4.tnedi.me/" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsIPv4Endpoints+`<small class="s-label-hint-block">(`+T.SettingsDNSHint+`)</small></span><input type="text" id="cfg-ipv4_endpoints" class="s-input s-input-lg" placeholder="https://4.ident.me/, https://4.tnedi.me/" value="%s"></div>`,
 			html.EscapeString(strings.Join(c.IPv4Endpoints, ", ")),
 		) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsIPv6Endpoints+`<small class="s-label-hint-block">(`+T.SettingsDNSHint+`)</small></span>`+
-			`<input type="text" id="cfg-ipv6_endpoints" class="s-input s-input-lg" placeholder="https://6.ident.me/, https://6.tnedi.me/" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsIPv6Endpoints+`<small class="s-label-hint-block">(`+T.SettingsDNSHint+`)</small></span><input type="text" id="cfg-ipv6_endpoints" class="s-input s-input-lg" placeholder="https://6.ident.me/, https://6.tnedi.me/" value="%s"></div>`,
 			html.EscapeString(strings.Join(c.IPv6Endpoints, ", ")),
 		) +
 
-		`<div class="s-row"><span class="s-label">` + T.SettingsLanguage + `</span>` +
-		`<select id="cfg-lang" class="s-input s-select-auto-md">` +
+		`<div class="s-row"><span class="s-label">` + T.SettingsLanguage + `</span><select id="cfg-lang" class="s-input s-select-auto-md">` +
 		buildDynamicLangOptions(c.Lang) +
 		`</select></div>` +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsDryRun+`<small class="s-label-hint-block">`+T.SettingsDryRunHint+`</small></span>`+
-			`<label class="s-checkbox-container">`+
-			`<input type="checkbox" id="cfg-dry-run" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)"`+
-			` data-label-on="%s" data-label-off="%s"%s>`+
-			`<span class="s-checkbox-text">%s</span></label></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsDryRun+`<small class="s-label-hint-block">`+T.SettingsDryRunHint+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-dry-run" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
 			T.SettingsCheckboxActive, T.SettingsCheckboxDeactive,
 			checkedAttr(c.DryRun),
 			checkboxLabel(c.DryRun),
 		) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">Debug-Modus <small class="s-label-hint-block">`+T.SettingsDebugVerboseHint+`</small></span>`+
-			`<label class="s-checkbox-container">`+
-			`<input type="checkbox" id="cfg-debug" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)"`+
-			` data-label-on="%s" data-label-off="%s"%s>`+
-			`<span class="s-checkbox-text">%s</span></label></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Debug-Modus <small class="s-label-hint-block">`+T.SettingsDebugVerboseHint+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-debug" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
 			T.SettingsCheckboxActive, T.SettingsCheckboxDeactive,
 			checkedAttr(c.DebugEnabled),
 			checkboxLabel(c.DebugEnabled),
 		) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">Debug HTTP Raw <small class="s-label-hint-block">`+T.SettingsDebugHTTPHint+`</small></span>`+
-			`<label class="s-checkbox-container">`+
-			`<input type="checkbox" id="cfg-debug-http" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)"`+
-			` data-label-on="%s" data-label-off="%s"%s>`+
-			`<span class="s-checkbox-text">%s</span></label></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Debug HTTP Raw <small class="s-label-hint-block">`+T.SettingsDebugHTTPHint+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-debug-http" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
 			T.SettingsCheckboxActive, T.SettingsCheckboxDeactive,
 			checkedAttr(c.DebugHTTPRaw),
 			checkboxLabel(c.DebugHTTPRaw),
@@ -461,183 +412,118 @@ func buildSettingsSystemSection(c Config) string {
 }
 
 func buildSettingsDomainsSection() string {
-	addDomainForm := `<div class="add-domain-box">` +
-		`<input type="text" id="new-domain-fqdn" class="s-input mb-8" placeholder="` + T.SettingsDomainPlaceholder + `">` +
-		`<input type="number" id="new-domain-ttl" class="s-input mb-8" placeholder="TTL (z. B. 60)" min="1" step="1">` +
-		`<select id="new-domain-ip-mode" class="s-input mb-8">` +
-		`<option value="">` + T.SettingsIPMode + ` (` + T.SettingsIPMode + ` global)</option>` +
-		`<option value="BOTH">BOTH – IPv4 + IPv6</option>` +
-		`<option value="IPV4">IPV4 – nur IPv4</option>` +
-		`<option value="IPV6">IPV6 – nur IPv6</option>` +
-		`</select>` +
-		`<select id="new-domain-provider" class="s-input mb-8" onchange="toggleProviderFields()">` +
-		`<option value="IONOS">IONOS</option>` +
-		`<option value="CLOUDFLARE">Cloudflare</option>` +
-		`<option value="IPV64">IPv64</option>` +
-		`</select>` +
-		`<div id="fields-ionos">` +
-		`<input type="text" id="new-ionos-prefix" class="s-input mb-8" placeholder="` + T.SettingsAPIPrefix + `">` +
-		`<div class="input-with-action mt-8">` +
-		`<input type="password" id="new-ionos-secret" class="s-input" placeholder="` + T.SettingsAPISecret + `">` +
-		`<button type="button" class="input-action-btn" onclick="togglePassword('new-ionos-secret', this)">👁️</button>` +
-		`</div>` +
-		`</div>` +
-		`<div id="fields-cloudflare" class="is-hidden">` +
-		`<input type="text" id="new-cf-token" class="s-input mb-8" placeholder="` + T.SettingsCFTokenHint + `">` +
-		`<div class="center-note">` + T.SettingsCFOr + `</div>` +
-		`<input type="text" id="new-cf-email" class="s-input mb-8" placeholder="` + T.SettingsCFEmail + `">` +
-		`<div class="input-with-action mt-8">` +
-		`<input type="password" id="new-cf-secret" class="s-input" placeholder="` + T.SettingsCFGlobalKey + `">` +
-		`<button type="button" class="input-action-btn" onclick="togglePassword('new-cf-secret', this)">👁️</button>` +
-		`</div>` +
-		`<label class="inline-check">` +
-		`<input type="checkbox" id="new-cf-proxied"> ` + T.SettingsCFProxyLabel +
-		`</label>` +
-		`</div>` +
-		`<div id="fields-ipv64" class="is-hidden">` +
-		`<div class="input-with-action mt-8">` +
-		`<input type="password" id="new-ipv64-token" class="s-input" placeholder="` + T.SettingsIPv64Token + `">` +
-		`<button type="button" class="input-action-btn" onclick="togglePassword('new-ipv64-token', this)">👁️</button>` +
-		`</div>` +
-		`</div>` +
-		`<div style="display:flex; gap:10px; margin-top:15px;">` +
-		`<button class="s-btn s-btn-success-full" onclick="addDomainToList()">` +
+	addDomainForm := `<div class="add-domain-box"><input type="text" id="new-domain-fqdn" class="s-input mb-8" placeholder="` + T.SettingsDomainPlaceholder + `"><input type="number" id="new-domain-ttl" class="s-input mb-8" placeholder="TTL (z. B. 60)" min="1" step="1"><select id="new-domain-ip-mode" class="s-input mb-8"><option value="">` + T.SettingsIPMode + ` (` + T.SettingsIPMode + ` global)</option><option value="BOTH">BOTH – IPv4 + IPv6</option><option value="IPV4">IPV4 – nur IPv4</option><option value="IPV6">IPV6 – nur IPv6</option></select><select id="new-domain-provider" class="s-input mb-8" onchange="toggleProviderFields()"><option value="IONOS">IONOS</option><option value="CLOUDFLARE">Cloudflare</option><option value="IPV64">IPv64</option></select><div id="fields-ionos"><input type="text" id="new-ionos-prefix" class="s-input mb-8" placeholder="` + T.SettingsAPIPrefix + `"><div class="input-with-action mt-8"><input type="password" id="new-ionos-secret" class="s-input" placeholder="` + T.SettingsAPISecret + `"><button type="button" class="input-action-btn" onclick="togglePassword('new-ionos-secret', this)">👁️</button></div></div><div id="fields-cloudflare" class="is-hidden"><input type="text" id="new-cf-token" class="s-input mb-8" placeholder="` + T.SettingsCFTokenHint + `"><div class="center-note">` + T.SettingsCFOr + `</div><input type="text" id="new-cf-email" class="s-input mb-8" placeholder="` + T.SettingsCFEmail + `"><div class="input-with-action mt-8"><input type="password" id="new-cf-secret" class="s-input" placeholder="` + T.SettingsCFGlobalKey + `"><button type="button" class="input-action-btn" onclick="togglePassword('new-cf-secret', this)">👁️</button></div><label class="inline-check"><input type="checkbox" id="new-cf-proxied"> ` + T.SettingsCFProxyLabel +
+		`</label></div><div id="fields-ipv64" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-ipv64-token" class="s-input" placeholder="` + T.SettingsIPv64Token + `"><button type="button" class="input-action-btn" onclick="togglePassword('new-ipv64-token', this)">👁️</button></div></div><div style="display:flex; gap:10px; margin-top:15px;"><button class="s-btn s-btn-success-full" onclick="addDomainToList()">` +
 		T.SettingsAddBtn +
-		`</button>` +
-		`<button type="button" class="s-btn" style="background:none; border:1px solid var(--border); color:var(--text);" onclick="cancelEdit()">` +
+		`</button><button type="button" class="s-btn" style="background:none; border:1px solid var(--border); color:var(--text);" onclick="cancelEdit()">` +
 		T.SettingsCancelBtn +
-		`</button>` +
-		`</div>`
+		`</button></div>`
 
 	return `<div id="settings-domain-list" class="settings-domain-list"></div>` +
 		buildSettingsSubSection("add-domain-section", T.SettingsAddDomain, addDomainForm)
 }
 
 func buildSettingsNotifySection(c Config) string {
-	notifyEventsSection := `<div class="s-row s-row-stack s-gap-6">` +
-		`<span class="s-label">` + T.SettingsNotifyEvents + `</span>` +
+	notifyEventsSection := `<div class="s-row s-row-stack s-gap-6"><span class="s-label">` + T.SettingsNotifyEvents + `</span>` +
 		buildSettingsNotifyEventCheckboxes(c.Notifications.Events) +
 		`</div>`
 
 	telegramSection := `<div class="notify-box notify-telegram">` +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsTGChatID+`</span>`+
-			`<input type="text" id="cfg-tg-chat-id" class="s-input s-input-lg"`+
-			` placeholder="-100xxxxxxxxx" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsTGChatID+`</span><input type="text" id="cfg-tg-chat-id" class="s-input s-input-lg" placeholder="-100xxxxxxxxx" value="%s"></div>`,
 			html.EscapeString(c.Notifications.Telegram.ChatID)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsTGToken+`</span>`+
-			`<div class="input-with-action">`+
-			`<input type="password" id="cfg-tg-token" class="s-input s-input-lg"`+
-			` placeholder="`+T.SettingsTokenUnchanged+`" value="%s">`+
-			`<button type="button" class="input-action-btn" onclick="togglePassword('cfg-tg-token', this)">👁️</button>`+
-			`</div></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsTGToken+`</span><div class="input-with-action"><input type="password" id="cfg-tg-token" class="s-input s-input-lg" placeholder="`+T.SettingsTokenUnchanged+`" value="%s"><button type="button" class="input-action-btn" onclick="togglePassword('cfg-tg-token', this)">👁️</button></div></div>`,
 			html.EscapeString(c.Notifications.Telegram.Token)) +
 		`</div>`
 
 	gotifySection := `<div class="notify-box notify-gotify">` +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsGotifyURL+`</span>`+
-			`<input type="text" id="cfg-gotify-url" class="s-input s-input-lg"`+
-			` placeholder="https://gotify.example.com" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsGotifyURL+`</span><input type="text" id="cfg-gotify-url" class="s-input s-input-lg" placeholder="https://gotify.example.com" value="%s"></div>`,
 			html.EscapeString(c.Notifications.Gotify.URL)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsGotifyToken+`</span>`+
-			`<div class="input-with-action">`+
-			`<input type="password" id="cfg-gotify-token" class="s-input s-input-lg"`+
-			` placeholder="`+T.SettingsTokenUnchanged+`" value="%s">`+
-			`<button type="button" class="input-action-btn" onclick="togglePassword('cfg-gotify-token', this)">👁️</button>`+
-			`</div></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsGotifyToken+`</span><div class="input-with-action"><input type="password" id="cfg-gotify-token" class="s-input s-input-lg" placeholder="`+T.SettingsTokenUnchanged+`" value="%s"><button type="button" class="input-action-btn" onclick="togglePassword('cfg-gotify-token', this)">👁️</button></div></div>`,
 			html.EscapeString(c.Notifications.Gotify.Token)) +
 		`</div>`
 
 	webhookSection := `<div class="notify-box notify-webhook">` +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">URL</span>`+
-			`<input type="text" id="cfg-webhook-url" class="s-input s-input-lg"`+
-			` placeholder="https://your-endpoint.com/api" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">URL</span><input type="text" id="cfg-webhook-url" class="s-input s-input-lg" placeholder="https://your-endpoint.com/api" value="%s"></div>`,
 			html.EscapeString(c.Notifications.Webhook.URL)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">Secret <small class="s-label-hint-inline">(opt.)</small></span>`+
-			`<div class="input-with-action">`+
-			`<input type="password" id="cfg-webhook-secret" class="s-input s-input-lg"`+
-			` placeholder="`+T.SettingsTokenUnchanged+`" value="%s">`+
-			`<button type="button" class="input-action-btn" onclick="togglePassword('cfg-webhook-secret', this)">👁️</button>`+
-			`</div></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Secret <small class="s-label-hint-inline">(opt.)</small></span><div class="input-with-action"><input type="password" id="cfg-webhook-secret" class="s-input s-input-lg" placeholder="`+T.SettingsTokenUnchanged+`" value="%s"><button type="button" class="input-action-btn" onclick="togglePassword('cfg-webhook-secret', this)">👁️</button></div></div>`,
 			html.EscapeString(c.Notifications.Webhook.Secret)) +
 		`</div>`
 
 	mqttSection := `<div class="notify-box notify-mqtt">` +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">Broker</span>`+
-			`<input type="text" id="cfg-mqtt-broker" class="s-input s-input-lg"`+
-			` placeholder="tcp://192.168.1.10:1883" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Broker</span><input type="text" id="cfg-mqtt-broker" class="s-input s-input-lg" placeholder="tcp://192.168.1.10:1883" value="%s"></div>`,
 			html.EscapeString(c.Notifications.MQTTConfig.Broker)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">Client ID</span>`+
-			`<input type="text" id="cfg-mqtt-clientid" class="s-input s-input-lg"`+
-			` placeholder="go-dyndns" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Client ID</span><input type="text" id="cfg-mqtt-clientid" class="s-input s-input-lg" placeholder="go-dyndns" value="%s"></div>`,
 			html.EscapeString(c.Notifications.MQTTConfig.ClientID)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">Username</span>`+
-			`<input type="text" id="cfg-mqtt-username" class="s-input s-input-lg"`+
-			` placeholder="optional" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Username</span><input type="text" id="cfg-mqtt-username" class="s-input s-input-lg" placeholder="optional" value="%s"></div>`,
 			html.EscapeString(c.Notifications.MQTTConfig.Username)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">Secret <small class="s-label-hint-inline">Password</small></span>`+
-			`<div class="input-with-action">`+
-			`<input type="password" id="cfg-mqtt-password" class="s-input s-input-lg"`+
-			` placeholder="`+T.SettingsTokenUnchanged+`" value="%s">`+
-			`<button type="button" class="input-action-btn" onclick="togglePassword('cfg-mqtt-password', this)">👁️</button>`+
-			`</div></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Secret <small class="s-label-hint-inline">Password</small></span><div class="input-with-action"><input type="password" id="cfg-mqtt-password" class="s-input s-input-lg" placeholder="`+T.SettingsTokenUnchanged+`" value="%s"><button type="button" class="input-action-btn" onclick="togglePassword('cfg-mqtt-password', this)">👁️</button></div></div>`,
 			html.EscapeString(c.Notifications.MQTTConfig.Password)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">Topic</span>`+
-			`<input type="text" id="cfg-mqtt-topic" class="s-input s-input-lg"`+
-			` placeholder="dyndns/ip" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Topic</span><input type="text" id="cfg-mqtt-topic" class="s-input s-input-lg" placeholder="dyndns/ip" value="%s"></div>`,
 			html.EscapeString(c.Notifications.MQTTConfig.Topic)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">QoS</span>`+
-			`<input type="number" min="0" max="2" id="cfg-mqtt-qos" class="s-input s-input-sm"`+
-			` value="%d"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">QoS</span><input type="number" min="0" max="2" id="cfg-mqtt-qos" class="s-input s-input-sm" value="%d"></div>`,
 			c.Notifications.MQTTConfig.QoS) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">Retain</span>`+
-			`<label class="s-checkbox-container">`+
-			`<input type="checkbox" id="cfg-mqtt-retain" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)"`+
-			` data-label-on="%s" data-label-off="%s"%s>`+
-			`<span class="s-checkbox-text">%s</span></label></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Retain</span><label class="s-checkbox-container"><input type="checkbox" id="cfg-mqtt-retain" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
 			T.SettingsCheckboxActive,
 			T.SettingsCheckboxDeactive,
 			checkedAttr(c.Notifications.MQTTConfig.Retain),
 			checkboxLabel(c.Notifications.MQTTConfig.Retain),
 		) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">Auto Discovery <small class="s-label-hint-inline">Home Assistant</small></span>`+
-			`<label class="s-checkbox-container">`+
-			`<input type="checkbox" id="cfg-mqtt-discovery" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)"`+
-			` data-label-on="%s" data-label-off="%s"%s>`+
-			`<span class="s-checkbox-text">%s</span></label></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Auto Discovery <small class="s-label-hint-inline">Home Assistant</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-mqtt-discovery" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
 			T.SettingsCheckboxActive,
 			T.SettingsCheckboxDeactive,
 			checkedAttr(c.Notifications.MQTTConfig.Discovery),
 			checkboxLabel(c.Notifications.MQTTConfig.Discovery),
 		) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">Discovery Prefix</span>`+
-			`<input type="text" id="cfg-mqtt-discovery-prefix" class="s-input s-input-lg"`+
-			` placeholder="homeassistant" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Discovery Prefix</span><input type="text" id="cfg-mqtt-discovery-prefix" class="s-input s-input-lg" placeholder="homeassistant" value="%s"></div>`,
 			html.EscapeString(c.Notifications.MQTTConfig.DiscoveryPrefix)) +
 		`</div>`
-	return fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsNotifyEnabled+`</span>`+
-		`<label class="s-checkbox-container">`+
-		`<input type="checkbox" id="cfg-notify-enabled" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)"`+
-		` data-label-on="%s" data-label-off="%s"%s>`+
-		`<span class="s-checkbox-text">%s</span></label></div>`,
+
+	emailSection := `<div class="notify-box notify-email">` +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">SMTP Host</span><input type="text" id="cfg-email-host" class="s-input s-input-lg" placeholder="smtp.gmail.com" value="%s"></div>`,
+			html.EscapeString(c.Notifications.Email.Host)) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Port</span><input type="text" id="cfg-email-port" class="s-input s-input-sm" placeholder="587" value="%d"></div>`,
+			c.Notifications.Email.Port) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">User</span><input type="text" id="cfg-email-user" class="s-input s-input-lg" value="%s"></div>`,
+			html.EscapeString(c.Notifications.Email.Username)) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Passwort</span><div class="input-with-action"><input type="password" id="cfg-email-pass" class="s-input s-input-lg" placeholder="***" value="%s"><button type="button" class="input-action-btn" onclick="togglePassword('cfg-email-pass', this)">👁️</button></div></div>`,
+			html.EscapeString(c.Notifications.Email.Password)) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Sender</span><input type="text" id="cfg-email-from" class="s-input s-input-lg" value="%s"></div>`,
+			html.EscapeString(c.Notifications.Email.From)) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Empfänger</span><input type="text" id="cfg-email-to" class="s-input s-input-lg" placeholder="mail1@test.de, mail2@test.de" value="%s"></div>`,
+			html.EscapeString(c.Notifications.Email.To)) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Subjekt</span><input type="text" id="cfg-email-subject-prefix" class="s-input s-input-lg" placeholder="[DynDNS]" value="%s"></div>`,
+			html.EscapeString(c.Notifications.Email.SubjectPrefix)) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">TLS Modus</span><select id="cfg-email-tls-mode" class="s-input s-input-lg"><option value="starttls" %s>STARTTLS (Standard)</option><option value="tls" %s>Direct TLS (SSL)</option><option value="plain" %s>Plain (Unverschlüsselt)</option></select></div>`,
+			selected(c.Notifications.Email.TLSMode == "starttls" || c.Notifications.Email.TLSMode == ""),
+			selected(c.Notifications.Email.TLSMode == "tls"),
+			selected(c.Notifications.Email.TLSMode == "plain"),
+		) +
+		`</div>`
+
+	testSection := `<div style="margin-top:12px;padding:12px;background:rgba(59,130,246,0.07);border:1px solid rgba(59,130,246,0.25);border-radius:8px;"><p style="font-size:0.75rem;margin:0 0 8px 0;opacity:0.75;">` + T.NotifyTestDesc + `</p><button class="s-btn" id="notify-test-btn" onclick="sendNotifyTest()" style="background:rgba(59,130,246,0.15);border-color:rgba(59,130,246,0.5);color:#93c5fd;">` +
+		T.NotifyBtnTest +
+		`</button><div id="notify-test-result" style="margin-top:8px;font-size:0.78rem;display:none;"></div></div>`
+
+	return fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsNotifyEnabled+`</span><label class="s-checkbox-container"><input type="checkbox" id="cfg-notify-enabled" class="s-checkbox-dynamic" onchange="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
 		T.SettingsCheckboxActive, T.SettingsCheckboxDeactive,
 		checkedAttr(c.Notifications.Enabled),
 		checkboxLabel(c.Notifications.Enabled),
 	) +
+
 		buildSettingsSubSection("", T.SettingsNotifyEvents, notifyEventsSection) +
 		buildSettingsSubSection("", T.SettingsTelegramHeading, telegramSection) +
 		buildSettingsSubSection("", T.SettingsGotifyHeading, gotifySection) +
 		buildSettingsSubSection("", T.SettingsWebhookHeading, webhookSection) +
-		buildSettingsSubSection("", T.SettingsMqttHeading, mqttSection)
+		buildSettingsSubSection("", T.SettingsMqttHeading, mqttSection) +
+		buildSettingsSubSection("", T.SettingsEmailHeading, emailSection) +
+		testSection
 }
 
 func buildSettingsSaveSection() string {
-	return `<div style="margin-top:20px;padding:15px;background:rgba(74,222,128,0.07);border-radius:8px;border:1px solid var(--success);">` +
-		`<p style="font-size:0.75rem;margin-bottom:10px;opacity:0.8;text-align:center;">` +
+	return `<div style="margin-top:20px;padding:15px;background:rgba(74,222,128,0.07);border-radius:8px;border:1px solid var(--success);"><p style="font-size:0.75rem;margin-bottom:10px;opacity:0.8;text-align:center;">` +
 		T.SettingsSaveHint + `<br>` +
 		T.SettingsRestartHint +
-		`</p>` +
-		`<button class="action-btn" style="width:100%;margin:0;" onclick="saveFullConfig()">` + T.SettingsSaveBtn + `</button>` +
-		`</div>`
+		`</p><button class="action-btn" style="width:100%;margin:0;" onclick="saveFullConfig()">` + T.SettingsSaveBtn + `</button></div>`
 }
 
 type safeDomainConfig struct {
@@ -666,6 +552,17 @@ type safeMQTTConfig struct {
 	DiscoveryPrefix string `json:"discovery_prefix"`
 }
 
+type safeEmail struct {
+	Host          string `json:"host"`
+	Port          int    `json:"port"`
+	Username      string `json:"username"`
+	Password      string `json:"password"`
+	From          string `json:"from"`
+	To            string `json:"to"`
+	SubjectPrefix string `json:"subject_prefix"`
+	TLSMode       string `json:"tls_mode"`
+}
+
 type safeSystemConfig struct {
 	IPMode          string         `json:"ip_mode"`
 	IfaceName       string         `json:"iface_name"`
@@ -673,6 +570,8 @@ type safeSystemConfig struct {
 	DNSServers      []string       `json:"dns_servers"`
 	Interval        int            `json:"interval"`
 	DryRun          bool           `json:"dry_run"`
+	DebugEnabled    bool           `json:"debug_enabled"`
+	DebugHTTPRaw    bool           `json:"debug_http_raw"`
 	HourlyRateLimit int            `json:"hourly_rate_limit"`
 	MaxConcurrent   int            `json:"max_concurrent"`
 	MaxLogLines     int            `json:"max_log_lines"`
@@ -687,8 +586,7 @@ type safeSystemConfig struct {
 	WebhookURL      string         `json:"webhook_url"`
 	WebhookSecret   string         `json:"webhook_secret"`
 	MQTT            safeMQTTConfig `json:"mqtt"`
-	DebugEnabled    bool           `json:"debug_enabled"`
-	DebugHTTPRaw    bool           `json:"debug_http_raw"`
+	Email           safeEmail      `json:"email"`
 	IPv4Endpoints   []string       `json:"ipv4_endpoints"`
 	IPv6Endpoints   []string       `json:"ipv6_endpoints"`
 }
@@ -726,6 +624,8 @@ func currentSystemConfig() safeSystemConfig {
 		DNSServers:      cfg.DNSServers,
 		Interval:        cfg.Interval,
 		DryRun:          cfg.DryRun,
+		DebugEnabled:    cfg.DebugEnabled,
+		DebugHTTPRaw:    cfg.DebugHTTPRaw,
 		HourlyRateLimit: cfg.HourlyRateLimit,
 		MaxConcurrent:   cfg.MaxConcurrent,
 		MaxLogLines:     cfg.MaxLogLines,
@@ -750,8 +650,16 @@ func currentSystemConfig() safeSystemConfig {
 			Discovery:       cfg.Notifications.MQTTConfig.Discovery,
 			DiscoveryPrefix: cfg.Notifications.MQTTConfig.DiscoveryPrefix,
 		},
-		DebugEnabled:  cfg.DebugEnabled,
-		DebugHTTPRaw:  cfg.DebugHTTPRaw,
+		Email: safeEmail{
+			Host:          cfg.Notifications.Email.Host,
+			Port:          cfg.Notifications.Email.Port,
+			Username:      cfg.Notifications.Email.Username,
+			Password:      cfg.Notifications.Email.Password,
+			From:          cfg.Notifications.Email.From,
+			To:            cfg.Notifications.Email.To,
+			SubjectPrefix: cfg.Notifications.Email.SubjectPrefix,
+			TLSMode:       cfg.Notifications.Email.TLSMode,
+		},
 		IPv4Endpoints: cfg.IPv4Endpoints,
 		IPv6Endpoints: cfg.IPv6Endpoints,
 	}
@@ -759,50 +667,58 @@ func currentSystemConfig() safeSystemConfig {
 
 func dashboardI18NJSON() string {
 	m := map[string]string{
-		"theme":                 t(T.ThemeLabelJS, "Theme"),
-		"no_ip_to_copy":         t(T.NoIPToCopyJS, "❌ No IP to copy"),
-		"copied":                t(T.CopiedJS, "✓ Copied: "),
-		"copy_failed":           t(T.CopyFailedJS, "❌ Copy failed"),
-		"copy_error":            t(T.CopyFailedJS, "❌ Copy failed"),
-		"update_starting":       t(T.UpdateStartingJS, "⏳ Starting update..."),
-		"update_started":        t(T.UpdateStartedJS, "✅ Update started"),
-		"connection_error":      t(T.ConnectionErrorJS, "❌ Connection error"),
-		"export_started":        t(T.ExportStartedJS, "✓ Export started"),
-		"export_failed":         t(T.ExportFailedJS, "Export failed"),
-		"fqdn_missing":          t(T.FQDNMissingJS, "FQDN missing"),
-		"domain_updated":        t(T.DomainUpdatedJS, "✓ {domain} updated"),
-		"delete_domain_confirm": t(T.DeleteDomainConfirmJS, `Domain "{domain}" remove from status?`),
-		"domain_removed":        t(T.DomainRemovedJS, "🗑️ {domain} removed"),
-		"delete_failed":         t(T.DeleteFailedJS, "Deletion failed"),
-		"remove_btn":            t(T.RemoveBtn, "🗑️ Remove"),
-		"save_config_confirm":   t(T.SaveConfigConfirmJS, "Save all settings to config.json?"),
-		"saved_reload":          t(T.SavedReloadJS, "✅ Saved! Reloading..."),
-		"error_prefix":          t(T.ErrorPrefixJS, "❌ Error: "),
-		"loading_saving":        t(T.LoadingSavingJS, "⏳ Saving configuration..."),
-		"loading_slow":          t(T.LoadingSlowJS, "⚠️ Taking longer than expected..."),
-		"reset_metrics_confirm": t(T.ResetMetricsConfirmJS, "Clear all metrics?"),
-		"metrics_reset_ok":      t(T.MetricsResetOKJS, "✅ Metrics reset"),
-		"metrics_reset_failed":  t(T.MetricsResetFailedJS, "❌ Reset failed"),
-		"token_saved":           t(T.TokenSavedJS, "✅ Token saved"),
-		"token_deleted":         t(T.TokenDeletedJS, "🗑️ Token deleted"),
-		"token_saved_masked":    t(T.TokenSavedMaskedJS, "●●●●●● (saved)"),
-		"token_enter":           t(T.TokenEnterJS, "Enter token..."),
-		"cleared":               t(T.ClearedJS, "Cleared."),
-		"no_log_entries":        t(T.NoLogEntries, "No log entries visible"),
-		"user_load_failed":      t(T.UserLoadFailedJS, "Failed to load"),
-		"no_users_found":        t(T.NoUsersFoundJS, "No users found."),
-		"user_created":          t(T.UserCreatedJS, "User created"),
-		"user_deleted":          t(T.UserDeletedJS, "User deleted"),
-		"role_changed":          t(T.RoleChangedJS, "Role changed"),
-		"role_admin":            t(T.RoleAdminJS, "Admin"),
-		"role_editor":           t(T.RoleEditorJS, "Editor"),
-		"role_viewer":           t(T.RoleViewerJS, "Viewer"),
-		"generic_error":         t(T.GenericErrorJS, "Error"),
-		"auth_user_min":         t(T.AuthUserMinJS, "Username min. 3 characters"),
-		"auth_pass_min":         t(T.AuthPassMinJS, "Password min. 8 characters"),
-		"edit_domain_cancelled": t(T.EditDomainCancelledJS, "Edit cancelled"),
-		"edit_domain_saved":     t(T.EditDomainSavedJS, "Changes saved"),
-		"settings_add_btn":      t(T.SettingsAddBtnJS, "➕ Add to list"),
+		"theme":                    t(T.ThemeLabelJS, "Theme"),
+		"no_ip_to_copy":            t(T.NoIPToCopyJS, "❌ No IP to copy"),
+		"copied":                   t(T.CopiedJS, "✓ Copied: "),
+		"copy_failed":              t(T.CopyFailedJS, "❌ Copy failed"),
+		"copy_error":               t(T.CopyFailedJS, "❌ Copy failed"),
+		"update_starting":          t(T.UpdateStartingJS, "⏳ Starting update..."),
+		"update_started":           t(T.UpdateStartedJS, "✅ Update started"),
+		"connection_error":         t(T.ConnectionErrorJS, "❌ Connection error"),
+		"export_started":           t(T.ExportStartedJS, "✓ Export started"),
+		"export_failed":            t(T.ExportFailedJS, "Export failed"),
+		"fqdn_missing":             t(T.FQDNMissingJS, "FQDN missing"),
+		"domain_updated":           t(T.DomainUpdatedJS, "✓ {domain} updated"),
+		"delete_domain_confirm":    t(T.DeleteDomainConfirmJS, `Domain "{domain}" remove from status?`),
+		"domain_removed":           t(T.DomainRemovedJS, "🗑️ {domain} removed"),
+		"delete_failed":            t(T.DeleteFailedJS, "Deletion failed"),
+		"remove_btn":               t(T.RemoveBtn, "🗑️ Remove"),
+		"save_config_confirm":      t(T.SaveConfigConfirmJS, "Save all settings to config.json?"),
+		"saved_reload":             t(T.SavedReloadJS, "✅ Saved! Reloading..."),
+		"error_prefix":             t(T.ErrorPrefixJS, "❌ Error: "),
+		"loading_saving":           t(T.LoadingSavingJS, "⏳ Saving configuration..."),
+		"loading_slow":             t(T.LoadingSlowJS, "⚠️ Taking longer than expected..."),
+		"reset_metrics_confirm":    t(T.ResetMetricsConfirmJS, "Clear all metrics?"),
+		"metrics_reset_ok":         t(T.MetricsResetOKJS, "✅ Metrics reset"),
+		"metrics_reset_failed":     t(T.MetricsResetFailedJS, "❌ Reset failed"),
+		"token_saved":              t(T.TokenSavedJS, "✅ Token saved"),
+		"token_deleted":            t(T.TokenDeletedJS, "🗑️ Token deleted"),
+		"token_saved_masked":       t(T.TokenSavedMaskedJS, "●●●●●● (saved)"),
+		"token_enter":              t(T.TokenEnterJS, "Enter token..."),
+		"cleared":                  t(T.ClearedJS, "Cleared."),
+		"no_log_entries":           t(T.NoLogEntries, "No log entries visible"),
+		"user_load_failed":         t(T.UserLoadFailedJS, "Failed to load"),
+		"no_users_found":           t(T.NoUsersFoundJS, "No users found."),
+		"user_created":             t(T.UserCreatedJS, "User created"),
+		"user_deleted":             t(T.UserDeletedJS, "User deleted"),
+		"role_changed":             t(T.RoleChangedJS, "Role changed"),
+		"role_admin":               t(T.RoleAdminJS, "Admin"),
+		"role_editor":              t(T.RoleEditorJS, "Editor"),
+		"role_viewer":              t(T.RoleViewerJS, "Viewer"),
+		"generic_error":            t(T.GenericErrorJS, "Error"),
+		"auth_user_min":            t(T.AuthUserMinJS, "Username min. 3 characters"),
+		"auth_pass_min":            t(T.AuthPassMinJS, "Password min. 8 characters"),
+		"edit_domain_cancelled":    t(T.EditDomainCancelledJS, "Edit cancelled"),
+		"edit_domain_saved":        t(T.EditDomainSavedJS, "Changes saved"),
+		"settings_add_btn":         t(T.SettingsAddBtnJS, "➕ Add to list"),
+		"notify_test_success":      t(T.NotifyTestSuccess, "✅ Test message sent successfully!"),
+		"notify_test_unauthorized": t(T.NotifyTestUnauthorized, "❌ Unauthorized (check token)"),
+		"notify_test_error":        t(T.NotifyTestError, "❌ Error while sending"),
+		"notify_test_conn_error":   t(T.NotifyTestConnError, "❌ Connection error to server"),
+		"notify_btn_sending":       t(T.NotifyBtnSending, "⏳ Sende..."),
+		"notify_btn_test":          t(T.NotifyBtnTest, "🧪 Test-Nachricht senden"),
+		"notify_no_notifier":       t(T.NotifyNoNotifier, "⚠️ Keine aktiven Notifier konfiguriert."),
+		"notify_stat_success":      t(T.NotifyStatSuccess, "erfolgreich"),
 	}
 
 	b, err := json.Marshal(m)
@@ -838,6 +754,7 @@ func registerAPIroutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/domain/delete", handleAPIDomainDelete)
 	mux.HandleFunc("/api/trigger", handleAPITrigger)
 	mux.HandleFunc("/api/trigger/status", handleAPITriggerStatus)
+	mux.HandleFunc("/api/notify/test", handleAPINotifyTest)
 	mux.HandleFunc("/api/export", handleAPIExport)
 	mux.HandleFunc("/api/metrics/reset", handleMetricsReset)
 	mux.HandleFunc("/api/users", handleAPIUsers)
@@ -1091,6 +1008,15 @@ func applyNotificationConfig(sys safeSystemConfig) {
 	cfg.Notifications.MQTTConfig.Retain = sys.MQTT.Retain
 	cfg.Notifications.MQTTConfig.Discovery = sys.MQTT.Discovery
 	cfg.Notifications.MQTTConfig.DiscoveryPrefix = sys.MQTT.DiscoveryPrefix
+
+	cfg.Notifications.Email.Host = sys.Email.Host
+	cfg.Notifications.Email.Port = sys.Email.Port
+	cfg.Notifications.Email.Username = sys.Email.Username
+	cfg.Notifications.Email.Password = sys.Email.Password
+	cfg.Notifications.Email.From = sys.Email.From
+	cfg.Notifications.Email.To = sys.Email.To
+	cfg.Notifications.Email.SubjectPrefix = sys.Email.SubjectPrefix
+	cfg.Notifications.Email.TLSMode = sys.Email.TLSMode
 }
 
 func applyIPMode(mode string) {
@@ -1108,7 +1034,8 @@ func ensureNotificationsEnabled() {
 	cfg.Notifications.Enabled = (cfg.Notifications.Telegram.Token != "" && cfg.Notifications.Telegram.ChatID != "") ||
 		(cfg.Notifications.Gotify.URL != "" && cfg.Notifications.Gotify.Token != "") ||
 		(cfg.Notifications.Webhook.URL != "") ||
-		(cfg.Notifications.MQTTConfig.Broker != "" && cfg.Notifications.MQTTConfig.Topic != "")
+		(cfg.Notifications.MQTTConfig.Broker != "" && cfg.Notifications.MQTTConfig.Topic != "") ||
+		(cfg.Notifications.Email.Host != "" && cfg.Notifications.Email.To != "")
 }
 
 func cleanDNSServers(in []string) []string {
@@ -1356,6 +1283,77 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 		"status":               "triggered",
 		"message":              T.UpdateStartedMessage,
 		"rate_limit_remaining": remaining,
+	})
+}
+
+func handleAPINotifyTest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !validateTriggerToken(r) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	notifyCfgMu.RLock()
+	notifiers := notifyCfg.notifiers
+	notifyCfgMu.RUnlock()
+
+	if len(notifiers) == 0 {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"status":  "no_notifiers",
+			"message": "Keine aktiven Notifier konfiguriert",
+			"sent":    0,
+		})
+		return
+	}
+
+	testMsg := NotifyMessage{
+		Action:  ActionConfig,
+		Domain:  "",
+		Message: t(T.NotifyTestBody, "🔔 Test Notification: Your dashboard notification system is working perfectly!"),
+		Level:   LogInfo,
+	}
+
+	type result struct {
+		Name  string `json:"name"`
+		OK    bool   `json:"ok"`
+		Error string `json:"error,omitempty"`
+	}
+
+	results := make([]result, 0, len(notifiers))
+	type syncSender interface {
+		SendSync(msg NotifyMessage) error
+	}
+
+	for _, n := range notifiers {
+		var err error
+		if s, ok := n.(syncSender); ok {
+			err = s.SendSync(testMsg)
+		} else {
+			err = n.Send(testMsg)
+		}
+
+		r := result{Name: n.Name(), OK: err == nil}
+		if err != nil {
+			r.Error = err.Error()
+		}
+		results = append(results, r)
+	}
+
+	sentCount := 0
+	for _, r := range results {
+		if r.OK {
+			sentCount++
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":  "done",
+		"sent":    sentCount,
+		"total":   len(notifiers),
+		"results": results,
 	})
 }
 
@@ -1640,9 +1638,7 @@ func buildNICHTML(stats map[string]interface{}) string {
 		return ""
 	}
 
-	return `<div style="display:flex; justify-content:space-between; padding:4px 8px; background:rgba(251,191,36,0.08); border-radius:5px; grid-column:1/-1;">` +
-		`<span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">NIC <span style="font-weight:400; opacity:0.6;">(` + T.NicIPv64Updates + `)</span></span>` +
-		`<span id="mDailyNIC" style="font-size:0.95rem; font-weight:700; color:#fbbf24; font-family:monospace;">` +
+	return `<div style="display:flex; justify-content:space-between; padding:4px 8px; background:rgba(251,191,36,0.08); border-radius:5px; grid-column:1/-1;"><span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">NIC <span style="font-weight:400; opacity:0.6;">(` + T.NicIPv64Updates + `)</span></span><span id="mDailyNIC" style="font-size:0.95rem; font-weight:700; color:#fbbf24; font-family:monospace;">` +
 		fmt.Sprintf("%v", stats["daily_nic"]) +
 		`</span></div>`
 }
@@ -1731,14 +1727,12 @@ func loadLogsFromMainFile() ([]LogEntry, string) {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		if err := scanner.Err(); err != nil {
-			log(LogContext{
-				Level:    LogError,
-				Category: "FILE",
-				Action:   ActionError,
-				Message:  fmt.Sprintf("%s: %v", t(T.ScannerError, "Scanner error"), err),
-			})
-		}
+		log(LogContext{
+			Level:    LogError,
+			Category: "FILE",
+			Action:   ActionError,
+			Message:  fmt.Sprintf("%s: %v", t(T.ScannerError, "Scanner error"), err),
+		})
 	}
 
 	if count > limit {
@@ -1856,6 +1850,7 @@ func buildNotifierStatusHTML() string {
 		"Gotify":   "📬",
 		"Webhook":  "🔗",
 		"mqtt":     "📡",
+		"Email":    "✉️",
 	}
 
 	var sb strings.Builder
@@ -1928,7 +1923,7 @@ func writeDashboardTop(w http.ResponseWriter, statusClass, statusText string) {
 		<div id="endpoint-status" class="endpoint-status">
 			<span style="opacity:0.4;font-size:0.82rem;">
 				`+T.IPEndpointStatusWaiting+`
-			</span>s
+			</span>
 		</div>
 	</div>
         </details>
@@ -1964,18 +1959,21 @@ func writeDashboardConfigCard(w http.ResponseWriter) {
 
 func buildUsersSection() string {
 	return `<div id="users-list" style="margin-bottom:12px;">
-		<div style="font-size:0.75rem;opacity:0.5;margin-bottom:8px;">Lädt...</div>
+		<div style="font-size:0.75rem;opacity:0.5;margin-bottom:8px;">` + T.UserLoading + `</div>
 	</div>
 	<div class="add-domain-box">
-		<div style="font-size:0.8rem;font-weight:600;margin-bottom:10px;">➕ Neuer Benutzer</div>
-		<input type="text" id="new-user-name" class="s-input mb-8" placeholder="Benutzername (min. 3 Zeichen)">
-		<input type="password" id="new-user-pass" class="s-input mb-8" placeholder="Passwort (min. 8 Zeichen)">
+		<div style="font-size:0.8rem;font-weight:600;margin-bottom:10px;">` + T.UserNewTitle + `</div>
+		<input type="text" id="new-user-name" class="s-input mb-8" placeholder="` + T.UserPlaceholderName + `">
+		<div class="input-with-action mb-8">
+			<input type="password" id="new-user-pass" class="s-input" placeholder="` + T.UserPlaceholderPass + `">
+			<button type="button" class="input-action-btn" onclick="togglePassword('new-user-pass', this)">👁️</button>
+		</div>
 		<select id="new-user-role" class="s-input mb-8">
-			<option value="viewer">👁️ Viewer — nur lesen</option>
-			<option value="editor">✏️ Editor — lesen + triggering</option>
-			<option value="admin">👑 Admin — voller Zugriff</option>
+			<option value="viewer">` + T.UserRoleViewer + `</option>
+			<option value="editor">` + T.UserRoleEditor + `</option>
+			<option value="admin">` + T.UserRoleAdmin + `</option>
 		</select>
-		<button class="s-btn s-btn-success-full" onclick="addUser()">➕ Benutzer erstellen</button>
+		<button class="s-btn s-btn-success-full" onclick="addUser()">` + T.UserBtnCreate + `</button>
 	</div>`
 }
 

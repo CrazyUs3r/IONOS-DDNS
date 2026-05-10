@@ -750,15 +750,17 @@ func formatTelegramMessage(msg NotifyMessage, instanceTag string) string {
 	icon := levelEmoji(msg.Level)
 	switch msg.Action {
 	case ActionUpdate:
-		icon = "🔄"
+		icon = IconUpdate
 	case ActionCreate:
-		icon = "🆕"
+		icon = IconCreate
 	case ActionStart:
-		icon = "🚀"
+		icon = IconStart
 	case ActionStop:
-		icon = "🛑"
+		icon = IconStop
+	case ActionError:
+		icon = IconErr
 	case ActionCleanup:
-		icon = "🧹"
+		icon = IconCleanup
 	}
 
 	var sb strings.Builder

@@ -748,7 +748,7 @@ func applyCoreEnvOverrides(logsDir string, tempInterval int, dnsList []string) {
 		cfg.HealthPort = v
 	}
 	if v := os.Getenv("DRY_RUN"); v != "" {
-		cfg.DryRun = v == "true"
+		cfg.DryRun = v == constTrue
 	}
 
 	cfg.LogDir = logsDir

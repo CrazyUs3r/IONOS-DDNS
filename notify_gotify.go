@@ -166,18 +166,19 @@ func (g *gotifyNotifier) doSend(payload map[string]interface{}) error {
 
 func formatGotifyMessage(msg NotifyMessage) (title, body string) {
 	icon := levelEmoji(msg.Level)
-
 	switch msg.Action {
 	case ActionUpdate:
-		icon = "🔄"
+		icon = IconUpdate
 	case ActionCreate:
-		icon = "🆕"
+		icon = IconCreate
 	case ActionStart:
-		icon = "🚀"
+		icon = IconStart
 	case ActionStop:
-		icon = "🛑"
+		icon = IconStop
+	case ActionError:
+		icon = IconErr
 	case ActionCleanup:
-		icon = "🧹"
+		icon = IconCleanup
 	}
 
 	title = fmt.Sprintf("%s Go-DynDNS · %s", icon, msg.Action)

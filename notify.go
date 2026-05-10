@@ -63,6 +63,7 @@ func initNotifiers() {
 			Message: t(T.NotifyWebhookActive, "✅ Webhook active"),
 		})
 	}
+
 	if cfg.Notifications.MQTTConfig.Broker != "" && cfg.Notifications.MQTTConfig.Topic != "" {
 		newCfg.notifiers = append(newCfg.notifiers, newMQTTNotifier(
 			cfg.Notifications.MQTTConfig.Broker,
@@ -81,6 +82,25 @@ func initNotifiers() {
 			Level:   LogInfo,
 			Action:  ActionConfig,
 			Message: t(T.NotifyMqttActive, "✅ MQTT active"),
+		})
+	}
+
+	if cfg.Notifications.Email.Host != "" && cfg.Notifications.Email.To != "" {
+		newCfg.notifiers = append(newCfg.notifiers, newEmailNotifier(
+			cfg.Notifications.Email.Host,
+			cfg.Notifications.Email.Port,
+			cfg.Notifications.Email.Username,
+			cfg.Notifications.Email.Password,
+			cfg.Notifications.Email.From,
+			cfg.Notifications.Email.To,
+			cfg.Notifications.Email.SubjectPrefix,
+			cfg.Notifications.Email.TLSMode,
+		))
+		debugLog("NOTIFY", "", fmt.Sprintf("%s %s", T.NotifyEmailActive, cfg.Notifications.Email.To))
+		log(LogContext{
+			Level:   LogInfo,
+			Action:  ActionConfig,
+			Message: t(T.NotifyEmailActive, "✅ Email (SMTP) active"),
 		})
 	}
 
