@@ -117,6 +117,12 @@ body {
         max-height: calc(88vh - env(safe-area-inset-bottom, 0px));
         padding-bottom: env(safe-area-inset-bottom, 0px);
     }
+    .chart-svg {
+        shape-rendering: crispEdges;
+    }
+    * {
+        transition: none !important;
+    }
 }
 
 @media (max-width: 480px) {
@@ -135,6 +141,42 @@ body {
     .metrics-bottom-grid {
         grid-template-columns: 1fr !important;
     }
+
+    .debug-log-box {
+        font-size: 0.72rem;
+        padding: 6px;
+        height: 260px;
+    }
+
+    .debug-log-box > div {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 4px 6px;
+        padding: 4px 0;
+        border-bottom: 1px solid rgba(255,255,255,0.04);
+        word-break: break-word;
+        overflow-wrap: anywhere;
+        white-space: normal;
+    }
+
+    .debug-log-box > div > span {
+        word-break: break-word;
+        overflow-wrap: anywhere;
+        white-space: normal;
+        max-width: 100%;
+    }
+
+    .debug-toolbar {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .debug-filter-input {
+        min-width: 0;
+        flex: 1 1 120px;
+    }
+
 }
 
 @media (hover: hover) {
@@ -209,16 +251,19 @@ body {
 }
 
 .card {
-	background: var(--card);
-	padding: 0;
-	margin-bottom: 15px;
-	border-radius: 12px;
-	border: 1px solid var(--border);
-	overflow: hidden;
+    background: var(--card);
+    padding: 0;
+    margin-bottom: 15px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+    content-visibility: auto;
+    contain-intrinsic-size: 0 80px;
 }
 
 details.card {
-	padding: 0;
+    padding: 0;
+    contain: content;
 }
 
 details.card > summary {
@@ -247,6 +292,7 @@ details.card[open] > summary::after {
 
 .card-content {
 	padding: 0 20px 20px 20px;
+  overflow: hidden;
 }
 
 .search-box {
@@ -287,7 +333,8 @@ details.card[open] > summary::after {
 	cursor: pointer;
 	color: var(--text);
 	font-size: 0.85rem;
-	transition: all 0.2s;
+	transition: background-color 0.2s, color 0.2s, border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+
 }
 
 .filter-btn:hover {
@@ -306,7 +353,7 @@ details.card[open] > summary::after {
 	border-radius: 4px;
 	cursor: pointer;
 	font-size: 0.9rem;
-	transition:  all 0.2s;
+	transition: background-color 0.2s, color 0.2s, border-color 0.2s, transform 0.2s, box-shadow 0.2s;
 	color: var(--text); 
 }
 
@@ -350,6 +397,11 @@ details.card[open] > summary::after {
 }
 .v4 {background: #0ea5e9;}
 .v6 {background: #8b5cf6;}
+
+.domain-item {
+    content-visibility: auto;
+    contain-intrinsic-size: 0 120px;
+}
 
 .domain-item td {
     vertical-align: top;
@@ -396,7 +448,7 @@ button:disabled {
 	border-radius: 8px;
 	cursor: pointer;
 	font-weight: 600;
-	transition: all 0.2s;
+	transition: background-color 0.2s, color 0.2s, border-color 0.2s, transform 0.2s, box-shadow 0.2s;
 }
 
 .action-btn:hover {
@@ -905,6 +957,7 @@ select.s-input optgroup {
 
 .chart-y-label.top {
 	top: 0;
+	transform: translateY(0);
 }
 
 .chart-y-label.middle {
@@ -913,6 +966,7 @@ select.s-input optgroup {
 
 .chart-y-label.bottom {
 	top: 60px;
+	transform: translateY(-100%);
 }
 
 .chart-svg {
@@ -990,6 +1044,14 @@ select.s-input optgroup {
 	font-family: monospace;
 	font-size: 0.78rem;
 	overscroll-behavior: contain;
+	overflow-x: hidden;
+}
+
+.debug-log-box > div {
+	word-break: break-word;
+	overflow-wrap: anywhere;
+	white-space: pre-wrap;
+	min-width: 0;
 }
 
 .debug-placeholder {
@@ -1018,13 +1080,14 @@ select.s-input optgroup {
 }
 
 .log-entry-row {
-	display: flex;
-	align-items: flex-start;
-	padding: 6px 8px;
-	border-radius: 4px;
-	margin-bottom: 4px;
-	gap: 10px;
-	background: rgba(255,255,255,0.03);
+    display: flex;
+    align-items: flex-start;
+    padding: 6px 8px;
+    border-radius: 4px;
+    margin-bottom: 4px;
+    gap: 10px;
+    background: rgba(255,255,255,0.03);
+    contain: layout style;
 }
 
 .log-entry-icon {
@@ -1237,6 +1300,10 @@ select.s-input optgroup {
 .notify-mqtt {
 	background: rgba(85, 247, 139, 0.08);
 	border-color: rgba(131, 50, 206, 0.3);
+}
+.notify-email {
+    background: rgba(234,179,8,0.08);
+    border-color: rgba(234,179,8,0.3);
 }
 .notify-box .s-row {
 	display: flex;

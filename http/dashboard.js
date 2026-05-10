@@ -9,16 +9,16 @@ const reconnectDelayMax = 10000;
 let tempDomainConfigs = [];
 
 if (typeof initialConfig !== 'undefined' && initialConfig !== null) {
-	tempDomainConfigs = (Array.isArray(initialConfig) ? initialConfig : []).map(d => ({...d}));
+	tempDomainConfigs = (Array.isArray(initialConfig) ? initialConfig : []).map(d => ({ ...d }));
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-   if (!localStorage.getItem('theme')) {
-       localStorage.setItem('theme',
-           window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
-       );
-   }
-   const savedTheme = localStorage.getItem('theme');
+	if (!localStorage.getItem('theme')) {
+		localStorage.setItem('theme',
+			window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+		);
+	}
+	const savedTheme = localStorage.getItem('theme');
 	document.documentElement.setAttribute('data-theme', savedTheme);
 
 	renderSettingsDomainList();
@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		const saved = id ? localStorage.getItem('collapse-' + id) : null;
 		if (saved === 'open') details.setAttribute('open', '');
 		else if (saved === 'closed') details.removeAttribute('open');
-		
+
 		if (id) {
 			details.addEventListener('toggle', () => {
 				localStorage.setItem('collapse-' + id, details.open ? 'open' : 'closed');
@@ -59,9 +59,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function faviconHref(theme, level, blink) {
 	return '/favicon.svg?theme=' + encodeURIComponent(theme) +
-			'&level=' + encodeURIComponent(level) +
-			'&blink=' + (blink ? '1' : '0') +
-			'&v=' + Date.now();
+		'&level=' + encodeURIComponent(level) +
+		'&blink=' + (blink ? '1' : '0') +
+		'&v=' + Date.now();
 }
 
 function applyFavicon(theme, level, blink) {
@@ -115,7 +115,7 @@ function calcLevelFromMetrics(m) {
 	const total = toNum(m.total_requests, 0);
 	const successRate = toNum(m.success_rate, 100);
 	const successAge = toNum(m.last_success_age_secs, -1);
-	const errorAge   = toNum(m.last_error_age_secs,   -1);
+	const errorAge = toNum(m.last_error_age_secs, -1);
 	const recovered = successAge >= 0 && errorAge >= 0 && successAge < errorAge;
 	const hasActiveError = errorAge >= 0 && !recovered;
 
@@ -133,7 +133,7 @@ function calcLevelFromMetrics(m) {
 }
 
 function updateMetrics(m) {
-	const setTxt = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+	const setTxt = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
 	setTxt('lastUpdate', new Date().toLocaleTimeString());
 	setTxt('mTotal', m.total_requests);
 	setTxt('mSuccess', m.success_rate);
@@ -142,7 +142,7 @@ function updateMetrics(m) {
 	setTxt('mP50', m.p50_latency);
 	setTxt('mP85', m.p85_latency);
 	setTxt('mP99', m.p99_latency);
-	
+
 	const bar = document.getElementById('mUsageBar');
 	if (bar) {
 		const p = (m.usage_percent != null) ? Number(m.usage_percent) : 0;
@@ -166,10 +166,10 @@ function updateMetrics(m) {
 	const s = u % 60;
 
 	let uptime;
-	if (days > 0)     uptime = days + 'd ' + h + 'h ' + min + 'm';
-	else if (h > 0)   uptime = h + 'h ' + min + 'm';
+	if (days > 0) uptime = days + 'd ' + h + 'h ' + min + 'm';
+	else if (h > 0) uptime = h + 'h ' + min + 'm';
 	else if (min > 0) uptime = min + 'm ' + s + 's';
-	else              uptime = s + 's';
+	else uptime = s + 's';
 	setTxt('uptime', uptime);
 }
 
@@ -178,7 +178,7 @@ function connectWS() {
 	ws = new WebSocket(proto + location.host + '/ws');
 	ws.onmessage = (e) => {
 		let msg;
-     try { msg = JSON.parse(e.data); } catch { return; }
+		try { msg = JSON.parse(e.data); } catch { return; }
 		if (msg.type === 'initial' || msg.type === 'metrics') {
 			updateMetrics(msg.data);
 			const theme = localStorage.getItem('theme') || 'dark';
@@ -186,19 +186,19 @@ function connectWS() {
 			applyFavicon(theme, currentLevel, false);
 			setBlinking(theme, currentLevel);
 		} else if (msg.type === 'domain_update') {
-    		updateDomainDisplay(msg.data).catch(err =>
-       		console.error('domain_update error:', err)
-   		 );
+			updateDomainDisplay(msg.data).catch(err =>
+				console.error('domain_update error:', err)
+			);
 		} else if (msg.type === 'notification') {
 			showToast(msg.data.message, msg.data.level || 'info');
 		} else if (msg.type === 'debug_log') {
-        appendDebugLog(msg.data);
-    } else if (msg.type === 'ip_check_result') {
-        updateEndpointStatus(msg.data);
-    }
+			appendDebugLog(msg.data);
+		} else if (msg.type === 'ip_check_result') {
+			updateEndpointStatus(msg.data);
+		}
 	};
 	ws.onclose = () => scheduleReconnect();
-	ws.onopen = () => { reconnectDelay = 1000; if(reconnectTimer) clearTimeout(reconnectTimer); };
+	ws.onopen = () => { reconnectDelay = 1000; if (reconnectTimer) clearTimeout(reconnectTimer); };
 }
 
 function scheduleReconnect() {
@@ -210,20 +210,20 @@ function scheduleReconnect() {
 let _toastTimer = null;
 function showToast(message, type = 'success') {
 	const toast = document.getElementById('toast');
-  if (!toast) return;
-  if (_toastTimer) clearTimeout(_toastTimer);
+	if (!toast) return;
+	if (_toastTimer) clearTimeout(_toastTimer);
 	toast.textContent = message;
 	let borderColor = 'var(--success)';
 	let duration = 4000;
-	if(type === 'error') { borderColor = 'var(--error)'; duration = 5000; }
-	else if(type === 'warning') { borderColor = '#facc15'; duration = 4000; }
-	else if(type === 'info') { borderColor = '#3b82f6'; duration = 2500; }
+	if (type === 'error') { borderColor = 'var(--error)'; duration = 5000; }
+	else if (type === 'warning') { borderColor = '#facc15'; duration = 4000; }
+	else if (type === 'info') { borderColor = '#3b82f6'; duration = 2500; }
 	toast.style.borderLeft = '4px solid ' + borderColor;
-  toast.classList.add('show');
-  _toastTimer = setTimeout(() => {
-    toast.classList.remove('show');
-    _toastTimer = null;
-  }, duration);
+	toast.classList.add('show');
+	_toastTimer = setTimeout(() => {
+		toast.classList.remove('show');
+		_toastTimer = null;
+	}, duration);
 }
 
 function copyIP(text) {
@@ -235,7 +235,7 @@ function copyIP(text) {
 		const ta = document.createElement("textarea"); ta.value = t;
 		ta.style.position = "fixed"; ta.style.left = "-9999px";
 		document.body.appendChild(ta); ta.focus(); ta.select();
-		try { document.execCommand('copy'); showToast(tr('copied', '✓ Copied: ') + text);} 
+		try { document.execCommand('copy'); showToast(tr('copied', '✓ Copied: ') + text); }
 		catch (err) { showToast(tr('copy_error', '❌ Fehler'), 'error'); }
 		document.body.removeChild(ta);
 	};
@@ -246,39 +246,107 @@ function copyIP(text) {
 
 function filterLogs(filter) {
 	document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.filter === filter));
-	document.querySelectorAll('.log-entry').forEach(entry => {
-		const action = (entry.dataset.action || '').toUpperCase();
-		const level = (entry.dataset.level || '').toUpperCase();
-		if (filter === 'all') { entry.style.display = ''; return; }
-		const shouldShow = (filter.toUpperCase() === 'ERR' && level === 'ERR') || 
-							(filter.toUpperCase() === 'WARN' && level === 'WARN') || 
-							(action === filter.toUpperCase());
-		entry.style.display = shouldShow ? '' : 'none';
+	const entries = document.querySelectorAll('.log-entry');
+	const f = filter.toUpperCase();
+	requestAnimationFrame(() => {
+		entries.forEach(entry => {
+			if (f === 'ALL') { entry.style.display = ''; return; }
+			const action = (entry.dataset.action || '').toUpperCase();
+			const level = (entry.dataset.level || '').toUpperCase();
+			const show = (f === 'ERR' && level === 'ERR') ||
+				(f === 'WARN' && level === 'WARN') ||
+				(action === f);
+			entry.style.display = show ? '' : 'none';
+		});
 	});
 }
 
 function triggerUpdate() {
-  const btn = document.getElementById('update-button');
-  const token = localStorage.getItem('triggerToken') || '';
-  if (btn) btn.disabled = true;
-  showToast(tr('update_starting', '⏳ Update wird gestartet...'), 'info');
-  fetch('/api/trigger', { 
-    method: 'POST', 
-    headers: token ? {'X-Trigger-Token': token} : {} 
-  })
-  .then(r => r.json().then(j => {
-    if (j.error) {
-      showToast('⚠️ ' + j.error, 'warning');
-    } else {
-      showToast(tr('update_started', '✅ Update gestartet'), 'success');
-    }
-  }))
-  .catch(() => {
-    showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error');
-  })
-  .finally(() => {
-    if (btn) btn.disabled = false;
-  });
+	const btn = document.getElementById('update-button');
+	const token = localStorage.getItem('triggerToken') || '';
+	if (btn) btn.disabled = true;
+	showToast(tr('update_starting', '⏳ Update wird gestartet...'), 'info');
+	fetch('/api/trigger', {
+		method: 'POST',
+		headers: token ? { 'X-Trigger-Token': token } : {}
+	})
+		.then(r => r.json().then(j => {
+			if (j.error) {
+				showToast('⚠️ ' + j.error, 'warning');
+			} else {
+				showToast(tr('update_started', '✅ Update gestartet'), 'success');
+			}
+		}))
+		.catch(() => {
+			showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error');
+		})
+		.finally(() => {
+			if (btn) btn.disabled = false;
+		});
+}
+
+function sendNotifyTest() {
+	const btn = document.getElementById('notify-test-btn');
+	const result = document.getElementById('notify-test-result');
+	const token = localStorage.getItem('triggerToken') || '';
+
+	if (btn) { btn.disabled = true; btn.textContent = tr('notify_btn_sending', '⏳ Sende...'); }
+	if (result) { result.style.display = 'none'; result.innerHTML = ''; }
+
+	fetch('/api/notify/test', {
+		method: 'POST',
+		headers: token ? { 'X-Trigger-Token': token } : {}
+	})
+		.then(r => {
+			if (r.status === 401) {
+				if (btn) { btn.disabled = false; btn.textContent = tr('notify_btn_test', '🧪 Test-Nachricht senden'); }
+				if (result) {
+					result.style.display = 'block';
+					result.innerHTML = `<span style="color:var(--error);">${tr('notify_test_unauthorized', '❌ Unauthorized (check token)')}</span>`;
+				}
+				return null;
+			}
+			return r.json();
+		})
+		.then(data => {
+			if (!data) return;
+			if (btn) { btn.disabled = false; btn.textContent = tr('notify_btn_test', '🧪 Test-Nachricht senden'); }
+			if (!result) return;
+
+			result.style.display = 'block';
+
+			if (data.status === 'no_notifiers') {
+				result.innerHTML = `<span style="color:#facc15;">${tr('notify_no_notifier', '⚠️ Keine aktiven Notifier konfiguriert.')}</span>`;
+				return;
+			}
+
+			if (data.status !== 'done') {
+				result.innerHTML = `<span style="color:var(--error);">${tr('notify_test_error', '❌ Error while sending')}</span>`;
+				return;
+			}
+
+			const lines = (data.results || []).map(r => {
+				const icon = r.ok ? '✅' : '❌';
+				const err = r.error ? ` <span style="opacity:0.6;font-size:0.72rem;">(${escHtml(r.error)})</span>` : '';
+				return `${icon} <strong>${escHtml(r.name)}</strong>${err}`;
+			});
+
+			const allOk = data.sent === data.total;
+			const successText = tr('notify_stat_success', 'erfolgreich');
+			const summary = allOk
+				? `<div style="margin-bottom:6px;font-weight:600;">${tr('notify_test_success', '✅ Test message sent successfully!')}</div>`
+				: `<div style="margin-bottom:6px;font-weight:600;">${data.sent}/${data.total} ${successText}</div>`;
+
+			result.innerHTML = summary + lines.join('<br>');
+			result.style.color = allOk ? 'var(--success)' : '#facc15';
+		})
+		.catch(() => {
+			if (btn) { btn.disabled = false; btn.textContent = tr('notify_btn_test', '🧪 Test-Nachricht senden'); }
+			if (result) {
+				result.style.display = 'block';
+				result.innerHTML = `<span style="color:var(--error);">${tr('notify_test_conn_error', '❌ Connection error to server')}</span>`;
+			}
+		});
 }
 
 function exportData() {
@@ -287,7 +355,7 @@ function exportData() {
 		const a = document.createElement('a');
 		a.href = url; a.download = 'dyndns-export-' + new Date().toISOString().split('T')[0] + '.json';
 		document.body.appendChild(a);
-		a.click(); 
+		a.click();
 		document.body.removeChild(a);
 		URL.revokeObjectURL(url);
 		showToast(tr('export_started', '✓ Export gestartet'));
@@ -332,19 +400,16 @@ async function updateDomainDisplay(data) {
 	const dotEl = document.getElementById('dot-' + safeID);
 	if (dotEl) {
 		dotEl.className = 'domain-status-dot dot-ok dot-recent';
-		setTimeout(() => { if(dotEl) dotEl.classList.remove('dot-recent'); }, 3600000);
+		setTimeout(() => { if (dotEl) dotEl.classList.remove('dot-recent'); }, 3600000);
 	}
-	showToast(trf('domain_updated', {domain: data.domain}, '✓ {domain} updated'));
+	showToast(trf('domain_updated', { domain: data.domain }, '✓ {domain} updated'));
 }
 
 function _getVal(id) { const el = document.getElementById(id); return el ? el.value : ''; }
+function _isChecked(id) { const el = document.getElementById(id); return el ? el.checked : false; }
+function _parseList(raw) { return (raw || '').split(',').map(s => s.trim()).filter(Boolean); }
 function _setVal(id, v) { const el = document.getElementById(id); if (el) el.value = v != null ? String(v) : ''; }
-function _setChk(id, v) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.checked = !!v;
-    updateCheckboxLabel(el);
-}
+function _setChk(id, v) { const el = document.getElementById(id); if (!el) return; el.checked = !!v; updateCheckboxLabel(el); }
 
 function openSettings() {
 	document.getElementById('settingsOverlay').classList.add('open');
@@ -355,51 +420,60 @@ function openSettings() {
 
 	const sys = (typeof initialSystem !== 'undefined' && initialSystem) ? initialSystem : {};
 	const mqtt = sys.mqtt || {};
-	_setVal('cfg-ip-mode',        sys.ip_mode           || 'BOTH');
-	_setVal('cfg-interval',       sys.interval          || 300);
-	_setVal('cfg-health-port',    sys.health_port       || '8080');
-	_setVal('cfg-iface',          sys.iface_name        || '');
-	_setVal('cfg-dns',            (sys.dns_servers 		|| []).join(', '));
-	_setVal('cfg-max-log',        sys.max_log_lines     || 500);
-	_setVal('cfg-max-retries',    sys.max_api_retries   || 3);
-	_setVal('cfg-max-concurrent', sys.max_concurrent    || 5);
-	_setVal('cfg-hourly-limit',   sys.hourly_rate_limit || 1200);
-	_setVal('cfg-lang',           sys.lang              || 'de');
-	_setChk('cfg-dry-run',        sys.dry_run           || false);
-	_setChk('cfg-debug',       	  sys.debug_enabled     || false);
-	_setChk('cfg-debug-http',  	  sys.debug_http_raw    || false);
-	_setVal('cfg-ipv4_endpoints', (sys.ipv4_endpoints 	|| []).join(', '));
-	_setVal('cfg-ipv6_endpoints', (sys.ipv6_endpoints 	|| []).join(', '));
+	const email = sys.email || {};
+	_setVal('cfg-ip-mode', sys.ip_mode || 'BOTH');
+	_setVal('cfg-interval', sys.interval || 300);
+	_setVal('cfg-health-port', sys.health_port || '8080');
+	_setVal('cfg-iface', sys.iface_name || '');
+	_setVal('cfg-dns', (sys.dns_servers || []).join(', '));
+	_setVal('cfg-max-log', sys.max_log_lines || 500);
+	_setVal('cfg-max-retries', sys.max_api_retries || 3);
+	_setVal('cfg-max-concurrent', sys.max_concurrent || 5);
+	_setVal('cfg-hourly-limit', sys.hourly_rate_limit || 1200);
+	_setVal('cfg-lang', sys.lang || 'de');
+	_setChk('cfg-dry-run', sys.dry_run || false);
+	_setChk('cfg-debug', sys.debug_enabled || false);
+	_setChk('cfg-debug-http', sys.debug_http_raw || false);
+	_setVal('cfg-ipv4_endpoints', (sys.ipv4_endpoints || []).join(', '));
+	_setVal('cfg-ipv6_endpoints', (sys.ipv6_endpoints || []).join(', '));
 
 	// Notifications
-	_setChk('cfg-notify-enabled',  sys.notify_enabled   || false);
+	_setChk('cfg-notify-enabled', sys.notify_enabled || false);
 	const activeEvents = new Set((sys.notify_events || []).map(e => e.toUpperCase()));
-  	document.querySelectorAll('input[name="notify-event"]').forEach(cb => {
-      cb.checked = activeEvents.has(cb.value);
-  	});
-	_setVal('cfg-tg-token',        	sys.telegram_token   	|| '');
-	_setVal('cfg-tg-chat-id',       	sys.telegram_chat_id 	|| '');
-	_setVal('cfg-gotify-url',      	sys.gotify_url        	|| '');
-	_setVal('cfg-gotify-token',    	sys.gotify_token      	|| '');
-	_setVal('cfg-webhook-url',    	sys.webhook_url    		|| '');
-	_setVal('cfg-webhook-secret', 	sys.webhook_secret 		|| '');
-	_setVal('cfg-mqtt-broker',            mqtt.broker || '');
-	_setVal('cfg-mqtt-clientid',          mqtt.client_id || '');
-	_setVal('cfg-mqtt-username',          mqtt.username || '');
-	_setVal('cfg-mqtt-password',          mqtt.password || '');
-	_setVal('cfg-mqtt-topic',             mqtt.topic || '');
-	_setVal('cfg-mqtt-qos',               mqtt.qos ?? 0);
-	_setChk('cfg-mqtt-retain',            mqtt.retain || false);
-	_setChk('cfg-mqtt-discovery',         mqtt.discovery || false);
-	_setVal('cfg-mqtt-discovery-prefix',  mqtt.discovery_prefix || 'homeassistant');
+	document.querySelectorAll('input[name="notify-event"]').forEach(cb => {
+		cb.checked = activeEvents.has(cb.value);
+	});
+	_setVal('cfg-tg-token', sys.telegram_token || '');
+	_setVal('cfg-tg-chat-id', sys.telegram_chat_id || '');
+	_setVal('cfg-gotify-url', sys.gotify_url || '');
+	_setVal('cfg-gotify-token', sys.gotify_token || '');
+	_setVal('cfg-webhook-url', sys.webhook_url || '');
+	_setVal('cfg-webhook-secret', sys.webhook_secret || '');
+	_setVal('cfg-mqtt-broker', mqtt.broker || '');
+	_setVal('cfg-mqtt-clientid', mqtt.client_id || '');
+	_setVal('cfg-mqtt-username', mqtt.username || '');
+	_setVal('cfg-mqtt-password', mqtt.password || '');
+	_setVal('cfg-mqtt-topic', mqtt.topic || '');
+	_setVal('cfg-mqtt-qos', mqtt.qos ?? 0);
+	_setChk('cfg-mqtt-retain', mqtt.retain || false);
+	_setChk('cfg-mqtt-discovery', mqtt.discovery || false);
+	_setVal('cfg-mqtt-discovery-prefix', mqtt.discovery_prefix || 'homeassistant');
+	_setVal('cfg-email-host', email.host || '');
+	_setVal('cfg-email-port', email.port || '');
+	_setVal('cfg-email-user', email.username || '');
+	_setVal('cfg-email-pass', email.password || '');
+	_setVal('cfg-email-from', email.from || '');
+	_setVal('cfg-email-to', email.to || '');
+	_setVal('cfg-email-subject-prefix', email.subject_prefix || '');
+	_setVal('cfg-email-tls-mode', email.tls_mode || 'starttls');
 
 	renderSettingsDomainList();
 	loadUsers();
 }
 
-function closeSettings() { 
+function closeSettings() {
 	const el = document.getElementById('settingsOverlay');
-	if(el) el.classList.remove('open'); 
+	if (el) el.classList.remove('open');
 }
 
 function closeSettingsOutside(e) { if (e.target.id === 'settingsOverlay') closeSettings(); }
@@ -419,38 +493,38 @@ function saveToken() {
 }
 
 function renderSettingsDomainList() {
-    const container = document.getElementById('settings-domain-list');
-    if (!container) return;
-    container.innerHTML = '';
+	const container = document.getElementById('settings-domain-list');
+	if (!container) return;
+	container.innerHTML = '';
 
-    const sorted = [...tempDomainConfigs].sort((a, b) => {
-        if (a.provider !== b.provider) return a.provider.localeCompare(b.provider);
-        return a.fqdn.localeCompare(b.fqdn);
-    });
+	const sorted = [...tempDomainConfigs].sort((a, b) => {
+		if (a.provider !== b.provider) return a.provider.localeCompare(b.provider);
+		return a.fqdn.localeCompare(b.fqdn);
+	});
 
-    sorted.forEach((d) => {
-        const origIndex = tempDomainConfigs.indexOf(d);
-        const providerColor = {IONOS:'#3b82f6', CLOUDFLARE:'#f97316', IPV64:'#a855f7'}[d.provider] || '#64748b';
-        const div = document.createElement('div');
-        div.className = 'domain-pill';
-        div.innerHTML =
-            '<div style="flex:1;min-width:0;">' +
-                '<span style="font-weight:600;word-break:break-all;">' + escHtml(d.fqdn) + '</span>' +
-                '<span class="provider-badge" style="background:' + providerColor + '20;color:' + providerColor + ';border:1px solid ' + providerColor + '40;margin-left:6px;">' + escHtml(d.provider) + '</span>' +
-                (d.ttl ? '<span class="provider-badge" style="margin-left:6px;">TTL ' + escHtml(d.ttl) + '</span>' : '') +
-                (d.ip_mode ? '<span class="provider-badge" style="margin-left:6px;">' + escHtml(d.ip_mode) + '</span>' : '') +
-                (d.provider === 'CLOUDFLARE' && d.cf_proxied ? '<span class="provider-badge" style="margin-left:6px;">proxied</span>' : '') +
-            '</div>' +
-            '<div style="display:flex;gap:6px;flex-shrink:0;">' +
-                '<button onclick="editDomain(' + origIndex + ')" style="background:none;border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:0.75rem;">✏️</button>' +
-                '<button onclick="removeDomainFromList(' + origIndex + ')" style="background:none;border:none;color:var(--error);cursor:pointer;font-weight:bold;font-size:1rem;padding:0 4px;">✕</button>' +
-            '</div>';
-        container.appendChild(div);
-    });
+	sorted.forEach((d) => {
+		const origIndex = tempDomainConfigs.indexOf(d);
+		const providerColor = { IONOS: '#3b82f6', CLOUDFLARE: '#f97316', IPV64: '#a855f7' }[d.provider] || '#64748b';
+		const div = document.createElement('div');
+		div.className = 'domain-pill';
+		div.innerHTML =
+			'<div style="flex:1;min-width:0;">' +
+			'<span style="font-weight:600;word-break:break-all;">' + escHtml(d.fqdn) + '</span>' +
+			'<span class="provider-badge" style="background:' + providerColor + '20;color:' + providerColor + ';border:1px solid ' + providerColor + '40;margin-left:6px;">' + escHtml(d.provider) + '</span>' +
+			(d.ttl ? '<span class="provider-badge" style="margin-left:6px;">TTL ' + escHtml(d.ttl) + '</span>' : '') +
+			(d.ip_mode ? '<span class="provider-badge" style="margin-left:6px;">' + escHtml(d.ip_mode) + '</span>' : '') +
+			(d.provider === 'CLOUDFLARE' && d.cf_proxied ? '<span class="provider-badge" style="margin-left:6px;">proxied</span>' : '') +
+			'</div>' +
+			'<div style="display:flex;gap:6px;flex-shrink:0;">' +
+			'<button onclick="editDomain(' + origIndex + ')" style="background:none;border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:0.75rem;">✏️</button>' +
+			'<button onclick="removeDomainFromList(' + origIndex + ')" style="background:none;border:none;color:var(--error);cursor:pointer;font-weight:bold;font-size:1rem;padding:0 4px;">✕</button>' +
+			'</div>';
+		container.appendChild(div);
+	});
 }
 
 function escHtml(s) {
-	return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+	return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function openAddDomainSection() {
@@ -464,7 +538,7 @@ function openAddDomainSection() {
 function resetDomainForm() {
 	_setVal('new-domain-fqdn', '');
 	_setVal('new-domain-ttl', '');
-  _setVal('new-domain-ip-mode', '');
+	_setVal('new-domain-ip-mode', '');
 	_setVal('new-ionos-prefix', '');
 	_setVal('new-ionos-secret', '');
 	_setVal('new-cf-token', '');
@@ -483,7 +557,7 @@ function editDomain(index) {
 	const d = tempDomainConfigs[index];
 	if (!d) return;
 
-  editIndex = index;
+	editIndex = index;
 	resetDomainForm();
 
 	_setVal('new-domain-fqdn', d.fqdn || '');
@@ -495,7 +569,7 @@ function editDomain(index) {
 
 	_setVal('new-domain-ttl', d.ttl || '');
 
-  _setVal('new-domain-ip-mode', d.ip_mode || '');
+	_setVal('new-domain-ip-mode', d.ip_mode || '');
 
 	if (d.provider === 'IONOS') {
 		_setVal('new-ionos-prefix', d.api_prefix || '');
@@ -511,8 +585,8 @@ function editDomain(index) {
 
 	renderSettingsDomainList();
 	openAddDomainSection();
-  const addBtn = document.querySelector('#add-domain-section button[onclick="addDomainToList()"]');
-  if (addBtn) addBtn.textContent = tr('edit_domain_saved', 'Änderungen übernehmen');
+	const addBtn = document.querySelector('#add-domain-section button[onclick="addDomainToList()"]');
+	if (addBtn) addBtn.textContent = tr('edit_domain_saved', 'Änderungen übernehmen');
 	document.getElementById('new-domain-fqdn')?.focus();
 }
 
@@ -527,7 +601,7 @@ function addDomainToList() {
 	const fqdn = document.getElementById('new-domain-fqdn').value.trim().toLowerCase();
 	const provider = document.getElementById('new-domain-provider').value;
 	const ttlRaw = _getVal('new-domain-ttl').trim();
-  const ipMode = _getVal('new-domain-ip-mode').trim();
+	const ipMode = _getVal('new-domain-ip-mode').trim();
 	const ttl = ttlRaw === '' ? 0 : parseInt(ttlRaw, 10);
 	if (!fqdn) return showToast(tr('fqdn_missing', 'FQDN fehlt'), 'error');
 
@@ -537,24 +611,24 @@ function addDomainToList() {
 		ttl: Number.isFinite(ttl) && ttl > 0 ? ttl : 0,
 		ip_mode: ipMode || ''
 	};
-	if(provider === 'IONOS') {
+	if (provider === 'IONOS') {
 		entry.api_prefix = _getVal('new-ionos-prefix');
 		entry.api_secret = _getVal('new-ionos-secret');
-	} else if(provider === 'CLOUDFLARE') {
-		entry.cf_token  = _getVal('new-cf-token');
-		entry.cf_email  = _getVal('new-cf-email');
+	} else if (provider === 'CLOUDFLARE') {
+		entry.cf_token = _getVal('new-cf-token');
+		entry.cf_email = _getVal('new-cf-email');
 		entry.cf_secret = _getVal('new-cf-secret');
 		entry.cf_proxied = document.getElementById('new-cf-proxied')?.checked || false;
-	} else if(provider === 'IPV64') {
+	} else if (provider === 'IPV64') {
 		entry.ipv64_token = _getVal('new-ipv64-token');
 	}
 
-  if (editIndex !== null) {
-      tempDomainConfigs[editIndex] = entry;
-      editIndex = null;
-  } else {
-      tempDomainConfigs.push(entry);
-  }
+	if (editIndex !== null) {
+		tempDomainConfigs[editIndex] = entry;
+		editIndex = null;
+	} else {
+		tempDomainConfigs.push(entry);
+	}
 
 	renderSettingsDomainList();
 	resetDomainForm();
@@ -568,33 +642,26 @@ function addDomainToList() {
 		'new-cf-email',
 		'new-cf-secret',
 		'new-ipv64-token',
-	].forEach(id => _setVal(id,''));
+	].forEach(id => _setVal(id, ''));
 
 	_setChk('new-cf-proxied', false);
-  const addBtn = document.querySelector('#add-domain-section button[onclick="addDomainToList()"]');
-    if (addBtn) addBtn.textContent = tr('settings_add_btn', 'Hinzufügen');
+	const addBtn = document.querySelector('#add-domain-section button[onclick="addDomainToList()"]');
+	if (addBtn) addBtn.textContent = tr('settings_add_btn', 'Hinzufügen');
 }
 
 function cancelEdit() {
-    editIndex = null;
-    resetDomainForm();
-    const addBtn = document.querySelector('#add-domain-section button[onclick="addDomainToList()"]');
-    if (addBtn) addBtn.textContent = tr('settings_add_btn', 'Hinzufügen');
-    const section = document.getElementById('add-domain-section');
-    if (section) section.open = false;
-    showToast(tr('edit_domain_cancelled', 'Edit cancelled'), 'info');
+	editIndex = null;
+	resetDomainForm();
+	const addBtn = document.querySelector('#add-domain-section button[onclick="addDomainToList()"]');
+	if (addBtn) addBtn.textContent = tr('settings_add_btn', 'Hinzufügen');
+	const section = document.getElementById('add-domain-section');
+	if (section) section.open = false;
+	showToast(tr('edit_domain_cancelled', 'Edit cancelled'), 'info');
 }
 
 function removeDomainFromList(index) {
 	tempDomainConfigs.splice(index, 1);
 	renderSettingsDomainList();
-}
-
-function parseList(raw) {
-	return (raw || '')
-		.split(',')
-		.map(s => s.trim())
-		.filter(Boolean);
 }
 
 async function saveFullConfig() {
@@ -610,16 +677,16 @@ async function saveFullConfig() {
 		interval: parseInt(_getVal('cfg-interval'), 10) || 300,
 		health_port: _getVal('cfg-health-port') || '8080',
 		iface_name: _getVal('cfg-iface'),
-		dns_servers: parseList(_getVal('cfg-dns')),
+		dns_servers: _parseList(_getVal('cfg-dns')),
 		max_log_lines: parseInt(_getVal('cfg-max-log'), 10) || 500,
 		max_api_retries: parseInt(_getVal('cfg-max-retries'), 10) || 4,
 		max_concurrent: parseInt(_getVal('cfg-max-concurrent'), 10) || 5,
 		hourly_rate_limit: parseInt(_getVal('cfg-hourly-limit'), 10) || 1200,
 		lang: _getVal('cfg-lang') || 'de',
-		dry_run: document.getElementById('cfg-dry-run')?.checked || false,
-		debug_enabled: document.getElementById('cfg-debug')?.checked || false,
-		debug_http_raw: document.getElementById('cfg-debug-http')?.checked || false,
-		notify_enabled: document.getElementById('cfg-notify-enabled')?.checked || false,
+		dry_run: _isChecked('cfg-dry-run'),
+		debug_enabled: _isChecked('cfg-debug'),
+		debug_http_raw: _isChecked('cfg-debug-http'),
+		notify_enabled: _isChecked('cfg-notify-enabled'),
 		notify_events: notifyEvents,
 		telegram_token: _getVal('cfg-tg-token'),
 		telegram_chat_id: _getVal('cfg-tg-chat-id'),
@@ -634,12 +701,22 @@ async function saveFullConfig() {
 			password: _getVal('cfg-mqtt-password'),
 			topic: _getVal('cfg-mqtt-topic'),
 			qos: parseInt(_getVal('cfg-mqtt-qos'), 10) || 0,
-			retain: document.getElementById('cfg-mqtt-retain')?.checked || false,
-			discovery: document.getElementById('cfg-mqtt-discovery')?.checked || false,
+			retain: _isChecked('cfg-mqtt-retain'),
+			discovery: _isChecked('cfg-mqtt-discovery'),
 			discovery_prefix: _getVal('cfg-mqtt-discovery-prefix') || 'homeassistant'
 		},
-		ipv4_endpoints: parseList(_getVal('cfg-ipv4_endpoints')),
-		ipv6_endpoints: parseList(_getVal('cfg-ipv6_endpoints')),
+		email: {
+			host: _getVal('cfg-email-host'),
+			port: parseInt(_getVal('cfg-email-port'), 10) || 587,
+			username: _getVal('cfg-email-user'),
+			password: _getVal('cfg-email-pass'),
+			from: _getVal('cfg-email-from'),
+			to: _getVal('cfg-email-to'),
+			subject_prefix: _getVal('cfg-email-subject-prefix'),
+			tls_mode: _getVal('cfg-email-tls-mode') || 'starttls'
+		},
+		ipv4_endpoints: _parseList(_getVal('cfg-ipv4_endpoints')),
+		ipv6_endpoints: _parseList(_getVal('cfg-ipv6_endpoints')),
 	};
 
 	showLoadingToast(tr('loading_saving', '⏳ Speichere Konfiguration...'));
@@ -656,7 +733,7 @@ async function saveFullConfig() {
 
 		if (!r.ok) {
 			const txt = await r.text();
-			showToast(tr('error_prefix', tr('connection_error', '❌ Verbindungsfehler')) + txt, 'error');
+			showToast(tr('error_prefix', '❌ Error: ') + txt, 'error');
 			return;
 		}
 
@@ -683,13 +760,13 @@ function resetMetrics() {
 	const token = localStorage.getItem('triggerToken') || '';
 	fetch('/api/metrics/reset', {
 		method: 'POST',
-		headers: token ? {'X-Trigger-Token': token} : {}
+		headers: token ? { 'X-Trigger-Token': token } : {}
 	})
-	.then(r => {
-		if (r.ok) { showToast(tr('metrics_reset_ok', '✅ Metriken zurückgesetzt'), 'success'); }
-		else { showToast(tr('metrics_reset_failed', '❌ Reset fehlgeschlagen'), 'error'); }
-	})
-	.catch(() => showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'));
+		.then(r => {
+			if (r.ok) { showToast(tr('metrics_reset_ok', '✅ Metriken zurückgesetzt'), 'success'); }
+			else { showToast(tr('metrics_reset_failed', '❌ Reset fehlgeschlagen'), 'error'); }
+		})
+		.catch(() => showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'));
 }
 
 function showNotifierTooltip(el, text) {
@@ -772,9 +849,9 @@ function exportLogs(format) {
 		_downloadBlob(blob, filename + '.txt');
 	} else {
 		const entries = rows.map(r => ({
-			time:   r.querySelector('.log-entry-time')?.textContent.trim() || '',
+			time: r.querySelector('.log-entry-time')?.textContent.trim() || '',
 			action: r.dataset.action || '',
-			level:  r.dataset.level || '',
+			level: r.dataset.level || '',
 			domain: r.querySelector('.log-entry-domain')?.textContent.trim() || '',
 			message: r.querySelector('.log-entry-message')?.textContent.trim() || '',
 		}));
@@ -793,14 +870,18 @@ function _downloadBlob(blob, filename) {
 	URL.revokeObjectURL(url);
 }
 
+let _filterDomainsTimer = null;
 function filterDomains(query) {
-    const container = document.getElementById('domainContainer');
-    if (!container) return;
-    const search = query.toLowerCase();
-    container.querySelectorAll('.domain-item').forEach(d => {
-        const name = (d.getAttribute('data-domain') || '').toLowerCase();
-        d.classList.toggle('hidden', !name.includes(search));
-    });
+	if (_filterDomainsTimer) cancelAnimationFrame(_filterDomainsTimer);
+	_filterDomainsTimer = requestAnimationFrame(() => {
+		const container = document.getElementById('domainContainer');
+		if (!container) return;
+		const search = query.toLowerCase();
+		container.querySelectorAll('.domain-item').forEach(d => {
+			const name = (d.getAttribute('data-domain') || '').toLowerCase();
+			d.classList.toggle('hidden', !name.includes(search));
+		});
+	});
 }
 
 function deleteDomain(domain, btn) {
@@ -810,20 +891,20 @@ function deleteDomain(domain, btn) {
 	btn.textContent = '⏳';
 	fetch('/api/domain/delete?domain=' + encodeURIComponent(domain), {
 		method: 'POST',
-		headers: token ? {'X-Trigger-Token': token} : {}
+		headers: token ? { 'X-Trigger-Token': token } : {}
 	})
-	.then(r => r.json().then(j => ({ status: r.status, json: j })))
-	.then(({ status, json: j }) => {
-		if (status === 200) {
-			const card = btn.closest('.domain-item');
-			if (card) { card.style.transition = 'opacity 0.4s'; card.style.opacity = '0'; setTimeout(() => card.remove(), 400); }
-			showToast(trf('domain_removed', { domain }, '🗑️ {domain} entfernt'), 'success');
-		} else {
-			btn.disabled = false; btn.textContent = tr('remove_btn', '🗑️ Entfernen');
-			showToast('❌ ' + (j.error || tr('delete_failed', 'Fehler beim Löschen')), 'error');
-		}
-	})
-	.catch(() => { btn.disabled = false; btn.textContent = tr('remove_btn', '🗑️ Entfernen'); showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'); });
+		.then(r => r.json().then(j => ({ status: r.status, json: j })))
+		.then(({ status, json: j }) => {
+			if (status === 200) {
+				const card = btn.closest('.domain-item');
+				if (card) { card.style.transition = 'opacity 0.4s'; card.style.opacity = '0'; setTimeout(() => card.remove(), 400); }
+				showToast(trf('domain_removed', { domain }, '🗑️ {domain} entfernt'), 'success');
+			} else {
+				btn.disabled = false; btn.textContent = tr('remove_btn', '🗑️ Entfernen');
+				showToast('❌ ' + (j.error || tr('delete_failed', 'Fehler beim Löschen')), 'error');
+			}
+		})
+		.catch(() => { btn.disabled = false; btn.textContent = tr('remove_btn', '🗑️ Entfernen'); showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'); });
 }
 
 function fallbackCopy(text) {
@@ -836,122 +917,122 @@ function fallbackCopy(text) {
 }
 
 function startClock() {
-    const el = document.getElementById('clock');
-    if (!el) return;
-    const tick = () => {
-        const d = new Date();
-        el.textContent = [d.getHours(), d.getMinutes(), d.getSeconds()]
-            .map(n => String(n).padStart(2, '0')).join(':');
-    };
-    tick(); setInterval(tick, 1000);
+	const el = document.getElementById('clock');
+	if (!el) return;
+	const tick = () => {
+		const d = new Date();
+		el.textContent = [d.getHours(), d.getMinutes(), d.getSeconds()]
+			.map(n => String(n).padStart(2, '0')).join(':');
+	};
+	tick(); setInterval(tick, 1000);
 }
 
 function togglePassword(id, btn) {
-  const input = document.getElementById(id);
-  if (!input) return;
+	const input = document.getElementById(id);
+	if (!input) return;
 
-  if (input.type === "password") {
-    input.type = "text";
-    btn.textContent = "🙈";
-  } else {
-    input.type = "password";
-    btn.textContent = "👁️";
-  }
+	if (input.type === "password") {
+		input.type = "text";
+		btn.textContent = "🙈";
+	} else {
+		input.type = "password";
+		btn.textContent = "👁️";
+	}
 }
 
 function updateCheckboxLabel(cb) {
-    const labelSpan = cb.parentElement.querySelector('.s-checkbox-text');
-    if (!labelSpan) return;
-    const textOn = cb.getAttribute('data-label-on') || 'Aktiv';
-    const textOff = cb.getAttribute('data-label-off') || 'Inaktiv';
-    labelSpan.textContent = cb.checked ? textOn : textOff;
+	const labelSpan = cb.parentElement.querySelector('.s-checkbox-text');
+	if (!labelSpan) return;
+	const textOn = cb.getAttribute('data-label-on') || 'Aktiv';
+	const textOff = cb.getAttribute('data-label-off') || 'Inaktiv';
+	labelSpan.textContent = cb.checked ? textOn : textOff;
 }
 
 function appendDebugLog(entry) {
-    const container = document.getElementById('debug-log-container');
-    if (!container) return;
+	const container = document.getElementById('debug-log-container');
+	if (!container) return;
 
-    if (
-        container.children.length === 1 &&
-        container.firstElementChild &&
-        container.firstElementChild.classList.contains('debug-placeholder')
-    ) {
-        container.innerHTML = '';
-    }
+	if (
+		container.children.length === 1 &&
+		container.firstElementChild &&
+		container.firstElementChild.classList.contains('debug-placeholder')
+	) {
+		container.innerHTML = '';
+	}
 
-    const line = document.createElement('div');
-    line.style.cssText =
-        'padding:2px 0; border-bottom:1px solid rgba(255,255,255,0.04); display:flex; gap:8px; align-items:baseline;';
+	const line = document.createElement('div');
+	line.style.cssText =
+		'padding:2px 0; border-bottom:1px solid rgba(255,255,255,0.04); display:flex; gap:8px; align-items:baseline;';
 
-    const appendSpan = (text, style) => {
-        const span = document.createElement('span');
-        if (style) span.style.cssText = style;
-        span.textContent = text;
-        line.appendChild(span);
-        return span;
-    };
+	const appendSpan = (text, style) => {
+		const span = document.createElement('span');
+		if (style) span.style.cssText = style;
+		span.textContent = text;
+		line.appendChild(span);
+		return span;
+	};
 
-    if (entry.timestamp) {
-        appendSpan(entry.timestamp, 'color:#4b5563; white-space:nowrap;');
-    }
+	if (entry.timestamp) {
+		appendSpan(entry.timestamp, 'color:#4b5563; white-space:nowrap;');
+	}
 
-    if (entry.icon) {
-        appendSpan(entry.icon, '');
-    }
+	if (entry.icon) {
+		appendSpan(entry.icon, '');
+	}
 
-    if (entry.category) {
-        appendSpan(
-            `[${entry.category}]`,
-            'color:#64b5f6; min-width:80px;'
-        );
-    }
+	if (entry.category) {
+		appendSpan(
+			`[${entry.category}]`,
+			'color:#64b5f6; min-width:80px;'
+		);
+	}
 
-    if (entry.domain) {
-        appendSpan(
-            entry.domain,
-            'color:#a78bfa;'
-        );
-    }
+	if (entry.domain) {
+		appendSpan(
+			entry.domain,
+			'color:#a78bfa;'
+		);
+	}
 
-    appendSpan(
-        entry.message || '',
-        'color:#e2e8f0; word-break:break-word;'
-    );
+	appendSpan(
+		entry.message || '',
+		'color:#e2e8f0; word-break:break-word;'
+	);
 
-    line.dataset.text = `${entry.category || ''} ${entry.domain || ''} ${entry.message || ''}`.toLowerCase();
+	line.dataset.text = `${entry.category || ''} ${entry.domain || ''} ${entry.message || ''}`.toLowerCase();
 
-    container.appendChild(line);
+	container.appendChild(line);
 
-    while (container.children.length > 500) {
-        container.removeChild(container.firstChild);
-    }
+	while (container.children.length > 500) {
+		container.removeChild(container.firstChild);
+	}
 
-    const autoScroll = document.getElementById('debug-autoscroll');
-    if (autoScroll && autoScroll.checked) {
-        container.scrollTop = container.scrollHeight;
-    }
+	const autoScroll = document.getElementById('debug-autoscroll');
+	if (autoScroll && autoScroll.checked) {
+		container.scrollTop = container.scrollHeight;
+	}
 }
 
 function filterDebugLog(query) {
-    const container = document.getElementById('debug-log-container');
-    if (!container) return;
-    const q = query.toLowerCase();
-    for (const line of container.children) {
-        line.style.display = (!q || (line.dataset.text || '').includes(q)) ? '' : 'none';
-    }
+	const container = document.getElementById('debug-log-container');
+	if (!container) return;
+	const q = query.toLowerCase();
+	for (const line of container.children) {
+		line.style.display = (!q || (line.dataset.text || '').includes(q)) ? '' : 'none';
+	}
 }
 
 function clearDebugLog() {
-    const container = document.getElementById('debug-log-container');
-    if (!container) return;
+	const container = document.getElementById('debug-log-container');
+	if (!container) return;
 
-    container.innerHTML = '';
+	container.innerHTML = '';
 
-    const placeholder = document.createElement('span');
-    placeholder.className = 'debug-placeholder';
-    placeholder.style.opacity = '0.3';
-    placeholder.textContent = tr('cleared', 'Cleared.');
-    container.appendChild(placeholder);
+	const placeholder = document.createElement('span');
+	placeholder.className = 'debug-placeholder';
+	placeholder.style.opacity = '0.3';
+	placeholder.textContent = tr('cleared', 'Cleared.');
+	container.appendChild(placeholder);
 }
 
 // ============================================================================
@@ -980,7 +1061,7 @@ function renderUsersList(users) {
 	}
 
 	const roleIcon = { admin: '👑', editor: '✏️', viewer: '👁️' };
-	const roleLabel = {admin: tr('role_admin', 'Admin'),editor: tr('role_editor', 'Editor'),viewer: tr('role_viewer', 'Viewer')};
+	const roleLabel = { admin: tr('role_admin', 'Admin'), editor: tr('role_editor', 'Editor'), viewer: tr('role_viewer', 'Viewer') };
 
 	container.innerHTML = users.map(u => `
 		<div class="domain-pill" style="margin-bottom:6px;">
@@ -994,9 +1075,9 @@ function renderUsersList(users) {
 			<div style="display:flex;gap:6px;flex-shrink:0;">
 				<select onchange="changeUserRole('${u.id}', this.value)"
 					style="font-size:0.75rem;padding:3px 6px;background:var(--border);border:1px solid var(--border);border-radius:5px;color:var(--text);cursor:pointer;">
-					<option value="viewer" ${u.role==='viewer'?'selected':''}>👁️ ${tr('role_viewer', 'Viewer')}</option>
-					<option value="editor" ${u.role==='editor'?'selected':''}>✏️ ${tr('role_editor', 'Editor')}</option>
-					<option value="admin" ${u.role==='admin'?'selected':''}>👑 ${tr('role_admin', 'Admin')}</option>
+					<option value="viewer" ${u.role === 'viewer' ? 'selected' : ''}>👁️ ${tr('role_viewer', 'Viewer')}</option>
+					<option value="editor" ${u.role === 'editor' ? 'selected' : ''}>✏️ ${tr('role_editor', 'Editor')}</option>
+					<option value="admin" ${u.role === 'admin' ? 'selected' : ''}>👑 ${tr('role_admin', 'Admin')}</option>
 				</select>
 				<button onclick="deleteUser('${u.id}', '${escHtml(u.username)}')"
 					style="background:none;border:none;color:var(--error);cursor:pointer;font-weight:bold;font-size:1rem;padding:0 4px;">✕</button>
@@ -1008,42 +1089,42 @@ function renderUsersList(users) {
 function addUser() {
 	const username = (document.getElementById('new-user-name')?.value || '').trim();
 	const password = document.getElementById('new-user-pass')?.value || '';
-	const role     = document.getElementById('new-user-role')?.value || 'viewer';
+	const role = document.getElementById('new-user-role')?.value || 'viewer';
 
-  if (username.length < 3) return showToast(tr('auth_user_min', 'Benutzername min. 3 Zeichen'), 'error');
-  if (password.length < 8) return showToast(tr('auth_pass_min', 'Passwort min. 8 Zeichen'), 'error');
+	if (username.length < 3) return showToast(tr('auth_user_min', 'Benutzername min. 3 Zeichen'), 'error');
+	if (password.length < 8) return showToast(tr('auth_pass_min', 'Passwort min. 8 Zeichen'), 'error');
 
 	const token = localStorage.getItem('triggerToken') || '';
 	fetch('/api/users', {
 		method: 'POST',
-		headers: { 'Content-Type': 'application/json', ...(token ? {'X-Trigger-Token': token} : {}) },
+		headers: { 'Content-Type': 'application/json', ...(token ? { 'X-Trigger-Token': token } : {}) },
 		body: JSON.stringify({ username, password, role })
 	})
-	.then(r => r.json().then(j => ({ ok: r.ok, j })))
-	.then(({ ok, j }) => {
-		if (!ok) return showToast('❌ ' + (j.error || 'Fehler'), 'error');
-		showToast('✅ ' + tr('user_created', 'Benutzer erstellt'), 'success');
-		document.getElementById('new-user-name').value = '';
-		document.getElementById('new-user-pass').value = '';
-		loadUsers();
-	})
-	.catch(() => showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'));
+		.then(r => r.json().then(j => ({ ok: r.ok, j })))
+		.then(({ ok, j }) => {
+			if (!ok) return showToast('❌ ' + (j.error || 'Fehler'), 'error');
+			showToast('✅ ' + tr('user_created', 'Benutzer erstellt'), 'success');
+			document.getElementById('new-user-name').value = '';
+			document.getElementById('new-user-pass').value = '';
+			loadUsers();
+		})
+		.catch(() => showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'));
 }
 
 function changeUserRole(id, role) {
 	const token = localStorage.getItem('triggerToken') || '';
 	fetch('/api/users/' + id, {
 		method: 'PUT',
-		headers: { 'Content-Type': 'application/json', ...(token ? {'X-Trigger-Token': token} : {}) },
+		headers: { 'Content-Type': 'application/json', ...(token ? { 'X-Trigger-Token': token } : {}) },
 		body: JSON.stringify({ role })
 	})
-	.then(r => r.json().then(j => ({ ok: r.ok, j })))
-	.then(({ ok, j }) => {
-		if (!ok) return showToast('❌ ' + (j.error || tr('generic_error', 'Fehler')), 'error');
-		showToast('✅ ' + tr('role_changed', 'Rolle geändert'), 'success');
-		loadUsers();
-	})
-	.catch(() => showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'));
+		.then(r => r.json().then(j => ({ ok: r.ok, j })))
+		.then(({ ok, j }) => {
+			if (!ok) return showToast('❌ ' + (j.error || tr('generic_error', 'Fehler')), 'error');
+			showToast('✅ ' + tr('role_changed', 'Rolle geändert'), 'success');
+			loadUsers();
+		})
+		.catch(() => showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'));
 }
 
 function deleteUser(id, username) {
@@ -1051,15 +1132,15 @@ function deleteUser(id, username) {
 	const token = localStorage.getItem('triggerToken') || '';
 	fetch('/api/users/' + id, {
 		method: 'DELETE',
-		headers: token ? {'X-Trigger-Token': token} : {}
+		headers: token ? { 'X-Trigger-Token': token } : {}
 	})
-	.then(r => r.json().then(j => ({ ok: r.ok, j })))
-	.then(({ ok, j }) => {
-		if (!ok) return showToast('❌ ' + (j.error || tr('generic_error', 'Fehler')), 'error');
-		showToast('🗑️ ' + tr('user_deleted', 'Benutzer gelöscht'), 'success');
-		loadUsers();
-	})
-	.catch(() => showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'));
+		.then(r => r.json().then(j => ({ ok: r.ok, j })))
+		.then(({ ok, j }) => {
+			if (!ok) return showToast('❌ ' + (j.error || tr('generic_error', 'Fehler')), 'error');
+			showToast('🗑️ ' + tr('user_deleted', 'Benutzer gelöscht'), 'success');
+			loadUsers();
+		})
+		.catch(() => showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'));
 }
 
 function tr(key, fallback = '') {
@@ -1078,32 +1159,32 @@ function trf(key, vars = {}, fallback = '') {
 
 const endpointStatus = {};
 function updateEndpointStatus(data) {
-    endpointStatus[data.url] = { ok: data.ok, ts: Date.now() };
-    renderEndpointStatus();
+	endpointStatus[data.url] = { ok: data.ok, ts: Date.now() };
+	renderEndpointStatus();
 }
 
 function renderEndpointStatus() {
-    const el = document.getElementById('endpoint-status');
-    if (!el) return;
-    const entries = Object.entries(endpointStatus);
-    if (entries.length === 0) return;
-    el.innerHTML = entries.map(([url, s]) => {
-        let host;
-        try { host = new URL(url).hostname; } catch { host = url; }
-        const icon = s.ok ? '✅' : '❌';
-        const diff = Date.now() - s.ts;
-        let ageStr;
-        if (diff < 1000) {
-            ageStr = diff + 'ms';
-        } else if (diff < 60000) {
-            ageStr = (diff / 1000).toFixed(0) + 's';
-        } else {
-            ageStr = Math.round(diff / 60000) + 'm';
-        }
-        return `<span style="padding:3px 8px;border-radius:6px;font-size:0.78rem;font-family:monospace;`
-            + `background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);">`
-            + `${icon} ${host} <span style="opacity:0.4">${ageStr}</span></span>`;
-    }).join('');
+	const el = document.getElementById('endpoint-status');
+	if (!el) return;
+	const entries = Object.entries(endpointStatus);
+	if (entries.length === 0) return;
+	el.innerHTML = entries.map(([url, s]) => {
+		let host;
+		try { host = new URL(url).hostname; } catch { host = url; }
+		const icon = s.ok ? '✅' : '❌';
+		const diff = Date.now() - s.ts;
+		let ageStr;
+		if (diff < 1000) {
+			ageStr = diff + 'ms';
+		} else if (diff < 60000) {
+			ageStr = (diff / 1000).toFixed(0) + 's';
+		} else {
+			ageStr = Math.round(diff / 60000) + 'm';
+		}
+		return `<span style="padding:3px 8px;border-radius:6px;font-size:0.78rem;font-family:monospace;`
+			+ `background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);">`
+			+ `${icon} ${host} <span style="opacity:0.4">${ageStr}</span></span>`;
+	}).join('');
 }
 
 function showLoadingToast(text = '⏳ Speichere...') {
