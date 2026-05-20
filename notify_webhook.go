@@ -33,7 +33,7 @@ func (w *webhookNotifier) SendSync(msg NotifyMessage) error {
 }
 
 func (w *webhookNotifier) doSend(msg NotifyMessage) error {
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"action":    msg.Action,
 		"domain":    msg.Domain,
 		"message":   msg.Message,

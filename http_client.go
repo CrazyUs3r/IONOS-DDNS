@@ -17,8 +17,57 @@ import (
 	"net/http/httputil"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
+
+// ============================================================================
+// DNS CACHE
+// ============================================================================
+type dnsCache struct {
+	ttl      time.Duration
+	mu       sync.Mutex
+	entries  map[string]dnsCacheEntry
+	inflight map[string]*dnsInFlight
+	resolver *net.Resolver
+}
+
+type dnsCacheEntry struct {
+	ips    []net.IPAddr
+	expiry time.Time
+}
+
+type dnsInFlight struct {
+	done  chan struct{}
+	addrs []net.IPAddr
+	err   error
+}
+
+// ============================================================================
+// HTTP TRACE / TIMINGS (DNS, CONNECT, TLS, TTFB, REUSE)
+// ============================================================================
+type httpTimings struct {
+	start        time.Time
+	end          time.Time
+	gotConn      time.Time
+	connReused   bool
+	connWasIdle  bool
+	connIdleTime time.Duration
+	dnsStart     time.Time
+	dnsDone      time.Time
+	dnsErr       error
+	connectStart time.Time
+	connectDone  time.Time
+	connectNet   string
+	connectAddr  string
+	connectErr   error
+	tlsStart     time.Time
+	tlsDone      time.Time
+	tlsState     *tls.ConnectionState
+	tlsErr       error
+	wroteRequest time.Time
+	firstByte    time.Time
+}
 
 // ============================================================================
 // HTTP TRACE / TIMINGS (DNS, CONNECT, TLS, TTFB, REUSE)
@@ -341,6 +390,9 @@ func ResetHTTPClient() {
 	defer clientMu.Unlock()
 	httpClient = nil
 	clientDNSKey = ""
+}
+
+func invalidateSecretReplacer() {
 	secretReplacerMu.Lock()
 	secretReplacer = nil
 	secretReplacerMu.Unlock()
@@ -351,7 +403,12 @@ func dnsKey(servers []string) string {
 }
 
 func getHTTPClient() *http.Client {
-	currentKey := dnsKey(cfg.DNSServers)
+	cfgMu.RLock()
+	dnsServers := make([]string, len(cfg.DNSServers))
+	copy(dnsServers, cfg.DNSServers)
+	cfgMu.RUnlock()
+
+	currentKey := dnsKey(dnsServers)
 
 	clientMu.RLock()
 	if httpClient != nil && clientDNSKey == currentKey {
@@ -368,7 +425,7 @@ func getHTTPClient() *http.Client {
 		return httpClient
 	}
 
-	httpClient = buildHTTPClient(cfg.DNSServers)
+	httpClient = buildHTTPClient(dnsServers)
 	clientDNSKey = currentKey
 	return httpClient
 }
@@ -509,49 +566,88 @@ func buildHTTPClient(dnsList []string) *http.Client {
 func getSecretReplacer() *strings.Replacer {
 	secretReplacerMu.Lock()
 	defer secretReplacerMu.Unlock()
-	if secretReplacer != nil {
-		return secretReplacer
-	}
-	{
-		replacements := []string{}
-		domainConfigs := snapshotDomainConfigs()
-		for _, dc := range domainConfigs {
-			switch dc.Provider {
-			case ProviderIONOS:
-				if dc.APIPrefix != "" && dc.APISecret != "" {
-					fullKey := dc.APIPrefix + "." + dc.APISecret
-					replacements = append(replacements, fullKey, "***API-KEY***")
-				}
-				if dc.APISecret != "" {
-					replacements = append(replacements, dc.APISecret, "***SECRET***")
-				}
-				if dc.APIPrefix != "" {
-					replacements = append(replacements, dc.APIPrefix, "***PREFIX***")
-				}
 
-			case ProviderCloudflare:
-				if dc.CFToken != "" {
-					replacements = append(replacements, dc.CFToken, "***CF-TOKEN***")
-				}
-				if dc.CFSecret != "" {
-					replacements = append(replacements, dc.CFSecret, "***CF-SECRET***")
-				}
-
-			case ProviderIPv64:
-				if dc.IPv64Token != "" {
-					replacements = append(replacements, dc.IPv64Token, "***IPV64-TOKEN***")
-				}
-			}
-		}
-
-		if len(replacements) > 0 {
-			secretReplacer = strings.NewReplacer(replacements...)
-		} else {
-			secretReplacer = strings.NewReplacer("dummy_secret_placeholder", "none")
-		}
+	if secretReplacer == nil {
+		secretReplacer = buildSecretReplacer(snapshotDomainConfigs())
 	}
 
 	return secretReplacer
+}
+
+func buildSecretReplacer(domainConfigs []DomainConfig) *strings.Replacer {
+	replacements := buildSecretReplacements(domainConfigs)
+
+	if len(replacements) == 0 {
+		return strings.NewReplacer("dummy_secret_placeholder", "none")
+	}
+
+	return strings.NewReplacer(replacements...)
+}
+
+func buildSecretReplacements(domainConfigs []DomainConfig) []string {
+	replacements := []string{}
+
+	for _, dc := range domainConfigs {
+		replacements = appendProviderReplacements(replacements, dc)
+	}
+
+	return replacements
+}
+
+func appendProviderReplacements(replacements []string, dc DomainConfig) []string {
+	switch dc.Provider {
+	case ProviderIONOS:
+		return appendIONOSReplacements(replacements, dc)
+
+	case ProviderCloudflare:
+		return appendCloudflareReplacements(replacements, dc)
+
+	case ProviderIPv64:
+		return appendIPv64Replacements(replacements, dc)
+
+	case ProviderHetzner, ProviderHetznerCloud:
+		return appendHetznerReplacements(replacements, dc)
+
+	default:
+		return replacements
+	}
+}
+
+func appendIONOSReplacements(replacements []string, dc DomainConfig) []string {
+	if dc.APIPrefix != "" && dc.APISecret != "" {
+		replacements = append(replacements, dc.APIPrefix+"."+dc.APISecret, "***API-KEY***")
+	}
+
+	replacements = appendIfNotEmpty(replacements, dc.APISecret, "***SECRET***")
+	replacements = appendIfNotEmpty(replacements, dc.APIPrefix, "***PREFIX***")
+
+	return replacements
+}
+
+func appendCloudflareReplacements(replacements []string, dc DomainConfig) []string {
+	replacements = appendIfNotEmpty(replacements, dc.CFToken, "***CF-TOKEN***")
+	replacements = appendIfNotEmpty(replacements, dc.CFSecret, "***CF-SECRET***")
+
+	return replacements
+}
+
+func appendIPv64Replacements(replacements []string, dc DomainConfig) []string {
+	return appendIfNotEmpty(replacements, dc.IPv64Token, "***IPV64-TOKEN***")
+}
+
+func appendHetznerReplacements(replacements []string, dc DomainConfig) []string {
+	replacements = appendIfNotEmpty(replacements, dc.APISecret, "***HETZNER-TOKEN***")
+	replacements = appendIfNotEmpty(replacements, dc.APIPrefix, "***HETZNER-TOKEN***")
+
+	return replacements
+}
+
+func appendIfNotEmpty(replacements []string, value, replacement string) []string {
+	if value == "" {
+		return replacements
+	}
+
+	return append(replacements, value, replacement)
 }
 
 func sanitizeError(err error) string {
@@ -597,14 +693,23 @@ func sanitizeID(s string) string {
 	return out
 }
 
+var sanitizeIDCache sync.Map // string → string
+
 func sanitizeIDWithHash(s string) string {
+	if cached, ok := sanitizeIDCache.Load(s); ok {
+		return cached.(string)
+	}
 	base := sanitizeID(s)
 	sum := sha256.Sum256([]byte(s))
 	sfx := hex.EncodeToString(sum[:])[:8]
+	var result string
 	if base == "" || base == "x" {
-		return "d-" + sfx
+		result = "d-" + sfx
+	} else {
+		result = base + "-" + sfx
 	}
-	return base + "-" + sfx
+	sanitizeIDCache.Store(s, result)
+	return result
 }
 
 // ============================================================================

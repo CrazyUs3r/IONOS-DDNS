@@ -100,9 +100,15 @@ func (r rawEntry) toDomainConfig() DomainConfig {
 		return b
 	}
 	return DomainConfig{
-		Provider:   ProviderType(strings.ToUpper(r.Provider)),
-		APIPrefix:  pick(r.APIPrefix, r.APIPrefix2),
-		APISecret:  pick(r.APISecret, r.APISecret2),
+		Provider:  normalizeProviderName(r.Provider),
+		APIPrefix: pick(r.APIPrefix, r.APIPrefix2),
+		APISecret: firstNonEmpty(
+			pick(r.APISecret, r.APISecret2),
+			r.HetznerToken, r.HetznerToken2,
+			r.HetznerDNSToken, r.HetznerDNSToken2,
+			r.HetznerCloudToken, r.HetznerCloudToken2,
+			r.HCloudToken, r.HCloudToken2,
+		),
 		CFToken:    pick(r.CFToken, r.CFToken2),
 		CFEmail:    pick(r.CFEmail, r.CFEmail2),
 		CFSecret:   pick(r.CFSecret, r.CFSecret2),
@@ -188,13 +194,17 @@ func legacyDomainsFromEnv() ([]string, error) {
 }
 
 func buildLegacyDomainConfigs(providerEnv string, domains []string) ([]DomainConfig, error) {
-	switch providerEnv {
+	switch string(normalizeProviderName(providerEnv)) {
 	case "IONOS":
 		return buildLegacyIONOSConfigs(domains)
 	case "CLOUDFLARE":
 		return buildLegacyCloudflareConfigs(domains)
 	case "IPV64":
 		return buildLegacyIPv64Configs(domains)
+	case "HETZNER":
+		return buildLegacyHetznerDNSConfigs(domains)
+	case "HETZNERCLOUD":
+		return buildLegacyHetznerCloudConfigs(domains)
 	default:
 		return nil, fmt.Errorf(T.UnknownProviderFormat, providerEnv)
 	}
@@ -255,4 +265,46 @@ func buildLegacyIPv64Configs(domains []string) ([]DomainConfig, error) {
 		Provider:   ProviderIPv64,
 		IPv64Token: token,
 	}), nil
+}
+
+func buildLegacyHetznerDNSConfigs(domains []string) ([]DomainConfig, error) {
+	token := firstNonEmptyEnv("HETZNER_TOKEN", "HETZNER_DNS_TOKEN", "HETZNER_API_TOKEN")
+	if token == "" {
+		return nil, fmt.Errorf("HETZNER requires HETZNER_TOKEN or HETZNER_DNS_TOKEN")
+	}
+
+	return buildLegacyConfigs(domains, DomainConfig{
+		Provider:  ProviderHetzner,
+		APISecret: token,
+	}), nil
+}
+
+func buildLegacyHetznerCloudConfigs(domains []string) ([]DomainConfig, error) {
+	token := firstNonEmptyEnv("HCLOUD_TOKEN", "HETZNER_CLOUD_TOKEN", "HETZNER_CONSOLE_TOKEN")
+	if token == "" {
+		return nil, fmt.Errorf("HETZNERCLOUD requires HCLOUD_TOKEN or HETZNER_CLOUD_TOKEN")
+	}
+
+	return buildLegacyConfigs(domains, DomainConfig{
+		Provider:  ProviderHetznerCloud,
+		APISecret: token,
+	}), nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func firstNonEmptyEnv(keys ...string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+			return value
+		}
+	}
+	return ""
 }

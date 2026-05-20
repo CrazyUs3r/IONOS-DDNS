@@ -10,8 +10,82 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"sync"
 	"time"
 )
+
+type apiMetricsSnapshot struct {
+	TotalRequests        int64       `json:"total_requests"`
+	SuccessRequests      int64       `json:"success_requests"`
+	FailedRequests       int64       `json:"failed_requests"`
+	RateLimitHits        int64       `json:"rate_limit_hits"`
+	ServerErrors         int64       `json:"server_errors"`
+	ClientErrors         int64       `json:"client_errors"`
+	AverageLatencyMs     int64       `json:"avg_latency_ms"`
+	HourlyStats          [24]int     `json:"hourly_stats"`
+	HourlyLatencyMs      [24]int64   `json:"hourly_latency_ms"`
+	RequestTimestamps    []time.Time `json:"request_timestamps"`
+	LastSuccessTime      time.Time   `json:"last_success_at"`
+	LastError            string      `json:"last_error"`
+	LastErrorTime        time.Time   `json:"last_error_at"`
+	SavedAt              time.Time   `json:"saved_at"`
+	DailyGET             int64       `json:"daily_get"`
+	DailyPOST            int64       `json:"daily_post"`
+	DailyPUT             int64       `json:"daily_put"`
+	DailyDELETE          int64       `json:"daily_delete"`
+	DailyNIC             int64       `json:"daily_nic"`
+	DailyReset           time.Time   `json:"daily_reset"`
+	HourlyReset          time.Time   `json:"hourly_reset"`
+	LatencySamples       [1000]int64 `json:"latency_samples"`
+	LatencySampleIdx     int         `json:"latency_sample_idx"`
+	LatencySampleCount   int         `json:"latency_sample_count"`
+	IPLatencySum         int64       `json:"ip_latency_sum_ms"`
+	IPLatencyCount       int64       `json:"ip_latency_count"`
+	IPLatencyAvgMs       int64       `json:"ip_latency_avg_ms"`
+	IPLatencySamples     [200]int64  `json:"ip_latency_samples"`
+	IPLatencySampleIdx   int         `json:"ip_latency_sample_idx"`
+	IPLatencySampleCount int         `json:"ip_latency_sample_count"`
+	LastIPCheckTime      time.Time   `json:"last_ip_check_at"`
+}
+
+type APIMetrics struct {
+	sync.Mutex
+	TotalRequests        int64
+	SuccessRequests      int64
+	FailedRequests       int64
+	RateLimitHits        int64
+	ServerErrors         int64
+	ClientErrors         int64
+	LatencySum           time.Duration
+	LatencyCount         int64
+	AverageLatency       time.Duration
+	HourlyLatencySum     [24]time.Duration
+	HourlyLatencyCount   [24]int64
+	HourlyLatency        [24]time.Duration
+	LastError            string
+	LastErrorTimestamp   time.Time
+	LastSuccessTimestamp time.Time
+	RequestTimestamps    []time.Time
+	HourlyStats          [24]int
+	lastHour             int64
+	LatencySamples       [1000]int64
+	LatencySampleIdx     int
+	LatencySampleCount   int
+	DailyGET             int64
+	DailyPOST            int64
+	DailyPUT             int64
+	DailyDELETE          int64
+	DailyNIC             int64
+	DailyReset           time.Time
+	HourlyReset          time.Time
+	IPLatencySum         time.Duration
+	IPLatencyCount       int64
+	IPLatencyAvg         time.Duration
+	IPLatencySamples     [200]int64
+	IPLatencySampleIdx   int
+	IPLatencySampleCount int
+	LastIPCheckTime      time.Time
+}
 
 // ============================================================================
 // METRICS
@@ -28,6 +102,13 @@ func (m *APIMetrics) RecordSuccess(method string, duration time.Duration) {
 
 	hour := now.Hour()
 	if hour >= 0 && hour < 24 {
+		if !m.HourlyReset.IsZero() && now.Day() != m.HourlyReset.Day() {
+			m.HourlyStats = [24]int{}
+			m.HourlyLatency = [24]time.Duration{}
+			m.HourlyLatencySum = [24]time.Duration{}
+			m.HourlyLatencyCount = [24]int64{}
+		}
+		m.HourlyReset = now
 		m.HourlyStats[hour]++
 		m.updateLatency(duration, hour)
 	}
@@ -53,10 +134,15 @@ func (m *APIMetrics) RecordError(method string, statusCode int, err error, durat
 
 	hour := now.Hour()
 	if hour >= 0 && hour < 24 {
-		m.HourlyStats[hour]++
-		if duration > 0 && statusCode > 0 {
-			m.updateLatency(duration, hour)
+		if !m.HourlyReset.IsZero() && now.Day() != m.HourlyReset.Day() {
+			m.HourlyStats = [24]int{}
+			m.HourlyLatency = [24]time.Duration{}
+			m.HourlyLatencySum = [24]time.Duration{}
+			m.HourlyLatencyCount = [24]int64{}
 		}
+		m.HourlyReset = now
+		m.HourlyStats[hour]++
+		m.updateLatency(duration, hour)
 	}
 
 	switch {
@@ -188,7 +274,7 @@ func (m *APIMetrics) cleanupOldTimestamps(now time.Time) {
 	}
 }
 
-func (m *APIMetrics) GetStats() map[string]interface{} {
+func (m *APIMetrics) GetStats() map[string]any {
 	m.Lock()
 	defer m.Unlock()
 	return m.getStatsUnsafe()
@@ -209,7 +295,7 @@ func reorderHourlyStatsToChronological(hourlyData [24]int) [24]int {
 	currentHour := now.Hour()
 
 	var chronological [24]int
-	for i := 0; i < 24; i++ {
+	for i := range 24 {
 		hourIndex := (currentHour - 23 + i + 24) % 24
 		chronological[i] = hourlyData[hourIndex]
 	}
@@ -221,14 +307,14 @@ func reorderHourlyLatencyToChronological(hourlyData [24]time.Duration) [24]time.
 	currentHour := now.Hour()
 
 	var chronological [24]time.Duration
-	for i := 0; i < 24; i++ {
+	for i := range 24 {
 		hourIndex := (currentHour - 23 + i + 24) % 24
 		chronological[i] = hourlyData[hourIndex]
 	}
 	return chronological
 }
 
-func (m *APIMetrics) getStatsUnsafe() map[string]interface{} {
+func (m *APIMetrics) getStatsUnsafe() map[string]any {
 	currentCount := len(m.RequestTimestamps)
 
 	limit := float64(cfg.HourlyRateLimit)
@@ -268,7 +354,7 @@ func (m *APIMetrics) getStatsUnsafe() map[string]interface{} {
 		lastIPCheck = m.LastIPCheckTime.Format("15:04:05")
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"total_requests":        m.TotalRequests,
 		"success_rate":          fmt.Sprintf("%.2f%%", successRate),
 		"avg_latency":           m.AverageLatency.String(),
@@ -343,6 +429,7 @@ func (m *APIMetrics) SaveToFile(path string) error {
 		DailyDELETE:          m.DailyDELETE,
 		DailyNIC:             m.DailyNIC,
 		DailyReset:           m.DailyReset,
+		HourlyReset:          m.HourlyReset,
 		LatencySamples:       m.LatencySamples,
 		LatencySampleIdx:     m.LatencySampleIdx,
 		LatencySampleCount:   m.LatencySampleCount,
@@ -356,7 +443,7 @@ func (m *APIMetrics) SaveToFile(path string) error {
 	}
 	copy(snap.RequestTimestamps, m.RequestTimestamps)
 
-	for i := 0; i < 24; i++ {
+	for i := range 24 {
 		snap.HourlyLatencyMs[i] = m.HourlyLatency[i].Milliseconds()
 	}
 	m.Unlock()
@@ -401,7 +488,7 @@ func (m *APIMetrics) LoadFromFile(path string) error {
 	m.AverageLatency = time.Duration(snap.AverageLatencyMs) * time.Millisecond
 	m.HourlyStats = snap.HourlyStats
 
-	for i := 0; i < 24; i++ {
+	for i := range 24 {
 		m.HourlyLatency[i] = time.Duration(snap.HourlyLatencyMs[i]) * time.Millisecond
 	}
 
@@ -416,6 +503,9 @@ func (m *APIMetrics) LoadFromFile(path string) error {
 		m.DailyDELETE = snap.DailyDELETE
 		m.DailyNIC = snap.DailyNIC
 		m.DailyReset = snap.DailyReset
+		if !snap.HourlyReset.IsZero() && snap.HourlyReset.Day() == time.Now().Local().Day() {
+			m.HourlyReset = snap.HourlyReset
+		}
 	}
 
 	m.LatencySamples = snap.LatencySamples
@@ -457,7 +547,7 @@ func startMetricsAutosave(interval time.Duration) {
 	}()
 }
 
-func setLatestMetrics(stats map[string]interface{}) {
+func setLatestMetrics(stats map[string]any) {
 	latestMetricsMu.Lock()
 	latestMetrics = stats
 	latestMetricsMu.Unlock()

@@ -8,6 +8,10 @@ import (
 	"sync"
 )
 
+// ============================================================================
+// DNS INITIALIZATION
+// ============================================================================
+
 func processDomains(
 	ctx context.Context,
 	zonesByProvider map[string][]Zone,
@@ -361,8 +365,14 @@ func updateDomainRecord(
 	switch dc.Provider {
 	case ProviderCloudflare:
 		return updateCloudflareDNS(ctx, dc, job.Domain, recordType, ip, job.Records, job.ZoneID)
-	default:
+	case ProviderIONOS:
 		return updateIonosDNS(ctx, dc, job.Domain, recordType, ip, job.Records, job.ZoneID, job.ZoneName, cache)
+	case ProviderHetzner:
+		return updateHetznerDNS(ctx, dc, job.Domain, recordType, ip, job.Records, job.ZoneID, job.ZoneName, cache)
+	case ProviderHetznerCloud:
+		return updateHetznerCloudDNS(ctx, dc, job.Domain, recordType, ip, job.Records, job.ZoneID, job.ZoneName, cache)
+	default:
+		return false, fmt.Errorf("unknown provider: %s", dc.Provider)
 	}
 }
 

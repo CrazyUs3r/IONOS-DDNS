@@ -213,11 +213,16 @@ func loadZoneRecordsForProvider(
 	zone Zone,
 	provider ProviderType,
 ) ([]Record, error) {
-	if provider == ProviderCloudflare {
+	switch provider {
+	case ProviderCloudflare:
 		return loadCloudflareRecords(ctx, domainConfig, zone.ID)
+	case ProviderHetzner:
+		return loadHetznerDNSZoneRecords(ctx, domainConfig, zone.ID)
+	case ProviderHetznerCloud:
+		return loadHetznerCloudZoneRecords(ctx, domainConfig, zone.ID)
+	default:
+		return loadIonosZoneRecords(ctx, domainConfig, zone.ID)
 	}
-
-	return loadIonosZoneRecords(ctx, domainConfig, zone.ID)
 }
 
 func loadIonosZoneRecords(ctx context.Context, domainConfig *DomainConfig, zoneID string) ([]Record, error) {

@@ -127,7 +127,7 @@ func handleCurrentIPsError(err error, firstRun bool) (string, string, bool) {
 	log(LogContext{
 		Level:   LogWarn,
 		Action:  ActionError,
-		Message: fmt.Sprintf(T.IPFetchFailed, err) + " – nutze letzten bekannten Stand als Fallback",
+		Message: fmt.Sprintf(T.IPFetchFailedFallback, err),
 	})
 
 	return fallbackV4, fallbackV6, true
@@ -140,7 +140,7 @@ func logChangedIPs(currentIPv4, currentIPv6 string) {
 		log(LogContext{
 			Level:   LogWarn,
 			Action:  ActionUpdate,
-			Message: fmt.Sprintf("🔄 IPv4 geändert: %s → %s", lastV4, currentIPv4),
+			Message: fmt.Sprintf(T.IPv4Changed, lastV4, currentIPv4),
 		})
 	}
 
@@ -148,7 +148,7 @@ func logChangedIPs(currentIPv4, currentIPv6 string) {
 		log(LogContext{
 			Level:   LogWarn,
 			Action:  ActionUpdate,
-			Message: fmt.Sprintf("🔄 IPv6 geändert: %s → %s", lastV6, currentIPv6),
+			Message: fmt.Sprintf(T.IPv6Changed, lastV6, currentIPv6),
 		})
 	}
 }
@@ -423,7 +423,21 @@ func saveProviderCacheJob(job cacheSaveJob, cache *ZoneRecordCache) bool {
 
 	case ProviderIPv64:
 		if err := saveIPv64Cache(); err != nil {
-			debugLog("CACHE", "", fmt.Sprintf("⚠️ IPv64 cache save failed: %v", err))
+			debugLog("CACHE", "", fmt.Sprintf(T.IPv64CacheSaveFailed, err))
+			return false
+		}
+		return true
+
+	case ProviderHetzner:
+		if err := saveHetznerDNSCacheToFile(job.zones, cache); err != nil {
+			debugLog("CACHE", "", fmt.Sprintf(T.HetznerDNSCacheSaveFailed, err))
+			return false
+		}
+		return true
+
+	case ProviderHetznerCloud:
+		if err := saveHetznerCloudCacheToFile(job.zones, cache); err != nil {
+			debugLog("CACHE", "", fmt.Sprintf(T.HetznerCloudCacheSaveFailed, err))
 			return false
 		}
 		return true
@@ -498,6 +512,12 @@ func runCleanupIfNeeded(ctx context.Context, zonesByProvider map[string][]Zone, 
 
 		case ProviderCloudflare:
 			cleanupCloudflareRecords(ctx, zones, cache)
+
+		case ProviderHetzner:
+			cleanupHetznerDNSRecords(ctx, zones, cache)
+
+		case ProviderHetznerCloud:
+			cleanupHetznerCloudRecords(ctx, zones, cache)
 
 		case ProviderIPv64:
 			cfgMu.RLock()
@@ -581,6 +601,12 @@ func loadProviderRecordCacheFromDisk(
 	case ProviderIPv64:
 		return loadIPv64RecordCacheFromDisk(cache, zones), nil
 
+	case ProviderHetzner:
+		return loadProviderRecordCache(cache, zones, loadHetznerDNSCacheFromFile)
+
+	case ProviderHetznerCloud:
+		return loadProviderRecordCache(cache, zones, loadHetznerCloudCacheFromFile)
+
 	default:
 		return false, nil
 	}
@@ -652,6 +678,20 @@ func loadProviderZonesFromDisk(provider ProviderType) ([]Zone, bool) {
 		zones, ok := loadIPv64ZonesFromDiskCache()
 		if ok {
 			debugLog("CACHE", "", fmt.Sprintf(T.IPv64ZonesLoadedFromDisk, len(zones)))
+			return zones, true
+		}
+
+	case ProviderHetzner:
+		zones, _, err := loadHetznerDNSCacheFromFile()
+		if err == nil && len(zones) > 0 {
+			debugLog("CACHE", "", fmt.Sprintf(T.HetznerDNSZonesLoadedFromDisk, len(zones)))
+			return zones, true
+		}
+
+	case ProviderHetznerCloud:
+		zones, _, err := loadHetznerCloudCacheFromFile()
+		if err == nil && len(zones) > 0 {
+			debugLog("CACHE", "", fmt.Sprintf(T.HetznerCloudZonesLoadedFromDisk, len(zones)))
 			return zones, true
 		}
 	}

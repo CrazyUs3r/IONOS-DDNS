@@ -219,7 +219,30 @@ func (s *SessionStore) cleanupLoop() {
 // USER PERSISTENCE
 // ============================================================================
 
+var (
+	usersCache   []DashboardUser
+	usersCacheMu sync.RWMutex
+)
+
 func loadUsers() []DashboardUser {
+	usersCacheMu.RLock()
+	if usersCache != nil {
+		out := make([]DashboardUser, len(usersCache))
+		copy(out, usersCache)
+		usersCacheMu.RUnlock()
+		return out
+	}
+	usersCacheMu.RUnlock()
+
+	usersCacheMu.Lock()
+	defer usersCacheMu.Unlock()
+
+	if usersCache != nil {
+		out := make([]DashboardUser, len(usersCache))
+		copy(out, usersCache)
+		return out
+	}
+
 	data, err := os.ReadFile(usersFilePath)
 	if err != nil {
 		return nil
@@ -228,7 +251,8 @@ func loadUsers() []DashboardUser {
 	if err := json.Unmarshal(data, &users); err != nil {
 		return nil
 	}
-	return users
+	usersCache = users
+	return append([]DashboardUser(nil), users...)
 }
 
 func saveUsers(users []DashboardUser) error {
@@ -240,13 +264,20 @@ func saveUsers(users []DashboardUser) error {
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return err
 	}
-	return os.Rename(tmp, usersFilePath)
+	if err := os.Rename(tmp, usersFilePath); err != nil {
+		return err
+	}
+	usersCacheMu.Lock()
+	usersCache = nil
+	usersCacheMu.Unlock()
+	return nil
 }
 
 func findUserByUsername(username string) (*DashboardUser, bool) {
 	users := loadUsers()
-	for _, u := range users {
-		if strings.EqualFold(u.Username, username) {
+	for i := range users {
+		if strings.EqualFold(users[i].Username, username) {
+			u := users[i]
 			return &u, true
 		}
 	}
@@ -361,12 +392,11 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	redirect := r.URL.Query().Get("redirect")
-	if redirect == "" {
+	if redirect == "" || !strings.HasPrefix(redirect, "/") || strings.HasPrefix(redirect, "//") {
 		redirect = "/"
 	}
 
-	if sess, ok := sessionFromRequest(r); ok {
-		_ = sess
+	if _, ok := sessionFromRequest(r); ok {
 		http.Redirect(w, r, redirect, http.StatusFound)
 		return
 	}
@@ -374,6 +404,21 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	var errMsg string
 
 	if r.Method == http.MethodPost {
+		clientIP := getClientIP(r)
+		limiter := loginLimiter.GetLimiter(clientIP)
+		if !limiter.Allow() {
+			w.Header().Set("Retry-After", "60")
+			errMsg = "Too many login attempts. Please wait."
+			log(LogContext{
+				Level:   LogWarn,
+				Action:  ActionConfig,
+				Message: fmt.Sprintf("🚫 Login rate limit exceeded for IP: %s", clientIP),
+			})
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = fmt.Fprintf(w, "%s", buildLoginPage(errMsg, redirect))
+			return
+		}
+
 		username := strings.TrimSpace(r.FormValue("username"))
 		password := r.FormValue("password")
 

@@ -144,24 +144,29 @@ func printZoneInfrastructure(
 	printRelevantInfrastructureRecords(relevant)
 }
 
-func loadInfrastructureRecords(
-	ctx context.Context,
-	provider ProviderType,
-	z Zone,
-	dc *DomainConfig,
-) []Record {
+func loadInfrastructureRecords(ctx context.Context, provider ProviderType, z Zone, dc *DomainConfig) []Record {
 	switch provider {
 	case ProviderIPv64:
 		return loadIPv64InfrastructureRecords(z)
-
 	case ProviderCloudflare:
 		if dc == nil {
 			return nil
 		}
 		records, _ := loadCloudflareRecords(ctx, dc, z.ID)
 		return records
-
-	default:
+	case ProviderHetzner:
+		if dc == nil {
+			return nil
+		}
+		records, _ := loadHetznerDNSZoneRecords(ctx, dc, z.ID)
+		return records
+	case ProviderHetznerCloud:
+		if dc == nil {
+			return nil
+		}
+		records, _ := loadHetznerCloudZoneRecords(ctx, dc, z.ID)
+		return records
+	default: // IONOS
 		if dc == nil {
 			return nil
 		}

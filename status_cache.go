@@ -23,7 +23,7 @@ func updateStatusFile(fqdn, ipv4, ipv6, provider string) {
 		debugLog("CACHE", "", fmt.Sprintf(t(T.ErrUpdateDomainsCache, "updateDomainsCache failed: %v"), err))
 	}
 
-	broadcastUpdate("domain_update", map[string]interface{}{
+	broadcastUpdate("domain_update", map[string]any{
 		"domain": fqdn,
 		"ipv4":   ipv4,
 		"ipv6":   ipv6,

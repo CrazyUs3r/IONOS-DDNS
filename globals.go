@@ -4,8 +4,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"crypto/tls"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -23,18 +21,15 @@ import (
 // GLOBALE VARIABLEN
 // ============================================================================
 var (
-	cfg               Config
-	T                 Phrases
-	startTime         = time.Now()
-	configDir         string
-	langDir           string
-	logPath           string
-	configPath        string
-	updatePath        string
-	logCachePath      string
-	ionosBaseURL      = "https://api.hosting.ionos.com/dns/v1/zones"
-	cloudflareAPIBase = "https://api.cloudflare.com/client/v4"
-	ipv64APIBase      = "https://ipv64.net/api.php"
+	cfg          Config
+	T            Phrases
+	startTime    = time.Now()
+	configDir    string
+	langDir      string
+	logPath      string
+	configPath   string
+	updatePath   string
+	logCachePath string
 
 	lastOk             atomic.Bool
 	schedulerRanOnce   atomic.Bool
@@ -56,7 +51,7 @@ var (
 
 	apiMetrics      = &APIMetrics{}
 	latestMetricsMu sync.RWMutex
-	latestMetrics   map[string]interface{}
+	latestMetrics   map[string]any
 	logCacheWriteMu sync.Mutex
 
 	metricsSignal = make(chan struct{}, 1)
@@ -72,6 +67,7 @@ var (
 
 	globalTriggerLimiter *RateLimiter
 	ipTriggerLimiter     *IPRateLimiter
+	loginLimiter         *IPRateLimiter
 	updateInProgress     atomic.Bool
 	forceNextUpdate      atomic.Bool
 
@@ -222,7 +218,7 @@ const (
 	IconAPI      = "🔌"
 	IconServer   = "🖥️"
 	IconSuccess  = "✅"
-	HTMLChecked = " checked"
+	HTMLChecked  = " checked"
 	HTMLSelected = " selected"
 )
 
@@ -336,6 +332,7 @@ const (
 	MethodDELETE = "DELETE"
 	MethodGET    = "GET"
 	MethodNIC    = "NIC"
+	MethodADD    = "ADD"
 )
 
 // ============================================================================
@@ -369,9 +366,17 @@ const (
 // PROVIDER TYPES
 // ============================================================================
 const (
-	ProviderIONOS      ProviderType = "IONOS"
-	ProviderCloudflare ProviderType = "CLOUDFLARE"
-	ProviderIPv64      ProviderType = "IPV64"
+	ProviderIONOS        ProviderType = "IONOS"
+	ProviderCloudflare   ProviderType = "CLOUDFLARE"
+	ProviderIPv64        ProviderType = "IPV64"
+	ProviderHetzner      ProviderType = "HETZNER"
+	ProviderHetznerCloud ProviderType = "HETZNERCLOUD"
+
+	ionosBaseURL        = "https://api.hosting.ionos.com/dns/v1/zones"
+	cloudflareAPIBase   = "https://api.cloudflare.com/client/v4"
+	ipv64APIBase        = "https://ipv64.net/api.php"
+	hetznerDNSBaseURL   = "https://dns.hetzner.com/api/v1"
+	hetznerCloudBaseURL = "https://api.hetzner.cloud/v1"
 )
 
 type ProviderType string
@@ -494,6 +499,7 @@ type Phrases struct {
 
 	// Provider-Hinweise / Config
 	IonosAPIRequired, Ipv64TokenRequired, CloudflareAuthRequired, UnknownProvider  string
+	HetznerAuthRequired                                                            string
 	DomainParamMissing, DomainStillActiveInConfig, NicIPv64Updates                 string
 	NoStatusFileFound, DomainNotFoundInStatus                                      string
 	DomainDeletedFromStatusLog, DomainRemovedFromStatus                            string
@@ -635,9 +641,12 @@ type Phrases struct {
 	RecordCacheTooOldReload, RecordCacheLoadedFromDiskNoAPICall, TryingLoadRecordCacheFromDisk     string
 	RecordCacheLoadedFromDisk, RecordsLoadedSuccessfully, RecordCacheErrorZone                     string
 	DiskCachePersistSkipped, CloudflareCacheSaveFailed, IonosCacheSaveFailed                       string
+	IPv64CacheSaveFailed, HetznerDNSCacheSaveFailed, HetznerCloudCacheSaveFailed                   string
 	CleanupSkippedLastRun, CleanupStartingLastRun, CheckingIPv64OrphanedRecords                    string
 	IPv64ZonesLoadedFromDisk, CloudflareZonesLoadedFromDisk, IonosZonesLoadedFromDisk              string
 	NoProviderCacheOnDiskFound, NoRecordCachesFound, APIAndDiskCacheFailed                         string
+	IPFetchFailedFallback, IPv4Changed, IPv6Changed, HetznerDNSZonesLoadedFromDisk                 string
+	HetznerCloudZonesLoadedFromDisk                                                                string
 
 	// Main
 	MaxAPIRetriesInvalid, LogMaxLinesInvalid, ConfigJSONReadFailed, ProviderConfigFailed                   string
@@ -727,6 +736,16 @@ type rawEntry struct {
 	// IPv64
 	IPv64Token  string `json:"ipv64_token"`
 	IPv64Token2 string `json:"IPV64_TOKEN"`
+
+	// Hetzner DNS / Hetzner Cloud DNS aliases
+	HetznerToken       string `json:"hetzner_token"`
+	HetznerToken2      string `json:"HETZNER_TOKEN"`
+	HetznerDNSToken    string `json:"hetzner_dns_token"`
+	HetznerDNSToken2   string `json:"HETZNER_DNS_TOKEN"`
+	HetznerCloudToken  string `json:"hetzner_cloud_token"`
+	HetznerCloudToken2 string `json:"HETZNER_CLOUD_TOKEN"`
+	HCloudToken        string `json:"hcloud_token"`
+	HCloudToken2       string `json:"HCLOUD_TOKEN"`
 
 	TTL       int  `json:"ttl"`
 	CFProxied bool `json:"cf_proxied"`
@@ -832,7 +851,7 @@ type CloudflareResponse struct {
 	Success  bool              `json:"success"`
 	Errors   []CloudflareError `json:"errors"`
 	Messages []string          `json:"messages"`
-	Result   interface{}       `json:"result"`
+	Result   any               `json:"result"`
 }
 
 type CloudflareError struct {
@@ -908,52 +927,14 @@ type APIError struct {
 	RetryAfter time.Duration
 }
 
-type APIMetrics struct {
-	sync.Mutex
-	TotalRequests        int64
-	SuccessRequests      int64
-	FailedRequests       int64
-	RateLimitHits        int64
-	ServerErrors         int64
-	ClientErrors         int64
-	LatencySum           time.Duration
-	LatencyCount         int64
-	AverageLatency       time.Duration
-	HourlyLatencySum     [24]time.Duration
-	HourlyLatencyCount   [24]int64
-	HourlyLatency        [24]time.Duration
-	LastError            string
-	LastErrorTimestamp   time.Time
-	LastSuccessTimestamp time.Time
-	RequestTimestamps    []time.Time
-	HourlyStats          [24]int
-	lastHour             int64
-	LatencySamples       [1000]int64
-	LatencySampleIdx     int
-	LatencySampleCount   int
-	DailyGET             int64
-	DailyPOST            int64
-	DailyPUT             int64
-	DailyDELETE          int64
-	DailyNIC             int64
-	DailyReset           time.Time
-	IPLatencySum         time.Duration
-	IPLatencyCount       int64
-	IPLatencyAvg         time.Duration
-	IPLatencySamples     [200]int64
-	IPLatencySampleIdx   int
-	IPLatencySampleCount int
-	LastIPCheckTime      time.Time
-}
-
 type SafeErrorMsg struct {
 	sync.RWMutex
 	msg string
 }
 
 type WSMessage struct {
-	Type string      `json:"type"`
-	Data interface{} `json:"data"`
+	Type string `json:"type"`
+	Data any    `json:"data"`
 }
 
 type WSClient struct {
@@ -1024,195 +1005,4 @@ type domainUpdateResult struct {
 type rotationJob struct {
 	path     string
 	maxLines int
-}
-
-type apiMetricsSnapshot struct {
-	TotalRequests        int64       `json:"total_requests"`
-	SuccessRequests      int64       `json:"success_requests"`
-	FailedRequests       int64       `json:"failed_requests"`
-	RateLimitHits        int64       `json:"rate_limit_hits"`
-	ServerErrors         int64       `json:"server_errors"`
-	ClientErrors         int64       `json:"client_errors"`
-	AverageLatencyMs     int64       `json:"avg_latency_ms"`
-	HourlyStats          [24]int     `json:"hourly_stats"`
-	HourlyLatencyMs      [24]int64   `json:"hourly_latency_ms"`
-	RequestTimestamps    []time.Time `json:"request_timestamps"`
-	LastSuccessTime      time.Time   `json:"last_success_at"`
-	LastError            string      `json:"last_error"`
-	LastErrorTime        time.Time   `json:"last_error_at"`
-	SavedAt              time.Time   `json:"saved_at"`
-	DailyGET             int64       `json:"daily_get"`
-	DailyPOST            int64       `json:"daily_post"`
-	DailyPUT             int64       `json:"daily_put"`
-	DailyDELETE          int64       `json:"daily_delete"`
-	DailyNIC             int64       `json:"daily_nic"`
-	DailyReset           time.Time   `json:"daily_reset"`
-	LatencySamples       [1000]int64 `json:"latency_samples"`
-	LatencySampleIdx     int         `json:"latency_sample_idx"`
-	LatencySampleCount   int         `json:"latency_sample_count"`
-	IPLatencySum         int64       `json:"ip_latency_sum_ms"`
-	IPLatencyCount       int64       `json:"ip_latency_count"`
-	IPLatencyAvgMs       int64       `json:"ip_latency_avg_ms"`
-	IPLatencySamples     [200]int64  `json:"ip_latency_samples"`
-	IPLatencySampleIdx   int         `json:"ip_latency_sample_idx"`
-	IPLatencySampleCount int         `json:"ip_latency_sample_count"`
-	LastIPCheckTime      time.Time   `json:"last_ip_check_at"`
-}
-
-// ============================================================================
-// HTTP TRACE / TIMINGS (DNS, CONNECT, TLS, TTFB, REUSE)
-// ============================================================================
-type httpTimings struct {
-	start        time.Time
-	end          time.Time
-	gotConn      time.Time
-	connReused   bool
-	connWasIdle  bool
-	connIdleTime time.Duration
-	dnsStart     time.Time
-	dnsDone      time.Time
-	dnsErr       error
-	connectStart time.Time
-	connectDone  time.Time
-	connectNet   string
-	connectAddr  string
-	connectErr   error
-	tlsStart     time.Time
-	tlsDone      time.Time
-	tlsState     *tls.ConnectionState
-	tlsErr       error
-	wroteRequest time.Time
-	firstByte    time.Time
-}
-
-// ============================================================================
-// NOTIFICATION
-// ============================================================================
-type NotifyEvent string
-
-const (
-	NotifyOnUpdate  NotifyEvent = "UPDATE"
-	NotifyOnCreate  NotifyEvent = "CREATE"
-	NotifyOnError   NotifyEvent = "ERROR"
-	NotifyOnStart   NotifyEvent = "START"
-	NotifyOnStop    NotifyEvent = "STOP"
-	NotifyOnCleanup NotifyEvent = "CLEANUP"
-)
-
-type Notifier interface {
-	Name() string
-	Send(msg NotifyMessage) error
-}
-
-type NotifyMessage struct {
-	Action  string
-	Domain  string
-	Message string
-	Level   LogLevel
-}
-
-type notifyConfig struct {
-	notifiers []Notifier
-	events    map[NotifyEvent]struct{}
-}
-
-// ============================================================================
-// DNS CACHE
-// ============================================================================
-type dnsCache struct {
-	ttl      time.Duration
-	mu       sync.Mutex
-	entries  map[string]dnsCacheEntry
-	inflight map[string]*dnsInFlight
-	resolver *net.Resolver
-}
-
-type dnsCacheEntry struct {
-	ips    []net.IPAddr
-	expiry time.Time
-}
-
-type dnsInFlight struct {
-	done  chan struct{}
-	addrs []net.IPAddr
-	err   error
-}
-
-// ============================================================================
-// TELEGRAM TYPES
-// ============================================================================
-type tgMessage struct {
-	MessageID int    `json:"message_id"`
-	Text      string `json:"text"`
-	Chat      tgChat `json:"chat"`
-	From      tgUser `json:"from"`
-	Date      int64  `json:"date"`
-}
-
-type tgChat struct {
-	ID int64 `json:"id"`
-}
-
-type tgUser struct {
-	ID        int64  `json:"id"`
-	FirstName string `json:"first_name"`
-	Username  string `json:"username"`
-}
-
-type tgInlineKeyboard struct {
-	InlineKeyboard [][]tgInlineButton `json:"inline_keyboard"`
-}
-
-type tgInlineButton struct {
-	Text         string `json:"text"`
-	CallbackData string `json:"callback_data"`
-}
-
-type tgCallbackQuery struct {
-	ID      string    `json:"id"`
-	From    tgUser    `json:"from"`
-	Message tgMessage `json:"message"`
-	Data    string    `json:"data"`
-}
-
-type tgUpdateFull struct {
-	UpdateID      int64            `json:"update_id"`
-	Message       *tgMessage       `json:"message,omitempty"`
-	CallbackQuery *tgCallbackQuery `json:"callback_query,omitempty"`
-}
-type telegramNotifier struct {
-	token          string
-	chatID         string
-	instanceTag    string
-	pollOnce       sync.Once
-	pollClientOnce sync.Once
-	pollClient     *http.Client
-	lastOffset     atomic.Int64
-	sendQueue      chan tgQueuedMsg
-	pollCtx        context.Context
-	pollCancel     context.CancelFunc
-	wg             sync.WaitGroup
-}
-
-type tgQueuedMsg struct {
-	chatID   string
-	text     string
-	kb       *tgInlineKeyboard
-	enqueued time.Time
-}
-
-// ============================================================================
-// GOTIFY TYPES
-// ============================================================================
-type gotifyNotifier struct {
-	url       string
-	token     string
-	sendQueue chan gotifyQueuedMsg
-}
-
-type gotifyQueuedMsg struct {
-	title    string
-	body     string
-	priority int
-	enqueued time.Time
 }

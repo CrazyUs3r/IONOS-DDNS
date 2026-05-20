@@ -32,7 +32,7 @@ func loadIONOSCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
 // ============================================================================
 // API - IONOS
 // ============================================================================
-func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body interface{}) ([]byte, error) {
+func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body any) ([]byte, error) {
 	return apiWithRetry(ctx, "IONOS", T.IonosAPIFailed, func(attempt, maxRetries int) ([]byte, bool, error) {
 		return ionosAPIAttempt(ctx, dc, method, url, body, attempt, maxRetries)
 	})
@@ -42,7 +42,7 @@ func ionosAPIAttempt(
 	ctx context.Context,
 	dc *DomainConfig,
 	method, url string,
-	body interface{},
+	body any,
 	attempt, maxRetries int,
 ) ([]byte, bool, error) {
 	debugLog("HTTP", "", fmt.Sprintf(
@@ -73,7 +73,7 @@ func ionosAPIAttempt(
 	return handleIonosResponse(ctx, res, method, url, duration, attempt)
 }
 
-func marshalIonosBody(body interface{}) ([]byte, error) {
+func marshalIonosBody(body any) ([]byte, error) {
 	if body == nil {
 		return nil, nil
 	}
@@ -91,7 +91,7 @@ func buildIonosRequest(
 	ctx context.Context,
 	dc *DomainConfig,
 	method, url string,
-	body interface{},
+	body any,
 	bodyBytes []byte,
 ) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(bodyBytes))
@@ -328,12 +328,12 @@ func buildIonosUpdateRequest(
 	dc *DomainConfig,
 	fqdn, recordType, newIP, zoneID string,
 	existing *Record,
-) (string, string, string, interface{}) {
+) (string, string, string, any) {
 	if existing != nil {
 		return MethodPUT,
 			fmt.Sprintf("%s/%s/records/%s", ionosBaseURL, zoneID, existing.ID),
 			ActionUpdate,
-			map[string]interface{}{
+			map[string]any{
 				"name":    fqdn,
 				"type":    recordType,
 				"content": newIP,
@@ -363,7 +363,7 @@ func executeIonosDNSUpdate(
 	ctx context.Context,
 	dc *DomainConfig,
 	fqdn, recordType, newIP, method, url string,
-	payload interface{},
+	payload any,
 ) error {
 	_, err := ionosAPI(ctx, dc, method, url, payload)
 	if err == nil {

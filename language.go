@@ -166,10 +166,8 @@ func loadEnglishTranslations() (map[string]string, error) {
 }
 
 func applyTranslations(translations map[string]string) {
-	phraseMu.Lock()
-	defer phraseMu.Unlock()
-
-	v := reflect.ValueOf(&T).Elem()
+	var newT Phrases
+	v := reflect.ValueOf(&newT).Elem()
 	typ := v.Type()
 
 	for i := 0; i < v.NumField(); i++ {
@@ -179,6 +177,9 @@ func applyTranslations(translations map[string]string) {
 			v.Field(i).SetString(val)
 		}
 	}
+	phraseMu.Lock()
+	T = newT
+	phraseMu.Unlock()
 }
 
 func logLanguageLoaded(lang string, count int) {

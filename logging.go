@@ -455,6 +455,13 @@ func doLogRotation(path string, maxLines int) {
 		return
 	}
 
+	if filepath.Clean(path) == filepath.Clean(logPath) {
+		logMemCacheMu.Lock()
+		logMemCache = nil
+		logMemCacheTime = time.Time{}
+		logMemCacheMu.Unlock()
+	}
+
 	debugLog("MAINTENANCE", "", fmt.Sprintf("✅ %s: %d → %d", T.LogRotated, totalCount, len(newLines)))
 }
 

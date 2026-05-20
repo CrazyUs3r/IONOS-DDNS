@@ -48,7 +48,7 @@ func newEmailNotifier(host string, port int, username, password, from, toRaw, su
 	}
 
 	recipients := make([]string, 0)
-	for _, addr := range strings.Split(toRaw, ",") {
+	for addr := range strings.SplitSeq(toRaw, ",") {
 		addr = strings.TrimSpace(addr)
 		if addr != "" {
 			recipients = append(recipients, addr)

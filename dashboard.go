@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -71,8 +72,8 @@ func generateSVGChart(data [24]int) string {
 	timeLabels := labelsBuilder.String()
 
 	return fmt.Sprintf(`
-		<details class="card">
-			<summary>📈 %s</summary>
+		<div class="card">
+			<div style="padding:15px 20px 10px;font-weight:600;">📈 %s</div>
 			<div class="card-content chart-wrap pr-10">
 				<div class="chart-y-axis req">
 					<div class="chart-y-label top">%.0f</div>
@@ -83,12 +84,11 @@ func generateSVGChart(data [24]int) string {
 					<path d="%s L 300,60 L 0,60 Z" fill="rgba(56,189,248,0.1)"/>
 					<path d="%s" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/>
 				</svg>
-
 				<div class="chart-x-labels">
 					%s
 				</div>
 			</div>
-		</details>`, T.RequestHistory, renderMax, renderMax/2, pathData, pathData, timeLabels)
+		</div>`, T.RequestHistory, renderMax, renderMax/2, pathData, pathData, timeLabels)
 }
 
 func generateLatencyChart(data [24]time.Duration) string {
@@ -137,8 +137,8 @@ func generateLatencyChart(data [24]time.Duration) string {
 	timeLabels := labelsBuilder.String()
 
 	return fmt.Sprintf(`
-		<details class="card">
-			<summary>⚡ %s</summary>
+		<div class="card">
+			<div style="padding:15px 20px 10px;font-weight:600;">⚡ %s</div>
 			<div class="card-content chart-wrap pr-5">
 				<div class="chart-y-axis latency">
 					<div class="chart-y-label top">%.0fms</div>
@@ -149,12 +149,11 @@ func generateLatencyChart(data [24]time.Duration) string {
 					<path d="%s L 300,60 L 0,60 Z" fill="rgba(139,92,246,0.15)"/>
 					<path d="%s" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 				</svg>
-
 				<div class="chart-x-labels">
 					%s
 				</div>
 			</div>
-		</details>`, T.LatencyHistory, renderMax, renderMax/2, pathData, pathData, timeLabels)
+		</div>`, T.LatencyHistory, renderMax, renderMax/2, pathData, pathData, timeLabels)
 }
 
 func toInt24(v any) ([24]int, bool) {
@@ -246,35 +245,11 @@ func toDur24(v any) ([24]time.Duration, bool) {
 // ============================================================================
 // DASHBOARD HTTP HANDLER
 // ============================================================================
-func buildSettingsModal(c Config, isAdmin bool) string {
-	securitySection := buildSettingsSecuritySection()
-	systemSection := buildSettingsSystemSection(c)
-	domainsSection := buildSettingsDomainsSection()
-	notifySection := buildSettingsNotifySection(c)
-
-	modal := `<div id="settingsOverlay" class="modal-overlay" onclick="closeSettingsOutside(event)"><div class="modal"><div class="modal-header"><h2>⚙️ ` + T.SettingsTitle + `</h2><button class="modal-close" onclick="closeSettings()">✕</button></div><div class="modal-body">` +
-		buildSettingsCollapsibleSection(T.SettingsSecurity, securitySection, false) +
-		buildSettingsCollapsibleSection(T.SettingsSystem, systemSection, true) +
-		buildSettingsCollapsibleSection(T.SettingsDomains, domainsSection, false) +
-		buildSettingsCollapsibleSection(T.SettingsNotify, notifySection, false)
-
-	if isAdmin {
-		modal += buildSettingsCollapsibleSection(T.SettingsUserManagement, buildUsersSection(), false)
-	}
-
-	modal += buildSettingsSaveSection() +
-		`</div></div></div>`
-
-	return modal
-}
-
-func buildSettingsCollapsibleSection(title, body string, open bool) string {
-	openAttr := ""
-	if open {
-		openAttr = " open"
-	}
-
-	return `<details class="s-section s-collapsible"` + openAttr + `><summary class="s-section-summary"><span>` + title + `</span><span class="s-section-chevron">▾</span></summary><div class="s-section-content">` + body + `</div></details>`
+func buildSettingsInlineSection(title, body string) string {
+	return `<div class="s-section" style="margin-bottom:20px;">` +
+		`<div class="s-section-label" style="font-size:0.68rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border);">` + title + `</div>` +
+		body +
+		`</div>`
 }
 
 func buildSettingsSubSection(id, title, body string) string {
@@ -412,8 +387,8 @@ func buildSettingsSystemSection(c Config) string {
 }
 
 func buildSettingsDomainsSection() string {
-	addDomainForm := `<div class="add-domain-box"><input type="text" id="new-domain-fqdn" class="s-input mb-8" placeholder="` + T.SettingsDomainPlaceholder + `"><input type="number" id="new-domain-ttl" class="s-input mb-8" placeholder="TTL (z. B. 60)" min="1" step="1"><select id="new-domain-ip-mode" class="s-input mb-8"><option value="">` + T.SettingsIPMode + ` (` + T.SettingsIPMode + ` global)</option><option value="BOTH">BOTH – IPv4 + IPv6</option><option value="IPV4">IPV4 – nur IPv4</option><option value="IPV6">IPV6 – nur IPv6</option></select><select id="new-domain-provider" class="s-input mb-8" onchange="toggleProviderFields()"><option value="IONOS">IONOS</option><option value="CLOUDFLARE">Cloudflare</option><option value="IPV64">IPv64</option></select><div id="fields-ionos"><input type="text" id="new-ionos-prefix" class="s-input mb-8" placeholder="` + T.SettingsAPIPrefix + `"><div class="input-with-action mt-8"><input type="password" id="new-ionos-secret" class="s-input" placeholder="` + T.SettingsAPISecret + `"><button type="button" class="input-action-btn" onclick="togglePassword('new-ionos-secret', this)">👁️</button></div></div><div id="fields-cloudflare" class="is-hidden"><input type="text" id="new-cf-token" class="s-input mb-8" placeholder="` + T.SettingsCFTokenHint + `"><div class="center-note">` + T.SettingsCFOr + `</div><input type="text" id="new-cf-email" class="s-input mb-8" placeholder="` + T.SettingsCFEmail + `"><div class="input-with-action mt-8"><input type="password" id="new-cf-secret" class="s-input" placeholder="` + T.SettingsCFGlobalKey + `"><button type="button" class="input-action-btn" onclick="togglePassword('new-cf-secret', this)">👁️</button></div><label class="inline-check"><input type="checkbox" id="new-cf-proxied"> ` + T.SettingsCFProxyLabel +
-		`</label></div><div id="fields-ipv64" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-ipv64-token" class="s-input" placeholder="` + T.SettingsIPv64Token + `"><button type="button" class="input-action-btn" onclick="togglePassword('new-ipv64-token', this)">👁️</button></div></div><div style="display:flex; gap:10px; margin-top:15px;"><button class="s-btn s-btn-success-full" onclick="addDomainToList()">` +
+	addDomainForm := `<div class="add-domain-box"><input type="text" id="new-domain-fqdn" class="s-input mb-8" placeholder="` + T.SettingsDomainPlaceholder + `"><input type="number" id="new-domain-ttl" class="s-input mb-8" placeholder="TTL (z. B. 60)" min="1" step="1"><select id="new-domain-ip-mode" class="s-input mb-8"><option value="">` + T.SettingsIPMode + ` (` + T.SettingsIPMode + ` global)</option><option value="BOTH">BOTH – IPv4 + IPv6</option><option value="IPV4">IPV4 – nur IPv4</option><option value="IPV6">IPV6 – nur IPv6</option></select><select id="new-domain-provider" class="s-input mb-8" onchange="toggleProviderFields()"><option value="IONOS">IONOS</option><option value="CLOUDFLARE">Cloudflare</option><option value="IPV64">IPv64</option><option value="HETZNER">Hetzner DNS</option><option value="HETZNERCLOUD">Hetzner Cloud DNS</option></select><div id="fields-ionos"><input type="text" id="new-ionos-prefix" class="s-input mb-8" placeholder="` + T.SettingsAPIPrefix + `"><div class="input-with-action mt-8"><input type="password" id="new-ionos-secret" class="s-input" placeholder="` + T.SettingsAPISecret + `"><button type="button" class="input-action-btn" onclick="togglePassword('new-ionos-secret', this)">👁️</button></div></div><div id="fields-cloudflare" class="is-hidden"><input type="text" id="new-cf-token" class="s-input mb-8" placeholder="` + T.SettingsCFTokenHint + `"><div class="center-note">` + T.SettingsCFOr + `</div><input type="text" id="new-cf-email" class="s-input mb-8" placeholder="` + T.SettingsCFEmail + `"><div class="input-with-action mt-8"><input type="password" id="new-cf-secret" class="s-input" placeholder="` + T.SettingsCFGlobalKey + `"><button type="button" class="input-action-btn" onclick="togglePassword('new-cf-secret', this)">👁️</button></div><label class="inline-check"><input type="checkbox" id="new-cf-proxied"> ` + T.SettingsCFProxyLabel +
+		`</label></div><div id="fields-ipv64" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-ipv64-token" class="s-input" placeholder="` + T.SettingsIPv64Token + `"><button type="button" class="input-action-btn" onclick="togglePassword('new-ipv64-token', this)">👁️</button></div></div><div id="fields-hetzner" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-hetzner-token" class="s-input" placeholder="Hetzner DNS API Token"><button type="button" class="input-action-btn" onclick="togglePassword('new-hetzner-token', this)">👁️</button></div></div><div id="fields-hetznercloud" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-hcloud-token" class="s-input" placeholder="Hetzner Cloud/Console Token"><button type="button" class="input-action-btn" onclick="togglePassword('new-hcloud-token', this)">👁️</button></div></div><div style="display:flex; gap:10px; margin-top:15px;"><button class="s-btn s-btn-success-full" onclick="addDomainToList()">` +
 		T.SettingsAddBtn +
 		`</button><button type="button" class="s-btn" style="background:none; border:1px solid var(--border); color:var(--text);" onclick="cancelEdit()">` +
 		T.SettingsCancelBtn +
@@ -752,6 +727,7 @@ func registerAPIroutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/save-config", handleAPISaveConfig)
 	mux.HandleFunc("/api/set-language", handleAPISetLanguage)
 	mux.HandleFunc("/api/domain/delete", handleAPIDomainDelete)
+	mux.HandleFunc("/api/ipv64/domain", handleAPIIPv64Domain)
 	mux.HandleFunc("/api/trigger", handleAPITrigger)
 	mux.HandleFunc("/api/trigger/status", handleAPITriggerStatus)
 	mux.HandleFunc("/api/notify/test", handleAPINotifyTest)
@@ -849,17 +825,47 @@ func handleAPIConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	sess, _ := sessionFromRequest(r)
+	isAdmin := !authEnabled || (sess != nil && sess.Role == RoleAdmin)
+
 	type fullConfigResponse struct {
 		DomainConfigs []safeDomainConfig `json:"domain_configs"`
 		System        safeSystemConfig   `json:"system"`
 	}
 
+	sys := currentSystemConfig()
+
+	if !isAdmin {
+		sys.TelegramToken = maskSecret(sys.TelegramToken)
+		sys.GotifyToken = maskSecret(sys.GotifyToken)
+		sys.WebhookSecret = maskSecret(sys.WebhookSecret)
+		sys.MQTT.Password = maskSecret(sys.MQTT.Password)
+		sys.Email.Password = maskSecret(sys.Email.Password)
+	}
+
+	domains := safeDomainConfigs(cfg.DomainConfigs)
+	if !isAdmin {
+		for i := range domains {
+			domains[i].APISecret = maskSecret(domains[i].APISecret)
+			domains[i].CFToken = maskSecret(domains[i].CFToken)
+			domains[i].CFSecret = maskSecret(domains[i].CFSecret)
+			domains[i].IPv64Token = maskSecret(domains[i].IPv64Token)
+		}
+	}
+
 	resp := fullConfigResponse{
-		DomainConfigs: safeDomainConfigs(cfg.DomainConfigs),
-		System:        currentSystemConfig(),
+		DomainConfigs: domains,
+		System:        sys,
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func maskSecret(s string) string {
+	if s == "" {
+		return ""
+	}
+	return "●●●●●●"
 }
 
 func handleAPILanguages(w http.ResponseWriter, r *http.Request) {
@@ -912,13 +918,15 @@ func handleAPISaveConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var validationErr error
 	cfgMu.Lock()
 	applySystemConfigPayload(payload.System)
 	cfg.DomainConfigs = mergeDomainConfigs(cfg.DomainConfigs, payload.DomainConfigs)
+	validationErr = validateDomainConfigs()
 	cfgMu.Unlock()
 
-	if err := validateDomainConfigs(); err != nil {
-		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+	if validationErr != nil {
+		http.Error(w, validationErr.Error(), http.StatusUnprocessableEntity)
 		return
 	}
 
@@ -928,6 +936,7 @@ func handleAPISaveConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ResetHTTPClient()
+	invalidateSecretReplacer()
 	go initNotifiers()
 	forceNextUpdate.Store(true)
 	lastCleanupNano.Store(0)
@@ -1064,6 +1073,9 @@ func mergeDomainConfigs(existingCfg []DomainConfig, incoming []safeDomainConfig)
 		}
 
 		if found, ok := existing[fqdn]; ok {
+			if strings.TrimSpace(sc.Provider) != "" {
+				found.Provider = normalizeProviderName(sc.Provider)
+			}
 			if sc.APIPrefix != "" {
 				found.APIPrefix = sc.APIPrefix
 			}
@@ -1092,7 +1104,7 @@ func mergeDomainConfigs(existingCfg []DomainConfig, incoming []safeDomainConfig)
 
 		newConfigs = append(newConfigs, DomainConfig{
 			FQDN:       fqdn,
-			Provider:   ProviderType(strings.ToUpper(sc.Provider)),
+			Provider:   normalizeProviderName(sc.Provider),
 			APIPrefix:  sc.APIPrefix,
 			APISecret:  sc.APISecret,
 			CFToken:    sc.CFToken,
@@ -1156,6 +1168,69 @@ func handleAPISetLanguage(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func handleAPIIPv64Domain(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !validateTriggerToken(r) {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": T.InvalidToken})
+		return
+	}
+
+	var req struct {
+		Action string `json:"action"`
+		FQDN   string `json:"fqdn"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": T.ErrInvalidJSON})
+		return
+	}
+
+	req.FQDN = strings.TrimSpace(strings.ToLower(req.FQDN))
+	if req.FQDN == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": T.DomainIsEmpty})
+		return
+	}
+	if req.Action != MethodADD && req.Action != MethodDELETE {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "action must be 'add' or 'delete'"})
+		return
+	}
+
+	dc := findAnyIPv64DomainConfig()
+	if dc == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "no IPv64 provider configured"})
+		return
+	}
+
+	ctx := r.Context()
+	var err error
+
+	switch req.Action {
+	case MethodADD:
+		err = addIPv64Domain(ctx, dc, req.FQDN)
+	case MethodDELETE:
+		err = deleteIPv64Domain(ctx, dc, req.FQDN)
+	}
+
+	if err != nil {
+		debugLog("API", getClientIP(r), fmt.Sprintf("IPv64 %s domain %s: %v", req.Action, req.FQDN, err))
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	action := "added"
+	if req.Action == "delete" {
+		action = "deleted"
+	}
+
+	debugLog("API", getClientIP(r), fmt.Sprintf("IPv64 domain %s: %s", action, req.FQDN))
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status": action,
+		"fqdn":   req.FQDN,
+	})
+}
+
 func handleAPIDomainDelete(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -1182,7 +1257,7 @@ func handleAPIDomainDelete(w http.ResponseWriter, r *http.Request) {
 	statusMutex.Lock()
 	defer statusMutex.Unlock()
 
-	var fileData map[string]interface{}
+	var fileData map[string]any
 	if b, err := os.ReadFile(updatePath); err == nil {
 		_ = json.Unmarshal(b, &fileData)
 	}
@@ -1235,7 +1310,7 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 
 	if !globalTriggerLimiter.Allow() {
 		w.Header().Set("Retry-After", "10")
-		writeJSON(w, http.StatusTooManyRequests, map[string]interface{}{
+		writeJSON(w, http.StatusTooManyRequests, map[string]any{
 			"error":               T.GlobalRateLimitExceeded,
 			"retry_after_seconds": 10,
 		})
@@ -1249,7 +1324,7 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 		remaining := ipLimiter.Remaining()
 		w.Header().Set("Retry-After", "10")
 		w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
-		writeJSON(w, http.StatusTooManyRequests, map[string]interface{}{
+		writeJSON(w, http.StatusTooManyRequests, map[string]any{
 			"error":               T.IPRateLimitExceeded,
 			"retry_after_seconds": 10,
 			"remaining":           remaining,
@@ -1260,7 +1335,7 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !updateInProgress.CompareAndSwap(false, true) {
-		writeJSON(w, http.StatusConflict, map[string]interface{}{
+		writeJSON(w, http.StatusConflict, map[string]any{
 			"error":  T.UpdateAlreadyInProgressAPI,
 			"status": T.TriggerStatusBusy,
 		})
@@ -1279,7 +1354,7 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 
 	remaining := ipLimiter.Remaining()
 	w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
-	writeJSON(w, http.StatusAccepted, map[string]interface{}{
+	writeJSON(w, http.StatusAccepted, map[string]any{
 		"status":               "triggered",
 		"message":              T.UpdateStartedMessage,
 		"rate_limit_remaining": remaining,
@@ -1301,7 +1376,7 @@ func handleAPINotifyTest(w http.ResponseWriter, r *http.Request) {
 	notifyCfgMu.RUnlock()
 
 	if len(notifiers) == 0 {
-		writeJSON(w, http.StatusOK, map[string]interface{}{
+		writeJSON(w, http.StatusOK, map[string]any{
 			"status":  "no_notifiers",
 			"message": "Keine aktiven Notifier konfiguriert",
 			"sent":    0,
@@ -1349,7 +1424,7 @@ func handleAPINotifyTest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"status":  "done",
 		"sent":    sentCount,
 		"total":   len(notifiers),
@@ -1366,7 +1441,7 @@ func handleAPITriggerStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"ip":                 clientIP,
 		"remaining_requests": ipLimiter.Remaining(),
 		"update_in_progress": updateInProgress.Load(),
@@ -1388,7 +1463,7 @@ func handleAPIExport(w http.ResponseWriter, r *http.Request) {
 	statusMutex.Lock()
 	defer statusMutex.Unlock()
 
-	exportData := map[string]interface{}{
+	exportData := map[string]any{
 		"timestamp": time.Now().Local().Format(time.RFC3339),
 		"metrics":   apiMetrics.GetStats(),
 	}
@@ -1402,7 +1477,7 @@ func handleAPIExport(w http.ResponseWriter, r *http.Request) {
 
 	if b, err := os.ReadFile(logPath); err == nil {
 		var logEntries []LogEntry
-		for _, line := range strings.Split(string(b), "\n") {
+		for line := range strings.SplitSeq(string(b), "\n") {
 			line = strings.TrimSpace(line)
 			if line == "" {
 				continue
@@ -1441,7 +1516,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	degradedMode := false
 
 	if !hasRun {
-		writeJSON(w, http.StatusOK, map[string]interface{}{
+		writeJSON(w, http.StatusOK, map[string]any{
 			"status": "starting",
 			"reason": T.WaitingForFirstSchedulerRun,
 		})
@@ -1468,7 +1543,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if degradedMode && isHealthy {
-		writeJSON(w, http.StatusOK, map[string]interface{}{
+		writeJSON(w, http.StatusOK, map[string]any{
 			"status":      "degraded",
 			"reason":      healthReason,
 			"api_metrics": stats,
@@ -1477,7 +1552,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !isHealthy {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
 			"status":      "unhealthy",
 			"reason":      healthReason,
 			"api_metrics": stats,
@@ -1494,7 +1569,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("OK"))
 }
 
-func getTotalRequests(stats map[string]interface{}) int64 {
+func getTotalRequests(stats map[string]any) int64 {
 	switch v := stats["total_requests"].(type) {
 	case int64:
 		return v
@@ -1507,14 +1582,14 @@ func getTotalRequests(stats map[string]interface{}) int64 {
 	}
 }
 
-func handleDetailedHealth(w http.ResponseWriter, stats map[string]interface{}) {
+func handleDetailedHealth(w http.ResponseWriter, stats map[string]any) {
 	lastV4, lastV6 := loadLastKnownIPs()
 
 	statusMutex.Lock()
 	lastUpdateTime := readLastUpdateTimeFromStatusFile()
 	statusMutex.Unlock()
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"status":           "healthy",
 		"api_metrics":      stats,
 		"last_known_ipv4":  lastV4,
@@ -1563,27 +1638,39 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 
 	writeDashboardHeader(w, jsConfigSafe, jsSystemCfg, sess)
 	writeDashboardTop(w, statusClass, statusText)
-	_, _ = fmt.Fprintf(w, "%s", buildSettingsModal(cfg, isAdmin))
-	writeDashboardConfigCard(w)
 	writeDashboardMetricsCard(w, stats, nicHTML, chartSVG, latencySVG, isViewer)
+
+	writeDomainsCard(w, statusData)
+	writeLogsCard(w, logs, logTimeRange)
 
 	if cfg.DebugEnabled || cfg.DebugHTTPRaw {
 		writeDebugCard(w)
-	}
-	if len(logs) > 0 {
-		writeLogsCard(w, logs, logTimeRange)
+	} else {
+		_, _ = fmt.Fprint(w, `
+	<div class="page-section" data-section="debug">
+		<div class="card">
+			<div style="padding:15px 20px 10px;font-weight:600;">🐞 `+T.DebugLogTitle+`</div>
+			<div class="card-content">
+				<p style="opacity:0.5;font-size:0.85rem;">Debug-Modus ist deaktiviert. Aktiviere ihn in den Einstellungen unter System → Debug-Modus.</p>
+			</div>
+		</div>
+	</div>`)
 	}
 
-	writeDomainsCard(w, statusData)
+	writeSettingsSection(w, cfg)
+	writeUsersSection(w, isAdmin)
+
+	_, _ = fmt.Fprint(w, `<div id="settingsOverlay" class="modal-overlay"></div>`)
+
 	writeDashboardFooter(w)
 	_ = r
 }
 
-func loadStatusData() map[string]interface{} {
+func loadStatusData() map[string]any {
 	statusMutex.Lock()
 	defer statusMutex.Unlock()
 
-	data := make(map[string]interface{})
+	data := make(map[string]any)
 	if fileData, err := os.ReadFile(updatePath); err == nil {
 		_ = json.Unmarshal(fileData, &data)
 	}
@@ -1597,7 +1684,7 @@ func dashboardStatus() (string, string) {
 	return "status-ok", T.StatusOk
 }
 
-func getDashboardStats() map[string]interface{} {
+func getDashboardStats() map[string]any {
 	latestMetricsMu.RLock()
 	stats := latestMetrics
 	latestMetricsMu.RUnlock()
@@ -1608,7 +1695,7 @@ func getDashboardStats() map[string]interface{} {
 	return stats
 }
 
-func buildDashboardMetricsParts(stats map[string]interface{}) (string, string, string) {
+func buildDashboardMetricsParts(stats map[string]any) (string, string, string) {
 	hourlyStats, ok1 := toInt24(stats["hourly_stats"])
 	hourlyLat, ok2 := toDur24(stats["hourly_latency"])
 
@@ -1626,7 +1713,7 @@ func buildDashboardMetricsParts(stats map[string]interface{}) (string, string, s
 	return chartSVG, latencySVG, nicHTML
 }
 
-func buildNICHTML(stats map[string]interface{}) string {
+func buildNICHTML(stats map[string]any) string {
 	hasIPv64 := false
 	for _, dc := range cfg.DomainConfigs {
 		if dc.Provider == ProviderIPv64 {
@@ -1648,16 +1735,44 @@ type logCachePayload struct {
 	LogTimeRange string     `json:"log_time_range"`
 }
 
+var (
+	logMemCache      []LogEntry
+	logMemCacheRange string
+	logMemCacheTime  time.Time
+	logMemCacheMu    sync.RWMutex
+	logMemCacheTTL   = 10 * time.Second
+)
+
 func loadDashboardLogs() ([]LogEntry, string) {
+	logMemCacheMu.RLock()
+	if !logMemCacheTime.IsZero() && time.Since(logMemCacheTime) < logMemCacheTTL {
+		logs := make([]LogEntry, len(logMemCache))
+		copy(logs, logMemCache)
+		r := logMemCacheRange
+		logMemCacheMu.RUnlock()
+		return logs, r
+	}
+	logMemCacheMu.RUnlock()
+
 	var logs []LogEntry
 	var logTimeRange string
-
 	if loadLogsFromDiskCache(&logs, &logTimeRange) {
+		logMemCacheMu.Lock()
+		logMemCache = logs
+		logMemCacheRange = logTimeRange
+		logMemCacheTime = time.Now()
+		logMemCacheMu.Unlock()
 		return logs, logTimeRange
 	}
 
 	logs, logTimeRange = loadLogsFromMainFile()
 	saveLogsToDiskCache(logs, logTimeRange)
+
+	logMemCacheMu.Lock()
+	logMemCache = logs
+	logMemCacheRange = logTimeRange
+	logMemCacheTime = time.Now()
+	logMemCacheMu.Unlock()
 
 	return logs, logTimeRange
 }
@@ -1790,6 +1905,7 @@ func formatDashboardLogTimestamp(ts string) string {
 func writeDashboardHeader(w http.ResponseWriter, jsConfigSafe, jsSystemCfg []byte, sess *Session) {
 	logoutBtn := ""
 	userInfo := ""
+	userPage := ""
 	if authEnabled && sess != nil {
 		roleIcon := map[UserRole]string{
 			RoleAdmin:  "👑",
@@ -1798,6 +1914,11 @@ func writeDashboardHeader(w http.ResponseWriter, jsConfigSafe, jsSystemCfg []byt
 		}[sess.Role]
 		userInfo = fmt.Sprintf(`<span style="font-size:0.8rem;opacity:0.6;">%s %s</span>`, roleIcon, html.EscapeString(sess.Username))
 		logoutBtn = `<a href="/logout" class="action-btn" style="text-decoration:none;font-size:0.82rem;padding:8px 14px;">🚪 Logout</a>`
+		if sess.Role == RoleAdmin {
+			userPage = `<div class="nav-item" data-page="users" onclick="navTo('users')">` + T.SettingsUserManagement + `</div>`
+		}
+	} else if !authEnabled {
+		userPage = `<div class="nav-item" data-page="users" onclick="navTo('users')">` + T.SettingsUserManagement + `</div>`
 	}
 
 	_, _ = fmt.Fprintf(w, `<!DOCTYPE html><html><head>
@@ -1809,28 +1930,83 @@ func writeDashboardHeader(w http.ResponseWriter, jsConfigSafe, jsSystemCfg []byt
 		<script>const initialConfig = %s; const initialSystem = %s;</script>
 	</head>
 	<body>
+
 	<div class="auth-bg">
 		<div class="auth-sun"></div>
 		<div class="auth-mountains"></div>
 		<div class="auth-grid-floor"></div>
 	</div>
-	<div class="container">
-		<div class="header">
-			<h1>🌐 %s</h1>
-			<div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-				<button class="action-btn" onclick="triggerUpdate()" id="update-button">🔄 `+T.Update+`</button>
-				<button class="action-btn" onclick="exportData()">📥 `+T.ExportBtn+`</button>
-				<button class="theme-toggle" onclick="toggleTheme()">🌓</button>
-				<button class="menu-btn" onclick="openSettings()" title="`+T.SettingsTitle+`">⋮</button>
+
+	<div id="sidebar-overlay" onclick="document.getElementById('sidebar').classList.remove('sidebar-open');this.style.display='none';"></div>
+
+	<div class="app-layout">
+		<!-- ═══ SIDEBAR ═══ -->
+		<nav id="sidebar" class="sidebar">
+			<div class="sidebar-logo">
+				<span>🌐</span>
+				<div>
+					<div>DynDNS</div>
+					<small>Multi-Provider</small>
+				</div>
+			</div>
+
+			<div class="nav-section-label">Overview</div>
+			<div class="nav-item" data-page="dashboard" onclick="navTo('dashboard')">
+				<span class="nav-item-icon">📊</span> Dashboard
+			</div>
+			<div class="nav-item" data-page="domains" onclick="navTo('domains')">
+				<span class="nav-item-icon">🌐</span> Domains
+			</div>
+
+			<div class="nav-section-label">Monitoring</div>
+			<div class="nav-item" data-page="metrics" onclick="navTo('metrics')">
+				<span class="nav-item-icon">📈</span> `+T.APIPerformance+`
+			</div>
+			<div class="nav-item" data-page="logs" onclick="navTo('logs')">
+				<span class="nav-item-icon">🧾</span> `+T.SystemEvents+`
+			</div>
+			<div class="nav-item" data-page="debug" onclick="navTo('debug')">
+				<span class="nav-item-icon">🐞</span> `+T.DebugLogTitle+`
+			</div>
+
+			<div class="nav-section-label">Config</div>
+			<div class="nav-item" data-page="settings" onclick="navTo('settings')">
+				<span class="nav-item-icon">⚙️</span> `+T.SettingsTitle+`
+			</div>
+			%s
+
+			<div class="nav-spacer"></div>
+
+			<div class="sidebar-bottom">
 				%s
 				%s
 			</div>
-		</div>`,
+		</nav>
+
+		<!-- ═══ RIGHT SIDE ═══ -->
+		<div class="app-right">
+
+			<!-- Topbar -->
+			<header class="topbar">
+				<button class="hamburger-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button>
+				<span id="page-title" class="topbar-title">📊 Dashboard</span>
+				<div class="topbar-right">
+					<button class="action-btn" id="update-button" onclick="triggerUpdate()" style="font-size:0.82rem;padding:8px 14px;">🔄 `+T.Update+`</button>
+					<button class="action-btn" onclick="exportData()" style="font-size:0.82rem;padding:8px 14px;">📥 `+T.ExportBtn+`</button>
+					<button class="theme-toggle" onclick="toggleTheme()">🌓</button>
+				</div>
+			</header>
+
+			<div id="toast" class="toast"></div>
+
+			<!-- ═══ MAIN CONTENT ═══ -->
+			<div class="main-content">
+	`,
 		html.EscapeString(T.DashboardTitle),
 		cssData,
 		string(jsConfigSafe),
 		string(jsSystemCfg),
-		html.EscapeString(T.DashboardTitle),
+		userPage,
 		userInfo,
 		logoutBtn,
 	)
@@ -1877,7 +2053,7 @@ func buildNotifierStatusHTML() string {
 
 		fmt.Fprintf(&sb,
 			`<span title="%s" onclick="showNotifierTooltip(this, '%s')" style="font-size:0.85rem;opacity:0.85;filter:drop-shadow(0 0 3px %s);cursor:pointer;">%s</span>`,
-			title, title, color, icon,
+			esc(title), jsString(title), esc(color), esc(icon),
 		)
 	}
 
@@ -1887,69 +2063,62 @@ func buildNotifierStatusHTML() string {
 
 func writeDashboardTop(w http.ResponseWriter, statusClass, statusText string) {
 	_, _ = fmt.Fprintf(w, `
-        <div class="status-banner %s">
-	    <div class="status-banner-left">
-		    <span>%s</span>
-	    </div>
-	<div class="status-banner-meta">
-		<span class="status-item" 
-        		title="`+T.TooltipLastCheck+`"
-				onclick="showNotifierTooltip(this, '`+T.TooltipLastCheck+`')"
-        		style="cursor:pointer;">
-			%s:
-			<span id="lastUpdate">%s</span>
-		</span>
-		<span class="status-sep">|</span>
-		<span class="status-item" 
-        		title="`+T.TooltipClock+`"
-				onclick="showNotifierTooltip(this, '`+T.TooltipClock+`')"
-        		style="cursor:pointer;">
-			🕒 <span id="clock">--:--:--</span>
-		</span>
-		<span class="status-sep">|</span>
-		<span class="status-item status-uptime" 
-        		title="`+T.TooltipUptime+`"
-				onclick="showNotifierTooltip(this, '`+T.TooltipUptime+`')"
-        		style="cursor:pointer;">
-			⏱️ <span id="uptime">--</span>
-		</span>
-		%s
-	</div>
-        </div>
-        <div id="toast" class="toast"></div>
-        <details class="card" id="endpoint-card">
-	<summary>`+T.IPEndpointStatusTitle+`</summary>
-	<div class="card-content">
-		<div id="endpoint-status" class="endpoint-status">
-			<span style="opacity:0.4;font-size:0.82rem;">
-				`+T.IPEndpointStatusWaiting+`
-			</span>
+	<div class="page-section" data-section="dashboard">
+		<div class="status-banner %s">
+			<div class="status-banner-left">
+				<span>%s</span>
+			</div>
+			<div class="status-banner-meta">
+				<span class="status-item"
+					title="`+T.TooltipLastCheck+`"
+					onclick="showNotifierTooltip(this,'`+T.TooltipLastCheck+`')"
+					style="cursor:pointer;">
+					%s: <span id="lastUpdate">%s</span>
+				</span>
+				<span class="status-sep">|</span>
+				<span class="status-item"
+					title="`+T.TooltipClock+`"
+					onclick="showNotifierTooltip(this,'`+T.TooltipClock+`')"
+					style="cursor:pointer;">
+					🕒 <span id="clock">--:--:--</span>
+				</span>
+				<span class="status-sep">|</span>
+				<span class="status-item status-uptime"
+					title="`+T.TooltipUptime+`"
+					onclick="showNotifierTooltip(this,'`+T.TooltipUptime+`')"
+					style="cursor:pointer;">
+					⏱️ <span id="uptime">--</span>
+				</span>
+				%s
+			</div>
 		</div>
-	</div>
-        </details>
-             `,
+
+		<div class="card" id="endpoint-card">
+			<div style="padding:15px 20px 10px;font-weight:600;">`+T.IPEndpointStatusTitle+`</div>
+			<div class="card-content">
+				<div id="endpoint-status" class="endpoint-status">
+					<span style="opacity:0.4;font-size:0.82rem;">`+T.IPEndpointStatusWaiting+`</span>
+				</div>
+			</div>
+		</div>
+		<div class="card">
+			<div style="padding:15px 20px 10px;font-weight:600;">⚙️ `+T.ConfigHeading+`</div>
+			<div class="card-content">
+				<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
+					<div><strong>`+T.MaxLogLines+`:</strong> %d</div>
+					<div><strong>`+T.MaxAPIRetries+`:</strong> %d</div>
+					<div><strong>`+T.MaxConcurrent+`:</strong> %d</div>
+					<div><strong>`+T.Interval+`:</strong> %ds</div>
+				</div>
+			</div>
+		</div>
+	</div><!-- end dashboard section -->
+	`,
 		statusClass,
 		statusText,
 		T.LastUpdate,
 		time.Now().Local().Format("15:04:05"),
 		buildNotifierStatusHTML(),
-	)
-}
-
-func writeDashboardConfigCard(w http.ResponseWriter) {
-	_, _ = fmt.Fprintf(w, `
-	<details class="card">
-		<summary>⚙️ `+T.ConfigHeading+`</summary>
-		<div class="card-content">
-			<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px;">
-				<div><strong>`+T.MaxLogLines+`:</strong> %d</div>
-				<div><strong>`+T.MaxAPIRetries+`:</strong> %d</div>
-				<div><strong>`+T.MaxConcurrent+`:</strong> %d</div>
-				<div><strong>`+T.Interval+`:</strong> %ds</div>
-			</div>
-		</div>
-	</details>
-	`,
 		cfg.MaxLogLines,
 		cfg.MaxAPIRetries,
 		cfg.MaxConcurrent,
@@ -1977,113 +2146,204 @@ func buildUsersSection() string {
 	</div>`
 }
 
-func writeDashboardMetricsCard(w http.ResponseWriter, stats map[string]interface{}, nicHTML, chartSVG, latencySVG string, isViewer bool) {
-	resetBtn := `<button class="action-btn" style="background:var(--error); font-size:0.7rem; padding:3px 10px; margin-left:auto;" onclick="event.preventDefault(); resetMetrics()">🗑️ ` + T.MetricsResetBtn + `</button>`
+func writeDashboardMetricsCard(
+	w http.ResponseWriter,
+	stats map[string]any,
+	nicHTML, chartSVG, latencySVG string,
+	isViewer bool,
+) {
+	resetBtn := `<button class="action-btn" style="background:var(--error);font-size:0.7rem;padding:3px 10px;margin-left:auto;" onclick="event.preventDefault();resetMetrics()">🗑️ ` + T.MetricsResetBtn + `</button>`
+
 	if isViewer {
 		resetBtn = ""
 	}
+
 	_, _ = fmt.Fprintf(w, `
-	<details class="card" open id="metrics-card">
-		<summary style="display:flex; justify-content:space-between; align-items:center;">📊 %s`+resetBtn+`</summary>
+<div class="page-section" data-section="metrics">
+
+	<div class="card" id="metrics-card">
+
+		<div style="padding:15px 20px 10px;font-weight:600;display:flex;justify-content:space-between;align-items:center;">
+			📊 %s`+resetBtn+`
+		</div>
+
 		<div class="card-content">
-			<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-top: 10px;">
-				<div><strong>`+T.TotalRequests+`:</strong> <span id="mTotal">%v</span></div>
-				<div><strong>`+T.SuccessRate+`:</strong> <span id="mSuccess" style="color:var(--success)">%v</span></div>
-				<div><strong>`+T.AvgLatency+`:</strong> <span id="mLatency">%v</span></div>
-				<div title="`+T.ClientErrors+` / `+T.ServerErrors+`"><strong>`+T.Errors+`:</strong> <span id="mErrors">%v / %v</span></div>
-			</div>
-			<div style="margin-top: 14px; padding: 12px 14px; background: rgba(139,92,246,0.08); border: 1px solid rgba(139,92,246,0.2); border-radius: 8px;">
-				<div style="font-size: 0.68rem; color: #94a3b8; letter-spacing: 0.06em; margin-bottom: 8px; font-weight: 600; text-transform: uppercase;">`+T.MetricLatencyPercentile+`</div>
-				<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center;">
-					<div style="padding: 8px; background: rgba(74,222,128,0.08); border-radius: 6px; border: 1px solid rgba(74,222,128,0.2);">
-						<div style="font-size: 0.65rem; color: #94a3b8; margin-bottom: 3px; letter-spacing: 0.05em;">P50</div>
-						<div id="mP50" style="font-size: 1.05rem; font-weight: 700; color: #4ade80; font-family: monospace;">%v</div>
-					</div>
-					<div style="padding: 8px; background: rgba(250,204,21,0.08); border-radius: 6px; border: 1px solid rgba(250,204,21,0.2);">
-						<div style="font-size: 0.65rem; color: #94a3b8; margin-bottom: 3px; letter-spacing: 0.05em;">P85</div>
-						<div id="mP85" style="font-size: 1.05rem; font-weight: 700; color: #facc15; font-family: monospace;">%v</div>
-					</div>
-					<div style="padding: 8px; background: rgba(248,113,113,0.08); border-radius: 6px; border: 1px solid rgba(248,113,113,0.2);">
-						<div style="font-size: 0.65rem; color: #94a3b8; margin-bottom: 3px; letter-spacing: 0.05em;">P99</div>
-						<div id="mP99" style="font-size: 1.05rem; font-weight: 700; color: #f87171; font-family: monospace;">%v</div>
-					</div>
+
+			<!-- TOP STATS -->
+			<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:15px;margin-top:10px;">
+				<div>
+					<strong>`+T.TotalRequests+`:</strong>
+					<span id="mTotal">%v</span>
+				</div>
+
+				<div>
+					<strong>`+T.SuccessRate+`:</strong>
+					<span id="mSuccess" style="color:var(--success)">%v</span>
+				</div>
+
+				<div>
+					<strong>`+T.AvgLatency+`:</strong>
+					<span id="mLatency">%v</span>
+				</div>
+
+				<div title="`+T.ClientErrors+` / `+T.ServerErrors+`">
+					<strong>`+T.Errors+`:</strong>
+					<span id="mErrors">%v / %v</span>
 				</div>
 			</div>
-			<div style="margin-top: 20px;">
-				<div style="display: flex; justify-content: space-between; align-items: baseline; font-size: 0.7rem; color: #94a3b8; margin-bottom: 6px;">
-					<span style="letter-spacing: 0.04em;">`+T.HourlyLimitEst+`</span>
-					<span id="mUsage" style="font-weight: 600; color: var(--text);">
+
+			<!-- LATENCY PERCENTILES -->
+			<div style="margin-top:14px;padding:12px 14px;background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.2);border-radius:8px;">
+
+				<div style="font-size:0.68rem;color:#94a3b8;letter-spacing:0.06em;margin-bottom:8px;font-weight:600;text-transform:uppercase;">
+					`+T.MetricLatencyPercentile+`
+				</div>
+
+				<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;text-align:center;">
+
+					<div style="padding:8px;background:rgba(74,222,128,0.08);border-radius:6px;border:1px solid rgba(74,222,128,0.2);">
+						<div style="font-size:0.65rem;color:#94a3b8;margin-bottom:3px;">P50</div>
+						<div id="mP50" style="font-size:1.05rem;font-weight:700;color:#4ade80;font-family:monospace;">%v</div>
+					</div>
+
+					<div style="padding:8px;background:rgba(250,204,21,0.08);border-radius:6px;border:1px solid rgba(250,204,21,0.2);">
+						<div style="font-size:0.65rem;color:#94a3b8;margin-bottom:3px;">P85</div>
+						<div id="mP85" style="font-size:1.05rem;font-weight:700;color:#facc15;font-family:monospace;">%v</div>
+					</div>
+
+					<div style="padding:8px;background:rgba(248,113,113,0.08);border-radius:6px;border:1px solid rgba(248,113,113,0.2);">
+						<div style="font-size:0.65rem;color:#94a3b8;margin-bottom:3px;">P99</div>
+						<div id="mP99" style="font-size:1.05rem;font-weight:700;color:#f87171;font-family:monospace;">%v</div>
+					</div>
+
+				</div>
+			</div>
+
+			<!-- USAGE -->
+			<div style="margin-top:20px;">
+
+				<div style="display:flex;justify-content:space-between;align-items:baseline;font-size:0.7rem;color:#94a3b8;margin-bottom:6px;">
+					<span style="letter-spacing:0.04em;">`+T.HourlyLimitEst+`</span>
+
+					<span id="mUsage" style="font-weight:600;color:var(--text);">
 						%v / %v `+T.RequestsLabel+`
 					</span>
 				</div>
-				<div style="width: 100%%; background: #334155; height: 8px; border-radius: 999px; overflow: hidden;">
-					<div id="mUsageBar" style="width: %v%%; height: 100%%; background: %s; transition: width 0.5s ease;">
-					</div>
+
+				<div style="width:100%%;background:#334155;height:8px;border-radius:999px;overflow:hidden;">
+					<div id="mUsageBar" style="width:%v%%;height:100%%;background:%s;transition:width 0.5s ease;"></div>
 				</div>
-				<div style="font-size: 0.65rem; color: #64748b; margin-top: 6px;">
+
+				<div style="font-size:0.65rem;color:#64748b;margin-top:6px;">
 					`+T.UsageLast60Min+`
 				</div>
 			</div>
-			<div class="metrics-bottom-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px;">
-				<div style="padding:12px 14px; background:rgba(56,189,248,0.08); border:1px solid rgba(56,189,248,0.2); border-radius:8px;">
-					<div style="font-size:0.68rem; color:#94a3b8; letter-spacing:0.06em; margin-bottom:8px; font-weight:600; text-transform:uppercase;">`+T.MetricHTTPMethods+`</div>
-					<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
-						<div style="display:flex; justify-content:space-between; padding:4px 8px; background:rgba(74,222,128,0.08); border-radius:5px;">
-							<span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">GET</span>
-							<span id="mDailyGET" style="font-size:0.95rem; font-weight:700; color:#4ade80; font-family:monospace;">%v</span>
+
+			<!-- BOTTOM GRID -->
+			<div class="metrics-bottom-grid">
+
+				<!-- HTTP METHODS -->
+				<div style="padding:12px 14px;background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.2);border-radius:8px;">
+
+					<div style="font-size:0.68rem;color:#94a3b8;letter-spacing:0.06em;margin-bottom:8px;font-weight:600;text-transform:uppercase;">
+						`+T.MetricHTTPMethods+`
+					</div>
+
+					<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+
+						<div style="display:flex;justify-content:space-between;padding:4px 8px;background:rgba(74,222,128,0.08);border-radius:5px;">
+							<span style="font-size:0.7rem;color:#94a3b8;font-weight:600;">GET</span>
+							<span id="mDailyGET" style="font-size:0.95rem;font-weight:700;color:#4ade80;font-family:monospace;">%v</span>
 						</div>
-						<div style="display:flex; justify-content:space-between; padding:4px 8px; background:rgba(96,165,250,0.08); border-radius:5px;">
-							<span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">POST</span>
-							<span id="mDailyPOST" style="font-size:0.95rem; font-weight:700; color:#60a5fa; font-family:monospace;">%v</span>
+
+						<div style="display:flex;justify-content:space-between;padding:4px 8px;background:rgba(96,165,250,0.08);border-radius:5px;">
+							<span style="font-size:0.7rem;color:#94a3b8;font-weight:600;">POST</span>
+							<span id="mDailyPOST" style="font-size:0.95rem;font-weight:700;color:#60a5fa;font-family:monospace;">%v</span>
 						</div>
-						<div style="display:flex; justify-content:space-between; padding:4px 8px; background:rgba(250,204,21,0.08); border-radius:5px;">
-							<span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">PUT</span>
-							<span id="mDailyPUT" style="font-size:0.95rem; font-weight:700; color:#facc15; font-family:monospace;">%v</span>
+
+						<div style="display:flex;justify-content:space-between;padding:4px 8px;background:rgba(250,204,21,0.08);border-radius:5px;">
+							<span style="font-size:0.7rem;color:#94a3b8;font-weight:600;">PUT</span>
+							<span id="mDailyPUT" style="font-size:0.95rem;font-weight:700;color:#facc15;font-family:monospace;">%v</span>
 						</div>
-						<div style="display:flex; justify-content:space-between; padding:4px 8px; background:rgba(248,113,113,0.08); border-radius:5px;">
-							<span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">DEL</span>
-							<span id="mDailyDELETE" style="font-size:0.95rem; font-weight:700; color:#f87171; font-family:monospace;">%v</span>
+
+						<div style="display:flex;justify-content:space-between;padding:4px 8px;background:rgba(248,113,113,0.08);border-radius:5px;">
+							<span style="font-size:0.7rem;color:#94a3b8;font-weight:600;">DEL</span>
+							<span id="mDailyDELETE" style="font-size:0.95rem;font-weight:700;color:#f87171;font-family:monospace;">%v</span>
 						</div>
+
 						%s
+
 					</div>
 				</div>
-				<div style="padding:12px 14px; background:rgba(167,139,250,0.08); border:1px solid rgba(167,139,250,0.2); border-radius:8px;">
-					<div style="font-size:0.68rem; color:#94a3b8; letter-spacing:0.06em; margin-bottom:8px; font-weight:600; text-transform:uppercase;">`+T.MetricIPLatency+`</div>
-					<div style="text-align:center; padding:4px 0;">
-						<div id="mIPLatency" style="font-size:1.4rem; font-weight:700; color:#a78bfa; font-family:monospace;">%v</div>
-						<div style="font-size:0.65rem; color:#64748b; margin-top:4px;">`+T.MetricAvgFrom+` <span id="mIPCount">%v</span> `+T.ChecksLabel+`</div>
-						<div style="font-size:0.65rem; color:#64748b; margin-top:2px;">`+T.MetricLastCheck+` <span id="mLastIPCheck">%v</span></div>
+
+				<!-- IP LATENCY -->
+				<div style="padding:12px 14px;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);border-radius:8px;">
+
+					<div style="font-size:0.68rem;color:#94a3b8;letter-spacing:0.06em;margin-bottom:8px;font-weight:600;text-transform:uppercase;">
+						`+T.MetricIPLatency+`
+					</div>
+
+					<div style="text-align:center;padding:4px 0;">
+
+						<div id="mIPLatency" style="font-size:1.4rem;font-weight:700;color:#a78bfa;font-family:monospace;">
+							%v
+						</div>
+
+						<div style="font-size:0.65rem;color:#64748b;margin-top:4px;">
+							`+T.MetricAvgFrom+`
+							<span id="mIPCount">%v</span>
+							`+T.ChecksLabel+`
+						</div>
+
+						<div style="font-size:0.65rem;color:#64748b;margin-top:2px;">
+							`+T.MetricLastCheck+`
+							<span id="mLastIPCheck">%v</span>
+						</div>
+
 					</div>
 				</div>
-			</div>
-		</div>
-	</details>
+
+			</div> <!-- metrics-bottom-grid -->
+
+		</div> <!-- card-content -->
+
+	</div> <!-- card -->
 
 	%s
-
 	%s
-	`,
+
+</div> <!-- page-section -->
+`,
 		T.APIPerformance,
+
 		stats["total_requests"],
 		stats["success_rate"],
 		stats["avg_latency"],
+
 		stats["client_errors"],
 		stats["server_errors"],
+
 		stats["p50_latency"],
 		stats["p85_latency"],
 		stats["p99_latency"],
+
 		stats["usage_count"],
 		stats["hourly_limit"],
+
 		stats["usage_percent"],
 		stats["usage_color"],
+
 		stats["daily_get"],
 		stats["daily_post"],
 		stats["daily_put"],
 		stats["daily_delete"],
+
 		nicHTML,
+
 		stats["ip_latency_avg"],
 		stats["ip_latency_count"],
 		stats["last_ip_check"],
+
 		chartSVG,
 		latencySVG,
 	)
@@ -2091,74 +2351,78 @@ func writeDashboardMetricsCard(w http.ResponseWriter, stats map[string]interface
 
 func writeDebugCard(w http.ResponseWriter) {
 	_, _ = fmt.Fprint(w, `
-		<details class="card" id="debug-log-card" open>
-			<summary>🐞 `+T.DebugLogTitle+` <span id="debug-badge" class="debug-badge">`+T.DebugLogLive+`</span></summary>
+	<div class="page-section" data-section="debug">
+		<div class="card">
+			<div style="padding:15px 20px 10px;font-weight:600;display:flex;align-items:center;gap:8px;">
+				🐞 `+T.DebugLogTitle+` <span class="debug-badge">`+T.DebugLogLive+`</span>
+			</div>
 			<div class="card-content">
 				<div class="debug-toolbar">
 					<input type="text" id="debug-filter" placeholder="`+T.DebugFilterPlaceholder+`"
-						oninput="filterDebugLog(this.value)"
-						class="debug-filter-input">
+						oninput="filterDebugLog(this.value)" class="debug-filter-input">
 					<button onclick="clearDebugLog()" class="action-btn debug-clear-btn">`+T.DebugClearBtn+`</button>
-					<label class=`+T.DebugAutoscroll+`>
-						<input type="checkbox" id="debug-autoscroll" checked>
-						Auto-scroll
+					<label class="debug-autoscroll-label">
+						<input type="checkbox" id="debug-autoscroll" checked> `+T.DebugAutoscroll+`
 					</label>
 				</div>
 				<div id="debug-log-container" class="debug-log-box">
 					<span class="debug-placeholder">`+T.DebugWaitingMsg+`</span>
 				</div>
 			</div>
-		</details>
+		</div>
+	</div>
 	`)
 }
 
 func writeLogsCard(w http.ResponseWriter, logs []LogEntry, logTimeRange string) {
+	entryCount := len(logs)
+	timeRangeHTML := ""
+	if logTimeRange != "" {
+		timeRangeHTML = `<span class="logs-summary-sep">🕒 ` + logTimeRange + `</span>`
+	}
+
 	_, _ = fmt.Fprintf(w, `
-	<details class="card" id="logs-card">
-		<summary>
-			🧾 %s 
-			<span class="logs-summary-meta">
-				(%d `+T.EntriesLabel+`)
-				<span class="logs-summary-sep">
-					🕒 %s
+	<div class="page-section" data-section="logs">
+		<div class="card" style="overflow:visible;">
+			<div style="padding:15px 20px 10px;font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+				🧾 %s
+				<span class="logs-summary-meta">
+					(%d `+T.EntriesLabel+`)
+					%s
 				</span>
-			</span>
-		</summary>
-		<div class="card-content">
-			<div class="log-filters">
-				<button class="filter-btn active" data-filter="all" onclick="filterLogs('all')">`+T.FilterAll+`</button>
-				<button class="filter-btn" data-filter="ERR" onclick="filterLogs('ERR')">`+T.FilterErrors+`</button>
-				<button class="filter-btn" data-filter="WARN" onclick="filterLogs('WARN')">`+T.FilterWarnings+`</button>
-				<button class="filter-btn" data-filter="UPDATE" onclick="filterLogs('UPDATE')">`+T.FilterUpdates+`</button>
-				<button class="filter-btn" data-filter="START" onclick="filterLogs('START')">`+T.FilterStarts+`</button>
-				<button class="filter-btn" data-filter="STOP" onclick="filterLogs('STOP')">`+T.FilterStop+`</button>
-				<button class="filter-btn" data-filter="CREATE" onclick="filterLogs('CREATE')">`+T.FilterCreated+`</button>
-				<button class="filter-btn" data-filter="CLEANUP" onclick="filterLogs('CLEANUP')">`+T.FilterCleanup+`</button>
-				<button class="filter-btn" data-filter="SKIP" onclick="filterLogs('SKIP')">`+T.FilterSkip+`</button>
-				<button class="filter-btn" data-filter="CONFIG" onclick="filterLogs('CONFIG')">`+T.FilterConfig+`</button>
-				<button class="filter-btn" style="margin-left:auto;" onclick="exportLogs('txt')" title="Als .txt exportieren">📄 TXT</button>
-				<button class="filter-btn" onclick="exportLogs('json')" title="Als .json exportieren">📋 JSON</button>
 			</div>
-			<div id="logContainer" class="log-container">
-	`, T.SystemEvents, len(logs), logTimeRange)
+			<div class="card-content">
+				<div class="log-filters">
+					<button class="filter-btn active" data-filter="all" onclick="filterLogs('all')">`+T.FilterAll+`</button>
+					<button class="filter-btn" data-filter="ERR" onclick="filterLogs('ERR')">`+T.FilterErrors+`</button>
+					<button class="filter-btn" data-filter="WARN" onclick="filterLogs('WARN')">`+T.FilterWarnings+`</button>
+					<button class="filter-btn" data-filter="UPDATE" onclick="filterLogs('UPDATE')">`+T.FilterUpdates+`</button>
+					<button class="filter-btn" data-filter="START" onclick="filterLogs('START')">`+T.FilterStarts+`</button>
+					<button class="filter-btn" data-filter="STOP" onclick="filterLogs('STOP')">`+T.FilterStop+`</button>
+					<button class="filter-btn" data-filter="CREATE" onclick="filterLogs('CREATE')">`+T.FilterCreated+`</button>
+					<button class="filter-btn" data-filter="CLEANUP" onclick="filterLogs('CLEANUP')">`+T.FilterCleanup+`</button>
+					<button class="filter-btn" data-filter="SKIP" onclick="filterLogs('SKIP')">`+T.FilterSkip+`</button>
+					<button class="filter-btn" data-filter="CONFIG" onclick="filterLogs('CONFIG')">`+T.FilterConfig+`</button>
+					<button class="filter-btn" style="margin-left:auto;" onclick="exportLogs('txt')">📄 TXT</button>
+					<button class="filter-btn" onclick="exportLogs('json')">📋 JSON</button>
+				</div>
+				<div id="logContainer" class="log-container">
+	`, T.SystemEvents, entryCount, timeRangeHTML)
 
 	for _, e := range logs {
 		displayTime := e.Timestamp
 		if t, err := time.Parse(time.RFC3339, e.Timestamp); err == nil {
 			displayTime = t.Local().Format("02.01.2006 15:04")
 		}
-
 		actionUpper := strings.ToUpper(e.Action)
 		icon := IconDefault
 		if v, ok := actionIcons[actionUpper]; ok {
 			icon = v
 		}
-
 		domainHTML := ""
 		if e.Domain != "" {
 			domainHTML = `<span class="log-entry-domain">` + html.EscapeString(e.Domain) + `</span>`
 		}
-
 		copyText := displayTime
 		if e.Domain != "" {
 			copyText += " [" + e.Domain + "]"
@@ -2166,51 +2430,80 @@ func writeLogsCard(w http.ResponseWriter, logs []LogEntry, logTimeRange string) 
 		copyText += " " + e.Message
 
 		_, _ = fmt.Fprintf(w, `
-			<div class="log-entry log-entry-row" data-action="%s" data-level="%s" data-copy="%s">
+		<div class="log-entry log-entry-row" data-action="%s" data-level="%s" data-copy="%s">
 			<span class="log-entry-icon">%s</span>
 			<span class="log-entry-time">%s</span>
-			<div class="log-entry-body">
-				%s
-				<span class="log-entry-message">%s</span>
-			</div>
+			<div class="log-entry-body">%s<span class="log-entry-message">%s</span></div>
 			<button class="copy-btn log-copy-btn" onclick="copyLogEntry(this)" title="Kopieren">📋</button>
-		</div>
-		`,
-			actionUpper,
-			e.Level,
-			html.EscapeString(copyText),
-			icon,
-			displayTime,
-			domainHTML,
-			html.EscapeString(e.Message),
+		</div>`,
+			actionUpper, e.Level, html.EscapeString(copyText),
+			icon, displayTime, domainHTML, html.EscapeString(e.Message),
 		)
 	}
 
+	if len(logs) == 0 {
+		_, _ = fmt.Fprintf(w, `<div style="padding:20px;text-align:center;opacity:0.4;font-size:0.85rem;">%s</div>`, T.NoMoreEntries)
+	}
+
 	_, _ = fmt.Fprint(w, `
+				</div>
 			</div>
 		</div>
-	</details>
+	</div>
 	`)
 }
 
-func writeDomainsCard(w http.ResponseWriter, data map[string]interface{}) {
+func writeDomainsCard(w http.ResponseWriter, data map[string]any) {
 	keys := domainKeysFromStatusData(data)
 	configuredDomains := configuredDomainSet()
 	newestChange := newestDomainChange(data, keys)
 
+	// Check if IPv64 is configured
+	hasIPv64 := false
+	cfgMu.RLock()
+	for _, dc := range cfg.DomainConfigs {
+		if dc.Provider == ProviderIPv64 {
+			hasIPv64 = true
+			break
+		}
+	}
+	cfgMu.RUnlock()
+
 	_, _ = fmt.Fprint(w, `
-	<details class="card" open id="domains-card">
-		<summary>🌐 Domains</summary>
-		<div class="card-content">
-			<input type="text"
-				class="search-box"
-				id="domainSearch"
-				inputmode="search"
-				autocomplete="off"
-				placeholder="`+T.DomainSearchPlaceholder+`"
-				oninput="filterDomains(this.value)">
-			<div id="domainContainer">
+	<div class="page-section" data-section="domains">
+		<input type="text" class="search-box" id="domainSearch" inputmode="search" autocomplete="off"
+			placeholder="`+T.DomainSearchPlaceholder+`" oninput="filterDomains(this.value)">
 	`)
+
+	if hasIPv64 {
+		_, _ = fmt.Fprint(w, `
+		<div class="card" style="margin-bottom:15px;">
+			<div style="padding:15px 20px 10px;font-weight:600;">🔧 IPv64 Domain-Verwaltung</div>
+			<div class="card-content">
+				<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+					<div style="flex:1;min-width:200px;">
+						<label style="font-size:0.75rem;opacity:0.6;display:block;margin-bottom:4px;">Domain (FQDN)</label>
+						<input type="text" id="ipv64-domain-input" class="search-box"
+							style="margin-bottom:0;"
+							placeholder="z.B. home.example.ipv64.net"
+							onkeydown="if(event.key==='Enter') ipv64AddDomain()">
+					</div>
+					<button class="action-btn" onclick="ipv64AddDomain()"
+						style="background:rgba(74,222,128,0.15);color:#4ade80;border-color:rgba(74,222,128,0.5);white-space:nowrap;">
+						➕ Hinzufügen
+					</button>
+					<button class="action-btn" onclick="ipv64DeleteDomain()"
+						style="background:rgba(248,113,113,0.15);color:#f87171;border-color:rgba(248,113,113,0.5);white-space:nowrap;">
+						🗑️ Löschen
+					</button>
+				</div>
+				<div id="ipv64-domain-result" style="margin-top:8px;font-size:0.82rem;display:none;"></div>
+			</div>
+		</div>
+		`)
+	}
+
+	_, _ = fmt.Fprint(w, `<div id="domainContainer">`)
 
 	for _, k := range keys {
 		h := parseDomainHistory(data[k])
@@ -2218,13 +2511,52 @@ func writeDomainsCard(w http.ResponseWriter, data map[string]interface{}) {
 	}
 
 	_, _ = fmt.Fprint(w, `
-			</div>
 		</div>
-	</details>
+	</div>
 	`)
 }
 
-func domainKeysFromStatusData(data map[string]interface{}) []string {
+func writeSettingsSection(w http.ResponseWriter, c Config) {
+	securitySection := buildSettingsSecuritySection()
+	systemSection := buildSettingsSystemSection(c)
+	domainsSection := buildSettingsDomainsSection()
+	notifySection := buildSettingsNotifySection(c)
+
+	_, _ = fmt.Fprint(w, `
+	<div class="page-section" data-section="settings">
+		<div class="card">
+			<div style="padding:15px 20px 10px;font-weight:600;">⚙️ `+T.SettingsTitle+`</div>
+			<div class="card-content">
+				`+buildSettingsInlineSection(T.SettingsSecurity, securitySection)+`
+				`+buildSettingsInlineSection(T.SettingsSystem, systemSection)+`
+				`+buildSettingsInlineSection(T.SettingsDomains, domainsSection)+`
+				`+buildSettingsInlineSection(T.SettingsNotify, notifySection)+`
+				`+buildSettingsSaveSection()+`
+			</div>
+		</div>
+	</div>
+	`)
+}
+
+// writeUsersSection — Users als eigene Seite
+func writeUsersSection(w http.ResponseWriter, isAdmin bool) {
+	if !isAdmin {
+		_, _ = fmt.Fprint(w, `<div class="page-section" data-section="users"></div>`)
+		return
+	}
+	_, _ = fmt.Fprint(w, `
+	<div class="page-section" data-section="users">
+		<div class="card">
+			<div style="padding:15px 20px 10px;font-weight:600;">`+T.SettingsUserManagement+`</div>
+			<div class="card-content">
+				`+buildUsersSection()+`
+			</div>
+		</div>
+	</div>
+	`)
+}
+
+func domainKeysFromStatusData(data map[string]any) []string {
 	var keys []string
 	for k := range data {
 		if !strings.HasPrefix(k, "_") {
@@ -2243,7 +2575,7 @@ func configuredDomainSet() map[string]struct{} {
 	return configured
 }
 
-func newestDomainChange(data map[string]interface{}, keys []string) time.Time {
+func newestDomainChange(data map[string]any, keys []string) time.Time {
 	var newestChange time.Time
 	for _, k := range keys {
 		dh := parseDomainHistory(data[k])
@@ -2257,7 +2589,7 @@ func newestDomainChange(data map[string]interface{}, keys []string) time.Time {
 	return newestChange
 }
 
-func parseDomainHistory(v interface{}) DomainHistory {
+func parseDomainHistory(v any) DomainHistory {
 	var h DomainHistory
 	b, _ := json.Marshal(v)
 	_ = json.Unmarshal(b, &h)
@@ -2314,23 +2646,23 @@ func writeSingleDomainCard(w http.ResponseWriter, domain string, h DomainHistory
 						</tr>
 					</thead>
 					<tbody>`,
-		html.EscapeString(domain),
+		esc(domain),
 		orphanStyle,
 		safeID,
 		dotClass,
 		dotTitle,
-		html.EscapeString(domain),
-		html.EscapeString(h.Provider),
+		esc(domain),
+		esc(h.Provider),
 		changedBadge,
 		orphanLabel,
 		deleteBtn,
 		safeID,
-		html.EscapeString(latest.IPv4),
-		html.EscapeString(latest.IPv4),
+		jsString(latest.IPv4),
+		esc(latest.IPv4),
 		safeID,
-		html.EscapeString(latest.IPv6),
-		html.EscapeString(latest.IPv6),
-		html.EscapeString(latest.Time),
+		jsString(latest.IPv6),
+		esc(latest.IPv6),
+		esc(latest.Time),
 	)
 
 	writeDomainHistoryRows(w, h)
@@ -2377,10 +2709,13 @@ func buildOrphanDomainVisuals(isOrphan bool, domain string) (string, string, str
 	if !isOrphan {
 		return "", "", ""
 	}
-
 	orphanStyle := ` style="border-color: rgba(248,113,113,0.5);"`
-	orphanLabel := `<span class="orphan-badge">` + T.NotConfiguredLabel + `</span>`
-	deleteBtn := `<button class="action-btn btn-danger-soft" onclick="event.preventDefault(); event.stopPropagation(); deleteDomain('` + html.EscapeString(domain) + `', this)">` + T.RemoveBtn + `</button>`
+	orphanLabel := `<span class="orphan-badge">` + esc(T.NotConfiguredLabel) + `</span>`
+
+	deleteBtn := `<button class="action-btn btn-danger-soft" ` +
+		`onclick="event.preventDefault();event.stopPropagation();` +
+		`deleteDomain('` + jsString(domain) + `',this)">` +
+		esc(T.RemoveBtn) + `</button>`
 
 	return orphanStyle, orphanLabel, deleteBtn
 }
@@ -2430,29 +2765,28 @@ func writeDomainHistoryRows(w http.ResponseWriter, h DomainHistory) {
 
 func writeDashboardFooter(w http.ResponseWriter) {
 	_, _ = fmt.Fprintf(w, `
-	<footer class="dashboard-footer">
-		<div class="container">
+	<footer class="dashboard-footer" style="position:relative;z-index:10;">
+		<div>
 			<span>&copy; %d IONOS-DDNS Made with ❤️ by</span>
 			<span class="dashboard-footer-sep">|</span>
-			<a href="https://github.com/CrazyUs3r/IONOS-DDNS"
-				target="_blank"
-				rel="noopener noreferrer"
-				class="dashboard-footer-link">
-				CrazyUs3r
-			</a>
+			<a href="https://github.com/CrazyUs3r/IONOS-DDNS" target="_blank" rel="noopener noreferrer" class="dashboard-footer-link">CrazyUs3r</a>
 		</div>
-	</footer>`, time.Now().Year())
+	</footer>
+
+			</div><!-- end main-content -->
+		</div><!-- end app-right -->
+	</div><!-- end app-layout -->
+	`, time.Now().Year())
+
 	_, _ = fmt.Fprintf(w, `
-	<script>
-		window.I18N = %s;
-	</script>
+	<script>window.I18N = %s;</script>
 	<script>%s</script>
 	</body>
 	</html>
 	`, dashboardI18NJSON(), jsData)
 }
 
-func writeJSON(w http.ResponseWriter, status int, v interface{}) {
+func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)

@@ -15,8 +15,73 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 )
+
+// ============================================================================
+// TELEGRAM TYPES
+// ============================================================================
+type tgMessage struct {
+	MessageID int    `json:"message_id"`
+	Text      string `json:"text"`
+	Chat      tgChat `json:"chat"`
+	From      tgUser `json:"from"`
+	Date      int64  `json:"date"`
+}
+
+type tgChat struct {
+	ID int64 `json:"id"`
+}
+
+type tgUser struct {
+	ID        int64  `json:"id"`
+	FirstName string `json:"first_name"`
+	Username  string `json:"username"`
+}
+
+type tgInlineKeyboard struct {
+	InlineKeyboard [][]tgInlineButton `json:"inline_keyboard"`
+}
+
+type tgInlineButton struct {
+	Text         string `json:"text"`
+	CallbackData string `json:"callback_data"`
+}
+
+type tgCallbackQuery struct {
+	ID      string    `json:"id"`
+	From    tgUser    `json:"from"`
+	Message tgMessage `json:"message"`
+	Data    string    `json:"data"`
+}
+
+type tgUpdateFull struct {
+	UpdateID      int64            `json:"update_id"`
+	Message       *tgMessage       `json:"message,omitempty"`
+	CallbackQuery *tgCallbackQuery `json:"callback_query,omitempty"`
+}
+type telegramNotifier struct {
+	token          string
+	chatID         string
+	instanceTag    string
+	pollOnce       sync.Once
+	pollClientOnce sync.Once
+	pollClient     *http.Client
+	lastOffset     atomic.Int64
+	sendQueue      chan tgQueuedMsg
+	pollCtx        context.Context
+	pollCancel     context.CancelFunc
+	wg             sync.WaitGroup
+}
+
+type tgQueuedMsg struct {
+	chatID   string
+	text     string
+	kb       *tgInlineKeyboard
+	enqueued time.Time
+}
 
 // ============================================================================
 // TELEGRAM NOTIFIER
@@ -174,7 +239,7 @@ func (t *telegramNotifier) sendTextWithRetry(chatID, text string, kb *tgInlineKe
 }
 
 func (t *telegramNotifier) sendText(chatID, text string, kb *tgInlineKeyboard) error {
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"chat_id":    chatID,
 		"text":       text,
 		"parse_mode": "HTML",
@@ -225,7 +290,7 @@ func (t *telegramNotifier) sendText(chatID, text string, kb *tgInlineKeyboard) e
 }
 
 func (t *telegramNotifier) deleteMessage(chatID int64, messageID int) {
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"chat_id":    chatID,
 		"message_id": messageID,
 	}
@@ -247,7 +312,7 @@ func (t *telegramNotifier) deleteMessage(chatID int64, messageID int) {
 }
 
 func (t *telegramNotifier) answerCallback(callbackID string) {
-	payload := map[string]interface{}{"callback_query_id": callbackID}
+	payload := map[string]any{"callback_query_id": callbackID}
 	body, _ := json.Marshal(payload)
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/answerCallbackQuery", t.token)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -379,7 +444,7 @@ func (t *telegramNotifier) registerCommands() {
 		{"command": "health", "description": T.TgCmdHealth},
 		{"command": "help", "description": T.TgCmdHelp},
 	}
-	payload := map[string]interface{}{"commands": commands}
+	payload := map[string]any{"commands": commands}
 	body, _ := json.Marshal(payload)
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/setMyCommands", t.token)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

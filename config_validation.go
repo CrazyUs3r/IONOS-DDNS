@@ -33,6 +33,10 @@ func validateDomainConfigs() error {
 			if dc.CFToken == "" && (dc.CFEmail == "" || dc.CFSecret == "") {
 				return fmt.Errorf(T.CloudflareAuthRequired, dc.FQDN)
 			}
+		case ProviderHetzner, ProviderHetznerCloud:
+			if hetznerToken(&dc) == "" {
+				return fmt.Errorf(T.HetznerAuthRequired, dc.FQDN)
+			}
 		default:
 			return fmt.Errorf(T.UnknownProvider, dc.FQDN, dc.Provider)
 		}

@@ -13,6 +13,22 @@ import (
 )
 
 // ============================================================================
+// GOTIFY TYPES
+// ============================================================================
+type gotifyNotifier struct {
+	url       string
+	token     string
+	sendQueue chan gotifyQueuedMsg
+}
+
+type gotifyQueuedMsg struct {
+	title    string
+	body     string
+	priority int
+	enqueued time.Time
+}
+
+// ============================================================================
 // GOTIFY NOTIFIER
 // ============================================================================
 func newGotifyNotifier(url, token string) *gotifyNotifier {
@@ -109,7 +125,7 @@ func (g *gotifyNotifier) sendWithRetry(msg gotifyQueuedMsg) error {
 	const maxRetries = 3
 	wait := 5 * time.Second
 
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"title":    msg.title,
 		"message":  msg.body,
 		"priority": msg.priority,
@@ -134,7 +150,7 @@ func (g *gotifyNotifier) sendWithRetry(msg gotifyQueuedMsg) error {
 	return fmt.Errorf("gotify: max retries erreicht")
 }
 
-func (g *gotifyNotifier) doSend(payload map[string]interface{}) error {
+func (g *gotifyNotifier) doSend(payload map[string]any) error {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal: %w", err)

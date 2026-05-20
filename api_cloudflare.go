@@ -33,7 +33,7 @@ func loadCloudflareCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
 // ============================================================================
 // API - CLOUDFLARE
 // ============================================================================
-func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint string, body interface{}) ([]byte, error) {
+func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint string, body any) ([]byte, error) {
 	fullURL := cloudflareAPIBase + endpoint
 
 	return apiWithRetry(ctx, "Cloudflare", T.CFAPIFailed, func(attempt, maxRetries int) ([]byte, bool, error) {
@@ -45,7 +45,7 @@ func cloudflareAPIAttempt(
 	ctx context.Context,
 	dc *DomainConfig,
 	method, fullURL string,
-	body interface{},
+	body any,
 	attempt, maxRetries int,
 ) ([]byte, bool, error) {
 	debugLog("HTTP", "", fmt.Sprintf(T.CFAttempt,
@@ -72,7 +72,7 @@ func buildCloudflareRequest(
 	ctx context.Context,
 	dc *DomainConfig,
 	method, fullURL string,
-	body interface{},
+	body any,
 ) (*http.Request, error) {
 	bodyReader, err := cloudflareRequestBodyReader(body)
 	if err != nil {
@@ -97,7 +97,7 @@ func buildCloudflareRequest(
 	return req, nil
 }
 
-func cloudflareRequestBodyReader(body interface{}) (io.Reader, error) {
+func cloudflareRequestBodyReader(body any) (io.Reader, error) {
 	if body == nil {
 		return bytes.NewReader([]byte{}), nil
 	}
@@ -502,8 +502,8 @@ func shouldSkipCloudflareUpdate(fqdn, recordType, newIP string, existing *Record
 	return false
 }
 
-func buildCloudflareRecordPayload(dc *DomainConfig, fqdn, recordType, newIP string) map[string]interface{} {
-	return map[string]interface{}{
+func buildCloudflareRecordPayload(dc *DomainConfig, fqdn, recordType, newIP string) map[string]any {
+	return map[string]any{
 		"type":    recordType,
 		"name":    fqdn,
 		"content": newIP,
@@ -518,7 +518,7 @@ func upsertCloudflareRecord(
 	dc *DomainConfig,
 	zoneID, fqdn, recordType string,
 	existing *Record,
-	payload map[string]interface{},
+	payload map[string]any,
 ) (string, error) {
 	if existing != nil {
 		actionType, err := updateCloudflareRecord(ctx, dc, zoneID, existing.ID, payload)
@@ -540,7 +540,7 @@ func updateCloudflareRecord(
 	ctx context.Context,
 	dc *DomainConfig,
 	zoneID, recordID string,
-	payload map[string]interface{},
+	payload map[string]any,
 ) (string, error) {
 	endpoint := fmt.Sprintf("/zones/%s/dns_records/%s", zoneID, recordID)
 	_, err := cloudflareAPI(ctx, dc, MethodPUT, endpoint, payload)
@@ -554,7 +554,7 @@ func createCloudflareRecord(
 	ctx context.Context,
 	dc *DomainConfig,
 	zoneID string,
-	payload map[string]interface{},
+	payload map[string]any,
 ) error {
 	endpoint := fmt.Sprintf("/zones/%s/dns_records", zoneID)
 	_, err := cloudflareAPI(ctx, dc, MethodPOST, endpoint, payload)
@@ -570,7 +570,7 @@ func recoverCloudflareMissingRecord(
 	ctx context.Context,
 	dc *DomainConfig,
 	zoneID, fqdn, recordType string,
-	payload map[string]interface{},
+	payload map[string]any,
 ) (string, error) {
 	rec, err := findCloudflareRecord(ctx, dc, zoneID, fqdn, recordType)
 	if err != nil {

@@ -169,7 +169,7 @@ func (m *mqttNotifier) Send(msg NotifyMessage) error {
 		return fmt.Errorf("mqtt not connected")
 	}
 
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"action":    msg.Action,
 		"domain":    msg.Domain,
 		"message":   msg.Message,
@@ -206,14 +206,14 @@ func (m *mqttNotifier) publishDiscovery(client mqtt.Client) error {
 		m.clientID,
 	)
 
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"name":                  "Go DynDNS",
 		"unique_id":             fmt.Sprintf("%s_ip", m.clientID),
 		"state_topic":           m.stateTopic,
 		"value_template":        "{{ value_json.message }}",
 		"json_attributes_topic": m.stateTopic,
 		"icon":                  "mdi:dns",
-		"device": map[string]interface{}{
+		"device": map[string]any{
 			"name":         "Go DynDNS",
 			"identifiers":  []string{m.clientID},
 			"manufacturer": "custom",

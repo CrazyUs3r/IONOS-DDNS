@@ -488,6 +488,7 @@ func logStartupProviders() {
 func initializeRateLimiters() {
 	globalTriggerLimiter = NewRateLimiter(10, 1.0/6.0)
 	ipTriggerLimiter = NewIPRateLimiter(shutdownCtx, 5, 0.1)
+	loginLimiter = NewIPRateLimiter(shutdownCtx, 5, 1.0/60.0)
 }
 
 func refreshCaches() {
@@ -521,11 +522,38 @@ func newHTTPServer() *http.Server {
 		handler = authMiddleware(mux)
 	}
 
+	handler = cspMiddleware(handler)
+
 	return &http.Server{
 		Addr:              ":" + cfg.HealthPort,
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
+}
+
+func cspMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		isHTML := path == "/" ||
+			path == "/login" ||
+			path == "/setup" ||
+			path == "/logout"
+
+		if isHTML {
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.Header().Set("X-Frame-Options", "DENY")
+			w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+			w.Header().Set("Content-Security-Policy",
+				"default-src 'self'; "+
+					"script-src 'self' 'unsafe-inline'; "+
+					"style-src 'self' 'unsafe-inline'; "+
+					"img-src 'self' data:; "+
+					"connect-src 'self' ws: wss:; "+
+					"frame-ancestors 'none';",
+			)
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func startHTTPServer(srv *http.Server) {
@@ -733,8 +761,6 @@ func applyEnvOverrides(
 
 	applyCoreEnvOverrides(logsDir, tempInterval, dnsList)
 	applyLimitEnvOverrides(maxAPIRetries, maxLogLines, hourlyLimit, maxConcurrent)
-	applyNotificationEnvOverrides()
-	applyNotificationEnabledFallback()
 }
 
 func applyCoreEnvOverrides(logsDir string, tempInterval int, dnsList []string) {
@@ -777,31 +803,4 @@ func applyLimitEnvOverrides(maxAPIRetries, maxLogLines, hourlyLimit, maxConcurre
 	if os.Getenv("MAX_CONCURRENT") != "" {
 		cfg.MaxConcurrent = maxConcurrent
 	}
-}
-
-func applyNotificationEnvOverrides() {
-	if v := os.Getenv("TELEGRAM_BOT_TOKEN"); v != "" {
-		cfg.Notifications.Telegram.Token = strings.TrimSpace(v)
-	}
-	if v := os.Getenv("TELEGRAM_CHAT_ID"); v != "" {
-		cfg.Notifications.Telegram.ChatID = strings.TrimSpace(v)
-	}
-	if v := os.Getenv("GOTIFY_URL"); v != "" {
-		cfg.Notifications.Gotify.URL = strings.TrimSpace(v)
-	}
-	if v := os.Getenv("GOTIFY_TOKEN"); v != "" {
-		cfg.Notifications.Gotify.Token = strings.TrimSpace(v)
-	}
-	if v := os.Getenv("NOTIFY_ON"); v != "" {
-		cfg.Notifications.Events = strings.Split(v, ",")
-	}
-}
-
-func applyNotificationEnabledFallback() {
-	if cfg.Notifications.Enabled {
-		return
-	}
-
-	cfg.Notifications.Enabled = cfg.Notifications.Telegram.Token != "" ||
-		cfg.Notifications.Gotify.URL != ""
 }

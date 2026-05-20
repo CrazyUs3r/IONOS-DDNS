@@ -118,7 +118,7 @@ func getPublicIPFromAny(parent context.Context, urls []string, want IPVersion) (
 		cancel()
 
 		if err == nil {
-			broadcastUpdate("ip_check_result", map[string]interface{}{
+			broadcastUpdate("ip_check_result", map[string]any{
 				"url":  u,
 				"ok":   true,
 				"want": fmt.Sprintf("%d", int(want)),
@@ -126,7 +126,7 @@ func getPublicIPFromAny(parent context.Context, urls []string, want IPVersion) (
 			return ip, nil
 		}
 
-		broadcastUpdate("ip_check_result", map[string]interface{}{
+		broadcastUpdate("ip_check_result", map[string]any{
 			"url":  u,
 			"ok":   false,
 			"want": fmt.Sprintf("%d", int(want)),

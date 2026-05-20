@@ -8,6 +8,37 @@ import (
 )
 
 // ============================================================================
+// NOTIFICATION
+// ============================================================================
+type NotifyEvent string
+
+const (
+	NotifyOnUpdate  NotifyEvent = "UPDATE"
+	NotifyOnCreate  NotifyEvent = "CREATE"
+	NotifyOnError   NotifyEvent = "ERROR"
+	NotifyOnStart   NotifyEvent = "START"
+	NotifyOnStop    NotifyEvent = "STOP"
+	NotifyOnCleanup NotifyEvent = "CLEANUP"
+)
+
+type Notifier interface {
+	Name() string
+	Send(msg NotifyMessage) error
+}
+
+type NotifyMessage struct {
+	Action  string
+	Domain  string
+	Message string
+	Level   LogLevel
+}
+
+type notifyConfig struct {
+	notifiers []Notifier
+	events    map[NotifyEvent]struct{}
+}
+
+// ============================================================================
 // INIT
 // ============================================================================
 func initNotifiers() {

@@ -126,7 +126,7 @@ func (c *WSClient) closeSend() {
 	})
 }
 
-func broadcastUpdate(updateType string, data interface{}) {
+func broadcastUpdate(updateType string, data any) {
 	msg := WSMessage{Type: updateType, Data: data}
 	select {
 	case wsHub.broadcast <- msg:

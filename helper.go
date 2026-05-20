@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"math"
 	"math/rand"
 	"os"
@@ -185,6 +186,22 @@ func expectedTranslationKeySet() map[string]struct{} {
 	return keys
 }
 
+func esc(s string) string {
+	return html.EscapeString(s)
+}
+
+func jsString(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `'`, `\'`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	s = strings.ReplaceAll(s, "\n", `\n`)
+	s = strings.ReplaceAll(s, "\r", `\r`)
+	s = strings.ReplaceAll(s, "<", `\u003c`)
+	s = strings.ReplaceAll(s, ">", `\u003e`)
+	s = strings.ReplaceAll(s, "&", `\u0026`)
+	return s
+}
+
 // ============================================================================
 // HELPER - DNS
 // ============================================================================
@@ -219,6 +236,10 @@ func loadZonesForDomainConfig(ctx context.Context, dc *DomainConfig) ([]Zone, er
 		return loadIPv64Domains(ctx, dc)
 	case ProviderIONOS:
 		return loadIONOSZones(ctx, dc)
+	case ProviderHetzner:
+		return loadHetznerDNSZones(ctx, dc)
+	case ProviderHetznerCloud:
+		return loadHetznerCloudZones(ctx, dc)
 	default:
 		return nil, fmt.Errorf("unknown provider: %s", dc.Provider)
 	}
@@ -310,7 +331,7 @@ func loadAllProviderZones(ctx context.Context) (map[string][]Zone, error) {
 		}(provider, dc)
 	}
 
-	for i := 0; i < count; i++ {
+	for range count {
 		r := <-results
 		if r.err != nil {
 			return nil, fmt.Errorf("failed to load zones for %s: %w", r.provider, r.err)
@@ -331,7 +352,7 @@ func doSingleflight[T any](
 ) (T, error) {
 	var zero T
 
-	ch := g.DoChan(key, func() (interface{}, error) {
+	ch := g.DoChan(key, func() (any, error) {
 		v, err := fn()
 		if err != nil {
 			return nil, err

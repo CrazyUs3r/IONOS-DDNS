@@ -1,11 +1,11 @@
 ﻿# =============================================================================
 # Builder Stage
 # =============================================================================
-FROM --platform=${BUILDPLATFORM} golang:1.26.2-alpine AS builder
+FROM --platform=${BUILDPLATFORM} golang:1.26.3-alpine AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
-ARG VERSION=2.4.0
+ARG VERSION=2.5.0
 ARG BUILD_DATE
 ARG VCS_REF
 
@@ -38,7 +38,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # =============================================================================
 FROM busybox:stable-musl
 
-ARG VERSION=2.4.0
+ARG VERSION=2.5.0
 ARG BUILD_DATE
 
 LABEL org.opencontainers.image.title="Go-DynDNS" \
