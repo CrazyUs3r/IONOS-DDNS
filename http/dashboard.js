@@ -12,6 +12,66 @@ if (typeof initialConfig !== 'undefined' && initialConfig !== null) {
 	tempDomainConfigs = (Array.isArray(initialConfig) ? initialConfig : []).map(d => ({ ...d }));
 }
 
+// ============================================================================
+// SIDEBAR NAVIGATION
+// ============================================================================
+const PAGES = ['dashboard', 'domains', 'metrics', 'logs', 'debug', 'settings', 'users'];
+
+let currentPage = 'dashboard';
+
+function navTo(page) {
+	if (!PAGES.includes(page)) page = 'dashboard';
+	currentPage = page;
+
+	// Track settings open state for WS pause
+	isSettingsOpen = (page === 'settings');
+
+	// Update nav active state
+	document.querySelectorAll('.nav-item[data-page]').forEach(el => {
+		el.classList.toggle('nav-active', el.dataset.page === page);
+	});
+
+	// Show/hide sections
+	document.querySelectorAll('.page-section').forEach(el => {
+		el.style.display = el.dataset.section === page ? '' : 'none';
+	});
+
+	// Page title
+	const titles = {
+		dashboard: '🌐 Dashboard',
+		domains: '🌐 Domains',
+		metrics: '📊 Metriken',
+		logs: '🧾 Logs',
+		debug: '🐞 Debug',
+		settings: '⚙️ Einstellungen',
+		users: '👥 Benutzer',
+	};
+	const titleEl = document.getElementById('page-title');
+	if (titleEl) titleEl.textContent = titles[page] || 'Dashboard';
+
+	// Init settings fields when navigating to settings
+	if (page === 'settings') {
+		_initSettingsFields();
+	}
+
+	// Init users list when navigating to users
+	if (page === 'users') {
+		loadUsers();
+	}
+
+	// Persist
+	try { localStorage.setItem('nav-page', page); } catch { }
+
+	// Mobile: close sidebar
+	const sb = document.getElementById('sidebar');
+	if (sb && window.innerWidth < 768) sb.classList.remove('sidebar-open');
+}
+
+function toggleSidebar() {
+	const sb = document.getElementById('sidebar');
+	if (sb) sb.classList.toggle('sidebar-open');
+}
+
 document.addEventListener('DOMContentLoaded', () => {
 	if (!localStorage.getItem('theme')) {
 		localStorage.setItem('theme',
@@ -52,6 +112,33 @@ document.addEventListener('DOMContentLoaded', () => {
 			}
 		}
 	});
+
+	// Restore last page or default
+	const savedPage = localStorage.getItem('nav-page') || 'dashboard';
+	navTo(savedPage);
+
+	// Sidebar overlay close
+	document.getElementById('sidebar-overlay')?.addEventListener('click', () => {
+		document.getElementById('sidebar')?.classList.remove('sidebar-open');
+	});
+
+	// Korrigierter Klick-Listener für das Klicken AUẞERHALB der Sidebar
+	document.addEventListener('click', (event) => {
+		if (window.innerWidth < 768) {
+			const sidebar = document.getElementById('sidebar');
+			const hamburger = document.querySelector('.hamburger-btn');
+
+			// Prüfen, ob die Sidebar überhaupt geöffnet ist
+			if (sidebar && sidebar.classList.contains('sidebar-open')) {
+				
+				// Wenn der Klick WEDER in der Sidebar NOCH auf dem Hamburger-Button war:
+				if (!sidebar.contains(event.target) && (!hamburger || !hamburger.contains(event.target))) {
+					sidebar.classList.remove('sidebar-open');
+				}
+			}
+		}
+	});
+
 	startClock();
 	connectWS();
 	document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSettings(); });
@@ -173,12 +260,15 @@ function updateMetrics(m) {
 	setTxt('uptime', uptime);
 }
 
+let isSettingsOpen = false;
+
 function connectWS() {
 	const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
 	ws = new WebSocket(proto + location.host + '/ws');
 	ws.onmessage = (e) => {
 		let msg;
 		try { msg = JSON.parse(e.data); } catch { return; }
+		if (isSettingsOpen) { return; }
 		if (msg.type === 'initial' || msg.type === 'metrics') {
 			updateMetrics(msg.data);
 			const theme = localStorage.getItem('theme') || 'dark';
@@ -408,11 +498,15 @@ async function updateDomainDisplay(data) {
 function _getVal(id) { const el = document.getElementById(id); return el ? el.value : ''; }
 function _isChecked(id) { const el = document.getElementById(id); return el ? el.checked : false; }
 function _parseList(raw) { return (raw || '').split(',').map(s => s.trim()).filter(Boolean); }
-function _setVal(id, v) { const el = document.getElementById(id); if (el) el.value = v != null ? String(v) : ''; }
-function _setChk(id, v) { const el = document.getElementById(id); if (!el) return; el.checked = !!v; updateCheckboxLabel(el); }
+function _setVal(id, v) { const el = document.getElementById(id); if (!el || el === document.activeElement) return; el.value = v != null ? String(v) : ''; }
+function _setChk(id, v) { const el = document.getElementById(id); if (!el || el === document.activeElement) return; el.checked = !!v; updateCheckboxLabel(el); }
 
 function openSettings() {
-	document.getElementById('settingsOverlay').classList.add('open');
+	navTo('settings');
+}
+
+function _initSettingsFields() {
+	isSettingsOpen = true;
 
 	const saved = localStorage.getItem('triggerToken') || '';
 	const inp = document.getElementById('s-token');
@@ -472,11 +566,10 @@ function openSettings() {
 }
 
 function closeSettings() {
-	const el = document.getElementById('settingsOverlay');
-	if (el) el.classList.remove('open');
+	isSettingsOpen = false;
 }
 
-function closeSettingsOutside(e) { if (e.target.id === 'settingsOverlay') closeSettings(); }
+function closeSettingsOutside(e) { /* noop - no modal */ }
 
 function saveToken() {
 	const val = (document.getElementById('s-token').value || '').trim();
@@ -504,7 +597,7 @@ function renderSettingsDomainList() {
 
 	sorted.forEach((d) => {
 		const origIndex = tempDomainConfigs.indexOf(d);
-		const providerColor = { IONOS: '#3b82f6', CLOUDFLARE: '#f97316', IPV64: '#a855f7' }[d.provider] || '#64748b';
+		const providerColor = { IONOS: '#3b82f6', CLOUDFLARE: '#f97316', IPV64: '#a855f7', HETZNER: '#14b8a6', HETZNERCLOUD: '#06b6d4' }[d.provider] || '#64748b';
 		const div = document.createElement('div');
 		div.className = 'domain-pill';
 		div.innerHTML =
@@ -545,6 +638,8 @@ function resetDomainForm() {
 	_setVal('new-cf-email', '');
 	_setVal('new-cf-secret', '');
 	_setVal('new-ipv64-token', '');
+	_setVal('new-hetzner-token', '');
+	_setVal('new-hcloud-token', '');
 	_setChk('new-cf-proxied', false);
 
 	const provSel = document.getElementById('new-domain-provider');
@@ -581,6 +676,10 @@ function editDomain(index) {
 		_setChk('new-cf-proxied', d.cf_proxied || false);
 	} else if (d.provider === 'IPV64') {
 		_setVal('new-ipv64-token', d.ipv64_token || '');
+	} else if (d.provider === 'HETZNER') {
+		_setVal('new-hetzner-token', d.api_secret || d.api_prefix || '');
+	} else if (d.provider === 'HETZNERCLOUD') {
+		_setVal('new-hcloud-token', d.api_secret || d.api_prefix || '');
 	}
 
 	renderSettingsDomainList();
@@ -595,6 +694,8 @@ function toggleProviderFields() {
 	document.getElementById('fields-ionos').style.display = p === 'IONOS' ? 'block' : 'none';
 	document.getElementById('fields-cloudflare').style.display = p === 'CLOUDFLARE' ? 'block' : 'none';
 	document.getElementById('fields-ipv64').style.display = p === 'IPV64' ? 'block' : 'none';
+	document.getElementById('fields-hetzner').style.display = p === 'HETZNER' ? 'block' : 'none';
+	document.getElementById('fields-hetznercloud').style.display = p === 'HETZNERCLOUD' ? 'block' : 'none';
 }
 
 function addDomainToList() {
@@ -621,6 +722,10 @@ function addDomainToList() {
 		entry.cf_proxied = document.getElementById('new-cf-proxied')?.checked || false;
 	} else if (provider === 'IPV64') {
 		entry.ipv64_token = _getVal('new-ipv64-token');
+	} else if (provider === 'HETZNER') {
+		entry.api_secret = _getVal('new-hetzner-token');
+	} else if (provider === 'HETZNERCLOUD') {
+		entry.api_secret = _getVal('new-hcloud-token');
 	}
 
 	if (editIndex !== null) {
@@ -642,6 +747,8 @@ function addDomainToList() {
 		'new-cf-email',
 		'new-cf-secret',
 		'new-ipv64-token',
+		'new-hetzner-token',
+		'new-hcloud-token',
 	].forEach(id => _setVal(id, ''));
 
 	_setChk('new-cf-proxied', false);
@@ -905,6 +1012,69 @@ function deleteDomain(domain, btn) {
 			}
 		})
 		.catch(() => { btn.disabled = false; btn.textContent = tr('remove_btn', '🗑️ Entfernen'); showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'); });
+}
+
+// ============================================================================
+// IPv64 DOMAIN MANAGEMENT
+// ============================================================================
+function _ipv64DomainAction(action) {
+	const input = document.getElementById('ipv64-domain-input');
+	const result = document.getElementById('ipv64-domain-result');
+	const fqdn = (input ? input.value : '').trim().toLowerCase();
+
+	if (!fqdn) {
+		showToast('❌ FQDN fehlt', 'error');
+		return;
+	}
+
+	const token = localStorage.getItem('triggerToken') || '';
+	if (result) { result.style.display = 'none'; result.innerHTML = ''; }
+
+	const label = action === 'add' ? 'Hinzufügen' : 'Löschen';
+	showToast(`⏳ IPv64 Domain wird ${action === 'add' ? 'hinzugefügt' : 'gelöscht'}...`, 'info');
+
+	fetch('/api/ipv64/domain', {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+			...(token ? { 'X-Trigger-Token': token } : {})
+		},
+		body: JSON.stringify({ action, fqdn })
+	})
+		.then(r => r.json().then(j => ({ ok: r.ok, j })))
+		.then(({ ok, j }) => {
+			if (!ok) {
+				const msg = '❌ ' + (j.error || 'Fehler');
+				showToast(msg, 'error');
+				if (result) {
+					result.style.display = 'block';
+					result.style.color = 'var(--error)';
+					result.innerHTML = msg;
+				}
+				return;
+			}
+			const icon = action === 'add' ? '✅' : '🗑️';
+			const msg = `${icon} Domain <strong>${escHtml(j.fqdn)}</strong> ${j.status}`;
+			showToast(`${icon} IPv64 Domain ${j.status}: ${j.fqdn}`, 'success');
+			if (result) {
+				result.style.display = 'block';
+				result.style.color = 'var(--success)';
+				result.innerHTML = msg;
+			}
+			if (input) input.value = '';
+		})
+		.catch(() => {
+			showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error');
+		});
+}
+
+function ipv64AddDomain() { _ipv64DomainAction('add'); }
+function ipv64DeleteDomain() {
+	const input = document.getElementById('ipv64-domain-input');
+	const fqdn = (input ? input.value : '').trim();
+	if (!fqdn) { showToast('❌ FQDN fehlt', 'error'); return; }
+	if (!confirm(`IPv64 Domain "${fqdn}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`)) return;
+	_ipv64DomainAction('delete');
 }
 
 function fallbackCopy(text) {
