@@ -687,6 +687,6 @@ func handlePrometheusMetrics(w http.ResponseWriter, _ *http.Request) {
 
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 	if _, err := fmt.Fprintln(w, strings.Join(lines, "\n")); err != nil {
-		log.Printf("Error writing metrics: %v", err)
+		fmt.Fprintf(os.Stderr, "Error writing metrics: %v\n", err)
 	}
 }
