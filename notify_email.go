@@ -4,6 +4,7 @@ package main
 import (
 	"crypto/tls"
 	"fmt"
+	"mime"
 	"net"
 	"net/smtp"
 	"strings"
@@ -123,6 +124,8 @@ func (e *emailNotifier) drainQueue() {
 						_ = e.doSend(msg)
 					}
 				case <-deadline:
+					return
+				default:
 					return
 				}
 			}
@@ -250,9 +253,14 @@ func (e *emailNotifier) smtpSend(client *smtp.Client, msg []byte) error {
 	if err != nil {
 		return fmt.Errorf("email DATA: %w", err)
 	}
-	defer func() { _ = wc.Close() }()
-	_, err = wc.Write(msg)
-	return err
+	if _, err := wc.Write(msg); err != nil {
+		_ = wc.Close()
+		return fmt.Errorf("email write: %w", err)
+	}
+	if err := wc.Close(); err != nil {
+		return fmt.Errorf("email DATA close: %w", err)
+	}
+	return nil
 }
 
 // ============================================================================
@@ -266,7 +274,7 @@ func (e *emailNotifier) buildRawMessage(subject, body string) []byte {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "From: %s\r\n", e.from)
 	fmt.Fprintf(&sb, "To: %s\r\n", toHeader)
-	fmt.Fprintf(&sb, "Subject: %s\r\n", subject)
+	fmt.Fprintf(&sb, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", subject))
 	fmt.Fprintf(&sb, "Date: %s\r\n", now)
 	fmt.Fprintf(&sb, "MIME-Version: 1.0\r\n")
 	fmt.Fprintf(&sb, "Content-Type: text/plain; charset=UTF-8\r\n")
@@ -276,21 +284,7 @@ func (e *emailNotifier) buildRawMessage(subject, body string) []byte {
 }
 
 func formatEmailMessage(msg NotifyMessage, prefix string) (subject, body string) {
-	icon := levelEmoji(msg.Level)
-	switch msg.Action {
-	case ActionUpdate:
-		icon = IconUpdate
-	case ActionCreate:
-		icon = IconCreate
-	case ActionStart:
-		icon = IconStart
-	case ActionStop:
-		icon = IconStop
-	case ActionError:
-		icon = IconErr
-	case ActionCleanup:
-		icon = IconCleanup
-	}
+	icon := notifyIcon(msg)
 
 	subject = fmt.Sprintf("%s %s %s", prefix, icon, msg.Action)
 	if msg.Domain != "" {

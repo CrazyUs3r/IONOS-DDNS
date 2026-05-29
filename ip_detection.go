@@ -25,7 +25,7 @@ func fetchIPResponse(ctx context.Context, url string) (string, int, time.Duratio
 		return "", 0, 0, fmt.Errorf("%s: %w", t(T.ErrRequestCreate, "request create failed"), err)
 	}
 
-	start := time.Now()
+	start := time.Now().Local()
 	resp, err := getHTTPClient().Do(req)
 	duration := time.Since(start)
 	if err != nil {

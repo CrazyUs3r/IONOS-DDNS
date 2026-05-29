@@ -174,7 +174,7 @@ func (m *mqttNotifier) Send(msg NotifyMessage) error {
 		"domain":    msg.Domain,
 		"message":   msg.Message,
 		"level":     msg.Level,
-		"emoji":     levelEmoji(msg.Level),
+		"emoji":     notifyIcon(msg),
 		"timestamp": time.Now().Format("02.01.2006 15:04:05"),
 		"source":    ManagedComment,
 	}

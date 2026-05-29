@@ -3,7 +3,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -174,43 +173,10 @@ func loadInfrastructureRecords(ctx context.Context, provider ProviderType, z Zon
 	}
 }
 
-func loadIPv64InfrastructureRecords(z Zone) []Record {
-	providerCache.RLock()
-	defer providerCache.RUnlock()
-
-	var records []Record
-	if data, ok := providerCache.ipv64Records[z.Name]; ok {
-		for _, ir := range data.Records {
-			name := z.Name
-			if ir.Praefix != "" {
-				name = ir.Praefix + "." + z.Name
-			}
-			records = append(records, Record{
-				Name:    name,
-				Type:    ir.Type,
-				Content: ir.Content,
-			})
-		}
-	}
-
-	return records
-}
-
-func loadIonosInfrastructureRecords(ctx context.Context, dc *DomainConfig, zoneID string) []Record {
-	data, _ := ionosAPI(ctx, dc, MethodGET, ionosBaseURL+"/"+zoneID, nil)
-
-	var detail struct {
-		Records []Record `json:"records"`
-	}
-	_ = json.Unmarshal(data, &detail)
-
-	return detail.Records
-}
-
 func filterRelevantInfrastructureRecords(records []Record) []Record {
 	relevant := make([]Record, 0, len(records))
 	for _, r := range records {
-		if r.Type == "A" || r.Type == "AAAA" || r.Type == "CNAME" {
+		if r.Type == RecordTypeA || r.Type == RecordTypeAAAA || r.Type == RecordTypeCNAME {
 			relevant = append(relevant, r)
 		}
 	}

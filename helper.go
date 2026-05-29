@@ -9,6 +9,7 @@ import (
 	"html"
 	"math"
 	"math/rand"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -159,7 +160,13 @@ func buildDynamicLangOptions(current string) string {
 			sel = ` selected`
 		}
 		label := getLangLabel(code)
-		out.WriteString(`<option value="` + code + `"` + sel + `>` + label + `</option>`)
+		out.WriteString(`<option value="`)
+		out.WriteString(code)
+		out.WriteString(`"`)
+		out.WriteString(sel)
+		out.WriteString(`>`)
+		out.WriteString(label)
+		out.WriteString(`</option>`)
 	}
 	return out.String()
 }
@@ -200,6 +207,12 @@ func jsString(s string) string {
 	s = strings.ReplaceAll(s, ">", `\u003e`)
 	s = strings.ReplaceAll(s, "&", `\u0026`)
 	return s
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 // ============================================================================

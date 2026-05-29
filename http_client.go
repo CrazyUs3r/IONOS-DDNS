@@ -43,6 +43,11 @@ type dnsInFlight struct {
 	err   error
 }
 
+type bodyReadCloser struct {
+	io.Reader
+	io.Closer
+}
+
 // ============================================================================
 // HTTP TRACE / TIMINGS (DNS, CONNECT, TLS, TTFB, REUSE)
 // ============================================================================
@@ -307,10 +312,12 @@ func logHTTPResponse(resp *http.Response, duration time.Duration) {
 		return
 	}
 
-	bodyBytes := readAndRestoreResponseBody(resp)
+	bodyBytes, truncated := peekAndRestoreResponseBody(resp, 5000)
 	bodyStr := sanitizeHTTPDebugBody(string(bodyBytes))
 	bodyStr = prettyPrintHTTPDebugJSON(bodyStr)
-	bodyStr = truncateHTTPDebugBody(bodyStr, 5000)
+	if truncated {
+		bodyStr += "\n... (response body truncated for debug log)"
+	}
 
 	debugLog(
 		"HTTP-RAW",
@@ -322,6 +329,38 @@ func logHTTPResponse(resp *http.Response, duration time.Duration) {
 			bodyStr,
 		),
 	)
+}
+
+func peekAndRestoreResponseBody(resp *http.Response, maxBytes int) ([]byte, bool) {
+	if resp == nil || resp.Body == nil || maxBytes <= 0 {
+		return nil, false
+	}
+
+	original := resp.Body
+	peeked, err := io.ReadAll(io.LimitReader(original, int64(maxBytes+1)))
+	if err != nil {
+		resp.Body = original
+		debugLog("HTTP-RAW", "", fmt.Sprintf("Failed to peek response body: %v", err))
+		return nil, false
+	}
+
+	truncated := len(peeked) > maxBytes
+	logBytes := peeked
+	if truncated {
+		logBytes = peeked[:maxBytes]
+		resp.Body = &bodyReadCloser{
+			Reader: io.MultiReader(bytes.NewReader(peeked), original),
+			Closer: original,
+		}
+		return logBytes, true
+	}
+
+	if err := original.Close(); err != nil {
+		debugLog("HTTP-RAW", "", fmt.Sprintf("Failed to close response body: %v", err))
+	}
+
+	resp.Body = io.NopCloser(bytes.NewReader(peeked))
+	return logBytes, false
 }
 
 func logMQTTPublish(topic string, qos byte, retain bool, payload []byte) {
@@ -344,21 +383,6 @@ func logMQTTPublish(topic string, qos byte, retain bool, payload []byte) {
 			body,
 		),
 	)
-}
-
-func readAndRestoreResponseBody(resp *http.Response) []byte {
-	if resp.Body == nil {
-		return nil
-	}
-
-	bodyBytes, _ := io.ReadAll(resp.Body)
-
-	if err := resp.Body.Close(); err != nil {
-		debugLog("HTTP-RAW", "", fmt.Sprintf("Failed to close response body: %v", err))
-	}
-
-	resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-	return bodyBytes
 }
 
 func sanitizeHTTPDebugBody(body string) string {
@@ -406,9 +430,11 @@ func getHTTPClient() *http.Client {
 	cfgMu.RLock()
 	dnsServers := make([]string, len(cfg.DNSServers))
 	copy(dnsServers, cfg.DNSServers)
+	domainCount := len(cfg.DomainConfigs)
 	cfgMu.RUnlock()
 
-	currentKey := dnsKey(dnsServers)
+	dnsServers = normalizeDNSServers(dnsServers)
+	currentKey := fmt.Sprintf("%s|domains=%d", dnsKey(dnsServers), domainCount)
 
 	clientMu.RLock()
 	if httpClient != nil && clientDNSKey == currentKey {
@@ -431,10 +457,8 @@ func getHTTPClient() *http.Client {
 }
 
 func buildHTTPClient(dnsList []string) *http.Client {
-	if len(dnsList) == 0 {
-		dnsList = []string{"1.1.1.1:53", "8.8.8.8:53"}
-	}
-	domainCount := len(cfg.DomainConfigs)
+	dnsList = normalizeDNSServers(dnsList)
+	domainCount := len(snapshotDomainConfigs())
 	maxIdleConns := HTTPMaxIdleConns
 	maxIdleConnsPerHost := HTTPMaxIdleConnsHost
 	maxConnsPerHost := HTTPMaxConnsHost
@@ -451,49 +475,8 @@ func buildHTTPClient(dnsList []string) *http.Client {
 		))
 	}
 
-	resolver := &net.Resolver{
-		PreferGo: true,
-		Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			var lastErr error
-
-			startIndex := int(lastSuccessfulDNS.Load())
-			if len(dnsList) > 0 {
-				startIndex %= len(dnsList)
-			}
-
-			for i := 0; i < len(dnsList); i++ {
-				if err := ctx.Err(); err != nil {
-					return nil, err
-				}
-
-				idx := (startIndex + i) % len(dnsList)
-
-				targetAddr := dnsList[idx]
-				if !strings.Contains(targetAddr, ":") {
-					targetAddr += ":53"
-				}
-
-				d := net.Dialer{Timeout: 5 * time.Second}
-
-				conn, err := d.DialContext(ctx, "udp", targetAddr)
-				if err != nil {
-					conn, err = d.DialContext(ctx, "tcp", targetAddr)
-				}
-
-				if err == nil {
-					if idx != startIndex {
-						lastSuccessfulDNS.Store(int64(idx))
-					}
-					return conn, nil
-				}
-
-				lastErr = err
-				debugLog("DNS-FAILOVER", "", fmt.Sprintf("❌ DNS %s fehlgeschlagen: %v", targetAddr, err))
-			}
-
-			return nil, fmt.Errorf("alle DNS-Server fehlgeschlagen: %w", lastErr)
-		},
-	}
+	dnsList = normalizeDNSServers(dnsList)
+	resolver := newFailoverResolver(dnsList)
 
 	dnsTTL := min(max(time.Duration(cfg.Interval)*time.Second+30*time.Second, 60*time.Second), 10*time.Minute)
 	cache := newDNSCache(resolver, dnsTTL)
@@ -519,17 +502,18 @@ func buildHTTPClient(dnsList []string) *http.Client {
 			return nil, err
 		}
 
-		var lastErr error
-		for _, ipAddr := range addrs {
-			target := net.JoinHostPort(ipAddr.IP.String(), port)
-			conn, dErr := baseDialer.DialContext(ctx, network, target)
-			if dErr == nil {
-				return conn, nil
-			}
-			lastErr = dErr
+		addrs = filterIPAddrsForNetwork(prioritizeIPAddrs(addrs), network)
+		if len(addrs) == 0 {
+			return nil, fmt.Errorf("dns: keine passende IP für host=%s network=%s", host, network)
 		}
+
+		conn, err := dialResolvedAddrs(ctx, baseDialer, network, addr, port, addrs)
+		if err == nil {
+			return conn, nil
+		}
+
 		cache.invalidate(host)
-		return nil, fmt.Errorf("dial failed for %s (ips=%d): %w", addr, len(addrs), lastErr)
+		return nil, err
 	}
 
 	baseTransport := &http.Transport{
@@ -558,6 +542,254 @@ func buildHTTPClient(dnsList []string) *http.Client {
 
 	debugLog("SYSTEM", "", fmt.Sprintf(T.HTTPClientInitialized, len(dnsList), strings.Join(dnsList, ", ")))
 	return client
+}
+
+func normalizeDNSServers(servers []string) []string {
+	if len(servers) == 0 {
+		servers = []string{"1.1.1.1:53", "8.8.8.8:53"}
+	}
+
+	out := make([]string, 0, len(servers))
+	seen := make(map[string]struct{}, len(servers))
+	for _, serverList := range servers {
+		for _, server := range splitDNSServerList(serverList) {
+			server = normalizeDNSServer(server)
+			if server == "" {
+				continue
+			}
+			if _, ok := seen[server]; ok {
+				continue
+			}
+			seen[server] = struct{}{}
+			out = append(out, server)
+		}
+	}
+
+	if len(out) == 0 {
+		return []string{"1.1.1.1:53", "8.8.8.8:53"}
+	}
+	return out
+}
+
+func splitDNSServerList(serverList string) []string {
+	serverList = strings.TrimSpace(serverList)
+	if serverList == "" {
+		return nil
+	}
+
+	parts := strings.FieldsFunc(serverList, func(r rune) bool {
+		return r == ',' || r == ';' || r == '\n' || r == '\r' || r == '\t' || r == ' '
+	})
+
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
+func normalizeDNSServer(server string) string {
+	server = strings.TrimSpace(server)
+	if server == "" {
+		return ""
+	}
+
+	if host, port, err := net.SplitHostPort(server); err == nil {
+		if port == "" {
+			port = "53"
+		}
+		return net.JoinHostPort(strings.Trim(host, "[]"), port)
+	}
+
+	trimmed := strings.Trim(server, "[]")
+	if ip := net.ParseIP(trimmed); ip != nil {
+		return net.JoinHostPort(ip.String(), "53")
+	}
+
+	if !strings.Contains(server, ":") {
+		return net.JoinHostPort(server, "53")
+	}
+
+	return server
+}
+
+func newFailoverResolver(dnsList []string) *net.Resolver {
+	return &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			if network == "" {
+				network = "udp"
+			}
+
+			var lastErr error
+			startIndex := int(lastSuccessfulDNS.Load())
+			if len(dnsList) > 0 {
+				startIndex %= len(dnsList)
+			}
+
+			for i := 0; i < len(dnsList); i++ {
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
+
+				idx := (startIndex + i) % len(dnsList)
+				targetAddr := dnsList[idx]
+				d := net.Dialer{Timeout: dnsLookupTimeout(), KeepAlive: DNSKeepalive}
+
+				conn, err := d.DialContext(ctx, network, targetAddr)
+				if err != nil && strings.HasPrefix(network, "udp") {
+					conn, err = d.DialContext(ctx, "tcp", targetAddr)
+				}
+
+				if err == nil {
+					if idx != startIndex {
+						lastSuccessfulDNS.Store(int64(idx))
+					}
+					return conn, nil
+				}
+
+				lastErr = err
+				debugLog("DNS-FAILOVER", "", fmt.Sprintf("❌ DNS %s via %s fehlgeschlagen: %v", targetAddr, network, err))
+			}
+
+			return nil, fmt.Errorf("alle DNS-Server fehlgeschlagen: %w", lastErr)
+		},
+	}
+}
+
+func dnsLookupTimeout() time.Duration {
+	if DNSResolverTimeout > 0 {
+		return DNSResolverTimeout
+	}
+	return 5 * time.Second
+}
+
+type dialResult struct {
+	conn net.Conn
+	err  error
+	addr string
+}
+
+func dialResolvedAddrs(ctx context.Context, d *net.Dialer, network, originalAddr, port string, addrs []net.IPAddr) (net.Conn, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	results := make(chan dialResult, len(addrs))
+	started := 0
+	fallbackDelay := d.FallbackDelay
+	if fallbackDelay <= 0 {
+		fallbackDelay = 250 * time.Millisecond
+	}
+
+	for i, ipAddr := range addrs {
+		if ipAddr.IP == nil {
+			continue
+		}
+
+		target := net.JoinHostPort(ipAddr.IP.String(), port)
+		started++
+
+		go func(i int, target string) {
+			if i > 0 {
+				timer := time.NewTimer(time.Duration(i) * fallbackDelay)
+				defer timer.Stop()
+				select {
+				case <-ctx.Done():
+					results <- dialResult{err: ctx.Err(), addr: target}
+					return
+				case <-timer.C:
+				}
+			}
+
+			conn, err := d.DialContext(ctx, network, target)
+			results <- dialResult{conn: conn, err: err, addr: target}
+		}(i, target)
+	}
+
+	if started == 0 {
+		return nil, fmt.Errorf("dial failed for %s: keine IPs", originalAddr)
+	}
+
+	var lastErr error
+	for i := 0; i < started; i++ {
+		select {
+		case <-ctx.Done():
+			if lastErr != nil {
+				return nil, lastErr
+			}
+			return nil, ctx.Err()
+		case result := <-results:
+			if result.err == nil {
+				cancel()
+				go closeLateDialResults(results, started-i-1)
+				return result.conn, nil
+			}
+			lastErr = result.err
+			debugLog("HTTP-DIAL", "", fmt.Sprintf("Dial %s fehlgeschlagen: %v", result.addr, result.err))
+		}
+	}
+
+	return nil, fmt.Errorf("dial failed for %s (ips=%d): %w", originalAddr, len(addrs), lastErr)
+}
+
+func closeLateDialResults(results <-chan dialResult, count int) {
+	for i := 0; i < count; i++ {
+		result := <-results
+		if result.conn != nil {
+			_ = result.conn.Close()
+		}
+	}
+}
+
+func filterIPAddrsForNetwork(addrs []net.IPAddr, network string) []net.IPAddr {
+	if network != "tcp4" && network != "tcp6" {
+		return addrs
+	}
+
+	out := make([]net.IPAddr, 0, len(addrs))
+	for _, addr := range addrs {
+		if addr.IP == nil {
+			continue
+		}
+		if network == "tcp4" && addr.IP.To4() != nil {
+			out = append(out, addr)
+		}
+		if network == "tcp6" && addr.IP.To4() == nil {
+			out = append(out, addr)
+		}
+	}
+	return out
+}
+
+func prioritizeIPAddrs(addrs []net.IPAddr) []net.IPAddr {
+	v4 := make([]net.IPAddr, 0, len(addrs))
+	v6 := make([]net.IPAddr, 0, len(addrs))
+	for _, addr := range addrs {
+		if addr.IP == nil {
+			continue
+		}
+		if addr.IP.To4() != nil {
+			v4 = append(v4, addr)
+		} else {
+			v6 = append(v6, addr)
+		}
+	}
+
+	out := make([]net.IPAddr, 0, len(v4)+len(v6))
+	for len(v4) > 0 || len(v6) > 0 {
+		if len(v6) > 0 {
+			out = append(out, v6[0])
+			v6 = v6[1:]
+		}
+		if len(v4) > 0 {
+			out = append(out, v4[0])
+			v4 = v4[1:]
+		}
+	}
+	return out
 }
 
 // ============================================================================
@@ -725,6 +957,11 @@ func newDNSCache(r *net.Resolver, ttl time.Duration) *dnsCache {
 }
 
 func (c *dnsCache) getIPAddrs(ctx context.Context, host string) ([]net.IPAddr, error) {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if host == "" {
+		return nil, fmt.Errorf("dns: leerer host")
+	}
+
 	now := time.Now().Local()
 
 	c.mu.Lock()
@@ -756,7 +993,10 @@ func (c *dnsCache) getIPAddrs(ctx context.Context, host string) ([]net.IPAddr, e
 	c.inflight[host] = inf
 	c.mu.Unlock()
 
-	addrs, err := c.lookupWithTrace(ctx, host)
+	lookupCtx, cancel := context.WithTimeout(ctx, dnsLookupTimeout())
+	defer cancel()
+
+	addrs, err := c.lookupWithTrace(lookupCtx, host)
 
 	c.mu.Lock()
 	inf.addrs = addrs
@@ -792,7 +1032,7 @@ func (c *dnsCache) lookupWithTrace(ctx context.Context, host string) ([]net.IPAd
 	if len(addrs) == 0 {
 		return nil, fmt.Errorf("dns: keine IPs für host=%s", host)
 	}
-	return addrs, nil
+	return prioritizeIPAddrs(addrs), nil
 }
 
 func (c *dnsCache) invalidate(host string) {

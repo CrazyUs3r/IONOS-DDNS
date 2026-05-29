@@ -26,8 +26,18 @@ func t(val, fallback string) string {
 	return val
 }
 
-func loadLanguage(lang string) error {
-	defer recoverLanguageLoadPanic()
+func loadLanguage(lang string) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			log(LogContext{
+				Level:    LogError,
+				Category: "CONFIG",
+				Action:   ActionConfig,
+				Message:  fmt.Sprintf("%s: %v", t(T.PanicLoadingLanguage, "Panic loading language"), r),
+			})
+			err = fmt.Errorf("panic loading language: %v", r)
+		}
+	}()
 
 	data, resolvedLang, err := loadLanguageDataWithFallback(lang)
 	if err != nil {
@@ -44,17 +54,6 @@ func loadLanguage(lang string) error {
 	validateTranslationKeys(translations)
 
 	return nil
-}
-
-func recoverLanguageLoadPanic() {
-	if r := recover(); r != nil {
-		log(LogContext{
-			Level:    LogError,
-			Category: "CONFIG",
-			Action:   ActionConfig,
-			Message:  fmt.Sprintf("%s: %v", t(T.PanicLoadingLanguage, "Panic loading language"), r),
-		})
-	}
 }
 
 func loadLanguageDataWithFallback(lang string) ([]byte, string, error) {

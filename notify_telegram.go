@@ -188,6 +188,8 @@ func (t *telegramNotifier) drainQueue() {
 					}
 				case <-deadline:
 					return
+				default:
+					return
 				}
 			}
 
@@ -812,21 +814,7 @@ func generateInstanceTag() string {
 }
 
 func formatTelegramMessage(msg NotifyMessage, instanceTag string) string {
-	icon := levelEmoji(msg.Level)
-	switch msg.Action {
-	case ActionUpdate:
-		icon = IconUpdate
-	case ActionCreate:
-		icon = IconCreate
-	case ActionStart:
-		icon = IconStart
-	case ActionStop:
-		icon = IconStop
-	case ActionError:
-		icon = IconErr
-	case ActionCleanup:
-		icon = IconCleanup
-	}
+	icon := notifyIcon(msg)
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "<b>%s Go-DynDNS</b>  <code>%s</code>\n", icon, instanceTag)

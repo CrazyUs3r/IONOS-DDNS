@@ -13,12 +13,20 @@ import (
 type NotifyEvent string
 
 const (
-	NotifyOnUpdate  NotifyEvent = "UPDATE"
-	NotifyOnCreate  NotifyEvent = "CREATE"
-	NotifyOnError   NotifyEvent = "ERROR"
-	NotifyOnStart   NotifyEvent = "START"
-	NotifyOnStop    NotifyEvent = "STOP"
-	NotifyOnCleanup NotifyEvent = "CLEANUP"
+	NotifyOnUpdate  NotifyEvent = NotifyEvent(ActionUpdate)
+	NotifyOnCreate  NotifyEvent = NotifyEvent(ActionCreate)
+	NotifyOnCurrent NotifyEvent = NotifyEvent(ActionCurrent)
+	NotifyOnRetry   NotifyEvent = NotifyEvent(ActionRetry)
+	NotifyOnError   NotifyEvent = NotifyEvent(ActionError)
+	NotifyOnStart   NotifyEvent = NotifyEvent(ActionStart)
+	NotifyOnStop    NotifyEvent = NotifyEvent(ActionStop)
+	NotifyOnConfig  NotifyEvent = NotifyEvent(ActionConfig)
+	NotifyOnZone    NotifyEvent = NotifyEvent(ActionZone)
+	NotifyOnDryRun  NotifyEvent = NotifyEvent(ActionDryRun)
+	NotifyOnCleanup NotifyEvent = NotifyEvent(ActionCleanup)
+	NotifyOnSkip    NotifyEvent = NotifyEvent(ActionSkip)
+	NotifyOnAPI     NotifyEvent = NotifyEvent(ActionAPI)
+	NotifyOnServer  NotifyEvent = NotifyEvent(ActionServer)
 )
 
 type Notifier interface {
@@ -58,8 +66,7 @@ func initNotifiers() {
 	}
 
 	for _, raw := range cfg.Notifications.Events {
-		e := NotifyEvent(strings.ToUpper(strings.TrimSpace(raw)))
-		newCfg.events[e] = struct{}{}
+		newCfg.events[normalizeNotifyEvent(raw)] = struct{}{}
 	}
 
 	if cfg.Notifications.Telegram.Token != "" && cfg.Notifications.Telegram.ChatID != "" {
@@ -152,7 +159,7 @@ func notify(ctx LogContext) {
 		return
 	}
 
-	event := NotifyEvent(strings.ToUpper(ctx.Action))
+	event := normalizeNotifyEvent(ctx.Action)
 	if _, ok := events[event]; !ok {
 		return
 	}
@@ -178,7 +185,7 @@ func notifySync(ctx LogContext) {
 		return
 	}
 
-	event := NotifyEvent(strings.ToUpper(ctx.Action))
+	event := normalizeNotifyEvent(ctx.Action)
 	if _, ok := events[event]; !ok {
 		return
 	}
@@ -223,13 +230,21 @@ func buildNotifyMessage(ctx LogContext) NotifyMessage {
 // ============================================================================
 // HELPERS
 // ============================================================================
-func levelEmoji(level LogLevel) string {
-	switch level {
+func normalizeNotifyEvent(action string) NotifyEvent {
+	return NotifyEvent(strings.ToUpper(strings.TrimSpace(action)))
+}
+
+func notifyIcon(msg NotifyMessage) string {
+	if icon, ok := actionIcons[string(normalizeNotifyEvent(msg.Action))]; ok {
+		return icon
+	}
+
+	switch msg.Level {
 	case LogError:
-		return "❌"
+		return IconError
 	case LogWarn:
-		return "⚠️"
+		return IconWarn
 	default:
-		return "ℹ️"
+		return IconInfo
 	}
 }

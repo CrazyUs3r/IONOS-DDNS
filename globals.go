@@ -23,7 +23,7 @@ import (
 var (
 	cfg          Config
 	T            Phrases
-	startTime    = time.Now()
+	startTime    = time.Now().Local()
 	configDir    string
 	langDir      string
 	logPath      string
@@ -203,13 +203,16 @@ var persistOnOtherLevels = map[string]struct{}{
 // ============================================================================
 const (
 	IconDefault  = "🔹"
+	IconDBG      = "🐞"
+	IconInfo     = "ℹ️"
+	IconWarn     = "⚠️"
+	IconError    = "❌"
 	IconStart    = "🚀"
 	IconStop     = "🛑"
 	IconUpdate   = "🔄"
 	IconCreate   = "🆕"
 	IconCurrent  = "✓"
 	IconRetry    = "🔁"
-	IconError    = "❌"
 	IconConfig   = "⚙️"
 	IconZone     = "🌐"
 	IconDryRun   = "🔍"
@@ -223,23 +226,23 @@ const (
 )
 
 var actionIcons = map[string]string{
-	"START":   IconStart,
-	"STOP":    IconStop,
-	"UPDATE":  IconUpdate,
-	"CREATE":  IconCreate,
-	"CURRENT": IconCurrent,
-	"RETRY":   IconRetry,
-	"ERROR":   IconError,
-	"FAIL":    IconError,
-	"CONFIG":  IconConfig,
-	"ZONE":    IconZone,
-	"DRY-RUN": IconDryRun,
-	"CLEANUP": IconCleanup,
-	"SKIP":    IconSkip,
-	"API":     IconAPI,
-	"SERVER":  IconServer,
-	"SUCCESS": IconSuccess,
-	"ADDED":   IconSuccess,
+	ActionStart:   IconStart,
+	ActionStop:    IconStop,
+	ActionUpdate:  IconUpdate,
+	ActionCreate:  IconCreate,
+	ActionCurrent: IconCurrent,
+	ActionRetry:   IconRetry,
+	ActionError:   IconError,
+	ActionConfig:  IconConfig,
+	ActionZone:    IconZone,
+	ActionDryRun:  IconDryRun,
+	ActionCleanup: IconCleanup,
+	ActionSkip:    IconSkip,
+	ActionAPI:     IconAPI,
+	ActionServer:  IconServer,
+	"FAIL":        IconError,
+	"SUCCESS":     IconSuccess,
+	"ADDED":       IconSuccess,
 }
 
 // ============================================================================
@@ -291,11 +294,12 @@ const (
 )
 
 const (
-	RecordTypeA    = "A"
-	RecordTypeAAAA = "AAAA"
-	IPModeBoth     = "BOTH"
-	IPModeV4       = "IPV4"
-	IPModeV6       = "IPV6"
+	RecordTypeA     = "A"
+	RecordTypeAAAA  = "AAAA"
+	RecordTypeCNAME = "CNAME"
+	IPModeBoth      = "BOTH"
+	IPModeV4        = "IPV4"
+	IPModeV6        = "IPV6"
 )
 
 // ============================================================================
@@ -410,6 +414,11 @@ type Phrases struct {
 	GenericErrorJS, RoleAdminJS, RoleEditorJS, RoleViewerJS, AuthUserMinJS, AuthPassMinJS string
 	UserLoading, UserNewTitle, UserPlaceholderName, UserPlaceholderPass                   string
 	UserRoleViewer, UserRoleEditor, UserRoleAdmin, UserBtnCreate, NotifyTestDesc          string
+	NavDashboardJS, NavDomainsJS, NavMetricsJS, NavLogsJS, NavDebugJS                     string
+	NavSettingsJS, NavDashboard, NavDomains, IPv64ActionDelete                            string
+	IPv64DomainManagement, IPv64DomainFQDN, IPv64DomainPlaceholder, IPv64ActionAdd        string
+	ProviderStatusOK, ProviderStatusError, IPv64DomainPlaceholderToken                    string
+	IPv64DomainAPITokenOptional                                                           string
 
 	// Statistiken & Metriken
 	SuccessRate, AvgLatency, Errors, RequestHistory, LatencyHistory, APIPerformance            string
@@ -526,6 +535,14 @@ type Phrases struct {
 	NotifyEventStartLabel, NotifyEventStartDesc                                string
 	NotifyEventStopLabel, NotifyEventStopDesc                                  string
 	NotifyEventCleanupLabel, NotifyEventCleanupDesc                            string
+	NotifyEventCurrentLabel, NotifyEventCurrentDesc                            string
+	NotifyEventRetryLabel, NotifyEventRetryDesc                                string
+	NotifyEventConfigLabel, NotifyEventConfigDesc                              string
+	NotifyEventZoneLabel, NotifyEventZoneDesc                                  string
+	NotifyEventDryRunLabel, NotifyEventDryRunDesc                              string
+	NotifyEventSkipLabel, NotifyEventSkipDesc                                  string
+	NotifyEventAPILabel, NotifyEventAPIDesc                                    string
+	NotifyEventServerLabel, NotifyEventServerDesc                              string
 	NotifyTelegramActive, NotifyGotifyActive, NotifyWebhookActive              string
 	NotifyTestSuccess, NotifyTestUnauthorized, NotifyTestError                 string
 	NotifyTestConnError, NotifyTestBody, NotifyBtnSending                      string
@@ -805,9 +822,8 @@ type Config struct {
 			TLSMode       string `json:"tls_mode"`
 		} `json:"email"`
 	} `json:"notifications"`
-	IPv4Endpoints []string        `json:"ipv4_endpoints,omitempty"`
-	IPv6Endpoints []string        `json:"ipv6_endpoints,omitempty"`
-	Users         []DashboardUser `json:"users,omitempty"`
+	IPv4Endpoints []string `json:"ipv4_endpoints,omitempty"`
+	IPv6Endpoints []string `json:"ipv6_endpoints,omitempty"`
 }
 
 type Zone struct {

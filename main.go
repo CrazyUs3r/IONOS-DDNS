@@ -343,6 +343,31 @@ func loadConfigFromFile() bool {
 		return false
 	}
 
+	if loaded.Interval <= 0 {
+		loaded.Interval = DefaultInterval
+	}
+	if loaded.HealthPort == "" {
+		loaded.HealthPort = "8080"
+	}
+	if loaded.IPMode == "" {
+		loaded.IPMode = "BOTH"
+	}
+	if loaded.LogDir == "" {
+		loaded.LogDir = cfg.LogDir
+	}
+	if loaded.MaxConcurrent <= 0 || loaded.MaxConcurrent > 20 {
+		loaded.MaxConcurrent = DefaultMaxConcurrent
+	}
+	if loaded.MaxLogLines <= 0 {
+		loaded.MaxLogLines = DefaultMaxLogLines
+	}
+	if loaded.MaxAPIRetries < 0 || loaded.MaxAPIRetries > 20 {
+		loaded.MaxAPIRetries = DefaultMaxAPIRetries
+	}
+	if loaded.HourlyRateLimit <= 0 {
+		loaded.HourlyRateLimit = DefaultHourlyRateLimit
+	}
+
 	cfgMu.Lock()
 	cfg = loaded
 	cfgMu.Unlock()
@@ -696,7 +721,6 @@ func handleShutdownSignal(sig os.Signal, ticker *time.Ticker, srv *http.Server) 
 	}
 
 	safeCloseLogWriteQueue()
-
 	shutdownHTTPServer(srv)
 
 	return 0

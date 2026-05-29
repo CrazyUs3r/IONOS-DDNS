@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -85,6 +86,8 @@ type APIMetrics struct {
 	IPLatencySampleIdx   int
 	IPLatencySampleCount int
 	LastIPCheckTime      time.Time
+	ProviderLastStatus   map[string]bool
+	ProviderLastStatusMu sync.RWMutex
 }
 
 // ============================================================================
@@ -112,7 +115,7 @@ func (m *APIMetrics) RecordSuccess(method string, duration time.Duration) {
 		m.HourlyStats[hour]++
 		m.updateLatency(duration, hour)
 	}
-
+	m.setProviderStatus(method, true)
 	m.incrementDailyMethod(method, now)
 
 	statsCopy := m.getStatsUnsafe()
@@ -155,7 +158,7 @@ func (m *APIMetrics) RecordError(method string, statusCode int, err error, durat
 	case statusCode == 0:
 		m.ClientErrors++
 	}
-
+	m.setProviderStatus(method, false)
 	m.incrementDailyMethod(method, now)
 
 	statsCopy := m.getStatsUnsafe()
@@ -627,4 +630,61 @@ func handleMetricsReset(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(map[string]string{"status": "reset_success"}); err != nil {
 		debugLog("API", "", fmt.Sprintf("Failed to encode reset response: %v", err))
 	}
+}
+
+func (m *APIMetrics) setProviderStatus(method string, ok bool) {
+	m.ProviderLastStatusMu.Lock()
+	if m.ProviderLastStatus == nil {
+		m.ProviderLastStatus = make(map[string]bool)
+	}
+	m.ProviderLastStatus[method] = ok
+	m.ProviderLastStatusMu.Unlock()
+}
+
+func handlePrometheusMetrics(w http.ResponseWriter, r *http.Request) {
+	stats := apiMetrics.GetStats()
+
+	toFloat := func(v any) float64 {
+		switch x := v.(type) {
+		case int64:
+			return float64(x)
+		case int:
+			return float64(x)
+		case float64:
+			return x
+		default:
+			return 0
+		}
+	}
+
+	lines := []string{
+		"# HELP dyndns_total_requests Total API requests",
+		"# TYPE dyndns_total_requests counter",
+		fmt.Sprintf("dyndns_total_requests %.0f", toFloat(stats["total_requests"])),
+		"# HELP dyndns_server_errors Server errors (5xx)",
+		"# TYPE dyndns_server_errors counter",
+		fmt.Sprintf("dyndns_server_errors %.0f", toFloat(stats["server_errors"])),
+		"# HELP dyndns_client_errors Client errors (4xx)",
+		"# TYPE dyndns_client_errors counter",
+		fmt.Sprintf("dyndns_client_errors %.0f", toFloat(stats["client_errors"])),
+		"# HELP dyndns_uptime_seconds Uptime in seconds",
+		"# TYPE dyndns_uptime_seconds gauge",
+		fmt.Sprintf("dyndns_uptime_seconds %.0f", toFloat(stats["uptime_secs"])),
+		"# HELP dyndns_ip_check_count Total IP checks",
+		"# TYPE dyndns_ip_check_count counter",
+		fmt.Sprintf("dyndns_ip_check_count %.0f", toFloat(stats["ip_latency_count"])),
+	}
+
+	cfgMu.RLock()
+	for _, dc := range cfg.DomainConfigs {
+		safe := strings.ReplaceAll(dc.FQDN, ".", "_")
+		safe = strings.ReplaceAll(safe, "-", "_")
+
+		lines = append(lines,
+			fmt.Sprintf(`dyndns_domain_%s_configured{fqdn=%q,provider=%q} 1`, safe, dc.FQDN, dc.Provider))
+	}
+	cfgMu.RUnlock()
+
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+	fmt.Fprintln(w, strings.Join(lines, "\n"))
 }

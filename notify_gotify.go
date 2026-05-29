@@ -96,6 +96,8 @@ func (g *gotifyNotifier) drainQueue() {
 					}
 				case <-deadline:
 					return
+				default:
+					return
 				}
 			}
 
@@ -181,21 +183,7 @@ func (g *gotifyNotifier) doSend(payload map[string]any) error {
 }
 
 func formatGotifyMessage(msg NotifyMessage) (title, body string) {
-	icon := levelEmoji(msg.Level)
-	switch msg.Action {
-	case ActionUpdate:
-		icon = IconUpdate
-	case ActionCreate:
-		icon = IconCreate
-	case ActionStart:
-		icon = IconStart
-	case ActionStop:
-		icon = IconStop
-	case ActionError:
-		icon = IconErr
-	case ActionCleanup:
-		icon = IconCleanup
-	}
+	icon := notifyIcon(msg)
 
 	title = fmt.Sprintf("%s Go-DynDNS · %s", icon, msg.Action)
 

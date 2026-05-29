@@ -240,6 +240,39 @@ func ionosRetryWait(apiErr *APIError, attempt, statusCode int) time.Duration {
 	return calculateRetryDelay(attempt, statusCode >= 500)
 }
 
+func loadIPv64InfrastructureRecords(z Zone) []Record {
+	providerCache.RLock()
+	defer providerCache.RUnlock()
+
+	var records []Record
+	if data, ok := providerCache.ipv64Records[z.Name]; ok {
+		for _, ir := range data.Records {
+			name := z.Name
+			if ir.Praefix != "" {
+				name = ir.Praefix + "." + z.Name
+			}
+			records = append(records, Record{
+				Name:    name,
+				Type:    ir.Type,
+				Content: ir.Content,
+			})
+		}
+	}
+
+	return records
+}
+
+func loadIonosInfrastructureRecords(ctx context.Context, dc *DomainConfig, zoneID string) []Record {
+	data, _ := ionosAPI(ctx, dc, MethodGET, ionosBaseURL+"/"+zoneID, nil)
+
+	var detail struct {
+		Records []Record `json:"records"`
+	}
+	_ = json.Unmarshal(data, &detail)
+
+	return detail.Records
+}
+
 // ============================================================================
 // DNS LOGIC - IONOS
 // ============================================================================

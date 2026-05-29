@@ -14,14 +14,14 @@ WORKDIR /app
 RUN echo "dyndns:x:1000:1000::/:" > /etc/passwd && \
     echo "dyndns:x:1000:" > /etc/group
 
-RUN apk add --no-cache git ca-certificates
+RUN apk add --no-cache git ca-certificates tzdata
 
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 
 COPY *.go ./
-COPY http/* ./http/
+COPY dashboard/* ./dashboard/
 COPY lang/*.json ./lang/
 
 RUN --mount=type=cache,target=/go/pkg/mod \
@@ -70,6 +70,7 @@ RUN adduser -D -H -u 1000 -s /sbin/nologin dyndns
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=builder --chown=dyndns:dyndns /out/dyndns /app/dyndns
+COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 
 USER dyndns:dyndns
 

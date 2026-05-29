@@ -165,8 +165,8 @@ func (s *SessionStore) Create(user *DashboardUser, maxAge time.Duration) *Sessio
 		UserID:    user.ID,
 		Username:  user.Username,
 		Role:      user.Role,
-		CreatedAt: time.Now(),
-		ExpiresAt: time.Now().Add(maxAge),
+		CreatedAt: time.Now().Local(),
+		ExpiresAt: time.Now().Local().Add(maxAge),
 	}
 
 	s.mu.Lock()
@@ -181,7 +181,7 @@ func (s *SessionStore) Get(token string) (*Session, bool) {
 	sess, ok := s.sessions[token]
 	s.mu.RUnlock()
 
-	if !ok || time.Now().After(sess.ExpiresAt) {
+	if !ok || time.Now().Local().After(sess.ExpiresAt) {
 		if ok {
 			s.Delete(token)
 		}
@@ -204,7 +204,7 @@ func (s *SessionStore) cleanupLoop() {
 		case <-ticker.C:
 			s.mu.Lock()
 			for token, sess := range s.sessions {
-				if time.Now().After(sess.ExpiresAt) {
+				if time.Now().Local().After(sess.ExpiresAt) {
 					delete(s.sessions, token)
 				}
 			}
@@ -439,7 +439,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 			allUsers := loadUsers()
 			for i, u := range allUsers {
 				if u.ID == user.ID {
-					allUsers[i].LastLogin = time.Now()
+					allUsers[i].LastLogin = time.Now().Local()
 					break
 				}
 			}
@@ -531,7 +531,7 @@ func handleSetup(w http.ResponseWriter, r *http.Request) {
 				Username:     username,
 				PasswordHash: hash,
 				Role:         RoleAdmin,
-				CreatedAt:    time.Now(),
+				CreatedAt:    time.Now().Local(),
 			}
 
 			if err := saveUsers([]DashboardUser{newUser}); err != nil {
@@ -628,7 +628,7 @@ func handleAPIUsers(w http.ResponseWriter, r *http.Request) {
 			Username:     req.Username,
 			PasswordHash: hash,
 			Role:         req.Role,
-			CreatedAt:    time.Now(),
+			CreatedAt:    time.Now().Local(),
 		})
 
 		if err := saveUsers(users); err != nil {

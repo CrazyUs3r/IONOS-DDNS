@@ -19,13 +19,6 @@ const (
 	LogTErr  = "ERR"
 )
 
-const (
-	IconDBG  = "🐞"
-	IconInfo = "ℹ️"
-	IconWarn = "⚠️"
-	IconErr  = "❌"
-)
-
 // ============================================================================
 // LOGGING
 // ============================================================================
@@ -66,7 +59,7 @@ func logLevelPresentation(ctx LogContext) (string, string) {
 	case LogWarn:
 		return LogTWarn, IconWarn
 	case LogError:
-		return LogTErr, IconErr
+		return LogTErr, IconError
 	default:
 		return LogTInfo, IconInfo
 	}
@@ -436,7 +429,7 @@ func doLogRotation(path string, maxLines int) {
 	}
 
 	output := strings.Join(newLines, "\n") + "\n"
-	tmpPath := path + ".tmp." + strconv.FormatInt(time.Now().UnixNano(), 10)
+	tmpPath := path + ".tmp." + strconv.FormatInt(time.Now().Local().UnixNano(), 10)
 
 	if err := os.WriteFile(tmpPath, []byte(output), 0o600); err != nil {
 		fmt.Fprintf(os.Stderr, "log rotation write error: %v\n", err)
