@@ -538,13 +538,6 @@ func buildSettingsNotifySection(c Config) string {
 		testSection
 }
 
-//func buildSettingsSaveSection() string {
-//	return `<div class="settings-save-box"><p>` +
-//		T.SettingsSaveHint + `<br>` +
-//		T.SettingsRestartHint +
-//		`</p><button class="action-btn settings-save-btn" onclick="saveFullConfig()">` + T.SettingsSaveBtn + `</button></div>`
-//}
-
 type safeDomainConfig struct {
 	FQDN       string `json:"fqdn"`
 	Provider   string `json:"provider"`
