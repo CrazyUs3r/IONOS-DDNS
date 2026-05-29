@@ -641,7 +641,7 @@ func (m *APIMetrics) setProviderStatus(method string, ok bool) {
 	m.ProviderLastStatusMu.Unlock()
 }
 
-func handlePrometheusMetrics(w http.ResponseWriter, r *http.Request) {
+func handlePrometheusMetrics(w http.ResponseWriter, _ *http.Request) {
 	stats := apiMetrics.GetStats()
 
 	toFloat := func(v any) float64 {
@@ -686,5 +686,7 @@ func handlePrometheusMetrics(w http.ResponseWriter, r *http.Request) {
 	cfgMu.RUnlock()
 
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
-	fmt.Fprintln(w, strings.Join(lines, "\n"))
+	if _, err := fmt.Fprintln(w, strings.Join(lines, "\n")); err != nil {
+		log.Printf("Error writing metrics: %v", err)
+	}
 }
