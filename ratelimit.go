@@ -15,7 +15,7 @@ func NewRateLimiter(maxTokens, refillPerSecond float64) *RateLimiter {
 		tokens:     maxTokens,
 		maxTokens:  maxTokens,
 		refillRate: refillPerSecond,
-		lastRefill: time.Now().Local(),
+		lastRefill: time.Now(),
 	}
 }
 
@@ -23,7 +23,7 @@ func (rl *RateLimiter) Allow() bool {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	now := time.Now().Local()
+	now := time.Now()
 	elapsed := now.Sub(rl.lastRefill).Seconds()
 	rl.tokens = math.Min(rl.maxTokens, rl.tokens+elapsed*rl.refillRate)
 	rl.lastRefill = now
@@ -40,7 +40,7 @@ func (rl *RateLimiter) Remaining() int {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	now := time.Now().Local()
+	now := time.Now()
 	elapsed := now.Sub(rl.lastRefill).Seconds()
 	rl.tokens = math.Min(rl.maxTokens, rl.tokens+elapsed*rl.refillRate)
 	rl.lastRefill = now

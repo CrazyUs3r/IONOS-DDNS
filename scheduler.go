@@ -20,7 +20,9 @@ func runUpdate(firstRun bool) {
 
 	debugLog("SCHEDULER", "", fmt.Sprintf(T.SchedulerStarted, firstRun))
 
-	ctx, ipCtx, cancel, ipCancel := createRunUpdateContexts()
+	domainConfigs := snapshotDomainConfigs()
+
+	ctx, ipCtx, cancel, ipCancel := createRunUpdateContexts(len(domainConfigs))
 	defer cancel()
 	defer ipCancel()
 
@@ -34,14 +36,14 @@ func runUpdate(firstRun bool) {
 		return
 	}
 
-	logMissingProviderZones(zonesByProvider)
+	logMissingProviderZones(zonesByProvider, domainConfigs)
 
 	cache, ok := loadRunUpdateRecords(ctx, zonesByProvider, forced)
 	if !ok {
 		return
 	}
 
-	refreshIPv64DomainsIfNeeded(ctx, forced)
+	refreshIPv64DomainsIfNeeded(ctx, forced, domainConfigs)
 	saveCachesToDisk(zonesByProvider, cache)
 
 	if firstRun {
@@ -52,14 +54,10 @@ func runUpdate(firstRun bool) {
 	successCount := processDomains(ctx, zonesByProvider, cache, currentIPv4, currentIPv6)
 	debugLog("SCHEDULER", "", fmt.Sprintf(T.SchedulerCompleted, successCount))
 
-	runCleanupIfNeeded(ctx, zonesByProvider, cache)
+	runCleanupIfNeeded(ctx, zonesByProvider, cache, domainConfigs)
 }
 
-func createRunUpdateContexts() (context.Context, context.Context, context.CancelFunc, context.CancelFunc) {
-	cfgMu.RLock()
-	domainCount := len(cfg.DomainConfigs)
-	cfgMu.RUnlock()
-
+func createRunUpdateContexts(domainCount int) (context.Context, context.Context, context.CancelFunc, context.CancelFunc) {
 	baseTimeout := BaseUpdateTimeout
 	perDomainTimeout := time.Duration(domainCount) * PerDomainTimeout
 	buffer := UpdateBufferTimeout
@@ -169,12 +167,9 @@ func loadRunUpdateZones(ctx context.Context, forced bool) (map[string][]Zone, bo
 	return zonesByProvider, true
 }
 
-func logMissingProviderZones(zonesByProvider map[string][]Zone) {
-	cfgMu.RLock()
-	defer cfgMu.RUnlock()
-
-	for i := range cfg.DomainConfigs {
-		providerKey := string(cfg.DomainConfigs[i].Provider)
+func logMissingProviderZones(zonesByProvider map[string][]Zone, domainConfigs []DomainConfig) {
+	for i := range domainConfigs {
+		providerKey := string(domainConfigs[i].Provider)
 		zones, exists := zonesByProvider[providerKey]
 		if exists && len(zones) > 0 {
 			continue
@@ -183,7 +178,7 @@ func logMissingProviderZones(zonesByProvider map[string][]Zone) {
 		log(LogContext{
 			Level:   LogWarn,
 			Action:  ActionZone,
-			Domain:  cfg.DomainConfigs[i].FQDN,
+			Domain:  domainConfigs[i].FQDN,
 			Message: fmt.Sprintf(T.ProviderReturnedNoZonesCheckAPIKey, providerKey),
 		})
 	}
@@ -204,8 +199,7 @@ func loadRunUpdateRecords(
 	return cache, true
 }
 
-func refreshIPv64DomainsIfNeeded(ctx context.Context, forced bool) {
-	domainConfigs := snapshotDomainConfigs()
+func refreshIPv64DomainsIfNeeded(ctx context.Context, forced bool, domainConfigs []DomainConfig) {
 	ipv64Config := findProviderDomainConfig(domainConfigs, ProviderIPv64)
 	if ipv64Config == nil {
 		return
@@ -263,7 +257,7 @@ func setCachedZones(zones map[string][]Zone) {
 	defer zoneCacheMutex.Unlock()
 
 	cachedZones = zones
-	lastZoneLoad = time.Now().Local()
+	lastZoneLoad = time.Now()
 }
 
 func getCachedRecordsState() (*ZoneRecordCache, time.Duration, bool) {
@@ -278,7 +272,7 @@ func setCachedRecords(cache *ZoneRecordCache) {
 	defer zoneCacheMutex.Unlock()
 
 	cachedRecords = cache
-	lastRecordLoad = time.Now().Local()
+	lastRecordLoad = time.Now()
 }
 
 func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zone, error) {
@@ -486,7 +480,12 @@ func saveCachesToDisk(zonesByProvider map[string][]Zone, cache *ZoneRecordCache)
 // ============================================================================
 // CLEANUP
 // ============================================================================
-func runCleanupIfNeeded(ctx context.Context, zonesByProvider map[string][]Zone, cache *ZoneRecordCache) {
+func runCleanupIfNeeded(
+	ctx context.Context,
+	zonesByProvider map[string][]Zone,
+	cache *ZoneRecordCache,
+	domainConfigs []DomainConfig,
+) {
 	lastNano := lastCleanupNano.Load()
 	var timeSinceLastCleanup time.Duration
 	if lastNano == 0 {
@@ -502,6 +501,8 @@ func runCleanupIfNeeded(ctx context.Context, zonesByProvider map[string][]Zone, 
 
 	debugLog("MAINTENANCE", "", fmt.Sprintf(T.CleanupStartingLastRun, timeSinceLastCleanup.Round(time.Minute)))
 	lastCleanupNano.Store(time.Now().UnixNano())
+
+	hasIPv64Config := findProviderDomainConfig(domainConfigs, ProviderIPv64) != nil
 
 	for providerStr, zones := range zonesByProvider {
 		pType := ProviderType(providerStr)
@@ -520,11 +521,7 @@ func runCleanupIfNeeded(ctx context.Context, zonesByProvider map[string][]Zone, 
 			cleanupHetznerCloudRecords(ctx, zones, cache)
 
 		case ProviderIPv64:
-			cfgMu.RLock()
-			ipv64Config := findProviderDomainConfig(cfg.DomainConfigs, ProviderIPv64)
-			cfgMu.RUnlock()
-
-			if ipv64Config != nil {
+			if hasIPv64Config {
 				debugLog("MAINTENANCE", "", T.CheckingIPv64OrphanedRecords)
 				cleanupIPv64Records(ctx)
 			}

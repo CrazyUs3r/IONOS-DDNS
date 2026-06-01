@@ -269,7 +269,7 @@ func (e *emailNotifier) smtpSend(client *smtp.Client, msg []byte) error {
 
 func (e *emailNotifier) buildRawMessage(subject, body string) []byte {
 	toHeader := strings.Join(e.to, ", ")
-	now := time.Now().UTC().Format("Mon, 02 Jan 2006 15:04:05 -0700")
+	now := time.Now().Format("Mon, 02 Jan 2006 15:04:05 -0700")
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "From: %s\r\n", e.from)
@@ -299,7 +299,7 @@ func formatEmailMessage(msg NotifyMessage, prefix string) (subject, body string)
 		fmt.Fprintf(&sb, "Domain:  %s\n", msg.Domain)
 	}
 	fmt.Fprintf(&sb, "Message: %s\n", msg.Message)
-	fmt.Fprintf(&sb, "Time:    %s\n", time.Now().Local().Format("02.01.2006 15:04:05"))
+	fmt.Fprintf(&sb, "Time:    %s\n", time.Now().Format("02.01.2006 15:04:05"))
 	fmt.Fprintf(&sb, "\n--\nSent by Go-DynDNS\n")
 
 	return subject, sb.String()

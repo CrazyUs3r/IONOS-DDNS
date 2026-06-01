@@ -9,9 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -47,6 +47,16 @@ type apiMetricsSnapshot struct {
 	IPLatencySampleIdx   int         `json:"ip_latency_sample_idx"`
 	IPLatencySampleCount int         `json:"ip_latency_sample_count"`
 	LastIPCheckTime      time.Time   `json:"last_ip_check_at"`
+}
+
+// FIX 1: ProviderLastStatus wird jetzt mit sync/atomic verwaltet,
+// kein nested Lock mehr nötig.
+// FIX 2: Reusable scratch-buffer für calcPercentile (sync.Pool).
+var percentileBufPool = sync.Pool{
+	New: func() any {
+		buf := make([]int64, 0, 1000)
+		return &buf
+	},
 }
 
 type APIMetrics struct {
@@ -86,16 +96,20 @@ type APIMetrics struct {
 	IPLatencySampleIdx   int
 	IPLatencySampleCount int
 	LastIPCheckTime      time.Time
-	ProviderLastStatus   map[string]bool
-	ProviderLastStatusMu sync.RWMutex
+
+	// FIX 1: atomic statt nested RWMutex – kein Lock-in-Lock mehr.
+	// Wir brauchen keine per-method-Granularität im Dashboard,
+	// ein einfaches "irgendwas war ok/nicht-ok" reicht.
+	providerAnyError atomic.Bool
 }
 
 // ============================================================================
 // METRICS
 // ============================================================================
+
 func (m *APIMetrics) RecordSuccess(method string, duration time.Duration) {
 	m.Lock()
-	now := time.Now().Local()
+	now := time.Now()
 	m.TotalRequests++
 	m.SuccessRequests++
 	m.LastSuccessTimestamp = now
@@ -115,18 +129,22 @@ func (m *APIMetrics) RecordSuccess(method string, duration time.Duration) {
 		m.HourlyStats[hour]++
 		m.updateLatency(duration, hour)
 	}
-	m.setProviderStatus(method, true)
 	m.incrementDailyMethod(method, now)
 
-	statsCopy := m.getStatsUnsafe()
+	// FIX 1: kein nested Lock mehr
+	m.providerAnyError.Store(false)
+
+	// FIX 3: getStatsUnsafe() wird NICHT mehr hier aufgerufen.
+	// Der metricsBroadcasterLoop liest latestMetrics per Signal,
+	// wir signalisieren nur noch – ohne die teure Berechnung unter Lock.
 	m.Unlock()
 
-	setLatestMetrics(statsCopy)
+	m.signalStatsUpdate()
 }
 
 func (m *APIMetrics) RecordError(method string, statusCode int, err error, duration time.Duration) {
 	m.Lock()
-	now := time.Now().Local()
+	now := time.Now()
 	m.TotalRequests++
 	m.FailedRequests++
 	m.LastError = err.Error()
@@ -158,13 +176,24 @@ func (m *APIMetrics) RecordError(method string, statusCode int, err error, durat
 	case statusCode == 0:
 		m.ClientErrors++
 	}
-	m.setProviderStatus(method, false)
 	m.incrementDailyMethod(method, now)
 
-	statsCopy := m.getStatsUnsafe()
+	// FIX 1: kein nested Lock mehr
+	m.providerAnyError.Store(true)
+
 	m.Unlock()
 
-	setLatestMetrics(statsCopy)
+	m.signalStatsUpdate()
+}
+
+// signalStatsUpdate entkoppelt die teure Stats-Berechnung vom Aufrufer.
+// Der Broadcaster-Loop in metricsBroadcasterLoop() holt die Stats asynchron.
+func (m *APIMetrics) signalStatsUpdate() {
+	select {
+	case metricsSignal <- struct{}{}:
+	default:
+		// Channel ist voll → ein Update ist bereits unterwegs, reicht.
+	}
 }
 
 func (m *APIMetrics) updateLatency(duration time.Duration, hour int) {
@@ -223,7 +252,7 @@ func (m *APIMetrics) RecordIPLatency(duration time.Duration) {
 	m.IPLatencySum += duration
 	m.IPLatencyCount++
 	m.IPLatencyAvg = (m.IPLatencySum / time.Duration(m.IPLatencyCount)).Round(time.Millisecond)
-	m.LastIPCheckTime = time.Now().Local()
+	m.LastIPCheckTime = time.Now()
 	ms := duration.Milliseconds()
 	m.IPLatencySamples[m.IPLatencySampleIdx] = ms
 	m.IPLatencySampleIdx = (m.IPLatencySampleIdx + 1) % len(m.IPLatencySamples)
@@ -232,48 +261,72 @@ func (m *APIMetrics) RecordIPLatency(duration time.Duration) {
 	}
 }
 
+// FIX 2: sync.Pool für den Sort-Buffer – kein Heap-Alloc mehr pro Aufruf.
 func (m *APIMetrics) calcPercentile(p float64) time.Duration {
 	if m.LatencySampleCount == 0 {
 		return 0
 	}
 	count := m.LatencySampleCount
-	samples := make([]int64, count)
+
+	// Buffer aus Pool holen und zurückgeben
+	bufPtr := percentileBufPool.Get().(*[]int64)
+	buf := (*bufPtr)[:0]
+	if cap(buf) < count {
+		buf = make([]int64, count)
+	} else {
+		buf = buf[:count]
+	}
 
 	if count < len(m.LatencySamples) {
-		copy(samples, m.LatencySamples[:count])
+		copy(buf, m.LatencySamples[:count])
 	} else {
 		start := m.LatencySampleIdx
 		for i := range count {
-			samples[i] = m.LatencySamples[(start+i)%len(m.LatencySamples)]
+			buf[i] = m.LatencySamples[(start+i)%len(m.LatencySamples)]
 		}
 	}
 
-	slices.Sort(samples)
+	slices.Sort(buf)
 
 	idx := max(int(float64(count-1)*p), 0)
 	if idx >= count {
 		idx = count - 1
 	}
-	return time.Duration(samples[idx]) * time.Millisecond
+	result := time.Duration(buf[idx]) * time.Millisecond
+
+	*bufPtr = buf[:0]
+	percentileBufPool.Put(bufPtr)
+
+	return result
 }
 
+// FIX 4: cleanupOldTimestamps vermeidet copy() wenn nichts zu tun ist
+// und nutzt klares In-place-Slicing statt doppeltem copy.
 func (m *APIMetrics) cleanupOldTimestamps(now time.Time) {
-	threshold := now.Add(-1 * time.Hour)
-
-	validIdx := sort.Search(len(m.RequestTimestamps), func(i int) bool {
-		return m.RequestTimestamps[i].After(threshold)
-	})
-
-	if validIdx > 0 {
-		copy(m.RequestTimestamps, m.RequestTimestamps[validIdx:])
-		m.RequestTimestamps = m.RequestTimestamps[:len(m.RequestTimestamps)-validIdx]
+	if len(m.RequestTimestamps) == 0 {
+		return
 	}
 
+	threshold := now.Add(-1 * time.Hour)
+
+	// Finde ersten Timestamp der noch gültig ist (aufsteigend sortiert)
+	cutIdx := 0
+	for cutIdx < len(m.RequestTimestamps) && !m.RequestTimestamps[cutIdx].After(threshold) {
+		cutIdx++
+	}
+
+	if cutIdx > 0 {
+		// In-place verschieben ohne extra Allokation
+		n := copy(m.RequestTimestamps, m.RequestTimestamps[cutIdx:])
+		m.RequestTimestamps = m.RequestTimestamps[:n]
+	}
+
+	// Hard cap
 	const maxTimestamps = 3600
 	if len(m.RequestTimestamps) > maxTimestamps {
 		cutIdx := len(m.RequestTimestamps) - maxTimestamps
-		copy(m.RequestTimestamps, m.RequestTimestamps[cutIdx:])
-		m.RequestTimestamps = m.RequestTimestamps[:maxTimestamps]
+		n := copy(m.RequestTimestamps, m.RequestTimestamps[cutIdx:])
+		m.RequestTimestamps = m.RequestTimestamps[:n]
 	}
 }
 
@@ -294,9 +347,7 @@ func (m *APIMetrics) getUsageColor(p float64) string {
 }
 
 func reorderHourlyStatsToChronological(hourlyData [24]int) [24]int {
-	now := time.Now().Local()
-	currentHour := now.Hour()
-
+	currentHour := time.Now().Hour()
 	var chronological [24]int
 	for i := range 24 {
 		hourIndex := (currentHour - 23 + i + 24) % 24
@@ -306,9 +357,7 @@ func reorderHourlyStatsToChronological(hourlyData [24]int) [24]int {
 }
 
 func reorderHourlyLatencyToChronological(hourlyData [24]time.Duration) [24]time.Duration {
-	now := time.Now().Local()
-	currentHour := now.Hour()
-
+	currentHour := time.Now().Hour()
 	var chronological [24]time.Duration
 	for i := range 24 {
 		hourIndex := (currentHour - 23 + i + 24) % 24
@@ -401,8 +450,8 @@ func ensureMetricsFile(path string) error {
 		return err
 	}
 
-	empty := apiMetricsSnapshot{SavedAt: time.Now().Local()}
-	b, _ := json.MarshalIndent(empty, "", "  ")
+	empty := apiMetricsSnapshot{SavedAt: time.Now()}
+	b, _ := json.Marshal(empty)
 	return os.WriteFile(path, b, 0o600)
 }
 
@@ -424,7 +473,7 @@ func (m *APIMetrics) SaveToFile(path string) error {
 		LastError:            m.LastError,
 		LastSuccessTime:      m.LastSuccessTimestamp,
 		LastErrorTime:        m.LastErrorTimestamp,
-		SavedAt:              time.Now().Local(),
+		SavedAt:              time.Now(),
 		RequestTimestamps:    make([]time.Time, len(m.RequestTimestamps)),
 		DailyGET:             m.DailyGET,
 		DailyPOST:            m.DailyPOST,
@@ -451,7 +500,7 @@ func (m *APIMetrics) SaveToFile(path string) error {
 	}
 	m.Unlock()
 
-	b, err := json.MarshalIndent(snap, "", "  ")
+	b, err := json.MarshalIndent(snap, "", " ")
 	if err != nil {
 		return err
 	}
@@ -499,14 +548,14 @@ func (m *APIMetrics) LoadFromFile(path string) error {
 	m.LastError = snap.LastError
 	m.LastErrorTimestamp = snap.LastErrorTime
 
-	if !snap.DailyReset.IsZero() && snap.DailyReset.Day() == time.Now().Local().Day() {
+	if !snap.DailyReset.IsZero() && snap.DailyReset.Day() == time.Now().Day() {
 		m.DailyGET = snap.DailyGET
 		m.DailyPOST = snap.DailyPOST
 		m.DailyPUT = snap.DailyPUT
 		m.DailyDELETE = snap.DailyDELETE
 		m.DailyNIC = snap.DailyNIC
 		m.DailyReset = snap.DailyReset
-		if !snap.HourlyReset.IsZero() && snap.HourlyReset.Day() == time.Now().Local().Day() {
+		if !snap.HourlyReset.IsZero() && snap.HourlyReset.Day() == time.Now().Day() {
 			m.HourlyReset = snap.HourlyReset
 		}
 	}
@@ -524,7 +573,7 @@ func (m *APIMetrics) LoadFromFile(path string) error {
 
 	m.RequestTimestamps = nil
 	if len(snap.RequestTimestamps) > 0 {
-		now := time.Now().Local()
+		now := time.Now()
 		threshold := now.Add(-1 * time.Hour)
 
 		for _, t := range snap.RequestTimestamps {
@@ -534,7 +583,7 @@ func (m *APIMetrics) LoadFromFile(path string) error {
 		}
 	}
 
-	m.lastHour = time.Now().Local().Unix() / 3600
+	m.lastHour = time.Now().Unix() / 3600
 	m.Unlock()
 
 	return nil
@@ -560,15 +609,18 @@ func setLatestMetrics(stats map[string]any) {
 	}
 }
 
+// FIX 3: metricsBroadcasterLoop holt jetzt die Stats selbst (lazy, asynchron),
+// statt sie von RecordSuccess/RecordError unter Lock berechnet zu bekommen.
 func metricsBroadcasterLoop() {
 	go func() {
 		for range metricsSignal {
-			latestMetricsMu.RLock()
-			stats := latestMetrics
-			latestMetricsMu.RUnlock()
-			if stats != nil {
-				broadcastUpdate("metrics", stats)
-			}
+			stats := apiMetrics.GetStats()
+
+			latestMetricsMu.Lock()
+			latestMetrics = stats
+			latestMetricsMu.Unlock()
+
+			broadcastUpdate("metrics", stats)
 		}
 	}()
 }
@@ -615,30 +667,20 @@ func handleMetricsReset(w http.ResponseWriter, r *http.Request) {
 	apiMetrics.IPLatencySampleIdx = 0
 	apiMetrics.IPLatencySampleCount = 0
 	apiMetrics.LastIPCheckTime = time.Time{}
-
-	statsCopy := apiMetrics.getStatsUnsafe()
 	apiMetrics.Unlock()
 
 	if err := apiMetrics.SaveToFile(metricsPersistPath); err != nil {
 		debugLog("API", getClientIP(r), "Failed to save empty metrics: "+err.Error())
 	}
 
-	setLatestMetrics(statsCopy)
+	stats := apiMetrics.GetStats()
+	setLatestMetrics(stats)
 	broadcastNotification("📊 "+T.MetricsResetNotification, "info")
 
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(map[string]string{"status": "reset_success"}); err != nil {
 		debugLog("API", "", fmt.Sprintf("Failed to encode reset response: %v", err))
 	}
-}
-
-func (m *APIMetrics) setProviderStatus(method string, ok bool) {
-	m.ProviderLastStatusMu.Lock()
-	if m.ProviderLastStatus == nil {
-		m.ProviderLastStatus = make(map[string]bool)
-	}
-	m.ProviderLastStatus[method] = ok
-	m.ProviderLastStatusMu.Unlock()
 }
 
 func handlePrometheusMetrics(w http.ResponseWriter, _ *http.Request) {

@@ -28,7 +28,7 @@ func log(ctx LogContext) {
 	}
 
 	levelStr, icon := logLevelPresentation(ctx)
-	ts := time.Now().Local().Format("02.01.2006 15:04:05")
+	ts := time.Now().Format("02.01.2006 15:04:05")
 	msg := buildLogMessage(ctx)
 	icon = overrideLogIcon(icon, ctx)
 
@@ -42,12 +42,15 @@ func log(ctx LogContext) {
 }
 
 func shouldSkipLog(ctx LogContext) bool {
-	cfgMu.RLock()
-	debugEnabled := cfg.DebugEnabled
-	debugHTTPRaw := cfg.DebugHTTPRaw
-	cfgMu.RUnlock()
+	if ctx.Level != LogDebug {
+		return false
+	}
+	return !atomicDebugEnabled.Load() && !atomicDebugHTTPRaw.Load()
+}
 
-	return ctx.Level == LogDebug && !debugEnabled && !debugHTTPRaw
+func setAtomicDebugFlags(debugEnabled, debugHTTPRaw bool) {
+	atomicDebugEnabled.Store(debugEnabled)
+	atomicDebugHTTPRaw.Store(debugHTTPRaw)
 }
 
 func logLevelPresentation(ctx LogContext) (string, string) {
@@ -102,44 +105,38 @@ func printLogLine(ts, levelStr, icon string, ctx LogContext, msg string) {
 	}
 }
 
+type debugLogPayload struct {
+	Timestamp string `json:"timestamp"`
+	Category  string `json:"category"`
+	Domain    string `json:"domain"`
+	Message   string `json:"message"`
+	Icon      string `json:"icon"`
+}
+
 func broadcastDebugLogIfNeeded(ctx LogContext, msg, icon string) {
 	switch ctx.Level {
 	case LogDebug, LogWarn, LogError:
-		broadcastUpdate("debug_log", map[string]string{
-			"timestamp": time.Now().Local().Format("02.01.2006 15:04:05"),
-			"category":  ctx.Category,
-			"domain":    ctx.Domain,
-			"message":   msg,
-			"icon":      icon,
+		broadcastUpdate("debug_log", debugLogPayload{
+			Timestamp: time.Now().Format("02.01.2006 15:04:05"),
+			Category:  ctx.Category,
+			Domain:    ctx.Domain,
+			Message:   msg,
+			Icon:      icon,
 		})
 	}
 }
 
-func getCategoryIcon(category string) string {
-	icons := map[string]string{
-		"SYSTEM":       "⚙️",
-		"CONFIG":       "⚙️",
-		"DNS":          "🌐",
-		"ZONE":         "🌐",
-		"API":          "🌐",
-		"NETWORK":      "📡",
-		"IP":           "📡",
-		"IP-CHECK":     "📡",
-		"SCHEDULER":    "⏱️",
-		"MAINTENANCE":  "🧹",
-		"SERVER":       "📊",
-		"HTTP":         "📊",
-		"HTTP-RAW":     "📝",
-		"WS":           "🔌",
-		"WORKER":       "👷",
-		"DNS-LOGIC":    "🔧",
-		"CACHE":        "💾",
-		"DNS-FAILOVER": "🔀",
-		"STATUS":       "📄",
-		"NOTIFY":       "🔔",
-	}
+var categoryIcons = map[string]string{
+	"SYSTEM": IconConfig, "CONFIG": IconConfig, "DNS": IconZone, "ZONE": IconZone,
+	"API": IconZone, "NETWORK": IconNetwork, "IP": IconNetwork, "IP-CHECK": IconNetwork,
+	"SCHEDULER": "⏱️", "MAINTENANCE": IconCleanup, "SERVER": "📊",
+	"HTTP": "📊", "HTTP-RAW": "📝", "WS": IconAPI, "WORKER": "👷",
+	"DNS-LOGIC": "🔧", "CACHE": "💾", "DNS-FAILOVER": "🔀",
+	"STATUS": "📄", "NOTIFY": "🔔",
+}
 
-	if icon, ok := icons[category]; ok {
+func getCategoryIcon(category string) string {
+	if icon, ok := categoryIcons[category]; ok {
 		return icon
 	}
 	return "🐞"
@@ -164,7 +161,7 @@ func persistLog(ctx LogContext) {
 	}
 
 	entry := LogEntry{
-		Timestamp: time.Now().Local().Format("2006-01-02T15:04:05"),
+		Timestamp: time.Now().Format("2006-01-02T15:04:05"),
 		Level:     levelToString(ctx.Level),
 		Action:    ctx.Action,
 		Domain:    ctx.Domain,
@@ -429,7 +426,7 @@ func doLogRotation(path string, maxLines int) {
 	}
 
 	output := strings.Join(newLines, "\n") + "\n"
-	tmpPath := path + ".tmp." + strconv.FormatInt(time.Now().Local().UnixNano(), 10)
+	tmpPath := path + ".tmp." + strconv.FormatInt(time.Now().UnixNano(), 10)
 
 	if err := os.WriteFile(tmpPath, []byte(output), 0o600); err != nil {
 		fmt.Fprintf(os.Stderr, "log rotation write error: %v\n", err)

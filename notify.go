@@ -3,7 +3,6 @@ package main
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 )
 
@@ -231,7 +230,7 @@ func buildNotifyMessage(ctx LogContext) NotifyMessage {
 // HELPERS
 // ============================================================================
 func normalizeNotifyEvent(action string) NotifyEvent {
-	return NotifyEvent(strings.ToUpper(strings.TrimSpace(action)))
+	return NotifyEvent(action)
 }
 
 func notifyIcon(msg NotifyMessage) string {

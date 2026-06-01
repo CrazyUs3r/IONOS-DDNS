@@ -638,7 +638,7 @@ func (t *telegramNotifier) sendStatus(chatID string) {
 	fmt.Fprintf(&sb, "🔸 %s: <code>%v</code>\n", T.TgStatusLabelSuccessRate, stats["success_rate"])
 	fmt.Fprintf(&sb, "🔸 %s    <code>%v</code>\n", T.TgStatusLabelLatency, stats["avg_latency"])
 	fmt.Fprintf(&sb, "🔸 %s  <code>%v</code>\n", T.TgStatusLabelLastOk, stats["last_success_time"])
-	fmt.Fprintf(&sb, "\n🕒 <i>%s</i>", time.Now().Local().Format("02.01.2006 15:04:05"))
+	fmt.Fprintf(&sb, "\n🕒 <i>%s</i>", time.Now().Format("02.01.2006 15:04:05"))
 
 	t.enqueue(chatID, sb.String(), backKeyboard())
 }
@@ -676,7 +676,7 @@ func (t *telegramNotifier) sendMetrics(chatID string) {
 	if v, ok := stats["daily_nic"]; ok {
 		fmt.Fprintf(&sb, "  NIC: <code>%v</code>", v)
 	}
-	fmt.Fprintf(&sb, "\n\n🕒 <i>%s</i>", time.Now().Local().Format("02.01.2006 15:04:05"))
+	fmt.Fprintf(&sb, "\n\n🕒 <i>%s</i>", time.Now().Format("02.01.2006 15:04:05"))
 
 	t.enqueue(chatID, sb.String(), backKeyboard())
 }
@@ -722,7 +722,7 @@ func (t *telegramNotifier) sendDomains(chatID string) {
 		}
 	}
 
-	fmt.Fprintf(&sb, "\n🕒 <i>%s</i>", time.Now().Local().Format("02.01.2006 15:04:05"))
+	fmt.Fprintf(&sb, "\n🕒 <i>%s</i>", time.Now().Format("02.01.2006 15:04:05"))
 	t.enqueue(chatID, sb.String(), backKeyboard())
 }
 
@@ -747,7 +747,7 @@ func (t *telegramNotifier) sendHealth(chatID string) {
 	fmt.Fprintf(&sb, "\n🔸 %s <code>%v</code>\n", T.TgStatusLabelSuccessRate, stats["success_rate"])
 	fmt.Fprintf(&sb, "🔸 %s    <code>%v</code>\n", T.TgStatusLabelLatency, stats["avg_latency"])
 	fmt.Fprintf(&sb, "🔸 %s  <code>%v</code>\n", T.TgStatusLabelLastOk, stats["last_success_time"])
-	fmt.Fprintf(&sb, "\n🕒 <i>%s</i>", time.Now().Local().Format("02.01.2006 15:04:05"))
+	fmt.Fprintf(&sb, "\n🕒 <i>%s</i>", time.Now().Format("02.01.2006 15:04:05"))
 
 	t.enqueue(chatID, sb.String(), backKeyboard())
 }
@@ -765,7 +765,7 @@ func (t *telegramNotifier) triggerUpdate(chatID string) {
 		runUpdate(false)
 		t.enqueue(chatID,
 			fmt.Sprintf(T.TgUpdateDone+"\n🕒 <i>%s</i>",
-				time.Now().Local().Format("02.01.2006 15:04:05")),
+				time.Now().Format("02.01.2006 15:04:05")),
 			backKeyboard())
 	}()
 }
@@ -823,6 +823,6 @@ func formatTelegramMessage(msg NotifyMessage, instanceTag string) string {
 	}
 	fmt.Fprintf(&sb, "📋 <b>%s</b>\n", msg.Action)
 	fmt.Fprintf(&sb, "💬 %s\n", msg.Message)
-	fmt.Fprintf(&sb, "🕒 <i>%s</i>", time.Now().Local().Format("02.01.2006 15:04:05"))
+	fmt.Fprintf(&sb, "🕒 <i>%s</i>", time.Now().Format("02.01.2006 15:04:05"))
 	return sb.String()
 }

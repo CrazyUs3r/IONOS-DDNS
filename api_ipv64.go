@@ -6,10 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"maps"
 	"net/http"
 	"net/url"
-	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -121,7 +119,7 @@ func ipv64APIAttempt(
 		return nil, false, err
 	}
 
-	start := time.Now().Local()
+	start := time.Now()
 	res, err := getHTTPClient().Do(req)
 	duration := time.Since(start)
 
@@ -333,54 +331,49 @@ func validateIPv64ResponseBody(
 }
 
 // ============================================================================
-// CACHE PERSISTENCE
+// CACHE PERSISTENCE - IPV64
 // ============================================================================
+
+const ipv64CacheMetaRecordType = "__IPV64_META"
+
+type ipv64FileCacheRecordMeta struct {
+	DomainUpdateHash string `json:"domain_update_hash,omitempty"`
+	RecordID         int    `json:"record_id,omitempty"`
+	Praefix          string `json:"praefix,omitempty"`
+	TTL              int    `json:"ttl,omitempty"`
+	FailoverPolicy   string `json:"failover_policy,omitempty"`
+	Deactivated      int    `json:"deactivated,omitempty"`
+}
 
 func getIPv64CachePath() string {
 	return filepath.Join(cfg.LogDir, "ipv64_cache.json")
 }
 
+func saveIPv64CacheToFile(zones []Zone, recordCache *ZoneRecordCache) error {
+	return saveDNSProviderCacheToFile("IPv64", getIPv64CachePath(), zones, recordCache)
+}
+
+func loadIPv64CacheFromFile() ([]Zone, *ZoneRecordCache, error) {
+	return loadDNSProviderCacheFromFile("IPv64", getIPv64CachePath())
+}
+
 func saveIPv64Cache() error {
-	cachePath := getIPv64CachePath()
-
-	providerCache.RLock()
-	snapshot := make(map[string]IPv64Domain, len(providerCache.ipv64Records))
-	maps.Copy(snapshot, providerCache.ipv64Records)
-	providerCache.RUnlock()
-
-	jsonData, err := json.MarshalIndent(snapshot, "", " ")
-	if err != nil {
-		return fmt.Errorf("%s: %w", T.ErrCacheMarshal, err)
-	}
-
-	tmpPath := cachePath + ".tmp"
-	if err := os.WriteFile(tmpPath, jsonData, 0o600); err != nil {
-		return fmt.Errorf("%s: %w", T.ErrCacheWrite, err)
-	}
-
-	if err := os.Rename(tmpPath, cachePath); err != nil {
-		return fmt.Errorf("%s: %w", T.ErrCacheRename, err)
-	}
-
-	debugLog("CACHE", "", fmt.Sprintf(T.CacheSavedDomains, "IPv64", len(snapshot)))
-	return nil
+	zones, recordCache := buildIPv64FileCacheSnapshot()
+	return saveIPv64CacheToFile(zones, recordCache)
 }
 
 func loadIPv64CacheFromDisk() error {
-	cachePath := getIPv64CachePath()
-
-	data, err := os.ReadFile(cachePath)
+	zones, recordCache, err := loadIPv64CacheFromFile()
 	if err != nil {
-		if os.IsNotExist(err) {
-			debugLog("CACHE", "", fmt.Sprintf(T.CacheFileNotFound, "IPv64"))
-			return nil
-		}
-		return fmt.Errorf("%s: %w", T.ErrBodyRead, err)
+		return err
+	}
+	if zones == nil || recordCache == nil {
+		return nil
 	}
 
-	var cached map[string]IPv64Domain
-	if err := json.Unmarshal(data, &cached); err != nil {
-		return fmt.Errorf("%s: %w", T.ErrCacheMarshal, err)
+	cached := buildIPv64DomainsFromFileCache(zones, recordCache)
+	if len(cached) == 0 {
+		return nil
 	}
 
 	providerCache.Lock()
@@ -390,6 +383,193 @@ func loadIPv64CacheFromDisk() error {
 	debugLog("CACHE", "", fmt.Sprintf(T.CacheLoadedDomains, "IPv64", len(cached)))
 	lastIPv64DomainsLoadNano.Store(time.Now().UnixNano())
 	return nil
+}
+
+func buildIPv64FileCacheSnapshot() ([]Zone, *ZoneRecordCache) {
+	providerCache.RLock()
+	defer providerCache.RUnlock()
+
+	zones := make([]Zone, 0, len(providerCache.ipv64Records))
+	recordCache := NewZoneRecordCache()
+
+	domainNames := make([]string, 0, len(providerCache.ipv64Records))
+	for domainName := range providerCache.ipv64Records {
+		domainNames = append(domainNames, domainName)
+	}
+	slices.Sort(domainNames)
+
+	for _, domainName := range domainNames {
+		domain := providerCache.ipv64Records[domainName]
+		zoneID := normalizeIPv64FQDN(domainName)
+		zoneName := normalizeIPv64FQDN(domain.Domain)
+		if zoneName == "" {
+			zoneName = zoneID
+		}
+
+		zones = append(zones, Zone{ID: zoneID, Name: zoneName})
+
+		records := make([]Record, 0, len(domain.Records))
+		for _, ipv64Record := range domain.Records {
+			records = append(records, buildIPv64FileCacheRecord(zoneName, domain.DomainUpdateHash, ipv64Record))
+		}
+
+		if len(records) == 0 && domain.DomainUpdateHash != "" {
+			records = append(records, buildIPv64FileCacheMetaRecord(zoneName, domain.DomainUpdateHash))
+		}
+
+		recordCache.Set(zoneID, records)
+	}
+
+	return zones, recordCache
+}
+
+func buildIPv64FileCacheRecord(domainName, updateHash string, ipv64Record IPv64Record) Record {
+	recordID := ""
+	if ipv64Record.RecordID != 0 {
+		recordID = strconv.Itoa(ipv64Record.RecordID)
+	}
+
+	return Record{
+		ID:      recordID,
+		Name:    buildIPv64RecordFQDN(domainName, ipv64Record.Praefix),
+		Type:    ipv64Record.Type,
+		Content: ipv64Record.Content,
+		Comment: encodeIPv64FileCacheRecordMeta(ipv64FileCacheRecordMeta{
+			DomainUpdateHash: updateHash,
+			RecordID:         ipv64Record.RecordID,
+			Praefix:          ipv64Record.Praefix,
+			TTL:              ipv64Record.TTL,
+			FailoverPolicy:   ipv64Record.FailoverPolicy,
+			Deactivated:      ipv64Record.Deactivated,
+		}),
+	}
+}
+
+func buildIPv64FileCacheMetaRecord(domainName, updateHash string) Record {
+	return Record{
+		ID:      ipv64CacheMetaRecordType,
+		Name:    domainName,
+		Type:    ipv64CacheMetaRecordType,
+		Content: updateHash,
+		Comment: encodeIPv64FileCacheRecordMeta(ipv64FileCacheRecordMeta{
+			DomainUpdateHash: updateHash,
+		}),
+	}
+}
+
+func buildIPv64DomainsFromFileCache(zones []Zone, recordCache *ZoneRecordCache) map[string]IPv64Domain {
+	cached := make(map[string]IPv64Domain, len(zones))
+
+	for _, zone := range zones {
+		domainName := normalizeIPv64FQDN(zone.Name)
+		if domainName == "" {
+			domainName = normalizeIPv64FQDN(zone.ID)
+		}
+		if domainName == "" {
+			continue
+		}
+
+		domain := IPv64Domain{
+			Domain:  domainName,
+			Records: make([]IPv64Record, 0),
+		}
+
+		records, exists := recordCache.Get(zone.ID)
+		if !exists {
+			records, exists = recordCache.Get(domainName)
+		}
+		if exists {
+			domain = appendIPv64FileCacheRecords(domain, domainName, records)
+		}
+
+		cached[domainName] = domain
+	}
+
+	return cached
+}
+
+func appendIPv64FileCacheRecords(domain IPv64Domain, domainName string, records []Record) IPv64Domain {
+	for _, record := range records {
+		meta := decodeIPv64FileCacheRecordMeta(record.Comment)
+		if domain.DomainUpdateHash == "" {
+			domain.DomainUpdateHash = ipv64FirstNonEmpty(meta.DomainUpdateHash, record.Content)
+		}
+
+		if record.Type == ipv64CacheMetaRecordType {
+			continue
+		}
+
+		recordID := meta.RecordID
+		if record.ID != "" {
+			if parsedID, err := strconv.Atoi(record.ID); err == nil {
+				recordID = parsedID
+			}
+		}
+
+		failoverPolicy := meta.FailoverPolicy
+		if failoverPolicy == "" {
+			failoverPolicy = "0"
+		}
+
+		praefix := meta.Praefix
+		if praefix == "" {
+			praefix = ipv64PraefixFromCachedRecordName(domainName, record.Name)
+		}
+
+		domain.Records = append(domain.Records, IPv64Record{
+			RecordID:       recordID,
+			Praefix:        praefix,
+			Type:           record.Type,
+			Content:        record.Content,
+			TTL:            meta.TTL,
+			FailoverPolicy: failoverPolicy,
+			Deactivated:    meta.Deactivated,
+		})
+	}
+
+	return domain
+}
+
+func ipv64FirstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func encodeIPv64FileCacheRecordMeta(meta ipv64FileCacheRecordMeta) string {
+	data, err := json.Marshal(meta)
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+func decodeIPv64FileCacheRecordMeta(comment string) ipv64FileCacheRecordMeta {
+	var meta ipv64FileCacheRecordMeta
+	if strings.TrimSpace(comment) == "" {
+		return meta
+	}
+	_ = json.Unmarshal([]byte(comment), &meta)
+	return meta
+}
+
+func ipv64PraefixFromCachedRecordName(domainName, recordName string) string {
+	domainName = normalizeIPv64FQDN(domainName)
+	recordName = normalizeIPv64FQDN(recordName)
+
+	if recordName == "" || recordName == "@" || recordName == domainName {
+		return ""
+	}
+
+	suffix := "." + domainName
+	if strings.HasSuffix(recordName, suffix) {
+		return strings.TrimSuffix(recordName, suffix)
+	}
+
+	return recordName
 }
 
 func ensureIPv64DomainsFresh(ctx context.Context, dc *DomainConfig, force bool) error {
@@ -570,7 +750,11 @@ func updateIPv64DNS(ctx context.Context, fqdn, ipv4, ipv6 string) (bool, error) 
 		return false, err
 	}
 
-	updateIPv64Cache(baseDomain, praefix, ipv4, ipv6, needV4, needV6)
+	if updateIPv64Cache(baseDomain, praefix, ipv4, ipv6, needV4, needV6) {
+		if err := saveIPv64Cache(); err != nil {
+			debugLog("CACHE", "", fmt.Sprintf(T.IPv64CacheSaveError, err))
+		}
+	}
 	logIPv64UpdateResults(fqdn, ipv4, ipv6, needV4, needV6)
 
 	return true, nil
@@ -638,7 +822,7 @@ func waitForIPv64UpdateWindow(ctx context.Context) error {
 		wait = 12*time.Second - since
 	}
 
-	lastIPv64Update = time.Now().Local()
+	lastIPv64Update = time.Now()
 	ipv64Mutex.Unlock()
 
 	if wait > 0 {
@@ -683,7 +867,7 @@ func performIPv64NICUpdate(
 
 	req.Header.Set("User-Agent", ManagedComment)
 
-	start := time.Now().Local()
+	start := time.Now()
 	res, err := getHTTPClient().Do(req)
 	duration := time.Since(start)
 
@@ -727,7 +911,7 @@ func buildIPv64UpdateURL(
 		q.Set("ip6", ipv6)
 	}
 
-	return "https://ipv64.net/nic/update?" + q.Encode()
+	return ipv64APINIC + q.Encode()
 }
 
 func validateIPv64NICResponse(statusCode int, body []byte) error {
@@ -764,13 +948,13 @@ func logIPv64UpdateResults(fqdn, ipv4, ipv6 string, needV4, needV6 bool) {
 	}
 }
 
-func updateIPv64Cache(baseDomain, praefix, ipv4, ipv6 string, needV4, needV6 bool) {
+func updateIPv64Cache(baseDomain, praefix, ipv4, ipv6 string, needV4, needV6 bool) bool {
 	providerCache.Lock()
 	defer providerCache.Unlock()
 
 	domain, exists := providerCache.ipv64Records[baseDomain]
 	if !exists {
-		return
+		return false
 	}
 
 	updated := false
@@ -802,6 +986,8 @@ func updateIPv64Cache(baseDomain, praefix, ipv4, ipv6 string, needV4, needV6 boo
 		providerCache.ipv64Records[baseDomain] = domain
 		debugLog("CACHE", baseDomain, fmt.Sprintf(T.IPv64CacheUpdated, praefix))
 	}
+
+	return updated
 }
 
 // ============================================================================

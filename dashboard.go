@@ -62,7 +62,7 @@ func generateSVGChart(data [24]int) string {
 	pathData := pathBuilder.String()
 
 	var labelsBuilder strings.Builder
-	now := time.Now().Local()
+	now := time.Now()
 
 	offsets := []int{24, 18, 12, 6, 0}
 
@@ -124,15 +124,16 @@ func generateLatencyChart(data [24]time.Duration) string {
 
 	tooltipPoints := buildChartTooltipPoints(points, pointsData, " ms")
 
-	pathData := fmt.Sprintf("M %.1f,%.1f", points[0][0], points[0][1])
+	var pathData strings.Builder
+	fmt.Fprintf(&pathData, "M %.1f,%.1f", points[0][0], points[0][1])
 	for i := 0; i < len(points)-1; i++ {
 		p0, p1 := points[i], points[i+1]
 		cp1x := p0[0] + (p1[0]-p0[0])/2
-		pathData += fmt.Sprintf(" C %.1f,%.1f %.1f,%.1f %.1f,%.1f", cp1x, p0[1], cp1x, p1[1], p1[0], p1[1])
+		fmt.Fprintf(&pathData, " C %.1f,%.1f %.1f,%.1f %.1f,%.1f", cp1x, p0[1], cp1x, p1[1], p1[0], p1[1])
 	}
 
 	var labelsBuilder strings.Builder
-	now := time.Now().Local()
+	now := time.Now()
 
 	offsets := []int{24, 18, 12, 6, 0}
 
@@ -166,7 +167,7 @@ func generateLatencyChart(data [24]time.Duration) string {
 					%s
 				</div>
 			</div>
-		</div>`, T.LatencyHistory, renderMax, renderMax/2, pathData, pathData, tooltipPoints, timeLabels)
+		</div>`, T.LatencyHistory, renderMax, renderMax/2, pathData.String(), pathData.String(), tooltipPoints, timeLabels)
 }
 
 func toInt24(v any) ([24]int, bool) {
@@ -257,7 +258,7 @@ func toDur24(v any) ([24]time.Duration, bool) {
 
 func buildChartTooltipPoints(points [][2]float64, values []float64, unit string) string {
 	var b strings.Builder
-	now := time.Now().Local()
+	now := time.Now()
 
 	for i, p := range points {
 		label := now.Add(-time.Duration(len(points)-1-i) * time.Hour).Format("15:00")
@@ -1037,6 +1038,7 @@ func applySystemRuntimeConfig(sys safeSystemConfig) {
 	cfg.DebugHTTPRaw = sys.DebugHTTPRaw
 	cfg.IPv4Endpoints = sys.IPv4Endpoints
 	cfg.IPv6Endpoints = sys.IPv6Endpoints
+	setAtomicDebugFlags(sys.DebugEnabled, sys.DebugHTTPRaw)
 }
 
 func applyNotificationConfig(sys safeSystemConfig) {
@@ -1332,7 +1334,7 @@ func handleAPIDomainDelete(w http.ResponseWriter, r *http.Request) {
 
 	delete(fileData, domain)
 
-	b, err := json.MarshalIndent(fileData, "", "  ")
+	b, err := json.Marshal(fileData)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -1533,7 +1535,7 @@ func handleAPIExport(w http.ResponseWriter, r *http.Request) {
 	defer statusMutex.Unlock()
 
 	exportData := map[string]any{
-		"timestamp": time.Now().Local().Format(time.RFC3339),
+		"timestamp": time.Now().Format(time.RFC3339),
 		"metrics":   apiMetrics.GetStats(),
 	}
 
@@ -1789,11 +1791,6 @@ func buildNICHTML(stats map[string]any) string {
 		`</span></div>`
 }
 
-type logCachePayload struct {
-	Logs         []LogEntry `json:"logs"`
-	LogTimeRange string     `json:"log_time_range"`
-}
-
 var (
 	logMemCache      []LogEntry
 	logMemCacheRange string
@@ -1813,61 +1810,15 @@ func loadDashboardLogs() ([]LogEntry, string) {
 	}
 	logMemCacheMu.RUnlock()
 
-	var logs []LogEntry
-	var logTimeRange string
-	if loadLogsFromDiskCache(&logs, &logTimeRange) {
-		logMemCacheMu.Lock()
-		logMemCache = logs
-		logMemCacheRange = logTimeRange
-		logMemCacheTime = time.Now().Local()
-		logMemCacheMu.Unlock()
-		return logs, logTimeRange
-	}
-
-	logs, logTimeRange = loadLogsFromMainFile()
-	saveLogsToDiskCache(logs, logTimeRange)
+	logs, logTimeRange := loadLogsFromMainFile()
 
 	logMemCacheMu.Lock()
 	logMemCache = logs
 	logMemCacheRange = logTimeRange
-	logMemCacheTime = time.Now().Local()
+	logMemCacheTime = time.Now()
 	logMemCacheMu.Unlock()
 
 	return logs, logTimeRange
-}
-
-func loadLogsFromDiskCache(logs *[]LogEntry, logTimeRange *string) bool {
-	logCacheWriteMu.Lock()
-	defer logCacheWriteMu.Unlock()
-
-	logStat, err := os.Stat(logPath)
-	if err != nil {
-		return false
-	}
-	cacheStat, err := os.Stat(logCachePath)
-	if err != nil {
-		return false
-	}
-	if logStat.ModTime().After(cacheStat.ModTime()) {
-		return false
-	}
-
-	b, err := os.ReadFile(logCachePath)
-	if err != nil {
-		return false
-	}
-
-	var payload logCachePayload
-	if err := json.Unmarshal(b, &payload); err != nil {
-		return false
-	}
-	if len(payload.Logs) == 0 {
-		return false
-	}
-
-	*logs = payload.Logs
-	*logTimeRange = payload.LogTimeRange
-	return true
 }
 
 func loadLogsFromMainFile() ([]LogEntry, string) {
@@ -1931,26 +1882,6 @@ func loadLogsFromMainFile() ([]LogEntry, string) {
 	}
 
 	return logs, logTimeRange
-}
-
-func saveLogsToDiskCache(logs []LogEntry, logTimeRange string) {
-	payload, err := json.Marshal(logCachePayload{
-		Logs:         logs,
-		LogTimeRange: logTimeRange,
-	})
-	if err != nil {
-		return
-	}
-
-	logCacheWriteMu.Lock()
-	defer logCacheWriteMu.Unlock()
-
-	tmp := logCachePath + ".tmp"
-	if err := os.WriteFile(tmp, payload, 0o600); err == nil {
-		if err := os.Rename(tmp, logCachePath); err != nil {
-			_ = os.Remove(tmp)
-		}
-	}
 }
 
 func formatDashboardLogTimestamp(ts string) string {
@@ -2212,7 +2143,7 @@ func writeDashboardTop(w http.ResponseWriter, statusClass, statusText string) {
 		statusClass,
 		statusText,
 		T.LastUpdate,
-		time.Now().Local().Format("15:04:05"),
+		time.Now().Format("15:04:05"),
 		buildNotifierStatusHTML(),
 		cfg.MaxLogLines,
 		cfg.MaxAPIRetries,
@@ -2733,7 +2664,6 @@ func writeSingleDomainCard(w http.ResponseWriter, domain string, h DomainHistory
 					</div>
 				</div>
 			</div>
-
 			<div class="domain-history-box">
 				<table class="domain-history-table">
 					<thead class="domain-history-head">
@@ -2879,7 +2809,7 @@ func writeDashboardFooter(w http.ResponseWriter) {
 			</div><!-- end main-content -->
 		</div><!-- end app-right -->
 	</div><!-- end app-layout -->
-	`, time.Now().Local().Year())
+	`, time.Now().Year())
 
 	_, _ = fmt.Fprintf(w, `
 	<script>window.I18N = %s;</script>

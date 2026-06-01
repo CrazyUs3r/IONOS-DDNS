@@ -93,7 +93,7 @@ func hetznerAPIAttempt(
 		return nil, false, err
 	}
 
-	start := time.Now().Local()
+	start := time.Now()
 	res, err := getHTTPClient().Do(req)
 	duration := time.Since(start)
 	if err != nil {

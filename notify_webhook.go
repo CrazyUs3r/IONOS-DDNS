@@ -38,7 +38,7 @@ func (w *webhookNotifier) doSend(msg NotifyMessage) error {
 		"domain":    msg.Domain,
 		"message":   msg.Message,
 		"level":     levelToString(msg.Level),
-		"timestamp": time.Now().UTC().Format(time.RFC3339),
+		"timestamp": time.Now().Format(time.RFC3339),
 	}
 
 	data, err := json.Marshal(payload)

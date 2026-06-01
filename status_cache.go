@@ -35,23 +35,28 @@ func writeStatusFileLocked(fqdn, ipv4, ipv6, provider string) (IPEntry, bool) {
 	statusMutex.Lock()
 	defer statusMutex.Unlock()
 
-	domains := make(map[string]DomainHistory)
+	statusMutex.Lock()
+	defer statusMutex.Unlock()
 
-	if b, err := os.ReadFile(updatePath); err == nil {
-		if err := json.Unmarshal(b, &domains); err != nil {
-			log(LogContext{
-				Level:   LogError,
-				Action:  ActionError,
-				Message: fmt.Sprintf(t(T.ErrParseStatusFile, "Failed to parse status file: %v"), err),
-			})
-			return IPEntry{}, false
+	if statusDomains == nil {
+		statusDomains = make(map[string]DomainHistory)
+		if b, err := os.ReadFile(updatePath); err == nil {
+			if jsonErr := json.Unmarshal(b, &statusDomains); jsonErr != nil {
+				log(LogContext{
+					Level:   LogError,
+					Action:  ActionError,
+					Message: fmt.Sprintf(t(T.ErrParseStatusFile, "Failed to parse status file: %v"), jsonErr),
+				})
+				return IPEntry{}, false
+			}
 		}
 	}
 
-	h := domains[fqdn]
+	h := statusDomains[fqdn]
 	h.Provider = provider
+	statusDomains[fqdn] = h
 
-	now := time.Now().Local().Format("02.01.2006 15:04:05")
+	now := time.Now().Format("02.01.2006 15:04:05")
 	h.LastChanged = now
 
 	newEntry := IPEntry{
@@ -65,9 +70,9 @@ func writeStatusFileLocked(fqdn, ipv4, ipv6, provider string) (IPEntry, bool) {
 		h.IPs = h.IPs[len(h.IPs)-MaxStatusHistoryItems:]
 	}
 
-	domains[fqdn] = h
+	statusDomains[fqdn] = h
 
-	js, err := json.MarshalIndent(domains, "", "  ")
+	js, err := json.MarshalIndent(statusDomains, "", " ")
 	if err != nil {
 		log(LogContext{
 			Level:   LogError,
@@ -107,17 +112,15 @@ func updateDomainsCache() error {
 	statusMutex.Lock()
 	defer statusMutex.Unlock()
 
-	domains := make(map[string]DomainHistory)
-
-	if b, err := os.ReadFile(updatePath); err == nil {
-		if err := json.Unmarshal(b, &domains); err != nil {
-			return err
+	src := statusDomains
+	if src == nil {
+		src = make(map[string]DomainHistory)
+		if b, err := os.ReadFile(updatePath); err == nil {
+			_ = json.Unmarshal(b, &src)
 		}
-	} else if !os.IsNotExist(err) {
-		return err
 	}
 
-	data, err := json.Marshal(domains)
+	data, err := json.MarshalIndent(src, "", " ")
 	if err != nil {
 		return err
 	}
@@ -128,7 +131,7 @@ func updateDomainsCache() error {
 	domainsCache.mu.Lock()
 	domainsCache.Data = data
 	domainsCache.ETag = etag
-	domainsCache.LastModified = time.Now().Local()
+	domainsCache.LastModified = time.Now()
 	domainsCache.mu.Unlock()
 
 	return nil
@@ -137,7 +140,7 @@ func updateDomainsCache() error {
 func updateMetricsCache() error {
 	stats := apiMetrics.GetStats()
 
-	data, err := json.Marshal(stats)
+	data, err := json.MarshalIndent(stats, "", " ")
 	if err != nil {
 		debugLog("CACHE", "", fmt.Sprintf(t(T.ErrMetricsCacheMarshal, "Metrics cache marshal error: %v"), err))
 		return err
@@ -149,7 +152,7 @@ func updateMetricsCache() error {
 	metricsCache.mu.Lock()
 	metricsCache.Data = data
 	metricsCache.ETag = etag
-	metricsCache.LastModified = time.Now().Local()
+	metricsCache.LastModified = time.Now()
 	metricsCache.mu.Unlock()
 
 	return nil
@@ -168,7 +171,7 @@ func serveCachedJSON(w http.ResponseWriter, r *http.Request, cache *CachedRespon
 			etag = `"0"`
 		}
 		if lastMod.IsZero() {
-			lastMod = time.Now().Local()
+			lastMod = time.Now()
 		}
 	}
 

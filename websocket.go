@@ -84,13 +84,13 @@ func (c *WSClient) writePump() {
 			if !ok {
 				return
 			}
-			_ = c.conn.SetWriteDeadline(time.Now().Local().Add(WSWriteTimeout))
+			_ = c.conn.SetWriteDeadline(time.Now().Add(WSWriteTimeout))
 			if err := c.conn.WriteJSON(msg); err != nil {
 				return
 			}
 
 		case <-ticker.C:
-			_ = c.conn.SetWriteDeadline(time.Now().Local().Add(WSWriteTimeout))
+			_ = c.conn.SetWriteDeadline(time.Now().Add(WSWriteTimeout))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
@@ -107,9 +107,9 @@ func (c *WSClient) readPump(h *WSHub) {
 		}
 	}()
 
-	_ = c.conn.SetReadDeadline(time.Now().Local().Add(WSPongTimeout))
+	_ = c.conn.SetReadDeadline(time.Now().Add(WSPongTimeout))
 	c.conn.SetPongHandler(func(string) error {
-		_ = c.conn.SetReadDeadline(time.Now().Local().Add(WSPongTimeout))
+		_ = c.conn.SetReadDeadline(time.Now().Add(WSPongTimeout))
 		return nil
 	})
 

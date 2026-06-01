@@ -32,7 +32,7 @@ func saveDNSProviderCacheToFile(providerName, cachePath string, zones []Zone, re
 		Version:    1,
 		Zones:      zones,
 		Records:    make(map[string][]Record),
-		LastUpdate: time.Now().Local(),
+		LastUpdate: time.Now(),
 	}
 
 	totalRecords := 0
@@ -43,7 +43,7 @@ func saveDNSProviderCacheToFile(providerName, cachePath string, zones []Zone, re
 		}
 	}
 
-	jsonData, err := json.MarshalIndent(cache, "", "  ")
+	jsonData, err := json.MarshalIndent(cache, "", " ")
 	if err != nil {
 		return fmt.Errorf("%s: %w", T.ErrCacheMarshal, err)
 	}

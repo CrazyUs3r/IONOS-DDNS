@@ -21,18 +21,19 @@ import (
 // GLOBALE VARIABLEN
 // ============================================================================
 var (
-	cfg          Config
-	T            Phrases
-	startTime    = time.Now().Local()
-	configDir    string
-	langDir      string
-	logPath      string
-	configPath   string
-	updatePath   string
-	logCachePath string
+	cfg        Config
+	T          Phrases
+	startTime  = time.Now()
+	configDir  string
+	langDir    string
+	logPath    string
+	configPath string
+	updatePath string
 
 	lastOk             atomic.Bool
 	schedulerRanOnce   atomic.Bool
+	atomicDebugEnabled atomic.Bool
+	atomicDebugHTTPRaw atomic.Bool
 	cfgMu              sync.RWMutex
 	phraseMu           sync.RWMutex
 	logMutex           sync.Mutex
@@ -52,7 +53,6 @@ var (
 	apiMetrics      = &APIMetrics{}
 	latestMetricsMu sync.RWMutex
 	latestMetrics   map[string]any
-	logCacheWriteMu sync.Mutex
 
 	metricsSignal = make(chan struct{}, 1)
 
@@ -60,7 +60,7 @@ var (
 	labelRegex  = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
 	secretReplacer   *strings.Replacer
-	secretReplacerMu sync.Mutex
+	secretReplacerMu sync.RWMutex
 
 	shutdownCtx    context.Context
 	shutdownCancel context.CancelFunc
@@ -89,6 +89,8 @@ var (
 
 	domainsCache = &CachedResponse{}
 	metricsCache = &CachedResponse{}
+
+	statusDomains map[string]DomainHistory
 
 	metricsPersistPath = ""
 
@@ -215,6 +217,7 @@ const (
 	IconRetry    = "🔁"
 	IconConfig   = "⚙️"
 	IconZone     = "🌐"
+	IconNetwork  = "📡"
 	IconDryRun   = "🔍"
 	IconCleanup  = "🧹"
 	IconSkip     = "⏭️"
@@ -379,6 +382,7 @@ const (
 	ionosBaseURL        = "https://api.hosting.ionos.com/dns/v1/zones"
 	cloudflareAPIBase   = "https://api.cloudflare.com/client/v4"
 	ipv64APIBase        = "https://ipv64.net/api.php"
+	ipv64APINIC         = "https://ipv64.net/api.php"
 	hetznerDNSBaseURL   = "https://dns.hetzner.com/api/v1"
 	hetznerCloudBaseURL = "https://api.hetzner.cloud/v1"
 )

@@ -19,7 +19,21 @@ import (
 // ============================================================================
 // MAIN
 // ============================================================================
+func initTimezone() {
+	tz := os.Getenv("TZ")
+	if tz == "" {
+		return
+	}
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		fmt.Printf("[WARN] Could not load timezone %q: %v – using UTC\n", tz, err)
+		return
+	}
+	time.Local = loc
+}
+
 func main() {
+	initTimezone()
 	exitCode := run()
 	os.Exit(exitCode)
 }
@@ -241,8 +255,8 @@ func readDNSServersFromEnv() []string {
 	}
 
 	var dnsList []string
-	parts := strings.Split(dnsEnv, ",")
-	for _, p := range parts {
+	parts := strings.SplitSeq(dnsEnv, ",")
+	for p := range parts {
 		trimmed := strings.TrimSpace(p)
 		if trimmed != "" {
 			dnsList = append(dnsList, trimmed)
@@ -382,6 +396,7 @@ func applyDebugOverrides() {
 	if v := os.Getenv("DEBUG_HTTP_RAW"); v != "" {
 		cfg.DebugHTTPRaw = v == constTrue
 	}
+	setAtomicDebugFlags(cfg.DebugEnabled, cfg.DebugHTTPRaw)
 }
 
 func configureLanguage(langDir string) error {
@@ -470,7 +485,6 @@ func ensureRuntimeDirs(paths runtimePaths) error {
 func setRuntimeFilePaths(logsDir string) {
 	logPath = filepath.Join(logsDir, "dyndns.json")
 	updatePath = filepath.Join(logsDir, "update.json")
-	logCachePath = filepath.Join(logsDir, "log_cache.json")
 }
 
 func startBackgroundWorkers() {
