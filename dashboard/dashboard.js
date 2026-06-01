@@ -4,23 +4,8 @@ let ws = null;
 let reconnectTimer = null;
 let reconnectDelay = 1000;
 let editIndex = null;
-const reconnectDelayMax = 10000;
-
 let tempDomainConfigs = [];
-
-async function loadInitialConfig() {
-	try {
-		const r = await fetch('/api/config');
-		if (!r.ok) return;
-		const data = await r.json();
-		tempDomainConfigs = (Array.isArray(data.domain_configs) ? data.domain_configs : [])
-			.map(d => ({ ...d }));
-		window.initialSystem = data.system ?? {};
-	} catch {
-		tempDomainConfigs = [];
-		window.initialSystem = {};
-	}
-}
+const reconnectDelayMax = 10000;
 
 // ============================================================================
 // SIDEBAR NAVIGATION
@@ -137,9 +122,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 			}
 		}
 	});
-	startUptimeClocks(); 
-	initIPTimelines(); 
-	initKeyboardShortcuts(); 
+	startUptimeClocks();
+	initIPTimelines();
+	initKeyboardShortcuts();
 	initChangedBadges();
 	initChartTooltips();
 	startClock();
@@ -220,6 +205,20 @@ function calcLevelFromMetrics(m) {
 	}
 	if (total >= 10 && successRate < 90) return 'warn';
 	return 'ok';
+}
+
+async function loadInitialConfig() {
+	try {
+		const r = await fetch('/api/config');
+		if (!r.ok) return;
+		const data = await r.json();
+		tempDomainConfigs = (Array.isArray(data.domain_configs) ? data.domain_configs : [])
+			.map(d => ({ ...d }));
+		window.initialSystem = data.system ?? {};
+	} catch {
+		tempDomainConfigs = [];
+		window.initialSystem = {};
+	}
 }
 
 function updateMetrics(m) {
@@ -364,22 +363,52 @@ function initChartTooltips(root = document) {
 			showPoint(nearestPoint(event));
 		};
 
-		svg.addEventListener('pointerenter', showFromEvent);
-		svg.addEventListener('pointermove', showFromEvent);
-
-		svg.addEventListener('pointerdown', event => {
-			svg.setPointerCapture?.(event.pointerId);
+		// ---- Mouse / Stylus ----
+		svg.addEventListener('pointerenter', event => {
+			if (event.pointerType === 'touch') return;
 			showFromEvent(event);
 		});
-
-		svg.addEventListener('pointerup', event => {
-			if (event.pointerType === 'touch' || event.pointerType === 'pen') {
-				hideTimer = setTimeout(hide, 1600);
-			}
+		svg.addEventListener('pointermove', event => {
+			if (event.pointerType === 'touch') return;
+			showFromEvent(event);
+		});
+		svg.addEventListener('pointerleave', event => {
+			if (event.pointerType === 'touch') return;
+			hide();
 		});
 
-		svg.addEventListener('pointercancel', hide);
+		// ---- Touch ----
+		svg.addEventListener('touchstart', event => {
+			if (hideTimer) {
+				clearTimeout(hideTimer);
+				hideTimer = null;
+			}
+			const t = event.touches[0];
+			showPoint(nearestPoint(t));
+		}, {
+			passive: true
+		});
 
+		svg.addEventListener('touchmove', event => {
+			if (hideTimer) {
+				clearTimeout(hideTimer);
+				hideTimer = null;
+			}
+			const t = event.touches[0];
+			showPoint(nearestPoint(t));
+		}, {
+			passive: true
+		});
+
+		svg.addEventListener('touchend', () => {
+			hideTimer = setTimeout(hide, 2500);
+		}, {
+			passive: true
+		});
+
+		svg.addEventListener('touchcancel', hide, {
+			passive: true
+		});
 		svg.addEventListener('pointerleave', event => {
 			if (event.pointerType !== 'touch' && event.pointerType !== 'pen') {
 				hide();
@@ -1610,6 +1639,67 @@ function startUptimeClocks() {
 	});
 }
 
+let _dotTooltip = null;
+let _dotHideTimer = null;
+
+function _getDotTooltip() {
+	if (!_dotTooltip) {
+		_dotTooltip = document.createElement('div');
+		_dotTooltip.className = 'ip-dot-tooltip';
+		document.body.appendChild(_dotTooltip);
+	}
+	return _dotTooltip;
+}
+
+function _showDotTooltip(dotEl, text) {
+	if (_dotHideTimer) { clearTimeout(_dotHideTimer); _dotHideTimer = null; }
+	const tip = _getDotTooltip();
+	tip.textContent = text;
+	tip.classList.add('visible');
+	dotEl.classList.add('dot-active');
+	requestAnimationFrame(() => {
+		const r = dotEl.getBoundingClientRect();
+		const margin = 10;
+		const tipW = tip.offsetWidth || 200;
+		const tipH = tip.offsetHeight || 52;
+		let top = r.top - tipH - margin;
+		let left = r.left + r.width / 2 - tipW / 2;
+		if (top < margin) top = r.bottom + margin;
+		left = Math.max(margin, Math.min(left, window.innerWidth - tipW - margin));
+		tip.style.left = left + 'px';
+		tip.style.top = top + 'px';
+	});
+}
+
+function _hideDotTooltip(dotEl, delay) {
+	if (delay > 0) {
+		_dotHideTimer = setTimeout(() => {
+			_getDotTooltip().classList.remove('visible');
+			dotEl && dotEl.classList.remove('dot-active');
+		}, delay);
+	} else {
+		_getDotTooltip().classList.remove('visible');
+		dotEl && dotEl.classList.remove('dot-active');
+	}
+}
+
+function _attachDotEvents(dotEl, text) {
+	// Desktop hover
+	dotEl.addEventListener('mouseenter', () => _showDotTooltip(dotEl, text));
+	dotEl.addEventListener('mouseleave', () => _hideDotTooltip(dotEl, 0));
+	// Touch tap – first tap shows, second tap or 3 s timeout hides
+	dotEl.addEventListener('touchstart', e => {
+		e.stopPropagation(); // don't trigger <details> toggle
+		const tip = _getDotTooltip();
+		if (tip.classList.contains('visible') && dotEl.classList.contains('dot-active')) {
+			_hideDotTooltip(dotEl, 0);
+		} else {
+			_showDotTooltip(dotEl, text);
+			_hideDotTooltip(dotEl, 3000);
+		}
+	}, { passive: true });
+}
+
 function buildIPTimeline(domainEl) {
 	const raw = domainEl.dataset.ipHistory;
 	if (!raw) return;
@@ -1631,15 +1721,7 @@ function buildIPTimeline(domainEl) {
 			/^(\d{1,2})\.(\d{1,2})\.(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/
 		);
 		if (!p) return NaN;
-
-		return new Date(
-			+p[3],
-			+p[2] - 1,
-			+p[1],
-			+p[4],
-			+p[5],
-			+(p[6] || 0)
-		).getTime();
+		return new Date(+p[3], +p[2] - 1, +p[1], +p[4], +p[5], +(p[6] || 0)).getTime();
 	};
 
 	const points = entries
@@ -1647,45 +1729,53 @@ function buildIPTimeline(domainEl) {
 		.filter(p => Number.isFinite(p.t))
 		.filter((p, i, arr) => {
 			if (i === 0) return true;
-
 			const prev = arr[i - 1].e;
 			return p.e.ipv4 !== prev.ipv4 || p.e.ipv6 !== prev.ipv6;
 		});
 
 	if (points.length < 2) return;
 
-	const pct = (p, i) => {
+	const pct = (_, i) => {
 		const raw = (i / Math.max(1, points.length - 1)) * 100;
-
-		const min = 2.5;
-		const max = 97.5;
-
-		return min + (raw / 100) * (max - min);
+		return 2.5 + (raw / 100) * 95;
 	};
+	const wrap = document.createElement('div');
+	wrap.className = 'ip-timeline';
 
-	const dots = points.map((p, i) => {
+	const line = document.createElement('div');
+	line.className = 'ip-timeline-line';
+	wrap.appendChild(line);
+
+	points.forEach((p, i) => {
 		const x = pct(p, i).toFixed(3);
 		const color = p.e.ipv4 ? '#38bdf8' : '#a78bfa';
-		const title = `${p.e.time}: ${p.e.ipv4 || ''} ${p.e.ipv6 || ''}`;
+		const tooltipText = [
+			p.e.time || '',
+			p.e.ipv4 ? 'IPv4: ' + p.e.ipv4 : '',
+			p.e.ipv6 ? 'IPv6: ' + p.e.ipv6 : '',
+		].filter(Boolean).join('\n');
 
-		return `
-			<span
-				class="ip-timeline-dot"
-				style="left:${x}%; --dot-color:${color};"
-				title="${escHtml(title)}"
-			></span>`;
-	}).join('');
+		const dot = document.createElement('span');
+		dot.className = 'ip-timeline-dot';
+		dot.style.cssText = `left:${x}%;--dot-color:${color};`;
+		dot.title = tooltipText;
+		_attachDotEvents(dot, tooltipText);
+		wrap.appendChild(dot);
+	});
 
 	const last = points[points.length - 1];
 	const lastX = pct(last, points.length - 1).toFixed(3);
-	const label = (last.e.ipv4 || last.e.ipv6 || '').slice(-8);
+	const label = (last.e.ipv4 || last.e.ipv6 || '').slice(-15);
+	if (label) {
+		const lbl = document.createElement('span');
+		lbl.className = 'ip-timeline-label ip-timeline-label--last';
+		lbl.style.left = lastX + '%';
+		lbl.textContent = label;
+		wrap.appendChild(lbl);
+	}
 
-	container.innerHTML = `
-		<div class="ip-timeline">
-			<div class="ip-timeline-line"></div>
-			${dots}
-			${label ? `<span class="ip-timeline-label ip-timeline-label--last" style="left:${lastX}%;">${escHtml(label)}</span>` : ''}
-		</div>`;
+	container.innerHTML = '';
+	container.appendChild(wrap);
 }
 
 function initIPTimelines() {
@@ -1749,7 +1839,6 @@ function initChangedBadges() {
 		const ageMs = Date.now() - d.getTime();
 		if (ageMs < 15 * 60 * 1000) {
 			badge.classList.remove('changed-badge--hidden');
-			// nach Ablauf automatisch ausblenden
 			setTimeout(() => badge.classList.add('changed-badge--hidden'), 15 * 60 * 1000 - ageMs);
 		} else {
 			badge.classList.add('changed-badge--hidden');

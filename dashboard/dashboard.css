@@ -881,6 +881,49 @@ button:disabled {
 	box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.18), 0 0 10px rgba(56, 189, 248, 0.65);
 	z-index: 2;
 	pointer-events: auto;
+	cursor: pointer;
+	/* Larger invisible tap target for mobile */
+	-webkit-tap-highlight-color: transparent;
+}
+
+/* Tap/hover active state */
+.ip-timeline-dot:hover,
+.ip-timeline-dot.dot-active {
+	transform: translate(-50%, -50%) scale(1.8);
+	box-shadow: 0 0 0 3px var(--dot-color, #38bdf8),
+	            0 0 14px var(--dot-color, #38bdf8);
+}
+
+/* Tooltip element (JS-created, position:fixed) */
+.ip-dot-tooltip {
+	position: fixed;
+	z-index: 5100;
+	pointer-events: none;
+	background: rgba(15, 23, 42, 0.96);
+	color: #f8fafc;
+	border: 1px solid rgba(148, 163, 184, 0.35);
+	border-radius: 8px;
+	padding: 7px 11px;
+	font-size: 0.75rem;
+	font-family: monospace;
+	line-height: 1.55;
+	white-space: pre-line;
+	box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+	opacity: 0;
+	transition: opacity 0.14s ease;
+	max-width: min(280px, 88vw);
+	word-break: break-all;
+}
+
+.ip-dot-tooltip.visible {
+	opacity: 1;
+}
+
+[data-theme="light"] .ip-dot-tooltip {
+	background: rgba(255, 255, 255, 0.97);
+	color: #0f172a;
+	border-color: #94a3b8;
+	box-shadow: 0 8px 22px rgba(0, 0, 0, 0.15);
 }
 
 .ip-timeline-label {
@@ -1034,13 +1077,6 @@ button:disabled {
 	background: rgba(255, 255, 255, 0.96);
 	color: #0f172a;
 	border-color: #64748b;
-}
-
-@media (max-width: 768px) {
-	.chart-tooltip {
-		font-size: 0.78rem;
-		padding: 6px 9px;
-	}
 }
 
 .chart-x-labels {
@@ -1826,14 +1862,13 @@ select.s-input option {
 	background: color-mix(in srgb, var(--card) 92%, transparent);
 	border: 1px solid var(--border);
 	border-radius: 16px;
-	padding: 36px 32px;
+	padding: 1em;
 	width: 100%;
 	max-width: 400px;
 	box-shadow: 0 18px 45px rgba(0, 0, 0, 0.34);
 	max-height: 85dvh;
 	overflow-y: auto;
 	overscroll-behavior: contain;
-	padding-right: 10px;
 }
 
 .auth-logo {
@@ -2106,6 +2141,11 @@ form[action="/setup"] {
 		max-width: 70px;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+	
+	.chart-tooltip {
+		font-size: 0.78rem;
+		padding: 6px 9px;
 	}
 
 	.domain-history-th-time,
