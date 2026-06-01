@@ -49,9 +49,6 @@ type apiMetricsSnapshot struct {
 	LastIPCheckTime      time.Time   `json:"last_ip_check_at"`
 }
 
-// FIX 1: ProviderLastStatus wird jetzt mit sync/atomic verwaltet,
-// kein nested Lock mehr nötig.
-// FIX 2: Reusable scratch-buffer für calcPercentile (sync.Pool).
 var percentileBufPool = sync.Pool{
 	New: func() any {
 		buf := make([]int64, 0, 1000)
@@ -96,10 +93,6 @@ type APIMetrics struct {
 	IPLatencySampleIdx   int
 	IPLatencySampleCount int
 	LastIPCheckTime      time.Time
-
-	// FIX 1: atomic statt nested RWMutex – kein Lock-in-Lock mehr.
-	// Wir brauchen keine per-method-Granularität im Dashboard,
-	// ein einfaches "irgendwas war ok/nicht-ok" reicht.
 	providerAnyError atomic.Bool
 }
 
@@ -130,15 +123,8 @@ func (m *APIMetrics) RecordSuccess(method string, duration time.Duration) {
 		m.updateLatency(duration, hour)
 	}
 	m.incrementDailyMethod(method, now)
-
-	// FIX 1: kein nested Lock mehr
 	m.providerAnyError.Store(false)
-
-	// FIX 3: getStatsUnsafe() wird NICHT mehr hier aufgerufen.
-	// Der metricsBroadcasterLoop liest latestMetrics per Signal,
-	// wir signalisieren nur noch – ohne die teure Berechnung unter Lock.
 	m.Unlock()
-
 	m.signalStatsUpdate()
 }
 
@@ -177,17 +163,11 @@ func (m *APIMetrics) RecordError(method string, statusCode int, err error, durat
 		m.ClientErrors++
 	}
 	m.incrementDailyMethod(method, now)
-
-	// FIX 1: kein nested Lock mehr
 	m.providerAnyError.Store(true)
-
 	m.Unlock()
-
 	m.signalStatsUpdate()
 }
 
-// signalStatsUpdate entkoppelt die teure Stats-Berechnung vom Aufrufer.
-// Der Broadcaster-Loop in metricsBroadcasterLoop() holt die Stats asynchron.
 func (m *APIMetrics) signalStatsUpdate() {
 	select {
 	case metricsSignal <- struct{}{}:
@@ -261,14 +241,12 @@ func (m *APIMetrics) RecordIPLatency(duration time.Duration) {
 	}
 }
 
-// FIX 2: sync.Pool für den Sort-Buffer – kein Heap-Alloc mehr pro Aufruf.
 func (m *APIMetrics) calcPercentile(p float64) time.Duration {
 	if m.LatencySampleCount == 0 {
 		return 0
 	}
 	count := m.LatencySampleCount
 
-	// Buffer aus Pool holen und zurückgeben
 	bufPtr := percentileBufPool.Get().(*[]int64)
 	buf := (*bufPtr)[:0]
 	if cap(buf) < count {
@@ -300,28 +278,22 @@ func (m *APIMetrics) calcPercentile(p float64) time.Duration {
 	return result
 }
 
-// FIX 4: cleanupOldTimestamps vermeidet copy() wenn nichts zu tun ist
-// und nutzt klares In-place-Slicing statt doppeltem copy.
 func (m *APIMetrics) cleanupOldTimestamps(now time.Time) {
 	if len(m.RequestTimestamps) == 0 {
 		return
 	}
 
 	threshold := now.Add(-1 * time.Hour)
-
-	// Finde ersten Timestamp der noch gültig ist (aufsteigend sortiert)
 	cutIdx := 0
 	for cutIdx < len(m.RequestTimestamps) && !m.RequestTimestamps[cutIdx].After(threshold) {
 		cutIdx++
 	}
 
 	if cutIdx > 0 {
-		// In-place verschieben ohne extra Allokation
 		n := copy(m.RequestTimestamps, m.RequestTimestamps[cutIdx:])
 		m.RequestTimestamps = m.RequestTimestamps[:n]
 	}
 
-	// Hard cap
 	const maxTimestamps = 3600
 	if len(m.RequestTimestamps) > maxTimestamps {
 		cutIdx := len(m.RequestTimestamps) - maxTimestamps
@@ -609,8 +581,6 @@ func setLatestMetrics(stats map[string]any) {
 	}
 }
 
-// FIX 3: metricsBroadcasterLoop holt jetzt die Stats selbst (lazy, asynchron),
-// statt sie von RecordSuccess/RecordError unter Lock berechnet zu bekommen.
 func metricsBroadcasterLoop() {
 	go func() {
 		for range metricsSignal {
