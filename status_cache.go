@@ -13,10 +13,10 @@ import (
 // ============================================================================
 // STATUS FILE
 // ============================================================================
-func updateStatusFile(fqdn, ipv4, ipv6, provider string) {
-	newEntry, ok := writeStatusFileLocked(fqdn, ipv4, ipv6, provider)
-	if !ok {
-		return
+func updateStatusFile(fqdn, ipv4, ipv6, provider string) error {
+	newEntry, err := writeStatusFileLocked(fqdn, ipv4, ipv6, provider)
+	if err != nil {
+		return err
 	}
 
 	if err := updateDomainsCache(); err != nil {
@@ -29,32 +29,87 @@ func updateStatusFile(fqdn, ipv4, ipv6, provider string) {
 		"ipv6":   ipv6,
 		"time":   newEntry.Time,
 	})
+
+	return nil
 }
 
-func writeStatusFileLocked(fqdn, ipv4, ipv6, provider string) (IPEntry, bool) {
-	statusMutex.Lock()
-	defer statusMutex.Unlock()
-
+func writeStatusFileLocked(fqdn, ipv4, ipv6, provider string) (IPEntry, error) {
 	statusMutex.Lock()
 	defer statusMutex.Unlock()
 
 	if statusDomains == nil {
 		statusDomains = make(map[string]DomainHistory)
+
 		if b, err := os.ReadFile(updatePath); err == nil {
-			if jsonErr := json.Unmarshal(b, &statusDomains); jsonErr != nil {
+			loaded := make(map[string]DomainHistory)
+
+			if err := json.Unmarshal(b, &loaded); err != nil {
+				brokenFile := fmt.Sprintf(
+					"%s.broken.%s",
+					updatePath,
+					time.Now().Format("20060102_150405.000000000"),
+				)
+
+				if renameErr := os.Rename(updatePath, brokenFile); renameErr != nil {
+					log(LogContext{
+						Level:  LogError,
+						Action: ActionError,
+						Message: fmt.Sprintf(
+							"Failed to backup broken status file: %v",
+							renameErr,
+						),
+					})
+
+					return IPEntry{}, renameErr
+				}
+
 				log(LogContext{
-					Level:   LogError,
-					Action:  ActionError,
-					Message: fmt.Sprintf(t(T.ErrParseStatusFile, "Failed to parse status file: %v"), jsonErr),
+					Level:  LogWarn,
+					Action: ActionServer,
+					Message: fmt.Sprintf(
+						"Broken status file moved to %s",
+						brokenFile,
+					),
 				})
-				return IPEntry{}, false
+
+				statusDomains = make(map[string]DomainHistory)
+			} else if loaded == nil {
+				brokenFile := fmt.Sprintf(
+					"%s.broken.%s",
+					updatePath,
+					time.Now().Format("20060102_150405.000000000"),
+				)
+
+				if renameErr := os.Rename(updatePath, brokenFile); renameErr != nil {
+					return IPEntry{}, renameErr
+				}
+
+				log(LogContext{
+					Level:  LogWarn,
+					Action: ActionServer,
+					Message: fmt.Sprintf(
+						"Invalid/null status file moved to %s",
+						brokenFile,
+					),
+				})
+
+				statusDomains = make(map[string]DomainHistory)
+			} else {
+				statusDomains = loaded
 			}
+		} else if !os.IsNotExist(err) {
+			log(LogContext{
+				Level:   LogError,
+				Action:  ActionError,
+				Message: fmt.Sprintf("Failed to read status file: %v", err),
+			})
+
+			return IPEntry{}, err
 		}
 	}
 
 	h := statusDomains[fqdn]
 	h.Provider = provider
-	statusDomains[fqdn] = h
 
 	now := time.Now().Format("02.01.2006 15:04:05")
 	h.LastChanged = now
@@ -66,6 +121,7 @@ func writeStatusFileLocked(fqdn, ipv4, ipv6, provider string) (IPEntry, bool) {
 	}
 
 	h.IPs = append(h.IPs, newEntry)
+
 	if len(h.IPs) > MaxStatusHistoryItems {
 		h.IPs = h.IPs[len(h.IPs)-MaxStatusHistoryItems:]
 	}
@@ -75,34 +131,49 @@ func writeStatusFileLocked(fqdn, ipv4, ipv6, provider string) (IPEntry, bool) {
 	js, err := json.MarshalIndent(statusDomains, "", " ")
 	if err != nil {
 		log(LogContext{
-			Level:   LogError,
-			Action:  ActionError,
-			Message: fmt.Sprintf(t(T.ErrMarshalStatusFile, "Failed to marshal status file: %v"), err),
+			Level:  LogError,
+			Action: ActionError,
+			Message: fmt.Sprintf(
+				t(T.ErrMarshalStatusFile,
+					"Failed to marshal status file: %v"),
+				err,
+			),
 		})
-		return IPEntry{}, false
+
+		return IPEntry{}, err
 	}
 
 	tmp := updatePath + ".tmp"
 
 	if err := os.WriteFile(tmp, js, 0o600); err != nil {
 		log(LogContext{
-			Level:   LogError,
-			Action:  ActionError,
-			Message: fmt.Sprintf(t(T.ErrWriteTempStatusFile, "Failed to write temp status file: %v"), err),
+			Level:  LogError,
+			Action: ActionError,
+			Message: fmt.Sprintf(
+				t(T.ErrWriteTempStatusFile,
+					"Failed to write temp status file: %v"),
+				err,
+			),
 		})
-		return IPEntry{}, false
+
+		return IPEntry{}, err
 	}
 
 	if err := os.Rename(tmp, updatePath); err != nil {
 		log(LogContext{
-			Level:   LogError,
-			Action:  ActionError,
-			Message: fmt.Sprintf(t(T.ErrReplaceStatusFile, "Failed to replace status file: %v"), err),
+			Level:  LogError,
+			Action: ActionError,
+			Message: fmt.Sprintf(
+				t(T.ErrReplaceStatusFile,
+					"Failed to replace status file: %v"),
+				err,
+			),
 		})
-		return IPEntry{}, false
+
+		return IPEntry{}, err
 	}
 
-	return newEntry, true
+	return newEntry, nil
 }
 
 // ============================================================================

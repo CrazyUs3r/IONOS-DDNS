@@ -40,11 +40,11 @@ var apiErrorSpecs = map[int]apiErrorSpec{
 	429: {func() string { return T.APIErrorRateLimitExceeded }, "Rate limit exceeded", LogWarn, ActionRetry, true, true, RateLimitRetryDelay},
 	431: {func() string { return T.APIErrorRequestHeaderFieldsTooLarge }, "Request Header Fields Too Large", LogError, ActionError, false, false, 0},
 	451: {func() string { return T.APIErrorUnavailableForLegalReasons }, "Unavailable For Legal Reasons", LogError, ActionError, false, false, 0},
-	500: {func() string { return T.APIErrorInternalServerError }, "Ionos API server error", LogError, ActionError, true, false, ServerErrorRetryDelay},
+	500: {func() string { return T.APIErrorInternalServerError }, "API server error", LogError, ActionError, true, false, ServerErrorRetryDelay},
 	501: {func() string { return T.APIErrorNotImplemented }, "Not Implemented", LogError, ActionError, false, false, 0},
-	502: {func() string { return T.APIErrorBadGateway }, "Ionos Gateway error", LogError, ActionRetry, true, false, ServerErrorRetryDelay},
-	503: {func() string { return T.APIErrorServiceUnavailable }, "Ionos service unavailable", LogError, ActionRetry, true, true, ServerErrorRetryDelay},
-	504: {func() string { return T.APIErrorGatewayTimeout }, "Ionos timeout", LogError, ActionRetry, true, false, ServerErrorRetryDelay},
+	502: {func() string { return T.APIErrorBadGateway }, "Gateway error", LogError, ActionRetry, true, false, ServerErrorRetryDelay},
+	503: {func() string { return T.APIErrorServiceUnavailable }, "Service unavailable", LogError, ActionRetry, true, true, ServerErrorRetryDelay},
+	504: {func() string { return T.APIErrorGatewayTimeout }, "Gateway timeout", LogError, ActionRetry, true, false, ServerErrorRetryDelay},
 	507: {func() string { return T.APIErrorInsufficientStorage }, "Insufficient Storage", LogError, ActionRetry, true, false, ServerErrorRetryDelay},
 	508: {func() string { return T.APIErrorLoopDetected }, "Loop Detected", LogError, ActionRetry, true, false, 0},
 	511: {func() string { return T.APIErrorNetworkAuthenticationRequired }, "Network Authentication Required", LogError, ActionError, false, false, 0},
@@ -86,11 +86,7 @@ func parseRetryAfter(h http.Header) (time.Duration, bool) {
 	return 0, false
 }
 
-func classifyAPIErrorWithHeaders(
-	statusCode int,
-	method, url, responseBody string,
-	headers http.Header,
-) *APIError {
+func classifyAPIErrorWithHeaders(statusCode int, method, url, responseBody string, headers http.Header) *APIError {
 	if statusCode >= 200 && statusCode < 300 {
 		return nil
 	}
@@ -181,8 +177,4 @@ func withBody(base, responseBody string) string {
 func tf(value, fallback string, args ...any) string {
 	format := t(value, fallback)
 	return fmt.Sprintf(format, args...)
-}
-
-func classifyAPIError(statusCode int, method, url, responseBody string) *APIError {
-	return classifyAPIErrorWithHeaders(statusCode, method, url, responseBody, nil)
 }

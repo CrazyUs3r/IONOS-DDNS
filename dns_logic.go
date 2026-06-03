@@ -98,7 +98,6 @@ func startDomainWorker(
 	dryRun bool,
 ) {
 	wg.Add(1)
-
 	go func(domainConfig *DomainConfig) {
 		defer wg.Done()
 		defer func() {
@@ -109,18 +108,21 @@ func startDomainWorker(
 					Domain:  domainConfig.FQDN,
 					Message: fmt.Sprintf(t(T.PanicOccurred, "Panic: %v"), r),
 				})
+
+				results <- domainUpdateResult{
+					Domain: domainConfig.FQDN,
+					Error:  fmt.Errorf("panic in domain worker: %v", r),
+				}
 			}
 		}()
 
 		if ctx.Err() != nil {
 			return
 		}
-
 		if !acquireWorkerSlot(ctx, domainConfig.FQDN) {
 			return
 		}
 		defer releaseWorkerSlot(domainConfig.FQDN)
-
 		job, err := buildDomainUpdateJob(domainConfig, zonesByProvider, cache, ipv4, ipv6)
 		if err != nil {
 			results <- domainUpdateResult{
@@ -131,7 +133,7 @@ func startDomainWorker(
 		}
 
 		result := processDomainUpdate(ctx, domainConfig, job, cache)
-		handleDomainResultStatus(domainConfig, result, ipv4, ipv6, dryRun)
+		result = handleDomainResultStatus(domainConfig, result, ipv4, ipv6, dryRun)
 		results <- result
 	}(dc)
 }
@@ -215,10 +217,10 @@ func handleDomainResultStatus(
 	result domainUpdateResult,
 	ipv4, ipv6 string,
 	dryRun bool,
-) {
+) domainUpdateResult {
 	providerName := string(dc.Provider)
 
-	if result.Changed && !dryRun {
+	if result.Error == nil && result.Changed && !dryRun {
 		debugLog("STATUS", dc.FQDN, T.ChangesDetected)
 
 		v4 := result.IPv4
@@ -230,13 +232,18 @@ func handleDomainResultStatus(
 			v6 = ipv6
 		}
 
-		updateStatusFile(dc.FQDN, v4, v6, providerName)
-		return
+		if err := updateStatusFile(dc.FQDN, v4, v6, providerName); err != nil {
+			result.Error = fmt.Errorf("DNS updated, but update.json was not written: %w", err)
+		}
+
+		return result
 	}
 
 	if result.Error == nil {
 		debugLog("STATUS", dc.FQDN, T.NoChangesNeeded)
 	}
+
+	return result
 }
 
 func finalizeDomainResults(results <-chan domainUpdateResult, totalDomains int) int {

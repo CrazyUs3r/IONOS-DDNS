@@ -261,7 +261,7 @@ func handleCloudflareInvalidJSON(
 		debugLog("HTTP", "", fmt.Sprintf(T.CFHTMLResponse, res.StatusCode, preview))
 	}
 
-	apiErr := classifyAPIError(res.StatusCode, method, fullURL, string(respBody))
+	apiErr := classifyAPIErrorWithHeaders(res.StatusCode, method, fullURL, string(respBody), res.Header)
 	if apiErr == nil {
 		apiErr = &APIError{
 			StatusCode: res.StatusCode,
@@ -282,8 +282,13 @@ func handleCloudflareInvalidJSON(
 		return false, apiErr
 	}
 
-	serverBusy := res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= 500
-	if !sleepOrCancel(ctx, calculateRetryDelay(attempt, serverBusy)) {
+	wait := apiErr.RetryAfter
+	if wait <= 0 {
+		serverBusy := res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= 500
+		wait = calculateRetryDelay(attempt, serverBusy)
+	}
+
+	if !sleepOrCancel(ctx, wait) {
 		return false, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
 	}
 

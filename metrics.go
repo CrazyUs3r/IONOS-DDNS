@@ -93,7 +93,7 @@ type APIMetrics struct {
 	IPLatencySampleIdx   int
 	IPLatencySampleCount int
 	LastIPCheckTime      time.Time
-	providerAnyError atomic.Bool
+	providerAnyError     atomic.Bool
 }
 
 // ============================================================================
@@ -125,6 +125,7 @@ func (m *APIMetrics) RecordSuccess(method string, duration time.Duration) {
 	m.incrementDailyMethod(method, now)
 	m.providerAnyError.Store(false)
 	m.Unlock()
+
 	m.signalStatsUpdate()
 }
 
@@ -284,6 +285,7 @@ func (m *APIMetrics) cleanupOldTimestamps(now time.Time) {
 	}
 
 	threshold := now.Add(-1 * time.Hour)
+
 	cutIdx := 0
 	for cutIdx < len(m.RequestTimestamps) && !m.RequestTimestamps[cutIdx].After(threshold) {
 		cutIdx++

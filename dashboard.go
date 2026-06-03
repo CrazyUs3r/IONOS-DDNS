@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"io"
 	"net/http"
 	"os"
 	"sort"
@@ -16,10 +17,10 @@ import (
 	"time"
 )
 
-//go:embed dashboard/dashboard.css
+//go:embed templates/css/style.css
 var cssData string
 
-//go:embed dashboard/dashboard.js
+//go:embed templates/js/dashboard.js
 var jsData string
 
 // ============================================================================
@@ -768,6 +769,7 @@ func registerStaticRoutes(mux *http.ServeMux) {
 
 func registerAPIroutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/domains", handleAPIDomains)
+	mux.HandleFunc("/api/domains/html", handleAPIDomainsHTML)
 	mux.HandleFunc("/api/config", handleAPIConfig)
 	mux.HandleFunc("/api/languages", handleAPILanguages)
 	mux.HandleFunc("/api/save-config", handleAPISaveConfig)
@@ -781,6 +783,7 @@ func registerAPIroutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/metrics/reset", handleMetricsReset)
 	mux.HandleFunc("/api/users", handleAPIUsers)
 	mux.HandleFunc("/api/users/", handleAPIUsersID)
+	mux.HandleFunc("/api/logs", handleAPILogs)
 }
 
 func registerPageRoutes(mux *http.ServeMux) {
@@ -852,7 +855,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 
 	client := &WSClient{
 		conn: conn,
-		send: make(chan WSMessage, 64),
+		send: make(chan WSMessage, 128),
 	}
 
 	stats := apiMetrics.GetStats()
@@ -863,6 +866,20 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 
 func handleAPIDomains(w http.ResponseWriter, r *http.Request) {
 	serveCachedJSON(w, r, domainsCache)
+}
+
+func handleAPIDomainsHTML(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	data := loadStatusData()
+	var b strings.Builder
+	writeDomainsCard(&b, data)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"html":  b.String(),
+		"count": len(domainKeysFromStatusData(data)),
+	})
 }
 
 func handleAPIConfig(w http.ResponseWriter, r *http.Request) {
@@ -1307,58 +1324,123 @@ func handleAPIDomainDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, dc := range cfg.DomainConfigs {
-		if strings.EqualFold(dc.FQDN, domain) {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": T.DomainStillActiveInConfig})
-			return
-		}
+	if isDomainActiveInConfig(domain) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": T.DomainStillActiveInConfig})
+		return
 	}
 
 	statusMutex.Lock()
-	defer statusMutex.Unlock()
+	deleteKey, statusCode, errMsg := deleteDomainFromStatus(domain)
+	statusMutex.Unlock()
+
+	if statusCode != http.StatusOK {
+		writeJSON(w, statusCode, map[string]string{"error": errMsg})
+		return
+	}
+
+	debugLog("API", getClientIP(r), fmt.Sprintf(T.DomainDeletedFromStatusLog, deleteKey))
+	broadcastNotification(fmt.Sprintf(T.DomainRemovedFromStatus, deleteKey), "info")
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status": "deleted",
+		"domain": deleteKey,
+	})
+}
+
+func isDomainActiveInConfig(domain string) bool {
+	for _, dc := range cfg.DomainConfigs {
+		if strings.EqualFold(dc.FQDN, domain) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func deleteDomainFromStatus(domain string) (string, int, string) {
+	fileData, statusCode, errMsg := readStatusFileForDelete()
+	if statusCode != http.StatusOK {
+		return "", statusCode, errMsg
+	}
+
+	deleteKey, found := findStatusDomainKey(fileData, domain)
+	if !found {
+		return "", http.StatusNotFound, T.DomainNotFoundInStatus
+	}
+
+	delete(fileData, deleteKey)
+	deleteDomainFromStatusCache(domain, deleteKey)
+
+	if err := writeStatusFileData(fileData); err != nil {
+		return "", http.StatusInternalServerError, err.Error()
+	}
+
+	return deleteKey, http.StatusOK, ""
+}
+
+func readStatusFileForDelete() (map[string]any, int, string) {
+	b, err := os.ReadFile(updatePath)
+	if err != nil {
+		return nil, http.StatusNotFound, T.NoStatusFileFound
+	}
 
 	var fileData map[string]any
-	if b, err := os.ReadFile(updatePath); err == nil {
-		_ = json.Unmarshal(b, &fileData)
+	if err := json.Unmarshal(b, &fileData); err != nil {
+		return nil, http.StatusInternalServerError, err.Error()
 	}
 
 	if fileData == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": T.NoStatusFileFound})
+		return nil, http.StatusNotFound, T.NoStatusFileFound
+	}
+
+	return fileData, http.StatusOK, ""
+}
+
+func findStatusDomainKey(fileData map[string]any, domain string) (string, bool) {
+	if _, exists := fileData[domain]; exists {
+		return domain, true
+	}
+
+	for k := range fileData {
+		if strings.EqualFold(k, domain) {
+			return k, true
+		}
+	}
+
+	return "", false
+}
+
+func deleteDomainFromStatusCache(domain, deleteKey string) {
+	if statusDomains == nil {
 		return
 	}
 
-	if _, exists := fileData[domain]; !exists {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": T.DomainNotFoundInStatus})
-		return
+	delete(statusDomains, deleteKey)
+
+	for k := range statusDomains {
+		if strings.EqualFold(k, domain) {
+			delete(statusDomains, k)
+		}
 	}
+}
 
-	delete(fileData, domain)
-
-	b, err := json.Marshal(fileData)
+func writeStatusFileData(fileData map[string]any) error {
+	b, err := json.MarshalIndent(fileData, "", " ")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
+		return err
 	}
 
 	tmp := updatePath + ".tmp"
 	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
+		return err
 	}
 
 	if err := os.Rename(tmp, updatePath); err != nil {
 		_ = os.Remove(tmp)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
+		return err
 	}
 
-	debugLog("API", getClientIP(r), fmt.Sprintf(T.DomainDeletedFromStatusLog, domain))
-	broadcastNotification(fmt.Sprintf(T.DomainRemovedFromStatus, domain), "info")
-
-	writeJSON(w, http.StatusOK, map[string]string{
-		"status": "deleted",
-		"domain": domain,
-	})
+	return nil
 }
 
 func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
@@ -1819,6 +1901,36 @@ func loadDashboardLogs() ([]LogEntry, string) {
 	logMemCacheMu.Unlock()
 
 	return logs, logTimeRange
+}
+
+func loadDashboardLogsFresh() ([]LogEntry, string) {
+	logs, logTimeRange := loadLogsFromMainFile()
+
+	logMemCacheMu.Lock()
+	logMemCache = logs
+	logMemCacheRange = logTimeRange
+	logMemCacheTime = time.Now()
+	logMemCacheMu.Unlock()
+
+	return logs, logTimeRange
+}
+
+func handleAPILogs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	logs, logTimeRange := loadDashboardLogsFresh()
+
+	var b strings.Builder
+	writeLogsCard(&b, logs, logTimeRange)
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"html":       b.String(),
+		"count":      len(logs),
+		"time_range": logTimeRange,
+	})
 }
 
 func loadLogsFromMainFile() ([]LogEntry, string) {
@@ -2400,7 +2512,7 @@ func writeDebugCard(w http.ResponseWriter) {
 	`)
 }
 
-func writeLogsCard(w http.ResponseWriter, logs []LogEntry, logTimeRange string) {
+func writeLogsCard(w io.Writer, logs []LogEntry, logTimeRange string) {
 	entryCount := len(logs)
 	timeRangeHTML := ""
 	if logTimeRange != "" {
@@ -2479,7 +2591,7 @@ func writeLogsCard(w http.ResponseWriter, logs []LogEntry, logTimeRange string) 
 	`)
 }
 
-func writeDomainsCard(w http.ResponseWriter, data map[string]any) {
+func writeDomainsCard(w io.Writer, data map[string]any) {
 	keys := domainKeysFromStatusData(data)
 	configuredDomains := configuredDomainSet()
 	newestChange := newestDomainChange(data, keys)
@@ -2623,7 +2735,7 @@ func parseDomainHistory(v any) DomainHistory {
 	return h
 }
 
-func writeSingleDomainCard(w http.ResponseWriter, domain string, h DomainHistory, configuredDomains map[string]struct{}, newestChange time.Time) {
+func writeSingleDomainCard(w io.Writer, domain string, h DomainHistory, configuredDomains map[string]struct{}, newestChange time.Time) {
 	latest := IPEntry{}
 	if len(h.IPs) > 0 {
 		latest = h.IPs[len(h.IPs)-1]
@@ -2753,7 +2865,7 @@ func buildOrphanDomainVisuals(isOrphan bool, domain string) (string, string, str
 	return orphanStyle, orphanLabel, deleteBtn
 }
 
-func writeDomainHistoryRows(w http.ResponseWriter, h DomainHistory) {
+func writeDomainHistoryRows(w io.Writer, h DomainHistory) {
 	for i := len(h.IPs) - 2; i >= 0; i-- {
 		e := h.IPs[i]
 

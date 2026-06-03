@@ -9,7 +9,7 @@ import (
 type apiAttemptFunc func(attempt, maxRetries int) ([]byte, bool, error)
 
 // ============================================================================
-// COMMEN RETRY
+// COMMON RETRY
 // ============================================================================
 func apiWithRetry(
 	ctx context.Context,

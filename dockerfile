@@ -21,7 +21,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 
 COPY *.go ./
-COPY dashboard/* ./dashboard/
+COPY templates/ ./templates/
 COPY lang/*.json ./lang/
 
 RUN --mount=type=cache,target=/go/pkg/mod \
@@ -69,8 +69,9 @@ WORKDIR /app
 RUN adduser -D -H -u 1000 -s /sbin/nologin dyndns
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-COPY --from=builder --chown=dyndns:dyndns /out/dyndns /app/dyndns
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
+COPY --from=builder --chown=dyndns:dyndns /out/dyndns /app/dyndns
+
 
 USER dyndns:dyndns
 

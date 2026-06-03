@@ -186,11 +186,6 @@ func getIPv6FromInterface(ifaceName string) (string, error) {
 				continue
 			}
 
-			ipLog(fmt.Sprintf(
-				"ADDR: %s dad_state=%d preferred_lft=%d valid_lft=%d flags=%#x",
-				ip.String(), addr.DadState, addr.PreferredLifetime, addr.ValidLifetime, addr.Flags,
-			))
-
 			if !isUsableGlobalIPv6(ip) {
 				continue
 			}
@@ -205,7 +200,7 @@ func getIPv6FromInterface(ifaceName string) (string, error) {
 				continue
 			}
 
-			return selectIPv6FromInterface(ifaceName, ip)
+			return selectIPv6FromInterface(ifaceName, ip, addr.DadState, addr.PreferredLifetime, addr.ValidLifetime, addr.Flags)
 		}
 	}
 
@@ -339,8 +334,13 @@ func isDeprecatedWindowsIPv6Addr(addr *windows.IpAdapterUnicastAddress) bool {
 	return addr.DadState == windows.IpDadStateDeprecated
 }
 
-func selectIPv6FromInterface(ifaceName string, ip net.IP) (string, error) {
-	ipLog(fmt.Sprintf(T.IPv6ViaInterface, ifaceName, ip.String()))
+func selectIPv6FromInterface(ifaceName string, ip net.IP, dadState int32, preferredLifetime, validLifetime, flags uint32) (string, error) {
+	ipLog(fmt.Sprintf("%s dad_state=%d preferred_lft=%d valid_lft=%d flags=%#x", fmt.Sprintf(T.IPv6ViaInterface, ifaceName, ip.String()),
+		dadState,
+		preferredLifetime,
+		validLifetime,
+		flags,
+	))
 
 	return ip.String(), nil
 }

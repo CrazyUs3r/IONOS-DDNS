@@ -165,7 +165,16 @@ func handleIonosResponse(
 		return respBody, false, nil
 	}
 
-	retry, handledErr := handleIonosAPIError(ctx, res.StatusCode, method, url, respBody, duration, attempt)
+	retry, handledErr := handleIonosAPIError(
+		ctx,
+		res.StatusCode,
+		method,
+		url,
+		respBody,
+		res.Header,
+		duration,
+		attempt,
+	)
 	return nil, retry, handledErr
 }
 
@@ -195,10 +204,11 @@ func handleIonosAPIError(
 	statusCode int,
 	method, url string,
 	respBody []byte,
+	headers http.Header,
 	duration time.Duration,
 	attempt int,
 ) (bool, error) {
-	apiErr := classifyAPIError(statusCode, method, url, string(respBody))
+	apiErr := classifyAPIErrorWithHeaders(statusCode, method, url, string(respBody), headers)
 	apiMetrics.RecordError(method, statusCode, apiErr, duration)
 
 	if statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden {

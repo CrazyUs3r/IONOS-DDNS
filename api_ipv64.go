@@ -205,7 +205,7 @@ func handleIPv64Response(
 		return nil, retry, handledErr
 	}
 
-	if apiErr := classifyAPIError(res.StatusCode, method, apiURL, string(respBody)); apiErr != nil {
+	if apiErr := classifyAPIErrorWithHeaders(res.StatusCode, method, apiURL, string(respBody), res.Header); apiErr != nil {
 		retry, handledErr := handleIPv64APIError(ctx, apiErr, method, res.StatusCode, duration, attempt)
 		return nil, retry, handledErr
 	}
@@ -237,7 +237,7 @@ func handleIPv64RateLimit(
 ) (bool, error) {
 	apiMetrics.RecordError(method, res.StatusCode, fmt.Errorf("%s", T.ErrRateLimit), duration)
 
-	waitDuration := ipv64RateLimitWait(res.Header.Get("Retry-After"), attempt)
+	waitDuration := ipv64RateLimitWait(res.Header, attempt)
 	lastErr := fmt.Errorf("%s", T.ErrRateLimit)
 
 	if attempt < cfg.MaxAPIRetries-1 {
@@ -251,13 +251,10 @@ func handleIPv64RateLimit(
 	return false, lastErr
 }
 
-func ipv64RateLimitWait(retryAfter string, attempt int) time.Duration {
-	if retryAfter != "" {
-		if seconds, err := strconv.Atoi(retryAfter); err == nil {
-			waitDuration := time.Duration(seconds) * time.Second
-			debugLog("HTTP", "", fmt.Sprintf(T.IPv64RateLimitHeader, seconds))
-			return waitDuration
-		}
+func ipv64RateLimitWait(headers http.Header, attempt int) time.Duration {
+	if d, ok := parseRetryAfter(headers); ok {
+		debugLog("HTTP", "", fmt.Sprintf(T.IPv64RateLimitHeader, int(d.Seconds())))
+		return d
 	}
 
 	baseWait := min(time.Duration(60+attempt*30)*time.Second, 5*time.Minute)
@@ -276,7 +273,10 @@ func handleIPv64APIError(
 	apiMetrics.RecordError(method, statusCode, apiErr, duration)
 
 	if apiErr.Retryable && attempt < cfg.MaxAPIRetries-1 {
-		wait := calculateRetryDelay(attempt, statusCode >= 500)
+		wait := apiErr.RetryAfter
+		if wait <= 0 {
+			wait = calculateRetryDelay(attempt, statusCode >= 500)
+		}
 		debugLog("HTTP", "", fmt.Sprintf(T.IPv64RetriableWait, wait))
 
 		if !sleepOrCancel(ctx, wait) {
@@ -1211,7 +1211,6 @@ func loadIPv64Domains(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
 // DOMAIN MANAGEMENT (Dashboard UI only — not called from update loop)
 // ============================================================================
 
-// addIPv64Domain adds a new subdomain via the IPv64 API (dashboard use only).
 func addIPv64Domain(ctx context.Context, dc *DomainConfig, fqdn string) error {
 	fqdn = normalizeIPv64FQDN(fqdn)
 	if fqdn == "" {
@@ -1237,7 +1236,6 @@ func addIPv64Domain(ctx context.Context, dc *DomainConfig, fqdn string) error {
 	return nil
 }
 
-// deleteIPv64Domain removes a subdomain via the IPv64 API (dashboard use only).
 func deleteIPv64Domain(ctx context.Context, dc *DomainConfig, fqdn string) error {
 	fqdn = normalizeIPv64FQDN(fqdn)
 	if fqdn == "" {

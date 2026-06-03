@@ -493,8 +493,6 @@ func updateHetznerCloudDNS(
 	})
 
 	if existing != nil {
-		// The new DNS API manages records as RRSets. Replacing the RRSet is the
-		// right DynDNS operation for A/AAAA records.
 		endpoint = fmt.Sprintf(
 			"%s/zones/%s/rrsets/%s/%s/actions/set_records",
 			hetznerCloudBaseURL,

@@ -114,7 +114,7 @@ var (
 
 	wsHub = &WSHub{
 		clients:    make(map[*WSClient]bool),
-		broadcast:  make(chan WSMessage, 256),
+		broadcast:  make(chan WSMessage, 1024),
 		register:   make(chan *WSClient, 64),
 		unregister: make(chan *WSClient, 64),
 	}
@@ -382,7 +382,7 @@ const (
 	ionosBaseURL        = "https://api.hosting.ionos.com/dns/v1/zones"
 	cloudflareAPIBase   = "https://api.cloudflare.com/client/v4"
 	ipv64APIBase        = "https://ipv64.net/api.php"
-	ipv64APINIC         = "https://ipv64.net/api.php"
+	ipv64APINIC         = "https://ipv64.net/nic/update?"
 	hetznerDNSBaseURL   = "https://dns.hetzner.com/api/v1"
 	hetznerCloudBaseURL = "https://api.hetzner.cloud/v1"
 )

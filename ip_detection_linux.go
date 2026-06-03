@@ -154,6 +154,13 @@ const (
 	ifaFFlagTentative  = 0x40
 )
 
+type ipv6Candidate struct {
+	ip           net.IP
+	flags        int
+	preferredLft int
+	validLft     int
+}
+
 func getIPv6FromInterface(ifaceName string) (string, error) {
 	debugLog("IP-CHECK", "", fmt.Sprintf("🔍 %s: %s", T.CheckingInterface, ifaceName))
 
@@ -169,14 +176,12 @@ func getIPv6FromInterface(ifaceName string) (string, error) {
 		return "", err
 	}
 
-	var fallbackDeprecated net.IP
+	var fallbackDeprecated *ipv6Candidate
 
 	for _, addr := range addrs {
 		if addr.IPNet == nil || addr.IP == nil {
 			continue
 		}
-
-		ipLog(fmt.Sprintf("ADDR: %s flags=%#x preferred_lft=%d valid_lft=%d", addr.IPNet.String(), addr.Flags, addr.PreferedLft, addr.ValidLft))
 
 		ip := addr.IP
 		if !isUsableGlobalIPv6(ip) {
@@ -190,17 +195,36 @@ func getIPv6FromInterface(ifaceName string) (string, error) {
 
 		if isDeprecatedIPv6Addr(addr) {
 			ipLog(fmt.Sprintf("⚠️ SKIP deprecated/expired IPv6: %s", ip.String()))
+
 			if fallbackDeprecated == nil {
-				fallbackDeprecated = ip
+				fallbackDeprecated = &ipv6Candidate{
+					ip:           ip,
+					flags:        addr.Flags,
+					preferredLft: addr.PreferedLft,
+					validLft:     addr.ValidLft,
+				}
 			}
+
 			continue
 		}
 
-		return selectIPv6FromInterface(ifaceName, ip)
+		return selectIPv6FromInterface(
+			ifaceName,
+			ip,
+			addr.Flags,
+			addr.PreferedLft,
+			addr.ValidLft,
+		)
 	}
 
 	if fallbackDeprecated != nil {
-		return selectIPv6FromInterface(ifaceName, fallbackDeprecated)
+		return selectIPv6FromInterface(
+			ifaceName,
+			fallbackDeprecated.ip,
+			fallbackDeprecated.flags,
+			fallbackDeprecated.preferredLft,
+			fallbackDeprecated.validLft,
+		)
 	}
 
 	debugLog("IP-CHECK", "", "⚠️  "+T.NoIPv6OnInterface)
@@ -248,8 +272,15 @@ func isDeprecatedIPv6Addr(addr netlink.Addr) bool {
 	return addr.Flags&ifaFFlagDeprecated != 0
 }
 
-func selectIPv6FromInterface(ifaceName string, ip net.IP) (string, error) {
-	ipLog(fmt.Sprintf(T.IPv6ViaInterface, ifaceName, ip.String()))
+func selectIPv6FromInterface(ifaceName string, ip net.IP, flags int, preferredLft int, validLft int) (string, error) {
+	ipLog(fmt.Sprintf(
+		T.IPv6ViaInterface+" | flags=%d preferred_lft=%d valid_lft=%d",
+		ifaceName,
+		ip.String(),
+		flags,
+		preferredLft,
+		validLft,
+	))
 
 	return ip.String(), nil
 }
