@@ -308,9 +308,7 @@ func fetchCurrentIPs(ctx context.Context) (ipv4, ipv6 string, err error) {
 
 	if ipMode != IPModeV6 {
 		ipLog("🔎 " + T.CheckingIPv4 + " ...")
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			resV4, errV4 = getPublicIPFromAny(ctx, activeIPv4Endpoints(), IPV4)
 			if errV4 != nil {
 				log(LogContext{
@@ -320,14 +318,12 @@ func fetchCurrentIPs(ctx context.Context) (ipv4, ipv6 string, err error) {
 					Error:   errV4,
 				})
 			}
-		}()
+		})
 	}
 
 	if ipMode != IPModeV4 {
 		ipLog("🔎 " + T.CheckingIPv6 + " ...")
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			resV6, errV6 = getIPv6(ctx, ifaceName)
 			if errV6 != nil {
 				log(LogContext{
@@ -337,7 +333,7 @@ func fetchCurrentIPs(ctx context.Context) (ipv4, ipv6 string, err error) {
 					Error:   errV6,
 				})
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
