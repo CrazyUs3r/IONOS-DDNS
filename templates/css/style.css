@@ -891,7 +891,7 @@ button:disabled {
 .ip-timeline-dot.dot-active {
 	transform: translate(-50%, -50%) scale(1.8);
 	box-shadow: 0 0 0 3px var(--dot-color, #38bdf8),
-	            0 0 14px var(--dot-color, #38bdf8);
+		0 0 14px var(--dot-color, #38bdf8);
 }
 
 /* Tooltip element (JS-created, position:fixed) */
@@ -2018,6 +2018,8 @@ form[action="/setup"] {
 .page-section[data-section="dashboard"],
 .page-section[data-section="metrics"],
 .page-section[data-section="domains"],
+.page-section[data-section="diagnose"],
+.page-section[data-section="backup"],
 .page-section[data-section="users"] {
 	display: block;
 	width: 100%;
@@ -2142,7 +2144,7 @@ form[action="/setup"] {
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
-	
+
 	.chart-tooltip {
 		font-size: 0.78rem;
 		padding: 6px 9px;
@@ -3073,4 +3075,259 @@ form[action="/setup"] {
 
 .provider-status-dot {
 	font-size: 0.7rem;
+}
+
+/* ============================================================================
+   DIAGNOSE / HEALTH CENTER
+   ============================================================================ */
+
+.diag-loading {
+	opacity: 0.65;
+	font-size: 0.9rem;
+	padding: 10px 0;
+}
+
+.diag-status-card {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 16px;
+	border-radius: 12px;
+	margin-bottom: 16px;
+	border: 1px solid var(--border);
+	background: rgba(255, 255, 255, 0.03);
+}
+
+.diag-status-card.diag-ok {
+	background: rgba(74, 222, 128, 0.08);
+	border-color: rgba(74, 222, 128, 0.35);
+}
+
+.diag-status-card.diag-warn {
+	background: rgba(250, 204, 21, 0.08);
+	border-color: rgba(250, 204, 21, 0.35);
+}
+
+.diag-status-card.diag-bad {
+	background: rgba(248, 113, 113, 0.08);
+	border-color: rgba(248, 113, 113, 0.35);
+}
+
+.diag-status-icon {
+	font-size: 2rem;
+	line-height: 1;
+}
+
+.diag-status-title {
+	font-weight: 800;
+	font-size: 1.05rem;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.diag-status-reason {
+	font-size: 0.85rem;
+	opacity: 0.75;
+	margin-top: 2px;
+}
+
+.diag-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+	gap: 12px;
+}
+
+.diag-card {
+	background: rgba(255, 255, 255, 0.03);
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	padding: 14px;
+	min-width: 0;
+}
+
+.diag-card-wide {
+	grid-column: 1 / -1;
+}
+
+.diag-card h3 {
+	margin: 0 0 10px 0;
+	font-size: 0.86rem;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: #94a3b8;
+}
+
+.diag-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 12px;
+	padding: 6px 0;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+	font-size: 0.85rem;
+}
+
+.diag-row:last-child {
+	border-bottom: none;
+}
+
+.diag-row span {
+	opacity: 0.75;
+	min-width: 0;
+}
+
+.diag-row strong,
+.diag-row code,
+.diag-row small {
+	text-align: right;
+	overflow-wrap: anywhere;
+}
+
+.diag-row code {
+	font-family: monospace;
+	color: #93c5fd;
+}
+
+.diag-badge-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 8px;
+}
+
+.diag-badge {
+	display: inline-flex;
+	align-items: center;
+	padding: 4px 8px;
+	border-radius: 999px;
+	font-size: 0.75rem;
+	border: 1px solid var(--border);
+	background: rgba(255, 255, 255, 0.04);
+}
+
+.diag-badge.diag-ok {
+	color: #4ade80;
+	border-color: rgba(74, 222, 128, 0.35);
+	background: rgba(74, 222, 128, 0.08);
+}
+
+.diag-badge.diag-muted {
+	color: #94a3b8;
+}
+
+.diag-warning {
+	padding: 8px 10px;
+	border-radius: 8px;
+	margin-bottom: 6px;
+	background: rgba(250, 204, 21, 0.08);
+	border: 1px solid rgba(250, 204, 21, 0.25);
+	color: #facc15;
+	font-size: 0.85rem;
+}
+
+.diag-success-line {
+	padding: 8px 10px;
+	border-radius: 8px;
+	background: rgba(74, 222, 128, 0.08);
+	border: 1px solid rgba(74, 222, 128, 0.25);
+	color: #4ade80;
+	font-size: 0.85rem;
+}
+
+.diag-muted-text {
+	opacity: 0.5;
+	font-size: 0.85rem;
+}
+
+.diag-error-box {
+	padding: 14px;
+	border-radius: 8px;
+	color: var(--error);
+	background: rgba(248, 113, 113, 0.08);
+	border: 1px solid rgba(248, 113, 113, 0.3);
+}
+
+/* ============================================================================
+   BACKUP & RESTORE
+   ============================================================================ */
+
+.backup-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+	gap: 14px;
+}
+
+.backup-box {
+	background: rgba(255, 255, 255, 0.03);
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	padding: 16px;
+}
+
+.backup-box h3 {
+	margin: 0 0 8px 0;
+	font-size: 0.95rem;
+}
+
+.backup-box p {
+	font-size: 0.85rem;
+	opacity: 0.7;
+	margin: 0 0 12px 0;
+}
+
+.backup-hint {
+	margin-top: 12px;
+	font-size: 0.75rem;
+	color: #facc15;
+	opacity: 0.85;
+}
+
+.backup-warning {
+	padding: 14px;
+	border-radius: 8px;
+	background: rgba(250, 204, 21, 0.08);
+	border: 1px solid rgba(250, 204, 21, 0.3);
+	color: #facc15;
+}
+
+.backup-restore-btn {
+	margin-top: 14px;
+	width: 100%;
+	justify-content: center;
+}
+
+.backup-result {
+	display: none;
+	margin-top: 12px;
+	padding: 10px 12px;
+	border-radius: 8px;
+	background: rgba(255, 255, 255, 0.04);
+	border: 1px solid var(--border);
+	font-size: 0.85rem;
+}
+
+.backup-result-ok {
+	color: #4ade80;
+	background: rgba(74, 222, 128, 0.08);
+	border-color: rgba(74, 222, 128, 0.3);
+}
+
+.backup-result-error {
+	color: #f87171;
+	background: rgba(248, 113, 113, 0.08);
+	border-color: rgba(248, 113, 113, 0.3);
+}
+
+@media (max-width: 768px) {
+	.diag-row {
+		align-items: flex-start;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.diag-row strong,
+	.diag-row code,
+	.diag-row small {
+		text-align: left;
+	}
 }
