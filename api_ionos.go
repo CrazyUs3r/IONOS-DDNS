@@ -296,55 +296,43 @@ func executeIonosDNSUpdate(
 	return err
 }
 
-func handleIonosDNSAPIError(fqdn, recordType, newIP string, apiErrPtr *APIError, err error) error {
-	switch apiErrPtr.StatusCode {
-	case 401, 403:
-		log(LogContext{
-			Level:   LogError,
-			Action:  ActionError,
-			Domain:  fqdn,
-			Message: fmt.Sprintf("%s: %s!", recordType, T.APIErrorForbidden),
-		})
+func handleIonosDNSAPIError(fqdn, recordType, newIP string, apiErr *APIError, err error) error {
+	logIonosDNSAPIError(fqdn, recordType, newIP, apiErr)
+
+	switch apiErr.StatusCode {
+	case http.StatusUnauthorized, http.StatusForbidden:
 		return fmt.Errorf("%s: %w", T.ErrAuthFailed, err)
-
-	case 404:
-		log(LogContext{
-			Level:   LogError,
-			Action:  ActionZone,
-			Domain:  fqdn,
-			Message: fmt.Sprintf("%s: %s!", recordType, T.APIErrorNotFound),
-		})
+	case http.StatusNotFound:
 		return fmt.Errorf("%s: %w", T.ErrResourceNotFound, err)
-
-	case 422:
-		log(LogContext{
-			Level:   LogError,
-			Action:  ActionError,
-			Domain:  fqdn,
-			Message: fmt.Sprintf("%s: %s (IP: %s)", recordType, T.APIErrorUnprocessableEntity, newIP),
-		})
+	case http.StatusUnprocessableEntity:
 		return fmt.Errorf("%s: %w", T.ErrValidationFailed, err)
-
-	case 429:
-		log(LogContext{
-			Level:   LogWarn,
-			Action:  ActionRetry,
-			Domain:  fqdn,
-			Message: fmt.Sprintf("⏳ %s: %s...", recordType, T.APIErrorRateLimitExceeded),
-		})
-		return err
-
 	default:
-		log(LogContext{
-			Level:   LogError,
-			Action:  ActionError,
-			Domain:  fqdn,
-			Message: fmt.Sprintf("%s: API-Fehler %d", recordType, apiErrPtr.StatusCode),
-		})
-
 		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf(T.IonosErrDetail, err, err))
 		return err
 	}
+}
+
+func logIonosDNSAPIError(fqdn, recordType, newIP string, apiErr *APIError) {
+	level := LogError
+	action := ActionError
+	message := fmt.Sprintf("%s: API-Fehler %d - %s", recordType, apiErr.StatusCode, apiErr.Message)
+
+	switch apiErr.StatusCode {
+	case http.StatusNotFound:
+		action = ActionZone
+	case http.StatusTooManyRequests:
+		level = LogWarn
+		action = ActionRetry
+	case http.StatusUnprocessableEntity:
+		message = fmt.Sprintf("%s: %s (IP: %s)", recordType, apiErr.Message, newIP)
+	}
+
+	log(LogContext{
+		Level:   level,
+		Action:  action,
+		Domain:  fqdn,
+		Message: message,
+	})
 }
 
 // ============================================================================
