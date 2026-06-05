@@ -57,6 +57,12 @@ func cloudflareAPIAttempt(
 		return nil, retry, handledErr
 	}
 
+	defer func() {
+		if err := res.Body.Close(); err != nil {
+			debugLog("HTTP", "", fmt.Sprintf(T.ErrBodyClose+": %v", err))
+		}
+	}()
+
 	return handleCloudflareResponse(ctx, res, method, fullURL, duration, attempt)
 }
 
@@ -145,7 +151,7 @@ func handleCloudflareResponse(
 	duration time.Duration,
 	attempt int,
 ) ([]byte, bool, error) {
-	respBody, readErr := readAndCloseResponseBody(res)
+	respBody, readErr := io.ReadAll(res.Body)
 
 	if readErr != nil {
 		retry, handledErr := handleCloudflareReadError(ctx, res, method, readErr, duration, attempt)

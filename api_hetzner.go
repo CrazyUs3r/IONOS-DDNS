@@ -89,6 +89,12 @@ func hetznerAPIAttempt(
 		return nil, shouldRetry, retryErr
 	}
 
+	defer func() {
+		if err := res.Body.Close(); err != nil {
+			debugLog("HTTP", "", fmt.Sprintf(T.ErrBodyClose+": %v", err))
+		}
+	}()
+
 	return handleHetznerResponse(ctx, providerName, res, method, endpoint, duration, attempt)
 }
 

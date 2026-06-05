@@ -76,14 +76,8 @@ func findProviderConfigForCleanup(provider ProviderType) *DomainConfig {
 // COMMON HTTP BODY / RETRY HANDLING
 // ============================================================================
 
-func readAndCloseResponseBody(res *http.Response) ([]byte, error) {
-	body, readErr := io.ReadAll(res.Body)
-
-	if closeErr := res.Body.Close(); closeErr != nil {
-		debugLog("HTTP", "", fmt.Sprintf(T.ErrBodyClose+": %v", closeErr))
-	}
-
-	return body, readErr
+func readResponseBody(res *http.Response) ([]byte, error) {
+	return io.ReadAll(res.Body)
 }
 
 func providerRetryWait(apiErr *APIError, attempt, statusCode int) time.Duration {
@@ -144,7 +138,7 @@ func handleProviderHTTPResponse(
 	duration time.Duration,
 	attempt int,
 ) ([]byte, bool, error) {
-	respBody, readErr := readAndCloseResponseBody(res)
+	respBody, readErr := readResponseBody(res)
 	if readErr != nil {
 		retry, handledErr := handleProviderReadError(ctx, providerName, method, res.StatusCode, readErr, duration, attempt)
 		return nil, retry, handledErr

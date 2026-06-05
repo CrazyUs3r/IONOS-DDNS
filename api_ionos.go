@@ -61,6 +61,12 @@ func ionosAPIAttempt(
 		return nil, retry, handledErr
 	}
 
+	defer func() {
+		if err := res.Body.Close(); err != nil {
+			debugLog("HTTP", "", fmt.Sprintf(T.ErrBodyClose+": %v", err))
+		}
+	}()
+
 	debugLog("HTTP", "", fmt.Sprintf("✅ Status: %d | %s: %v", res.StatusCode, T.AvgLatency, duration))
 	return handleIonosResponse(ctx, res, method, url, duration, attempt)
 }

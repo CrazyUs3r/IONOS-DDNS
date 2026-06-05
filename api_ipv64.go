@@ -127,6 +127,12 @@ func ipv64APIAttempt(
 		return nil, retry, handledErr
 	}
 
+	defer func() {
+		if err := res.Body.Close(); err != nil {
+			debugLog("HTTP", "", fmt.Sprintf(T.ErrBodyClose+": %v", err))
+		}
+	}()
+
 	return handleIPv64Response(ctx, res, method, apiURL, duration, attempt)
 }
 
@@ -168,7 +174,7 @@ func handleIPv64Response(
 	duration time.Duration,
 	attempt int,
 ) ([]byte, bool, error) {
-	respBody, readErr := readAndCloseResponseBody(res)
+	respBody, readErr := io.ReadAll(res.Body)
 
 	if readErr != nil {
 		retry, handledErr := handleIPv64ReadError(method, res.StatusCode, readErr, duration)

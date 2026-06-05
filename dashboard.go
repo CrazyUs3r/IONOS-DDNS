@@ -3532,7 +3532,11 @@ func parseBackupRestoreRequest(r *http.Request) (backupRestoreRequest, int, erro
 	if err != nil {
 		return backupRestoreRequest{}, http.StatusBadRequest, fmt.Errorf("%s", t(T.BackupFileMissing, "backup file missing"))
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			debugLog("DASHBOARD", "", fmt.Sprintf(T.ErrBodyClose+": %v", err))
+		}
+	}()
 
 	backup, err := decodeDashboardBackup(file)
 	if err != nil {
