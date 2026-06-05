@@ -1502,21 +1502,24 @@ function renderUsersList(users) {
 	}
 
 	const roleIcon = { admin: '👑', editor: '✏️', viewer: '👁️' };
-	const roleLabel = { admin: tr('role_admin', 'Admin'), editor: tr('role_editor', 'Editor'), viewer: tr('role_viewer', 'Viewer') };
-
+	const roleOptions = (currentRole) => `
+		<option value="viewer" ${currentRole === 'viewer' ? 'selected' : ''}>👁️ ${tr('role_viewer', 'Viewer')}</option>
+		<option value="editor" ${currentRole === 'editor' ? 'selected' : ''}>✏️ ${tr('role_editor', 'Editor')}</option>
+		<option value="admin" ${currentRole === 'admin' ? 'selected' : ''}>👑 ${tr('role_admin', 'Admin')}</option>
+	`;
 	container.innerHTML = users.map(u => `
 		<div class="domain-pill">
 			<div class="user-pill-info">
 				<span class="user-pill-username">${escHtml(u.username)}</span>
 				<span class="provider-badge user-role-badge">
-					${roleIcon[u.role] || '?'} ${roleLabel[u.role] || u.role}
+					${roleIcon[u.role] || '?'} ${roleOptions[u.role] || u.role}
 				</span>
 				${u.last_login ? `<span class="user-last-login">Letzter Login: ${new Date(u.last_login).toLocaleString()}</span>` : ''}
 			</div>
 			<div class="domain-pill-actions">
-				<select onchange="changeUserRole('${u.id}', this.value)" class="user-role-select">
-					...
-				</select>
+					<select onchange="changeUserRole('${u.id}', this.value)" class="user-role-select">
+						${roleOptions(u.role)}
+					</select>
 				<button onclick="deleteUser('${u.id}', '${escHtml(u.username)}')" class="user-delete-btn">✕</button>
 			</div>
 		</div>`
