@@ -10,7 +10,7 @@ const reconnectDelayMax = 10000;
 // ============================================================================
 // SIDEBAR NAVIGATION
 // ============================================================================
-const PAGES = ['dashboard', 'domains', 'metrics', 'logs', 'debug', 'settings', 'users'];
+const PAGES = ['dashboard', 'domains', 'metrics', 'diagnose', 'logs', 'debug', 'backup', 'settings', 'users'];
 
 let currentPage = 'dashboard';
 
@@ -37,8 +37,10 @@ function navTo(page) {
 		dashboard: tr('nav_dashboard', '🌐 Dashboard'),
 		domains: tr('nav_domains', '🌐 Domains'),
 		metrics: tr('nav_metrics', '📊 Metrics'),
+		diagnose: tr('nav_diagnose', '🩺 Diagnose'),
 		logs: tr('nav_logs', '🧾 Logs'),
 		debug: tr('nav_debug', '🐞 Debug'),
+		backup: tr('nav_backup', '💾 Backup & Restore'),
 		settings: tr('nav_settings', '⚙️ Settings'),
 		users: tr('nav_users', '👥 User Management'),
 	};
@@ -59,6 +61,10 @@ function navTo(page) {
 
 	if (page === 'domains') {
 		refreshDashboardDomains();
+	}
+
+	if (page === 'diagnose') {
+		refreshDiagnosis();
 	}
 
 	try { localStorage.setItem('nav-page', page); } catch { }
@@ -1780,12 +1786,10 @@ function _hideDotTooltip(dotEl, delay) {
 }
 
 function _attachDotEvents(dotEl, text) {
-	// Desktop hover
 	dotEl.addEventListener('mouseenter', () => _showDotTooltip(dotEl, text));
 	dotEl.addEventListener('mouseleave', () => _hideDotTooltip(dotEl, 0));
-	// Touch tap – first tap shows, second tap or 3 s timeout hides
 	dotEl.addEventListener('touchstart', e => {
-		e.stopPropagation(); // don't trigger <details> toggle
+		e.stopPropagation();
 		const tip = _getDotTooltip();
 		if (tip.classList.contains('visible') && dotEl.classList.contains('dot-active')) {
 			_hideDotTooltip(dotEl, 0);
@@ -1886,9 +1890,10 @@ function initKeyboardShortcuts() {
 			case 's': navTo('settings'); break;
 			case 'd': navTo('dashboard'); break;
 			case 'm': navTo('metrics'); break;
+			case 'i': navTo('diagnose'); break;
 			case 'l': navTo('logs'); break;
 			case '?':
-				showToast('⌨️ R=Update  S=Settings  D=Dashboard  M=Metrics  L=Logs', 'info');
+				showToast('⌨️ R=Update  S=Settings  D=Dashboard  M=Metrics  L=Logs I=Diagnose', 'info');
 				break;
 		}
 	});
@@ -1940,4 +1945,263 @@ function initChangedBadges() {
 			badge.classList.add('changed-badge--hidden');
 		}
 	});
+}
+
+// ============================================================================
+// DIAGNOSE / HEALTH CENTER
+// ============================================================================
+
+async function refreshDiagnosis() {
+	const box = document.getElementById('diagnose-content');
+	if (!box) return;
+
+	box.innerHTML = '<div class="diag-loading">⏳ ' + escHtml(tr('diagnose_loading', 'Loading diagnosis...')) + '</div>';
+
+	try {
+		const r = await fetch('/api/diagnose');
+		const data = await r.json();
+
+		if (!r.ok) {
+			box.innerHTML = '<div class="diag-error-box">❌ ' + escHtml(data.error || tr('diagnose_load_failed', 'Diagnosis failed')) + '</div>';
+			return;
+		}
+
+		renderDiagnosis(data);
+	} catch (err) {
+		box.innerHTML = '<div class="diag-error-box">❌ ' + escHtml(tr('diagnose_connection_failed', 'Connection failed')) + '</div>';
+	}
+}
+
+function diagStatusLabel(status) {
+	const key = 'diagnose_status_' + String(status || 'unknown').toLowerCase();
+	const fallback = status || 'unknown';
+	return tr(key, fallback);
+}
+
+function diagStatusIcon(status) {
+	if (status === 'healthy') return '✅';
+	if (status === 'degraded') return '⚠️';
+	if (status === 'starting') return '⏳';
+	return '❌';
+}
+
+function diagStatusClass(status) {
+	if (status === 'healthy') return 'diag-ok';
+	if (status === 'degraded' || status === 'starting') return 'diag-warn';
+	return 'diag-bad';
+}
+
+function yesNo(v) {
+	return v ? tr('diagnose_yes', 'Yes') : tr('diagnose_no', 'No');
+}
+
+function renderBoolBadge(label, value) {
+	return '<span class="diag-badge ' + (value ? 'diag-ok' : 'diag-muted') + '">' +
+		escHtml(label) + ': ' + yesNo(value) +
+		'</span>';
+}
+
+function renderDiagnosis(d) {
+	const box = document.getElementById('diagnose-content');
+	if (!box) return;
+
+	const providerRows = Object.entries(d.provider_counts || {})
+		.map(([k, v]) => '<div class="diag-row"><span>' + escHtml(k) + '</span><strong>' + escHtml(v) + '</strong></div>')
+		.join('') || '<div class="diag-muted-text">' + escHtml(tr('diagnose_no_providers', 'No providers found')) + '</div>';
+
+	const warningRows = (d.warnings || [])
+		.map(w => '<div class="diag-warning">⚠️ ' + escHtml(w) + '</div>')
+		.join('') || '<div class="diag-success-line">✅ ' + escHtml(tr('diagnose_no_config_warnings', 'No config warnings')) + '</div>';
+
+	const files = (d.files || [])
+		.map(f => {
+			const ok = f.exists;
+			const fileMeta = ok
+				? escHtml((f.size || 0) + ' ' + tr('diagnose_bytes', 'bytes') + ' · ' + (f.modified || ''))
+				: escHtml(f.error || tr('diagnose_file_missing', 'missing'));
+
+			return '<div class="diag-row">' +
+				'<span>' + (ok ? '✅ ' : '❌ ') + escHtml(f.name) + '</span>' +
+				'<small>' + fileMeta + '</small>' +
+				'</div>';
+		})
+		.join('');
+
+	const notifiers = Object.entries(d.notifiers || {})
+		.map(([k, v]) => renderBoolBadge(k, v))
+		.join(' ');
+
+	const metrics = d.api_metrics || {};
+	const cfg = d.config || {};
+
+	box.innerHTML = `
+		<div class="diag-status-card ${diagStatusClass(d.status)}">
+			<div class="diag-status-icon">${diagStatusIcon(d.status)}</div>
+			<div>
+				<div class="diag-status-title">${escHtml(diagStatusLabel(d.status))}</div>
+				<div class="diag-status-reason">${escHtml(d.reason || '')}</div>
+			</div>
+		</div>
+
+		<div class="diag-grid">
+			<div class="diag-card">
+				<h3>${escHtml(tr('diagnose_system_title', 'System'))}</h3>
+				<div class="diag-row"><span>${escHtml(tr('diagnose_uptime', 'Uptime'))}</span><strong>${escHtml(d.uptime || '-')}</strong></div>
+				<div class="diag-row"><span>${escHtml(tr('diagnose_scheduler_ran', 'Scheduler ran'))}</span><strong>${yesNo(d.scheduler_ran_once)}</strong></div>
+				<div class="diag-row"><span>${escHtml(tr('diagnose_last_run_ok', 'Last run OK'))}</span><strong>${yesNo(d.last_ok)}</strong></div>
+				<div class="diag-row"><span>${escHtml(tr('diagnose_update_running', 'Update running'))}</span><strong>${yesNo(d.update_in_progress)}</strong></div>
+				<div class="diag-row"><span>${escHtml(tr('diagnose_active_updates', 'Active updates'))}</span><strong>${escHtml(d.active_updates ?? 0)}</strong></div>
+			</div>
+
+			<div class="diag-card">
+				<h3>${escHtml(tr('diagnose_ip_dns_title', 'IP / DNS'))}</h3>
+				<div class="diag-row"><span>${escHtml(tr('diagnose_last_ipv4', 'Last IPv4'))}</span><code>${escHtml(d.last_known_ipv4 || '-')}</code></div>
+				<div class="diag-row"><span>${escHtml(tr('diagnose_last_ipv6', 'Last IPv6'))}</span><code>${escHtml(d.last_known_ipv6 || '-')}</code></div>
+				<div class="diag-row"><span>${escHtml(tr('diagnose_last_domain_change', 'Last domain change'))}</span><strong>${escHtml(d.last_domain_change || '-')}</strong></div>
+				<div class="diag-row"><span>${escHtml(tr('diagnose_configured_domains', 'Domains in status'))}</span><strong>${escHtml(d.configured_domains ?? 0)}</strong></div>
+			</div>
+
+			<div class="diag-card">
+				<h3>${escHtml(tr('diagnose_api_metrics_title', 'API metrics'))}</h3>
+				<div class="diag-row"><span>${escHtml(tr('diagnose_total_requests', 'Total requests'))}</span><strong>${escHtml(metrics.total_requests ?? 0)}</strong></div>
+				<div class="diag-row"><span>${escHtml(tr('diagnose_success_rate', 'Success rate'))}</span><strong>${escHtml(metrics.success_rate || '-')}</strong></div>
+				<div class="diag-row"><span>${escHtml(tr('diagnose_average_latency', 'Average latency'))}</span><strong>${escHtml(metrics.avg_latency || '-')}</strong></div>
+				<div class="diag-row"><span>${escHtml(tr('diagnose_log_errors', 'Log errors'))}</span><strong>${escHtml(d.log_errors ?? 0)}</strong></div>
+				<div class="diag-row"><span>${escHtml(tr('diagnose_log_warnings', 'Log warnings'))}</span><strong>${escHtml(d.log_warnings ?? 0)}</strong></div>
+			</div>
+
+			<div class="diag-card">
+				<h3>${escHtml(tr('diagnose_config_title', 'Config'))}</h3>
+				<div class="diag-row"><span>${escHtml(tr('diagnose_ip_mode', 'IP mode'))}</span><strong>${escHtml(cfg.ip_mode || '-')}</strong></div>
+				<div class="diag-row"><span>${escHtml(tr('diagnose_interval', 'Interval'))}</span><strong>${escHtml(cfg.interval || '-')}s</strong></div>
+				<div class="diag-row"><span>${escHtml(tr('diagnose_ipv4_endpoints', 'IPv4 endpoints'))}</span><strong>${escHtml(cfg.ipv4_endpoints ?? 0)}</strong></div>
+				<div class="diag-row"><span>${escHtml(tr('diagnose_ipv6_endpoints', 'IPv6 endpoints'))}</span><strong>${escHtml(cfg.ipv6_endpoints ?? 0)}</strong></div>
+				<div class="diag-badge-row">
+					${renderBoolBadge('Dry Run', cfg.dry_run)}
+					${renderBoolBadge('Debug', cfg.debug)}
+					${renderBoolBadge('HTTP Raw', cfg.debug_http_raw)}
+				</div>
+			</div>
+
+			<div class="diag-card">
+				<h3>${escHtml(tr('diagnose_provider_title', 'Provider'))}</h3>
+				${providerRows}
+			</div>
+
+			<div class="diag-card">
+				<h3>${escHtml(tr('diagnose_notifier_title', 'Notifier'))}</h3>
+				<div class="diag-badge-row">${notifiers || '<span class="diag-muted-text">' + escHtml(tr('diagnose_no_notifiers', 'No notifiers')) + '</span>'}</div>
+			</div>
+
+			<div class="diag-card diag-card-wide">
+				<h3>${escHtml(tr('diagnose_warnings_title', 'Warnings'))}</h3>
+				${warningRows}
+			</div>
+
+			<div class="diag-card diag-card-wide">
+				<h3>${escHtml(tr('diagnose_files_title', 'Files'))}</h3>
+				${files}
+			</div>
+		</div>
+	`;
+}
+
+// ============================================================================
+// BACKUP & RESTORE
+// ============================================================================
+
+function downloadFullBackup() {
+	fetch('/api/backup/download')
+		.then(async r => {
+			if (!r.ok) throw new Error(await r.text());
+			return r.blob();
+		})
+		.then(blob => {
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = 'dyndns-backup-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.json';
+			document.body.appendChild(a);
+			a.click();
+			document.body.removeChild(a);
+			URL.revokeObjectURL(url);
+			showToast(tr('backup_download_success', '✅ Backup downloaded'), 'success');
+		})
+		.catch(err => {
+			console.error(err);
+			showToast(tr('backup_download_failed', '❌ Backup failed'), 'error');
+		});
+}
+
+function restoreFullBackup() {
+	const fileInput = document.getElementById('backup-file');
+	const result = document.getElementById('backup-result');
+
+	if (!fileInput || !fileInput.files || !fileInput.files[0]) {
+		showToast(tr('backup_select_file', '❌ Please select a backup file'), 'error');
+		return;
+	}
+
+	const restoreConfig = document.getElementById('restore-config')?.checked;
+	const restoreStatus = document.getElementById('restore-status')?.checked;
+	const restoreUsers = document.getElementById('restore-users')?.checked;
+
+	if (!restoreConfig && !restoreStatus && !restoreUsers) {
+		showToast(tr('backup_select_area', '❌ Please select at least one area'), 'error');
+		return;
+	}
+
+	const msg = [
+		tr('backup_confirm_title', 'Really restore backup?'),
+		'',
+		restoreConfig ? tr('backup_confirm_config', '• Config will be overwritten') : '',
+		restoreStatus ? tr('backup_confirm_status', '• Domain status will be overwritten') : '',
+		restoreUsers ? tr('backup_confirm_users', '• Users will be overwritten') : '',
+		'',
+		tr('backup_confirm_hint', 'This action may replace existing data.')
+	].filter(Boolean).join('\n');
+
+	if (!confirm(msg)) return;
+
+	const fd = new FormData();
+	fd.append('backup', fileInput.files[0]);
+	fd.append('config', restoreConfig ? '1' : '0');
+	fd.append('status', restoreStatus ? '1' : '0');
+	fd.append('users', restoreUsers ? '1' : '0');
+
+	if (result) {
+		result.style.display = 'block';
+		result.className = 'backup-result';
+		result.textContent = tr('backup_restore_running', '⏳ Restore running...');
+	}
+
+	fetch('/api/backup/restore', {
+		method: 'POST',
+		body: fd
+	})
+		.then(async r => {
+			const data = await r.json().catch(() => ({}));
+			if (!r.ok) throw new Error(data.error || tr('backup_restore_failed', '❌ Restore failed'));
+			return data;
+		})
+		.then(data => {
+			const restored = (data.restored || []).join(', ');
+			const successText = trf('backup_restore_success_format', { restored }, '✅ Restored: {restored}');
+
+			if (result) {
+				result.className = 'backup-result backup-result-ok';
+				result.textContent = successText;
+			}
+
+			showToast(successText, 'success');
+
+			setTimeout(() => location.reload(), 1200);
+		})
+		.catch(err => {
+			if (result) {
+				result.className = 'backup-result backup-result-error';
+				result.textContent = '❌ ' + err.message;
+			}
+			showToast(tr('backup_restore_failed', '❌ Restore failed'), 'error');
+		});
 }
