@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -124,7 +123,7 @@ func ipv64APIAttempt(
 	duration := time.Since(start)
 
 	if err != nil {
-		retry, handledErr := handleIPv64NetworkError(ctx, method, err, duration, attempt)
+		retry, handledErr := handleProviderNetworkError(ctx, "IPv64", method, err, duration, attempt, false)
 		return nil, retry, handledErr
 	}
 
@@ -162,25 +161,6 @@ func buildIPv64Request(
 	return req, nil
 }
 
-func handleIPv64NetworkError(
-	ctx context.Context,
-	method string,
-	err error,
-	duration time.Duration,
-	attempt int,
-) (bool, error) {
-	debugLog("HTTP", "", fmt.Sprintf("❌ %s: %v", T.NetworkError, err))
-	apiMetrics.RecordError(method, 0, err, duration)
-
-	lastErr := fmt.Errorf("%s: %w", T.ErrNetworkError, err)
-
-	if !sleepOrCancel(ctx, calculateRetryDelay(attempt, false)) {
-		return false, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
-	}
-
-	return true, lastErr
-}
-
 func handleIPv64Response(
 	ctx context.Context,
 	res *http.Response,
@@ -188,12 +168,7 @@ func handleIPv64Response(
 	duration time.Duration,
 	attempt int,
 ) ([]byte, bool, error) {
-	respBody, readErr := io.ReadAll(res.Body)
-	closeErr := res.Body.Close()
-
-	if closeErr != nil {
-		debugLog("HTTP", "", fmt.Sprintf(T.ErrBodyClose+": %v", closeErr))
-	}
+	respBody, readErr := readAndCloseResponseBody(res)
 
 	if readErr != nil {
 		retry, handledErr := handleIPv64ReadError(method, res.StatusCode, readErr, duration)
@@ -345,16 +320,12 @@ type ipv64FileCacheRecordMeta struct {
 	Deactivated      int    `json:"deactivated,omitempty"`
 }
 
-func getIPv64CachePath() string {
-	return filepath.Join(cfg.LogDir, "ipv64_cache.json")
-}
-
 func saveIPv64CacheToFile(zones []Zone, recordCache *ZoneRecordCache) error {
-	return saveDNSProviderCacheToFile("IPv64", getIPv64CachePath(), zones, recordCache)
+	return saveProviderCacheToFile("IPv64", "ipv64_cache.json", zones, recordCache)
 }
 
 func loadIPv64CacheFromFile() ([]Zone, *ZoneRecordCache, error) {
-	return loadDNSProviderCacheFromFile("IPv64", getIPv64CachePath())
+	return loadProviderCacheFromFile("IPv64", "ipv64_cache.json")
 }
 
 func saveIPv64Cache() error {
@@ -1103,7 +1074,7 @@ func shouldCleanupIPv64Record(
 	rec IPv64Record,
 	configuredFQDNs map[string]struct{},
 ) (string, bool) {
-	if rec.Type != RecordTypeA && rec.Type != RecordTypeAAAA {
+	if !isAddressRecord(rec.Type) {
 		return "", false
 	}
 

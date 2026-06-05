@@ -598,7 +598,7 @@ func metricsBroadcasterLoop() {
 }
 
 func handleMetricsReset(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
+	if r.Method != MethodPOST {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}

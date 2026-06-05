@@ -681,65 +681,120 @@ func currentSystemConfig() safeSystemConfig {
 
 func dashboardI18NJSON() string {
 	m := map[string]string{
-		"theme":                    t(T.ThemeLabelJS, "Theme"),
-		"no_ip_to_copy":            t(T.NoIPToCopyJS, "❌ No IP to copy"),
-		"copied":                   t(T.CopiedJS, "✓ Copied: "),
-		"copy_failed":              t(T.CopyFailedJS, "❌ Copy failed"),
-		"copy_error":               t(T.CopyFailedJS, "❌ Copy failed"),
-		"update_starting":          t(T.UpdateStartingJS, "⏳ Starting update..."),
-		"update_started":           t(T.UpdateStartedJS, "✅ Update started"),
-		"connection_error":         t(T.ConnectionErrorJS, "❌ Connection error"),
-		"export_started":           t(T.ExportStartedJS, "✓ Export started"),
-		"export_failed":            t(T.ExportFailedJS, "Export failed"),
-		"fqdn_missing":             t(T.FQDNMissingJS, "FQDN missing"),
-		"domain_updated":           t(T.DomainUpdatedJS, "✓ {domain} updated"),
-		"delete_domain_confirm":    t(T.DeleteDomainConfirmJS, `Domain "{domain}" remove from status?`),
-		"domain_removed":           t(T.DomainRemovedJS, "🗑️ {domain} removed"),
-		"delete_failed":            t(T.DeleteFailedJS, "Deletion failed"),
-		"remove_btn":               t(T.RemoveBtn, "🗑️ Remove"),
-		"save_config_confirm":      t(T.SaveConfigConfirmJS, "Save all settings to config.json?"),
-		"saved_reload":             t(T.SavedReloadJS, "✅ Saved! Reloading..."),
-		"error_prefix":             t(T.ErrorPrefixJS, "❌ Error: "),
-		"loading_saving":           t(T.LoadingSavingJS, "⏳ Saving configuration..."),
-		"loading_slow":             t(T.LoadingSlowJS, "⚠️ Taking longer than expected..."),
-		"reset_metrics_confirm":    t(T.ResetMetricsConfirmJS, "Clear all metrics?"),
-		"metrics_reset_ok":         t(T.MetricsResetOKJS, "✅ Metrics reset"),
-		"metrics_reset_failed":     t(T.MetricsResetFailedJS, "❌ Reset failed"),
-		"token_saved":              t(T.TokenSavedJS, "✅ Token saved"),
-		"token_deleted":            t(T.TokenDeletedJS, "🗑️ Token deleted"),
-		"token_saved_masked":       t(T.TokenSavedMaskedJS, "●●●●●● (saved)"),
-		"token_enter":              t(T.TokenEnterJS, "Enter token..."),
-		"cleared":                  t(T.ClearedJS, "Cleared."),
-		"no_log_entries":           t(T.NoLogEntries, "No log entries visible"),
-		"user_load_failed":         t(T.UserLoadFailedJS, "Failed to load"),
-		"no_users_found":           t(T.NoUsersFoundJS, "No users found."),
-		"user_created":             t(T.UserCreatedJS, "User created"),
-		"user_deleted":             t(T.UserDeletedJS, "User deleted"),
-		"role_changed":             t(T.RoleChangedJS, "Role changed"),
-		"role_admin":               t(T.RoleAdminJS, "Admin"),
-		"role_editor":              t(T.RoleEditorJS, "Editor"),
-		"role_viewer":              t(T.RoleViewerJS, "Viewer"),
-		"generic_error":            t(T.GenericErrorJS, "Error"),
-		"auth_user_min":            t(T.AuthUserMinJS, "Username min. 3 characters"),
-		"auth_pass_min":            t(T.AuthPassMinJS, "Password min. 8 characters"),
-		"edit_domain_cancelled":    t(T.EditDomainCancelledJS, "Edit cancelled"),
-		"edit_domain_saved":        t(T.EditDomainSavedJS, "Changes saved"),
-		"settings_add_btn":         t(T.SettingsAddBtnJS, "➕ Add to list"),
-		"notify_test_success":      t(T.NotifyTestSuccess, "✅ Test message sent successfully!"),
-		"notify_test_unauthorized": t(T.NotifyTestUnauthorized, "❌ Unauthorized (check token)"),
-		"notify_test_error":        t(T.NotifyTestError, "❌ Error while sending"),
-		"notify_test_conn_error":   t(T.NotifyTestConnError, "❌ Connection error to server"),
-		"notify_btn_sending":       t(T.NotifyBtnSending, "⏳ Sende..."),
-		"notify_btn_test":          t(T.NotifyBtnTest, "🧪 Test-Nachricht senden"),
-		"notify_no_notifier":       t(T.NotifyNoNotifier, "⚠️ Keine aktiven Notifier konfiguriert."),
-		"notify_stat_success":      t(T.NotifyStatSuccess, "erfolgreich"),
-		"nav_dashboard":            t(T.NavDashboardJS, "🌐 Dashboard"),
-		"nav_domains":              t(T.NavDomainsJS, "🌐 Domains"),
-		"nav_metrics":              t(T.NavMetricsJS, "📊 Metrics"),
-		"nav_logs":                 t(T.NavLogsJS, "🧾 Logs"),
-		"nav_debug":                t(T.NavDebugJS, "🐞 Debug"),
-		"nav_settings":             t(T.NavSettingsJS, "⚙️ Settings"),
-		"nav_users":                t(T.SettingsUserManagement, "👥 User Management"),
+		"theme":                         t(T.ThemeLabelJS, "Theme"),
+		"no_ip_to_copy":                 t(T.NoIPToCopyJS, "❌ No IP to copy"),
+		"copied":                        t(T.CopiedJS, "✓ Copied: "),
+		"copy_failed":                   t(T.CopyFailedJS, "❌ Copy failed"),
+		"copy_error":                    t(T.CopyFailedJS, "❌ Copy failed"),
+		"update_starting":               t(T.UpdateStartingJS, "⏳ Starting update..."),
+		"update_started":                t(T.UpdateStartedJS, "✅ Update started"),
+		"connection_error":              t(T.ConnectionErrorJS, "❌ Connection error"),
+		"export_started":                t(T.ExportStartedJS, "✓ Export started"),
+		"export_failed":                 t(T.ExportFailedJS, "Export failed"),
+		"fqdn_missing":                  t(T.FQDNMissingJS, "FQDN missing"),
+		"domain_updated":                t(T.DomainUpdatedJS, "✓ {domain} updated"),
+		"delete_domain_confirm":         t(T.DeleteDomainConfirmJS, `Domain "{domain}" remove from status?`),
+		"domain_removed":                t(T.DomainRemovedJS, "🗑️ {domain} removed"),
+		"delete_failed":                 t(T.DeleteFailedJS, "Deletion failed"),
+		"remove_btn":                    t(T.RemoveBtn, "🗑️ Remove"),
+		"save_config_confirm":           t(T.SaveConfigConfirmJS, "Save all settings to config.json?"),
+		"saved_reload":                  t(T.SavedReloadJS, "✅ Saved! Reloading..."),
+		"error_prefix":                  t(T.ErrorPrefixJS, "❌ Error: "),
+		"loading_saving":                t(T.LoadingSavingJS, "⏳ Saving configuration..."),
+		"loading_slow":                  t(T.LoadingSlowJS, "⚠️ Taking longer than expected..."),
+		"reset_metrics_confirm":         t(T.ResetMetricsConfirmJS, "Clear all metrics?"),
+		"metrics_reset_ok":              t(T.MetricsResetOKJS, "✅ Metrics reset"),
+		"metrics_reset_failed":          t(T.MetricsResetFailedJS, "❌ Reset failed"),
+		"token_saved":                   t(T.TokenSavedJS, "✅ Token saved"),
+		"token_deleted":                 t(T.TokenDeletedJS, "🗑️ Token deleted"),
+		"token_saved_masked":            t(T.TokenSavedMaskedJS, "●●●●●● (saved)"),
+		"token_enter":                   t(T.TokenEnterJS, "Enter token..."),
+		"cleared":                       t(T.ClearedJS, "Cleared."),
+		"no_log_entries":                t(T.NoLogEntries, "No log entries visible"),
+		"user_load_failed":              t(T.UserLoadFailedJS, "Failed to load"),
+		"no_users_found":                t(T.NoUsersFoundJS, "No users found."),
+		"user_created":                  t(T.UserCreatedJS, "User created"),
+		"user_deleted":                  t(T.UserDeletedJS, "User deleted"),
+		"role_changed":                  t(T.RoleChangedJS, "Role changed"),
+		"role_admin":                    t(T.RoleAdminJS, "Admin"),
+		"role_editor":                   t(T.RoleEditorJS, "Editor"),
+		"role_viewer":                   t(T.RoleViewerJS, "Viewer"),
+		"generic_error":                 t(T.GenericErrorJS, "Error"),
+		"auth_user_min":                 t(T.AuthUserMinJS, "Username min. 3 characters"),
+		"auth_pass_min":                 t(T.AuthPassMinJS, "Password min. 8 characters"),
+		"edit_domain_cancelled":         t(T.EditDomainCancelledJS, "Edit cancelled"),
+		"edit_domain_saved":             t(T.EditDomainSavedJS, "Changes saved"),
+		"settings_add_btn":              t(T.SettingsAddBtnJS, "➕ Add to list"),
+		"notify_test_success":           t(T.NotifyTestSuccess, "✅ Test message sent successfully!"),
+		"notify_test_unauthorized":      t(T.NotifyTestUnauthorized, "❌ Unauthorized (check token)"),
+		"notify_test_error":             t(T.NotifyTestError, "❌ Error while sending"),
+		"notify_test_conn_error":        t(T.NotifyTestConnError, "❌ Connection error to server"),
+		"notify_btn_sending":            t(T.NotifyBtnSending, "⏳ Sende..."),
+		"notify_btn_test":               t(T.NotifyBtnTest, "🧪 Test-Nachricht senden"),
+		"notify_no_notifier":            t(T.NotifyNoNotifier, "⚠️ Keine aktiven Notifier konfiguriert."),
+		"notify_stat_success":           t(T.NotifyStatSuccess, "erfolgreich"),
+		"nav_dashboard":                 t(T.NavDashboardJS, "🌐 Dashboard"),
+		"nav_domains":                   t(T.NavDomainsJS, "🌐 Domains"),
+		"nav_metrics":                   t(T.NavMetricsJS, "📊 Metrics"),
+		"nav_logs":                      t(T.NavLogsJS, "🧾 Logs"),
+		"nav_debug":                     t(T.NavDebugJS, "🐞 Debug"),
+		"nav_settings":                  t(T.NavSettingsJS, "⚙️ Settings"),
+		"nav_users":                     t(T.SettingsUserManagement, "👥 User Management"),
+		"nav_diagnose":                  t(T.NavDiagnoseJS, "🩺 Diagnose"),
+		"nav_backup":                    t(T.NavBackupJS, "💾 Backup & Restore"),
+		"diagnose_title":                t(T.DiagnoseTitle, "Diagnose / Health Center"),
+		"diagnose_loading":              t(T.DiagnoseLoading, "Loading diagnosis..."),
+		"diagnose_load_failed":          t(T.DiagnoseLoadFailed, "Diagnosis failed"),
+		"diagnose_connection_failed":    t(T.DiagnoseConnectionFailed, "Connection failed"),
+		"diagnose_status_healthy":       t(T.DiagnoseStatusHealthy, "Healthy"),
+		"diagnose_status_degraded":      t(T.DiagnoseStatusDegraded, "Degraded"),
+		"diagnose_status_starting":      t(T.DiagnoseStatusStarting, "Starting"),
+		"diagnose_status_unhealthy":     t(T.DiagnoseStatusUnhealthy, "Unhealthy"),
+		"diagnose_system_title":         t(T.DiagnoseSystemTitle, "System"),
+		"diagnose_ip_dns_title":         t(T.DiagnoseIPDNSTitle, "IP / DNS"),
+		"diagnose_api_metrics_title":    t(T.DiagnoseAPIMetricsTitle, "API metrics"),
+		"diagnose_config_title":         t(T.DiagnoseConfigTitle, "Config"),
+		"diagnose_provider_title":       t(T.DiagnoseProviderTitle, "Provider"),
+		"diagnose_notifier_title":       t(T.DiagnoseNotifierTitle, "Notifier"),
+		"diagnose_warnings_title":       t(T.DiagnoseWarningsTitle, "Warnings"),
+		"diagnose_files_title":          t(T.DiagnoseFilesTitle, "Files"),
+		"diagnose_uptime":               t(T.DiagnoseUptime, "Uptime"),
+		"diagnose_scheduler_ran":        t(T.DiagnoseSchedulerRan, "Scheduler ran"),
+		"diagnose_last_run_ok":          t(T.DiagnoseLastRunOK, "Last run OK"),
+		"diagnose_update_running":       t(T.DiagnoseUpdateRunning, "Update running"),
+		"diagnose_active_updates":       t(T.DiagnoseActiveUpdates, "Active updates"),
+		"diagnose_last_ipv4":            t(T.DiagnoseLastIPv4, "Last IPv4"),
+		"diagnose_last_ipv6":            t(T.DiagnoseLastIPv6, "Last IPv6"),
+		"diagnose_last_domain_change":   t(T.DiagnoseLastDomainChange, "Last domain change"),
+		"diagnose_configured_domains":   t(T.DiagnoseConfiguredDomains, "Domains in status"),
+		"diagnose_total_requests":       t(T.DiagnoseTotalRequests, "Total requests"),
+		"diagnose_success_rate":         t(T.DiagnoseSuccessRate, "Success rate"),
+		"diagnose_average_latency":      t(T.DiagnoseAverageLatency, "Average latency"),
+		"diagnose_log_errors":           t(T.DiagnoseLogErrors, "Log errors"),
+		"diagnose_log_warnings":         t(T.DiagnoseLogWarnings, "Log warnings"),
+		"diagnose_ip_mode":              t(T.DiagnoseIPMode, "IP mode"),
+		"diagnose_interval":             t(T.DiagnoseInterval, "Interval"),
+		"diagnose_ipv4_endpoints":       t(T.DiagnoseIPv4Endpoints, "IPv4 endpoints"),
+		"diagnose_ipv6_endpoints":       t(T.DiagnoseIPv6Endpoints, "IPv6 endpoints"),
+		"diagnose_no_providers":         t(T.DiagnoseNoProviders, "No providers found"),
+		"diagnose_no_notifiers":         t(T.DiagnoseNoNotifiers, "No notifiers"),
+		"diagnose_no_config_warnings":   t(T.DiagnoseNoConfigWarnings, "No config warnings"),
+		"diagnose_file_missing":         t(T.DiagnoseFileMissing, "missing"),
+		"diagnose_bytes":                t(T.DiagnoseBytes, "bytes"),
+		"diagnose_yes":                  t(T.DiagnoseYes, "Yes"),
+		"diagnose_no":                   t(T.DiagnoseNo, "No"),
+		"backup_download_success":       t(T.BackupDownloadSuccess, "✅ Backup downloaded"),
+		"backup_download_failed":        t(T.BackupDownloadFailed, "❌ Backup failed"),
+		"backup_select_file":            t(T.BackupSelectFile, "❌ Please select a backup file"),
+		"backup_select_area":            t(T.BackupSelectArea, "❌ Please select at least one area"),
+		"backup_confirm_title":          t(T.BackupConfirmTitle, "Really restore backup?"),
+		"backup_confirm_config":         t(T.BackupConfirmConfig, "• Config will be overwritten"),
+		"backup_confirm_status":         t(T.BackupConfirmStatus, "• Domain status will be overwritten"),
+		"backup_confirm_users":          t(T.BackupConfirmUsers, "• Users will be overwritten"),
+		"backup_confirm_hint":           t(T.BackupConfirmHint, "This action may replace existing data."),
+		"backup_restore_running":        t(T.BackupRestoreRunning, "⏳ Restore running..."),
+		"backup_restore_success_format": t(T.BackupRestoreSuccessFormat, "✅ Restored: {restored}"),
+		"backup_restore_failed":         t(T.BackupRestoreFailed, "❌ Restore failed"),
 	}
 
 	b, err := json.Marshal(m)
@@ -784,6 +839,10 @@ func registerAPIroutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/users", handleAPIUsers)
 	mux.HandleFunc("/api/users/", handleAPIUsersID)
 	mux.HandleFunc("/api/logs", handleAPILogs)
+
+	mux.HandleFunc("/api/diagnose", handleAPIDiagnose)
+	mux.HandleFunc("/api/backup/download", handleAPIBackupDownload)
+	mux.HandleFunc("/api/backup/restore", handleAPIBackupRestore)
 }
 
 func registerPageRoutes(mux *http.ServeMux) {
@@ -869,7 +928,7 @@ func handleAPIDomains(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAPIDomainsHTML(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	if r.Method != MethodGET {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -883,7 +942,7 @@ func handleAPIDomainsHTML(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAPIConfig(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	if r.Method != MethodGET {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -932,7 +991,7 @@ func maskSecret(s string) string {
 }
 
 func handleAPILanguages(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	if r.Method != MethodGET {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -966,7 +1025,7 @@ func handleAPILanguages(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAPISaveConfig(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
+	if r.Method != MethodPOST {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -984,6 +1043,7 @@ func handleAPISaveConfig(w http.ResponseWriter, r *http.Request) {
 	var validationErr error
 	cfgMu.Lock()
 	oldCfg := cfg
+	oldMaxConcurrent := cfg.MaxConcurrent
 	applySystemConfigPayload(payload.System)
 	cfg.DomainConfigs = mergeDomainConfigs(cfg.DomainConfigs, payload.DomainConfigs)
 	validationErr = validateDomainConfigs()
@@ -993,7 +1053,12 @@ func handleAPISaveConfig(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, validationErr.Error(), http.StatusUnprocessableEntity)
 		return
 	}
+	newMaxConcurrent := cfg.MaxConcurrent
 	cfgMu.Unlock()
+
+	if oldMaxConcurrent != newMaxConcurrent {
+		setWorkerConcurrencyLimit(newMaxConcurrent)
+	}
 
 	if err := saveConfigToFile(); err != nil {
 		http.Error(w, T.SaveFailed, http.StatusInternalServerError)
@@ -1194,7 +1259,7 @@ func mergeDomainConfigs(existingCfg []DomainConfig, incoming []safeDomainConfig)
 }
 
 func handleAPISetLanguage(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
+	if r.Method != MethodPOST {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -1235,7 +1300,7 @@ func handleAPISetLanguage(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAPIIPv64Domain(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
+	if r.Method != MethodPOST {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -1309,7 +1374,7 @@ func handleAPIIPv64Domain(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAPIDomainDelete(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
+	if r.Method != MethodPOST {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -1446,7 +1511,7 @@ func writeStatusFileData(fileData map[string]any) error {
 func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1024)
 
-	if r.Method != http.MethodPost {
+	if r.Method != MethodPOST {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -1458,6 +1523,14 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 			"error": T.InvalidOrMissingTriggerToken,
 		})
 		debugLog("API", clientIP, T.TriggerBlockedInvalidToken)
+		return
+	}
+
+	if !hasDomainConfig() {
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": "No domains configured yet. Save config.json from the dashboard first.",
+		})
+		debugLog("API", clientIP, "Trigger blocked: no domains configured yet")
 		return
 	}
 
@@ -1515,7 +1588,7 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAPINotifyTest(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
+	if r.Method != MethodPOST {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -1603,7 +1676,7 @@ func handleAPITriggerStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAPIExport(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	if r.Method != MethodGET {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -1784,7 +1857,9 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 	writeDashboardMetricsCard(w, stats, nicHTML, chartSVG, latencySVG, isViewer)
 
 	writeDomainsCard(w, statusData)
+	writeDiagnoseSection(w)
 	writeLogsCard(w, logs, logTimeRange)
+	writeBackupSection(w, isAdmin)
 
 	if cfg.DebugEnabled || cfg.DebugHTTPRaw {
 		writeDebugCard(w)
@@ -1916,7 +1991,7 @@ func loadDashboardLogsFresh() ([]LogEntry, string) {
 }
 
 func handleAPILogs(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	if r.Method != MethodGET {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -2059,7 +2134,7 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 				</div>
 			</div>
 
-			<div class="nav-section-label">Overview</div>
+			<div class="nav-section-label">`+t(T.NavOverview, "Overview")+`</div>
 			<div class="nav-item" data-page="dashboard" onclick="navTo('dashboard')">
 				<span class="nav-item-icon">📊</span> `+T.NavDashboard+`
 			</div>
@@ -2067,9 +2142,12 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 				<span class="nav-item-icon">🌐</span> `+T.NavDomains+`
 			</div>
 
-			<div class="nav-section-label">Monitoring</div>
+			<div class="nav-section-label">`+t(T.NavMonitoring, "Monitoring")+`</div>
 			<div class="nav-item" data-page="metrics" onclick="navTo('metrics')">
 				<span class="nav-item-icon">📈</span> `+T.APIPerformance+`
+			</div>
+			<div class="nav-item" data-page="diagnose" onclick="navTo('diagnose')">
+				<span class="nav-item-icon">🩺</span> `+t(T.DiagnoseTitle, "Diagnose / Health Center")+`
 			</div>
 			<div class="nav-item" data-page="logs" onclick="navTo('logs')">
 				<span class="nav-item-icon">🧾</span> `+T.SystemEvents+`
@@ -2078,7 +2156,12 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 				<span class="nav-item-icon">🐞</span> `+T.DebugLogTitle+`
 			</div>
 
-			<div class="nav-section-label">Config</div>
+			<div class="nav-section-label">`+t(T.NavTools, "Tools")+`</div>
+			<div class="nav-item" data-page="backup" onclick="navTo('backup')">
+				<span class="nav-item-icon">💾</span> `+t(T.BackupTitle, "Backup & Restore")+`
+			</div>
+
+			<div class="nav-section-label">`+t(T.NavConfig, "Config")+`</div>
 			<div class="nav-item" data-page="settings" onclick="navTo('settings')">
 				<span class="nav-item-icon">⚙️</span> `+T.SettingsTitle+`
 			</div>
@@ -2929,4 +3012,694 @@ func writeDashboardFooter(w http.ResponseWriter) {
 	</body>
 	</html>
 	`, dashboardI18NJSON(), jsData)
+}
+
+// ============================================================================
+// DIAGNOSE / HEALTH CENTER
+// ============================================================================
+
+func writeDiagnoseSection(w http.ResponseWriter) {
+	_, _ = fmt.Fprint(w, `
+	<div class="page-section" data-section="diagnose">
+		<div class="card">
+			<div class="card-header card-header--space-between">
+				<span>🩺 `+t(T.DiagnoseTitle, "Diagnose / Health Center")+`</span>
+				<button class="action-btn topbar-action-btn" onclick="refreshDiagnosis()">`+t(T.DiagnoseRefreshBtn, "🔄 Refresh")+`</button>
+			</div>
+			<div class="card-content">
+				<div id="diagnose-content" class="diag-loading">
+					`+t(T.DiagnoseLoading, "Loading diagnosis...")+`
+				</div>
+			</div>
+		</div>
+	</div>
+	`)
+}
+
+func handleAPIDiagnose(w http.ResponseWriter, r *http.Request) {
+	if r.Method != MethodGET {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, buildDiagnosisPayload())
+}
+
+type diagnosisLogCounts struct {
+	Errors   int
+	Warnings int
+}
+
+type diagnosisConfigSnapshot struct {
+	ProviderCounts map[string]int
+	Warnings       []string
+	Notifiers      map[string]bool
+	Info           map[string]any
+}
+
+func buildDiagnosisPayload() map[string]any {
+	stats := apiMetrics.GetStats()
+	lastV4, lastV6 := loadLastKnownIPs()
+
+	statusData := loadStatusData()
+	domainKeys := domainKeysFromStatusData(statusData)
+	newestChange := newestDomainChange(statusData, domainKeys)
+
+	logs, _ := loadDashboardLogs()
+	logCounts := countDiagnosisLogs(logs)
+
+	cfgDiag := buildDiagnosisConfigSnapshot()
+	mainStatus, reason := diagnosisMainStatus(cfgDiag.Warnings, logCounts.Warnings)
+
+	return map[string]any{
+		"status":             mainStatus,
+		"reason":             reason,
+		"uptime":             time.Since(startTime).Round(time.Second).String(),
+		"scheduler_ran_once": schedulerRanOnce.Load(),
+		"last_ok":            lastOk.Load(),
+		"update_in_progress": updateInProgress.Load(),
+		"active_updates":     activeUpdates.Load(),
+
+		"last_known_ipv4":    lastV4,
+		"last_known_ipv6":    lastV6,
+		"last_domain_change": formatDiagnosisTime(newestChange),
+
+		"configured_domains": len(domainKeys),
+		"provider_counts":    cfgDiag.ProviderCounts,
+		"warnings":           cfgDiag.Warnings,
+		"log_errors":         logCounts.Errors,
+		"log_warnings":       logCounts.Warnings,
+		"api_metrics":        stats,
+		"config":             cfgDiag.Info,
+		"notifiers":          cfgDiag.Notifiers,
+
+		"files": diagnosisFileInfos(),
+	}
+}
+
+func countDiagnosisLogs(logs []LogEntry) diagnosisLogCounts {
+	var counts diagnosisLogCounts
+
+	for _, e := range logs {
+		lvl := strings.ToUpper(e.Level)
+
+		if strings.Contains(lvl, "ERR") || strings.Contains(lvl, "ERROR") {
+			counts.Errors++
+		}
+
+		if strings.Contains(lvl, "WARN") {
+			counts.Warnings++
+		}
+	}
+
+	return counts
+}
+
+func buildDiagnosisConfigSnapshot() diagnosisConfigSnapshot {
+	cfgCopy := cloneConfigForBackup()
+
+	warnings := diagnoseDomainWarnings(cfgCopy.DomainConfigs)
+	warnings = append(warnings, diagnoseGlobalConfigWarnings(cfgCopy)...)
+
+	return diagnosisConfigSnapshot{
+		ProviderCounts: diagnoseProviderCounts(cfgCopy.DomainConfigs),
+		Warnings:       warnings,
+		Notifiers:      diagnoseNotifiers(cfgCopy),
+		Info:           diagnoseConfigInfo(cfgCopy),
+	}
+}
+
+func diagnoseProviderCounts(domains []DomainConfig) map[string]int {
+	counts := make(map[string]int)
+
+	for _, dc := range domains {
+		counts[string(dc.Provider)]++
+	}
+
+	return counts
+}
+
+func diagnoseDomainWarnings(domains []DomainConfig) []string {
+	warnings := make([]string, 0)
+
+	for _, dc := range domains {
+		warnings = append(warnings, diagnoseSingleDomainWarnings(dc)...)
+	}
+
+	if len(domains) == 0 {
+		warnings = append(warnings, t(T.DiagnoseNoDomainsConfigured, "No domains configured."))
+	}
+
+	return warnings
+}
+
+func diagnoseSingleDomainWarnings(dc DomainConfig) []string {
+	warnings := make([]string, 0)
+
+	if strings.TrimSpace(dc.FQDN) == "" {
+		warnings = append(warnings, t(T.DiagnoseDomainWithoutFQDN, "A domain without FQDN is configured."))
+	}
+
+	if dc.TTL > 0 && dc.TTL < 60 {
+		warnings = append(warnings, fmt.Sprintf(
+			t(T.DiagnoseTTLTooLowFormat, "%s: TTL is very low."),
+			diagnosisDomainName(dc),
+		))
+	}
+
+	if msg := providerCredentialWarning(dc); msg != "" {
+		warnings = append(warnings, msg)
+	}
+
+	return warnings
+}
+
+func diagnosisDomainName(dc DomainConfig) string {
+	fqdn := strings.TrimSpace(dc.FQDN)
+	if fqdn == "" {
+		return t(T.DiagnoseUnknownDomain, "Unknown domain")
+	}
+	return fqdn
+}
+
+func providerCredentialWarning(dc DomainConfig) string {
+	fqdn := diagnosisDomainName(dc)
+
+	switch dc.Provider {
+	case ProviderIONOS:
+		if dc.APIPrefix == "" || dc.APISecret == "" {
+			return fmt.Sprintf(
+				t(T.DiagnoseIonosCredentialsIncompleteFormat, "%s: IONOS credentials incomplete."),
+				fqdn,
+			)
+		}
+
+	case ProviderCloudflare:
+		if dc.CFToken == "" && (dc.CFEmail == "" || dc.CFSecret == "") {
+			return fmt.Sprintf(
+				t(T.DiagnoseCloudflareCredentialsIncompleteFormat, "%s: Cloudflare credentials incomplete."),
+				fqdn,
+			)
+		}
+
+	case ProviderIPv64:
+		if dc.IPv64Token == "" {
+			return fmt.Sprintf(
+				t(T.DiagnoseIpv64TokenMissingFormat, "%s: IPv64 token missing."),
+				fqdn,
+			)
+		}
+	}
+
+	return ""
+}
+
+func diagnoseGlobalConfigWarnings(cfg Config) []string {
+	warnings := make([]string, 0)
+
+	if cfg.DryRun {
+		warnings = append(warnings, t(T.DiagnoseDryRunActive, "Dry-run is active: DNS changes are not written."))
+	}
+
+	if cfg.DebugEnabled {
+		warnings = append(warnings, t(T.DiagnoseDebugActive, "Debug mode is active."))
+	}
+
+	if cfg.DebugHTTPRaw {
+		warnings = append(warnings, t(T.DiagnoseHTTPRawDebugActive, "HTTP raw debug is active. Sensitive data may appear in logs."))
+	}
+
+	if cfg.Interval > 0 && cfg.Interval < 60 {
+		warnings = append(warnings, t(T.DiagnoseIntervalLow, "Update interval is very low."))
+	}
+
+	return warnings
+}
+
+func diagnoseNotifiers(cfg Config) map[string]bool {
+	return map[string]bool{
+		"telegram": cfg.Notifications.Telegram.Token != "" && cfg.Notifications.Telegram.ChatID != "",
+		"gotify":   cfg.Notifications.Gotify.URL != "" && cfg.Notifications.Gotify.Token != "",
+		"webhook":  cfg.Notifications.Webhook.URL != "",
+		"mqtt":     cfg.Notifications.MQTTConfig.Broker != "" && cfg.Notifications.MQTTConfig.Topic != "",
+		"email":    cfg.Notifications.Email.Host != "" && cfg.Notifications.Email.To != "",
+	}
+}
+
+func diagnoseConfigInfo(cfg Config) map[string]any {
+	return map[string]any{
+		"ip_mode":        cfg.IPMode,
+		"interval":       cfg.Interval,
+		"dry_run":        cfg.DryRun,
+		"debug":          cfg.DebugEnabled,
+		"debug_http_raw": cfg.DebugHTTPRaw,
+		"max_log_lines":  cfg.MaxLogLines,
+		"ipv4_endpoints": len(cfg.IPv4Endpoints),
+		"ipv6_endpoints": len(cfg.IPv6Endpoints),
+	}
+}
+
+func diagnosisMainStatus(warnings []string, logWarnings int) (string, string) {
+	if !schedulerRanOnce.Load() {
+		return "starting", t(T.DiagnoseReasonSchedulerNotRun, "Scheduler has not run yet.")
+	}
+
+	if !lastOk.Load() {
+		return "unhealthy", t(T.DiagnoseReasonLastSchedulerFailed, "The last scheduler run failed.")
+	}
+
+	if len(warnings) > 0 || logWarnings > 0 {
+		return "degraded", t(T.DiagnoseReasonWarningsButRunning, "There are warnings, but the service is running.")
+	}
+
+	return "healthy", t(T.DiagnoseReasonAllGood, "Everything looks good.")
+}
+
+func formatDiagnosisTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+
+	return t.Format("02.01.2006 15:04:05")
+}
+
+func diagnosisFileInfos() []map[string]any {
+	return []map[string]any{
+		diagnoseFileInfo("config.json", configPath),
+		diagnoseFileInfo("status/update.json", updatePath),
+		diagnoseFileInfo("logs", logPath),
+		diagnoseFileInfo("users.json", usersFilePath),
+	}
+}
+
+func diagnoseFileInfo(name, path string) map[string]any {
+	out := map[string]any{
+		"name":   name,
+		"exists": false,
+	}
+
+	if strings.TrimSpace(path) == "" {
+		out["error"] = t(T.DiagnosePathEmpty, "path empty")
+		return out
+	}
+
+	st, err := os.Stat(path)
+	if err != nil {
+		out["error"] = err.Error()
+		return out
+	}
+
+	out["exists"] = true
+	out["size"] = st.Size()
+	out["modified"] = st.ModTime().Format("02.01.2006 15:04:05")
+	return out
+}
+
+// ============================================================================
+// BACKUP & RESTORE
+// ============================================================================
+
+type dashboardBackup struct {
+	Version   int                      `json:"version"`
+	App       string                   `json:"app"`
+	CreatedAt string                   `json:"created_at"`
+	Config    *Config                  `json:"config,omitempty"`
+	Status    map[string]DomainHistory `json:"status,omitempty"`
+	Users     []DashboardUser          `json:"users,omitempty"`
+	Logs      []LogEntry               `json:"logs,omitempty"`
+	Metrics   map[string]any           `json:"metrics,omitempty"`
+}
+
+func writeBackupSection(w http.ResponseWriter, isAdmin bool) {
+	if !isAdmin {
+		_, _ = fmt.Fprint(w, `
+		<div class="page-section" data-section="backup">
+			<div class="card">
+				<div class="card-header">💾 `+t(T.BackupTitle, "Backup & Restore")+`</div>
+				<div class="card-content">
+					<div class="backup-warning">
+						🔒 `+t(T.BackupAdminOnly, "Backup & Restore is only available for admins.")+`
+					</div>
+				</div>
+			</div>
+		</div>
+		`)
+		return
+	}
+
+	_, _ = fmt.Fprint(w, `
+	<div class="page-section" data-section="backup">
+		<div class="card">
+			<div class="card-header">💾 `+t(T.BackupTitle, "Backup & Restore")+`</div>
+			<div class="card-content">
+				<div class="backup-grid">
+					<div class="backup-box">
+						<h3>`+t(T.BackupCreateTitle, "Create backup")+`</h3>
+						<p>`+t(T.BackupCreateDesc, "Exports config, status, users, logs and current metrics as JSON.")+`</p>
+						<button class="action-btn" onclick="downloadFullBackup()">`+t(T.BackupDownloadBtn, "⬇️ Download backup")+`</button>
+						<div class="backup-hint">
+							`+t(T.BackupSecretsHint, "Warning: The backup contains secrets and password hashes. Store it safely.")+`
+						</div>
+					</div>
+
+					<div class="backup-box">
+						<h3>`+t(T.BackupRestoreTitle, "Restore backup")+`</h3>
+						<p>`+t(T.BackupRestoreDesc, "Select a previously created backup and choose which areas should be restored.")+`</p>
+
+						<input type="file" id="backup-file" class="search-box" accept="application/json,.json">
+
+						<label class="inline-check">
+							<input type="checkbox" id="restore-config" checked>
+							`+t(T.BackupRestoreConfig, "Restore config")+`
+						</label>
+
+						<label class="inline-check">
+							<input type="checkbox" id="restore-status" checked>
+							`+t(T.BackupRestoreStatus, "Restore domain status / history")+`
+						</label>
+
+						<label class="inline-check">
+							<input type="checkbox" id="restore-users">
+							`+t(T.BackupRestoreUsers, "Restore users")+`
+						</label>
+
+						<button class="action-btn btn-danger-soft backup-restore-btn" onclick="restoreFullBackup()">
+							`+t(T.BackupRestoreStartBtn, "♻️ Start restore")+`
+						</button>
+
+						<div id="backup-result" class="backup-result"></div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	`)
+}
+
+func requireAdminAPI(w http.ResponseWriter, r *http.Request) bool {
+	if !authEnabled {
+		return true
+	}
+
+	sess, ok := sessionFromRequest(r)
+	if !ok || sess == nil || sess.Role != RoleAdmin {
+		writeJSON(w, http.StatusForbidden, map[string]string{
+			"error": t(T.BackupAdminRequired, "admin required"),
+		})
+		return false
+	}
+
+	return true
+}
+
+func cloneConfigForBackup() Config {
+	cfgMu.RLock()
+	defer cfgMu.RUnlock()
+
+	cp := cfg
+	cp.DomainConfigs = append([]DomainConfig(nil), cfg.DomainConfigs...)
+	cp.DNSServers = append([]string(nil), cfg.DNSServers...)
+	cp.IPv4Endpoints = append([]string(nil), cfg.IPv4Endpoints...)
+	cp.IPv6Endpoints = append([]string(nil), cfg.IPv6Endpoints...)
+	cp.Notifications.Events = append([]string(nil), cfg.Notifications.Events...)
+
+	return cp
+}
+
+func readStatusBackup() map[string]DomainHistory {
+	statusMutex.Lock()
+	defer statusMutex.Unlock()
+
+	out := make(map[string]DomainHistory)
+
+	b, err := os.ReadFile(updatePath)
+	if err != nil {
+		return out
+	}
+
+	_ = json.Unmarshal(b, &out)
+	return out
+}
+
+func handleAPIBackupDownload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != MethodGET {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !requireAdminAPI(w, r) {
+		return
+	}
+
+	cfgCopy := cloneConfigForBackup()
+	logs, _ := loadDashboardLogsFresh()
+
+	backup := dashboardBackup{
+		Version:   1,
+		App:       "dyndns-dashboard",
+		CreatedAt: time.Now().Format(time.RFC3339),
+		Config:    &cfgCopy,
+		Status:    readStatusBackup(),
+		Users:     loadUsers(),
+		Logs:      logs,
+		Metrics:   apiMetrics.GetStats(),
+	}
+
+	filename := "dyndns-backup-" + time.Now().Format("20060102-150405") + ".json"
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(backup); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func handleAPIBackupRestore(w http.ResponseWriter, r *http.Request) {
+	if r.Method != MethodPOST {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if !requireAdminAPI(w, r) {
+		return
+	}
+
+	req, status, err := parseBackupRestoreRequest(r)
+	if err != nil {
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+
+	restored, status, err := restoreSelectedBackup(req)
+	if err != nil {
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+
+	logBackupRestore(restored)
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":   "restored",
+		"restored": restored,
+	})
+}
+
+type backupRestoreSelection struct {
+	Config bool
+	Status bool
+	Users  bool
+}
+
+type backupRestoreRequest struct {
+	Backup    dashboardBackup
+	Selection backupRestoreSelection
+}
+
+func parseBackupRestoreRequest(r *http.Request) (backupRestoreRequest, int, error) {
+	if err := r.ParseMultipartForm(16 << 20); err != nil {
+		return backupRestoreRequest{}, http.StatusBadRequest, err
+	}
+
+	selection := backupRestoreSelectionFromForm(r)
+	if !selection.any() {
+		return backupRestoreRequest{}, http.StatusBadRequest, fmt.Errorf("%s", t(T.BackupNothingSelected, "nothing selected"))
+	}
+
+	file, _, err := r.FormFile("backup")
+	if err != nil {
+		return backupRestoreRequest{}, http.StatusBadRequest, fmt.Errorf("%s", t(T.BackupFileMissing, "backup file missing"))
+	}
+	defer file.Close()
+
+	backup, err := decodeDashboardBackup(file)
+	if err != nil {
+		return backupRestoreRequest{}, http.StatusBadRequest, err
+	}
+
+	return backupRestoreRequest{
+		Backup:    backup,
+		Selection: selection,
+	}, http.StatusOK, nil
+}
+
+func backupRestoreSelectionFromForm(r *http.Request) backupRestoreSelection {
+	return backupRestoreSelection{
+		Config: r.FormValue("config") == "1",
+		Status: r.FormValue("status") == "1",
+		Users:  r.FormValue("users") == "1",
+	}
+}
+
+func (s backupRestoreSelection) any() bool {
+	return s.Config || s.Status || s.Users
+}
+
+func decodeDashboardBackup(file io.Reader) (dashboardBackup, error) {
+	var backup dashboardBackup
+
+	err := json.NewDecoder(io.LimitReader(file, 16<<20)).Decode(&backup)
+	if err != nil {
+		return dashboardBackup{}, fmt.Errorf(
+			t(T.BackupInvalidJSONFormat, "invalid backup json: %w"),
+			err,
+		)
+	}
+
+	return backup, nil
+}
+
+func restoreSelectedBackup(req backupRestoreRequest) ([]string, int, error) {
+	restored := make([]string, 0, 3)
+
+	if req.Selection.Config {
+		status, err := restoreBackupConfig(req.Backup)
+		if err != nil {
+			return nil, status, err
+		}
+		restored = append(restored, "config")
+	}
+
+	if req.Selection.Status {
+		status, err := restoreBackupStatus(req.Backup)
+		if err != nil {
+			return nil, status, err
+		}
+		restored = append(restored, "status")
+	}
+
+	if req.Selection.Users {
+		status, err := restoreBackupUsers(req.Backup)
+		if err != nil {
+			return nil, status, err
+		}
+		restored = append(restored, "users")
+	}
+
+	return restored, http.StatusOK, nil
+}
+
+func restoreBackupConfig(backup dashboardBackup) (int, error) {
+	if backup.Config == nil {
+		return http.StatusBadRequest, fmt.Errorf("%s", t(T.BackupContainsNoConfig, "backup contains no config"))
+	}
+
+	oldCfg, err := applyBackupConfig(*backup.Config)
+	if err != nil {
+		return http.StatusUnprocessableEntity, err
+	}
+
+	if err := saveConfigToFile(); err != nil {
+		restoreConfigInMemory(oldCfg)
+		return http.StatusInternalServerError, fmt.Errorf(
+			t(T.BackupConfigSaveFailedFormat, "config save failed: %w"),
+			err,
+		)
+	}
+
+	afterConfigRestore()
+	return http.StatusOK, nil
+}
+
+func applyBackupConfig(newCfg Config) (Config, error) {
+	cfgMu.Lock()
+	defer cfgMu.Unlock()
+
+	oldCfg := cfg
+	cfg = newCfg
+
+	if err := validateDomainConfigs(); err != nil {
+		cfg = oldCfg
+		return oldCfg, err
+	}
+
+	return oldCfg, nil
+}
+
+func restoreConfigInMemory(oldCfg Config) {
+	cfgMu.Lock()
+	cfg = oldCfg
+	cfgMu.Unlock()
+}
+
+func afterConfigRestore() {
+	ResetHTTPClient()
+	invalidateSecretReplacer()
+
+	go initNotifiers()
+
+	forceNextUpdate.Store(true)
+	lastCleanupNano.Store(0)
+}
+
+func restoreBackupStatus(backup dashboardBackup) (int, error) {
+	if backup.Status == nil {
+		return http.StatusBadRequest, fmt.Errorf("%s", t(T.BackupContainsNoStatus, "backup contains no status"))
+	}
+
+	b, err := json.MarshalIndent(backup.Status, "", "  ")
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+
+	statusMutex.Lock()
+	defer statusMutex.Unlock()
+
+	if err := os.WriteFile(updatePath, b, 0o600); err != nil {
+		return http.StatusInternalServerError, fmt.Errorf(
+			t(T.BackupStatusRestoreFailedFormat, "status restore failed: %w"),
+			err,
+		)
+	}
+
+	statusDomains = backup.Status
+	return http.StatusOK, nil
+}
+
+func restoreBackupUsers(backup dashboardBackup) (int, error) {
+	if len(backup.Users) == 0 {
+		return http.StatusBadRequest, fmt.Errorf("%s", t(T.BackupContainsNoUsers, "backup contains no users"))
+	}
+
+	if err := saveUsers(backup.Users); err != nil {
+		return http.StatusInternalServerError, fmt.Errorf(
+			t(T.BackupUsersRestoreFailedFormat, "users restore failed: %w"),
+			err,
+		)
+	}
+
+	return http.StatusOK, nil
+}
+
+func logBackupRestore(restored []string) {
+	log(LogContext{
+		Level:  LogWarn,
+		Action: ActionConfig,
+		Message: fmt.Sprintf(
+			t(T.BackupRestoredLogFormat, "Backup restored: %s"),
+			strings.Join(restored, ", "),
+		),
+	})
 }

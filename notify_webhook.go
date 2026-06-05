@@ -49,7 +49,7 @@ func (w *webhookNotifier) doSend(msg NotifyMessage) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, w.url, bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(ctx, MethodPOST, w.url, bytes.NewReader(data))
 	if err != nil {
 		return fmt.Errorf("webhook request: %w", err)
 	}

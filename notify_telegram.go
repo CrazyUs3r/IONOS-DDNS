@@ -259,7 +259,7 @@ func (t *telegramNotifier) sendText(chatID, text string, kb *tgInlineKeyboard) e
 	ctx, cancel := context.WithTimeout(t.pollCtx, 10*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, MethodPOST, url, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("request: %w", err)
 	}
@@ -300,7 +300,7 @@ func (t *telegramNotifier) deleteMessage(chatID int64, messageID int) {
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/deleteMessage", t.token)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, MethodPOST, url, bytes.NewReader(body))
 	if err != nil {
 		return
 	}
@@ -319,7 +319,7 @@ func (t *telegramNotifier) answerCallback(callbackID string) {
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/answerCallbackQuery", t.token)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, MethodPOST, url, bytes.NewReader(body))
 	if err != nil {
 		return
 	}
@@ -401,7 +401,7 @@ func (t *telegramNotifier) getUpdates(offset int) ([]tgUpdateFull, error) {
 	ctx, cancel := context.WithTimeout(t.pollCtx, 40*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, MethodGET, url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -451,7 +451,7 @@ func (t *telegramNotifier) registerCommands() {
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/setMyCommands", t.token)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, MethodPOST, url, bytes.NewReader(body))
 	if err != nil {
 		return
 	}
@@ -470,7 +470,7 @@ func (t *telegramNotifier) deleteWebhook() {
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/deleteWebhook?drop_pending_updates=false", t.token)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, MethodGET, url, nil)
 	if err != nil {
 		debugLog("NOTIFY", "", fmt.Sprintf(T.TgWebhookDeleteRequestError, err))
 		return

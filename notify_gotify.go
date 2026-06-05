@@ -162,7 +162,7 @@ func (g *gotifyNotifier) doSend(payload map[string]any) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(ctx, MethodPOST, endpoint, bytes.NewReader(data))
 	if err != nil {
 		return fmt.Errorf("request: %w", err)
 	}

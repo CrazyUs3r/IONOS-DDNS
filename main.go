@@ -78,7 +78,7 @@ func run() int {
 
 	initAuth(paths.logsDir)
 
-	workerSemaphore = make(chan struct{}, cfg.MaxConcurrent)
+	workerLimiter = NewDynamicWorkerLimiter(cfg.MaxConcurrent)
 
 	if err := initializeProvidersAndNotifiers(); err != nil {
 		return 1
@@ -101,11 +101,17 @@ func run() int {
 		return 1
 	}
 
-	logStartupProviders()
+	if hasDomainConfig() {
+		logStartupProviders()
+	} else {
+		logSetupMode()
+	}
 
 	initializeRateLimiters()
 
-	refreshCaches()
+	if hasDomainConfig() {
+		refreshCaches()
+	}
 
 	startMaintenanceWorkers()
 
@@ -113,7 +119,9 @@ func run() int {
 	startHTTPServer(srv)
 	startWebSocketHub()
 
-	runUpdate(true)
+	if hasDomainConfig() {
+		runUpdate(true)
+	}
 
 	return runMainLoop(srv)
 }
@@ -493,6 +501,10 @@ func startBackgroundWorkers() {
 }
 
 func validateRuntimeConfig() error {
+	if !hasDomainConfig() {
+		return nil
+	}
+
 	if err := validateConfig(); err != nil {
 		log(LogContext{
 			Level:   LogError,
@@ -503,6 +515,20 @@ func validateRuntimeConfig() error {
 	}
 
 	return nil
+}
+
+func hasDomainConfig() bool {
+	cfgMu.RLock()
+	defer cfgMu.RUnlock()
+	return len(cfg.DomainConfigs) > 0
+}
+
+func logSetupMode() {
+	log(LogContext{
+		Level:   LogWarn,
+		Action:  ActionConfig,
+		Message: "No domains configured yet. Dashboard setup mode is active; save config.json from the dashboard.",
+	})
 }
 
 func logStartupProviders() {
@@ -677,6 +703,11 @@ func handleSchedulerTick(ticker *time.Ticker, currentInterval *int) *time.Ticker
 		*currentInterval = interval
 		ticker = time.NewTicker(time.Duration(*currentInterval) * time.Second)
 		debugLog("SCHEDULER", "", fmt.Sprintf(t(T.SchedulerIntervalChanged, "Interval changed → new ticker: %ds"), *currentInterval))
+	}
+
+	if !hasDomainConfig() {
+		debugLog("SCHEDULER", "", "No domains configured yet; scheduler paused until config.json is saved.")
+		return ticker
 	}
 
 	debugLog("SCHEDULER", "", t(T.SchedulerIntervalReached, "Interval reached, starting runUpdate(false)"))

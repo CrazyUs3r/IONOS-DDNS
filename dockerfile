@@ -1,7 +1,7 @@
-﻿# =============================================================================
+# =============================================================================
 # Builder Stage
 # =============================================================================
-FROM --platform=${BUILDPLATFORM} golang:1.26.3-alpine AS builder
+FROM --platform=${BUILDPLATFORM} golang:1.26.4-alpine AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -47,22 +47,12 @@ LABEL org.opencontainers.image.title="Go-DynDNS" \
       org.opencontainers.image.source="https://github.com/crazyus3r/ionos-ddns" \
       org.opencontainers.image.created="${BUILD_DATE}"
 
-ENV PROVIDER="IONOS" \
-    DOMAINS="example.com" \
-    IP_MODE="BOTH" \
-    INTERVAL=300 \
+ENV CONFIG_DIR="/config" \
     HEALTH_PORT="8080" \
     LANG="de" \
-    CONFIG_DIR="/config" \
-    DRY_RUN=false \
     DEBUG=false \
     DEBUG_HTTP_RAW=false \
-    LOG_MAX_LINES=5000 \
-    HOURLY_RATE_LIMIT=1200 \
-    MAX_CONCURRENT=7 \
-    MAX_API_RETRIES=3 \
-    TZ="Europe/Berlin" \
-    DASHBOARD_AUTH=false
+    TZ="Europe/Berlin"
 
 WORKDIR /app
 

@@ -84,12 +84,17 @@ func initProviderConfig() error {
 		return nil
 	}
 
-	debugLog("CONFIG", "", T.NoConfigJSONAndNoDomainsConfigFoundUsingLegacyMode)
-	err := initLegacyConfig()
-	if err == nil {
-		_ = saveConfigToFile()
+	if strings.TrimSpace(os.Getenv("DOMAINS")) != "" {
+		debugLog("CONFIG", "", T.NoConfigJSONAndNoDomainsConfigFoundUsingLegacyMode)
+		err := initLegacyConfig()
+		if err == nil {
+			_ = saveConfigToFile()
+		}
+		return err
 	}
-	return err
+
+	debugLog("CONFIG", "", "No domain/provider configuration found yet; dashboard setup mode active.")
+	return nil
 }
 
 func (r rawEntry) toDomainConfig() DomainConfig {

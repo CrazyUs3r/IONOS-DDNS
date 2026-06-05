@@ -9,24 +9,16 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"time"
 )
 
-// ============================================================================
-// CACHE PERSISTENCE - IONOS
-// ============================================================================
-func getIONOSCachePath() string {
-	return filepath.Join(cfg.LogDir, "ionos_cache.json")
-}
-
 func saveIONOSCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error {
-	return saveDNSProviderCacheToFile("IONOS", getIONOSCachePath(), zones, recordCache)
+	return saveProviderCacheToFile("IONOS", "ionos_cache.json", zones, recordCache)
 }
 
 func loadIONOSCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
-	return loadDNSProviderCacheFromFile("IONOS", getIONOSCachePath())
+	return loadProviderCacheFromFile("IONOS", "ionos_cache.json")
 }
 
 // ============================================================================
@@ -65,7 +57,7 @@ func ionosAPIAttempt(
 	duration := time.Since(start)
 
 	if err != nil {
-		retry, handledErr := handleIonosNetworkError(ctx, method, err, duration, attempt)
+		retry, handledErr := handleProviderNetworkError(ctx, "IONOS", method, err, duration, attempt, false)
 		return nil, retry, handledErr
 	}
 
@@ -115,27 +107,6 @@ func buildIonosRequest(
 	return req, nil
 }
 
-func handleIonosNetworkError(
-	ctx context.Context,
-	method string,
-	err error,
-	duration time.Duration,
-	attempt int,
-) (bool, error) {
-	debugLog("HTTP", "", fmt.Sprintf("❌ %s: %v | %s: %v", T.NetworkError, err, T.AvgLatency, duration))
-	apiMetrics.RecordError(method, 0, err, duration)
-
-	lastErr := fmt.Errorf("%s: %w", T.ErrNetworkError, err)
-	wait := calculateRetryDelay(attempt, false)
-	debugLog("HTTP", "", fmt.Sprintf("⏱️  %s %v", T.RetryIn, wait))
-
-	if !sleepOrCancel(ctx, wait) {
-		return false, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
-	}
-
-	return true, lastErr
-}
-
 func handleIonosResponse(
 	ctx context.Context,
 	res *http.Response,
@@ -143,111 +114,7 @@ func handleIonosResponse(
 	duration time.Duration,
 	attempt int,
 ) ([]byte, bool, error) {
-	respBody, err := io.ReadAll(res.Body)
-	closeErr := res.Body.Close()
-	if closeErr != nil {
-		debugLog("HTTP", "", fmt.Sprintf(T.ErrBodyClose+": %v", closeErr))
-	}
-
-	if err != nil {
-		retry, handledErr := handleIonosReadError(ctx, res.StatusCode, method, err, duration, attempt)
-		return nil, retry, handledErr
-	}
-
-	if res.StatusCode >= 200 && res.StatusCode < 300 {
-		apiMetrics.RecordSuccess(method, duration)
-
-		if errVal := lastErrorMsg.Get(); errVal != "" {
-			lastErrorMsg.Set("")
-		}
-
-		debugLog("HTTP", "", fmt.Sprintf("✅ %s: %d Bytes", T.Success, len(respBody)))
-		return respBody, false, nil
-	}
-
-	retry, handledErr := handleIonosAPIError(
-		ctx,
-		res.StatusCode,
-		method,
-		url,
-		respBody,
-		res.Header,
-		duration,
-		attempt,
-	)
-	return nil, retry, handledErr
-}
-
-func handleIonosReadError(
-	ctx context.Context,
-	statusCode int,
-	method string,
-	err error,
-	duration time.Duration,
-	attempt int,
-) (bool, error) {
-	apiMetrics.RecordError(method, statusCode, err, duration)
-	debugLog("HTTP", "", fmt.Sprintf("❌ %s: %v", T.BodyReadError, err))
-
-	lastErr := fmt.Errorf("%s: %w", T.ErrBodyRead, err)
-	wait := calculateRetryDelay(attempt, false)
-
-	if !sleepOrCancel(ctx, wait) {
-		return false, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
-	}
-
-	return true, lastErr
-}
-
-func handleIonosAPIError(
-	ctx context.Context,
-	statusCode int,
-	method, url string,
-	respBody []byte,
-	headers http.Header,
-	duration time.Duration,
-	attempt int,
-) (bool, error) {
-	apiErr := classifyAPIErrorWithHeaders(statusCode, method, url, string(respBody), headers)
-	apiMetrics.RecordError(method, statusCode, apiErr, duration)
-
-	if statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden {
-		log(LogContext{
-			Level:   LogError,
-			Action:  ActionError,
-			Message: fmt.Sprintf("🚨 %s: %v", T.CriticalAPIError, apiErr),
-		})
-	}
-
-	debugLog("HTTP", "", fmt.Sprintf(T.IonosRetryable, apiErr.Message, apiErr.Retryable))
-	lastErrorMsg.Set(sanitizeError(apiErr))
-
-	if !apiErr.IsRetryable() {
-		debugLog("HTTP", "", fmt.Sprintf("❌ %s: %s", T.NonRetryableError, apiErr.Message))
-		return false, apiErr
-	}
-
-	if attempt >= cfg.MaxAPIRetries-1 {
-		debugLog("HTTP", "", fmt.Sprintf("❌ %s (%d)", T.MaxAttemptsReached, cfg.MaxAPIRetries))
-		return false, fmt.Errorf("%s: %w", T.IonosMaxAttempts, apiErr)
-	}
-
-	wait := ionosRetryWait(apiErr, attempt, statusCode)
-	debugLog("HTTP", "", fmt.Sprintf("🔄 %s #%d in %v...", T.RetryScheduled, attempt+2, wait))
-
-	if !sleepOrCancel(ctx, wait) {
-		debugLog("HTTP", "", "❌ "+T.ContextCancelled)
-		return false, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
-	}
-
-	return true, apiErr
-}
-
-func ionosRetryWait(apiErr *APIError, attempt, statusCode int) time.Duration {
-	if apiErr.RetryAfter > 0 {
-		return apiErr.RetryAfter
-	}
-	return calculateRetryDelay(attempt, statusCode >= 500)
+	return handleProviderHTTPResponse(ctx, "IONOS", T.IonosMaxAttempts, res, method, url, duration, attempt)
 }
 
 func loadIPv64InfrastructureRecords(z Zone) []Record {
@@ -302,6 +169,10 @@ func updateIonosDNS(
 		return false, nil
 	}
 
+	if zoneName == "" {
+		return false, fmt.Errorf(T.ErrZoneNameEmpty, fqdn)
+	}
+
 	if cfg.DryRun {
 		log(LogContext{
 			Level:   LogWarn,
@@ -325,10 +196,6 @@ func updateIonosDNS(
 		Domain:  fqdn,
 		Message: fmt.Sprintf("🔄 %s -> %s %s", recordType, newIP, T.Update),
 	})
-
-	if zoneName == "" {
-		return false, fmt.Errorf(T.ErrZoneNameEmpty, fqdn)
-	}
 
 	updateIONOSCache(cache, zoneID, recordName, fqdn, recordType, newIP, existing)
 	return true, nil
@@ -482,38 +349,45 @@ func updateIONOSCache(cache *ZoneRecordCache, zoneID, recordName, fqdn, recordTy
 		return
 	}
 
-	records, exists := cache.Get(zoneID)
-	if !exists {
+	if _, exists := cache.Get(zoneID); !exists {
 		debugLog("CACHE", fqdn, T.IonosCacheZoneNotFound)
 		return
 	}
 
-	updated := false
-
-	if existing != nil {
-		for i := range records {
-			if records[i].ID == existing.ID {
-				records[i].Content = newIP
-				updated = true
-				debugLog("CACHE", fqdn, fmt.Sprintf(T.IonosCacheUpdated, recordType, newIP))
-				break
+	var create cachedRecordCreateFunc
+	if existing == nil {
+		create = func(records []Record) *Record {
+			return &Record{
+				ID:      syntheticCachedRecordID(records),
+				Name:    recordName,
+				Type:    recordType,
+				Content: newIP,
 			}
 		}
-	} else {
-		newRecord := Record{
-			ID:      fmt.Sprintf("new-%d", len(records)),
-			Name:    recordName,
-			Type:    recordType,
-			Content: newIP,
-		}
-		records = append(records, newRecord)
-		updated = true
-		debugLog("CACHE", fqdn, fmt.Sprintf(T.IonosCacheRecordAdded, recordType, newIP))
 	}
 
-	if updated {
-		cache.Set(zoneID, records)
+	updated := updateCachedZoneRecord(
+		cache,
+		zoneID,
+		func(rec Record) bool {
+			return existing != nil && rec.ID == existing.ID
+		},
+		func(rec *Record) {
+			rec.Content = newIP
+		},
+		create,
+	)
+
+	if !updated {
+		return
 	}
+
+	if existing == nil {
+		debugLog("CACHE", fqdn, fmt.Sprintf(T.IonosCacheRecordAdded, recordType, newIP))
+		return
+	}
+
+	debugLog("CACHE", fqdn, fmt.Sprintf(T.IonosCacheUpdated, recordType, newIP))
 }
 
 // ============================================================================
@@ -534,37 +408,11 @@ func cleanupIONOSRecords(ctx context.Context, zones []Zone, recordCache *ZoneRec
 }
 
 func findIONOSConfigForCleanup() *DomainConfig {
-	cfgMu.RLock()
-	defer cfgMu.RUnlock()
-
-	for i := range cfg.DomainConfigs {
-		if cfg.DomainConfigs[i].Provider == ProviderIONOS {
-			dc := cfg.DomainConfigs[i]
-			return &dc
-		}
-	}
-
-	return nil
+	return findProviderConfigForCleanup(ProviderIONOS)
 }
 
 func buildIONOSConfigDomains() map[string]struct{} {
-	cfgMu.RLock()
-	defer cfgMu.RUnlock()
-
-	configDomains := make(map[string]struct{})
-
-	for _, dc := range cfg.DomainConfigs {
-		if dc.Provider != ProviderIONOS {
-			continue
-		}
-
-		fqdn := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(dc.FQDN), "."))
-		if fqdn != "" {
-			configDomains[fqdn] = struct{}{}
-		}
-	}
-
-	return configDomains
+	return buildProviderConfigDomains(ProviderIONOS)
 }
 
 func cleanupIONOSZoneRecords(
@@ -630,7 +478,7 @@ func shouldCleanupIONOSRecord(
 	rec Record,
 	configDomains map[string]struct{},
 ) (string, bool) {
-	if rec.Type != RecordTypeA && rec.Type != RecordTypeAAAA {
+	if !isAddressRecord(rec.Type) {
 		return "", false
 	}
 

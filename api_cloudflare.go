@@ -10,24 +10,16 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"time"
 )
 
-// ============================================================================
-// CACHE PERSISTENCE - CLOUDFLARE
-// ============================================================================
-func getCloudflareCachePath() string {
-	return filepath.Join(cfg.LogDir, "cloudflare_cache.json")
-}
-
 func saveCloudflareCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error {
-	return saveDNSProviderCacheToFile("Cloudflare", getCloudflareCachePath(), zones, recordCache)
+	return saveProviderCacheToFile("Cloudflare", "cloudflare_cache.json", zones, recordCache)
 }
 
 func loadCloudflareCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
-	return loadDNSProviderCacheFromFile("Cloudflare", getCloudflareCachePath())
+	return loadProviderCacheFromFile("Cloudflare", "cloudflare_cache.json")
 }
 
 // ============================================================================
@@ -61,7 +53,7 @@ func cloudflareAPIAttempt(
 	duration := time.Since(start)
 
 	if err != nil {
-		retry, handledErr := handleCloudflareNetworkError(ctx, method, err, duration, attempt)
+		retry, handledErr := handleProviderNetworkError(ctx, "Cloudflare", method, err, duration, attempt, true)
 		return nil, retry, handledErr
 	}
 
@@ -146,24 +138,6 @@ func normalizeCloudflareToken(token string) string {
 	return token
 }
 
-func handleCloudflareNetworkError(
-	ctx context.Context,
-	method string,
-	err error,
-	duration time.Duration,
-	attempt int,
-) (bool, error) {
-	debugLog("HTTP", "", fmt.Sprintf("❌ %s: %v | %s: %v", T.NetworkError, err, T.AvgLatency, duration))
-	apiMetrics.RecordError(method, 0, err, duration)
-
-	lastErr := fmt.Errorf("%s: %w", T.ErrNetworkError, err)
-	if !sleepOrCancel(ctx, calculateRetryDelay(attempt, true)) {
-		return false, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
-	}
-
-	return true, lastErr
-}
-
 func handleCloudflareResponse(
 	ctx context.Context,
 	res *http.Response,
@@ -171,11 +145,7 @@ func handleCloudflareResponse(
 	duration time.Duration,
 	attempt int,
 ) ([]byte, bool, error) {
-	respBody, readErr := io.ReadAll(res.Body)
-	closeErr := res.Body.Close()
-	if closeErr != nil {
-		debugLog("HTTP", "", fmt.Sprintf(T.ErrBodyClose+": %v", closeErr))
-	}
+	respBody, readErr := readAndCloseResponseBody(res)
 
 	if readErr != nil {
 		retry, handledErr := handleCloudflareReadError(ctx, res, method, readErr, duration, attempt)
@@ -628,20 +598,7 @@ func cleanupCloudflareRecords(ctx context.Context, zones []Zone, recordCache *Zo
 }
 
 func buildCloudflareConfigDomains() map[string]struct{} {
-	configDomains := make(map[string]struct{})
-
-	for _, dc := range cfg.DomainConfigs {
-		if dc.Provider != ProviderCloudflare {
-			continue
-		}
-
-		fqdn := normalizeCloudflareName(dc.FQDN)
-		if fqdn != "" {
-			configDomains[fqdn] = struct{}{}
-		}
-	}
-
-	return configDomains
+	return buildProviderConfigDomains(ProviderCloudflare)
 }
 
 func cleanupCloudflareZoneRecords(
@@ -704,7 +661,7 @@ func shouldCleanupCloudflareRecord(
 	zoneName string,
 	configDomains map[string]struct{},
 ) (string, bool) {
-	if rec.Type != RecordTypeA && rec.Type != RecordTypeAAAA {
+	if !isAddressRecord(rec.Type) {
 		return "", false
 	}
 

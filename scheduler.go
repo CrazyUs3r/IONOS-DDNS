@@ -136,7 +136,7 @@ func logChangedIPs(currentIPv4, currentIPv6 string) {
 
 	if lastV4 != "" && currentIPv4 != "" && lastV4 != currentIPv4 {
 		log(LogContext{
-			Level:   LogWarn,
+			Level:   LogInfo,
 			Action:  ActionUpdate,
 			Message: fmt.Sprintf(T.IPv4Changed, lastV4, currentIPv4),
 		})
@@ -144,7 +144,7 @@ func logChangedIPs(currentIPv4, currentIPv6 string) {
 
 	if lastV6 != "" && currentIPv6 != "" && lastV6 != currentIPv6 {
 		log(LogContext{
-			Level:   LogWarn,
+			Level:   LogInfo,
 			Action:  ActionUpdate,
 			Message: fmt.Sprintf(T.IPv6Changed, lastV6, currentIPv6),
 		})

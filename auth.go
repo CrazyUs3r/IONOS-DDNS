@@ -356,7 +356,7 @@ func hasPermission(role UserRole, method, path string) bool {
 		return true
 
 	case RoleEditor:
-		blocked := []string{"/api/users", "/api/save-config"}
+		blocked := []string{"/api/users", "/api/save-config", "/api/backup"}
 		for _, b := range blocked {
 			if strings.HasPrefix(path, b) {
 				return false
@@ -365,7 +365,7 @@ func hasPermission(role UserRole, method, path string) bool {
 		return true
 
 	case RoleViewer:
-		if method == http.MethodGet || path == "/ws" || path == "/metrics" {
+		if method == MethodGET || path == "/ws" || path == "/metrics" {
 			return true
 		}
 		return false
@@ -403,7 +403,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	var errMsg string
 
-	if r.Method == http.MethodPost {
+	if r.Method == MethodPOST {
 		clientIP := getClientIP(r)
 		limiter := loginLimiter.GetLimiter(clientIP)
 		if !limiter.Allow() {
@@ -504,7 +504,7 @@ func handleSetup(w http.ResponseWriter, r *http.Request) {
 
 	var errMsg string
 
-	if r.Method == http.MethodPost {
+	if r.Method == MethodPOST {
 		token := strings.TrimSpace(r.FormValue("setup_token"))
 		username := strings.TrimSpace(r.FormValue("username"))
 		password := r.FormValue("password")
@@ -576,7 +576,7 @@ func handleAPIUsers(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 
-	case http.MethodGet:
+	case MethodGET:
 		users := loadUsers()
 		type safeUser struct {
 			ID        string    `json:"id"`
@@ -591,7 +591,7 @@ func handleAPIUsers(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, out)
 
-	case http.MethodPost:
+	case MethodPOST:
 		var req struct {
 			Username string   `json:"username"`
 			Password string   `json:"password"`
@@ -661,9 +661,9 @@ func handleAPIUsersID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch r.Method {
-	case http.MethodPut:
+	case MethodPUT:
 		handleUpdateUser(w, r, id)
-	case http.MethodDelete:
+	case MethodDELETE:
 		handleDeleteUser(w, id, sess.UserID)
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

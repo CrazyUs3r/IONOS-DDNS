@@ -9,36 +9,24 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"time"
 )
 
-// ============================================================================
-// CACHE PERSISTENCE - HETZNER
-// ============================================================================
-func getHetznerDNSCachePath() string {
-	return filepath.Join(cfg.LogDir, "hetzner_dns_cache.json")
-}
-
 func saveHetznerDNSCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error {
-	return saveDNSProviderCacheToFile("HETZNER", getHetznerDNSCachePath(), zones, recordCache)
+	return saveProviderCacheToFile("HETZNER", "hetzner_dns_cache.json", zones, recordCache)
 }
 
 func loadHetznerDNSCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
-	return loadDNSProviderCacheFromFile("HETZNER", getHetznerDNSCachePath())
-}
-
-func getHetznerCloudCachePath() string {
-	return filepath.Join(cfg.LogDir, "hetzner_cloud_cache.json")
+	return loadProviderCacheFromFile("HETZNER", "hetzner_dns_cache.json")
 }
 
 func saveHetznerCloudCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error {
-	return saveDNSProviderCacheToFile("HETZNERCLOUD", getHetznerCloudCachePath(), zones, recordCache)
+	return saveProviderCacheToFile("HETZNERCLOUD", "hetzner_cloud_cache.json", zones, recordCache)
 }
 
 func loadHetznerCloudCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
-	return loadDNSProviderCacheFromFile("HETZNERCLOUD", getHetznerCloudCachePath())
+	return loadProviderCacheFromFile("HETZNERCLOUD", "hetzner_cloud_cache.json")
 }
 
 // ============================================================================
@@ -97,7 +85,7 @@ func hetznerAPIAttempt(
 	res, err := getHTTPClient().Do(req)
 	duration := time.Since(start)
 	if err != nil {
-		shouldRetry, retryErr := hetznerNetworkRetry(ctx, method, err, duration, attempt)
+		shouldRetry, retryErr := handleProviderNetworkError(ctx, providerName, method, err, duration, attempt, false)
 		return nil, shouldRetry, retryErr
 	}
 
@@ -156,31 +144,12 @@ func buildHetznerRequest(
 }
 
 func hetznerToken(dc *DomainConfig) string {
-	// Reuses existing DomainConfig fields so the provider can be added without a
-	// schema migration: api_secret is preferred; api_prefix is accepted as alias.
 	for _, candidate := range []string{dc.APISecret, dc.APIPrefix, dc.CFToken, dc.IPv64Token} {
 		if token := strings.TrimSpace(candidate); token != "" {
 			return token
 		}
 	}
 	return ""
-}
-
-func hetznerNetworkRetry(
-	ctx context.Context,
-	method string,
-	err error,
-	duration time.Duration,
-	attempt int,
-) (bool, error) {
-	debugLog("HTTP", "", fmt.Sprintf("❌ network error: %v | latency: %v", err, duration))
-	apiMetrics.RecordError(method, 0, err, duration)
-
-	wait := calculateRetryDelay(attempt, false)
-	if !sleepOrCancel(ctx, wait) {
-		return false, fmt.Errorf("context cancelled: %w", ctx.Err())
-	}
-	return true, fmt.Errorf("network error: %w", err)
 }
 
 func handleHetznerResponse(
@@ -191,51 +160,7 @@ func handleHetznerResponse(
 	duration time.Duration,
 	attempt int,
 ) ([]byte, bool, error) {
-	respBody, err := io.ReadAll(res.Body)
-	closeErr := res.Body.Close()
-	if closeErr != nil {
-		debugLog("HTTP", "", fmt.Sprintf("body close error: %v", closeErr))
-	}
-	if err != nil {
-		apiMetrics.RecordError(method, res.StatusCode, err, duration)
-		wait := calculateRetryDelay(attempt, false)
-		if !sleepOrCancel(ctx, wait) {
-			return nil, false, fmt.Errorf("context cancelled: %w", ctx.Err())
-		}
-		return nil, true, fmt.Errorf("body read error: %w", err)
-	}
-
-	if res.StatusCode >= 200 && res.StatusCode < 300 {
-		apiMetrics.RecordSuccess(method, duration)
-		lastErrorMsg.Set("")
-		debugLog("HTTP", "", fmt.Sprintf("✅ %s success: %d bytes", providerName, len(respBody)))
-		return respBody, false, nil
-	}
-
-	apiErr := classifyAPIErrorWithHeaders(res.StatusCode, method, endpoint, string(respBody), res.Header)
-	apiMetrics.RecordError(method, res.StatusCode, apiErr, duration)
-	lastErrorMsg.Set(sanitizeError(apiErr))
-
-	if res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden {
-		log(LogContext{Level: LogError, Action: ActionError, Message: fmt.Sprintf("🚨 %s auth error: %v", providerName, apiErr)})
-	}
-
-	if !apiErr.IsRetryable() {
-		return nil, false, apiErr
-	}
-	if attempt >= cfg.MaxAPIRetries-1 {
-		return nil, false, apiErr
-	}
-
-	wait := apiErr.RetryAfter
-	if wait <= 0 {
-		wait = calculateRetryDelay(attempt, res.StatusCode >= 500)
-	}
-	debugLog("HTTP", "", fmt.Sprintf("🔄 %s retry in %v", providerName, wait))
-	if !sleepOrCancel(ctx, wait) {
-		return nil, false, fmt.Errorf("context cancelled: %w", ctx.Err())
-	}
-	return nil, true, apiErr
+	return handleProviderHTTPResponse(ctx, providerName, "", res, method, endpoint, duration, attempt)
 }
 
 // ============================================================================
@@ -264,7 +189,7 @@ type hetznerDNSRecord struct {
 }
 
 func loadHetznerDNSZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
-	data, err := hetznerDNSAPI(ctx, dc, http.MethodGet, hetznerDNSBaseURL+"/zones", nil)
+	data, err := hetznerDNSAPI(ctx, dc, MethodGET, hetznerDNSBaseURL+"/zones", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +211,7 @@ func loadHetznerDNSZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) 
 
 func loadHetznerDNSZoneRecords(ctx context.Context, dc *DomainConfig, zoneID string) ([]Record, error) {
 	endpoint := hetznerDNSBaseURL + "/records?zone_id=" + url.QueryEscape(zoneID)
-	data, err := hetznerDNSAPI(ctx, dc, http.MethodGet, endpoint, nil)
+	data, err := hetznerDNSAPI(ctx, dc, MethodGET, endpoint, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -338,7 +263,7 @@ type hetznerCloudRRRecord struct {
 }
 
 func loadHetznerCloudZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
-	data, err := hetznerCloudAPI(ctx, dc, http.MethodGet, hetznerCloudBaseURL+"/zones", nil)
+	data, err := hetznerCloudAPI(ctx, dc, MethodGET, hetznerCloudBaseURL+"/zones", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -365,7 +290,7 @@ func loadHetznerCloudZones(ctx context.Context, dc *DomainConfig) ([]Zone, error
 
 func loadHetznerCloudZoneRecords(ctx context.Context, dc *DomainConfig, zoneID string) ([]Record, error) {
 	endpoint := fmt.Sprintf("%s/zones/%s/rrsets", hetznerCloudBaseURL, escapePathSegment(zoneID))
-	data, err := hetznerCloudAPI(ctx, dc, http.MethodGet, endpoint, nil)
+	data, err := hetznerCloudAPI(ctx, dc, MethodGET, endpoint, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -430,7 +355,7 @@ func updateHetznerDNS(
 		return true, nil
 	}
 
-	method := http.MethodPost
+	method := MethodPOST
 	endpoint := hetznerDNSBaseURL + "/records"
 	payload := hetznerDNSRecord{
 		Name:   recordName,
@@ -442,7 +367,7 @@ func updateHetznerDNS(
 	action := ActionCreate
 
 	if existing != nil {
-		method = http.MethodPut
+		method = MethodPUT
 		endpoint = hetznerDNSBaseURL + "/records/" + escapePathSegment(existing.ID)
 		payload.ID = existing.ID
 		action = ActionUpdate
@@ -481,7 +406,7 @@ func updateHetznerCloudDNS(
 	}
 
 	payloadRecords := []hetznerCloudRRRecord{{Value: newIP, Comment: ManagedComment}}
-	method := http.MethodPost
+	method := MethodPOST
 	action := ActionCreate
 	endpoint := fmt.Sprintf("%s/zones/%s/rrsets", hetznerCloudBaseURL, escapePathSegment(zoneIDOrName(zoneID, zoneName)))
 	payload := any(map[string]any{
@@ -546,36 +471,29 @@ func shouldSkipHetznerUpdate(providerName, fqdn, recordType, newIP string, exist
 }
 
 func updateHetznerRecordCache(cache *ZoneRecordCache, zoneID, recordName, recordType, newIP string, existing *Record) {
-	if cache == nil {
-		return
-	}
-	records, ok := cache.Get(zoneID)
-	if !ok {
-		return
-	}
-
-	updated := false
-	if existing != nil {
-		for i := range records {
-			if records[i].ID == existing.ID && records[i].Type == recordType {
-				records[i].Content = newIP
-				updated = true
-				break
+	var create cachedRecordCreateFunc
+	if existing == nil {
+		create = func(records []Record) *Record {
+			return &Record{
+				ID:      syntheticCachedRecordID(records),
+				Name:    recordName,
+				Type:    recordType,
+				Content: newIP,
 			}
 		}
-	} else {
-		records = append(records, Record{
-			ID:      fmt.Sprintf("new-%d", len(records)),
-			Name:    recordName,
-			Type:    recordType,
-			Content: newIP,
-		})
-		updated = true
 	}
 
-	if updated {
-		cache.Set(zoneID, records)
-	}
+	updateCachedZoneRecord(
+		cache,
+		zoneID,
+		func(rec Record) bool {
+			return existing != nil && rec.ID == existing.ID && rec.Type == recordType
+		},
+		func(rec *Record) {
+			rec.Content = newIP
+		},
+		create,
+	)
 }
 
 // ============================================================================
@@ -631,7 +549,7 @@ func cleanupSingleHetznerRecord(ctx context.Context, dc *DomainConfig, provider 
 	var err error
 	switch provider {
 	case ProviderHetzner:
-		_, err = hetznerDNSAPI(ctx, dc, http.MethodDelete, hetznerDNSBaseURL+"/records/"+escapePathSegment(rec.ID), nil)
+		_, err = hetznerDNSAPI(ctx, dc, MethodDELETE, hetznerDNSBaseURL+"/records/"+escapePathSegment(rec.ID), nil)
 	case ProviderHetznerCloud:
 		endpoint := fmt.Sprintf(
 			"%s/zones/%s/rrsets/%s/%s",
@@ -640,7 +558,7 @@ func cleanupSingleHetznerRecord(ctx context.Context, dc *DomainConfig, provider 
 			escapePathSegment(normalizeHetznerRelativeName(rec.Name)),
 			escapePathSegment(rec.Type),
 		)
-		_, err = hetznerCloudAPI(ctx, dc, http.MethodDelete, endpoint, nil)
+		_, err = hetznerCloudAPI(ctx, dc, MethodDELETE, endpoint, nil)
 	}
 	if err != nil {
 		debugLog("MAINTENANCE", fqdn, fmt.Sprintf("cleanup delete error: %v", err))
@@ -651,7 +569,7 @@ func cleanupSingleHetznerRecord(ctx context.Context, dc *DomainConfig, provider 
 }
 
 func shouldCleanupHetznerRecord(zoneName string, rec Record, configDomains map[string]struct{}) (string, bool) {
-	if rec.Type != RecordTypeA && rec.Type != RecordTypeAAAA {
+	if !isAddressRecord(rec.Type) {
 		return "", false
 	}
 	fqdn := hetznerRecordFQDN(zoneName, normalizeHetznerRelativeName(rec.Name))
@@ -659,35 +577,6 @@ func shouldCleanupHetznerRecord(zoneName string, rec Record, configDomains map[s
 		return "", false
 	}
 	return fqdn, true
-}
-
-func findProviderConfigForCleanup(provider ProviderType) *DomainConfig {
-	cfgMu.RLock()
-	defer cfgMu.RUnlock()
-	for i := range cfg.DomainConfigs {
-		if cfg.DomainConfigs[i].Provider == provider {
-			dc := cfg.DomainConfigs[i]
-			return &dc
-		}
-	}
-	return nil
-}
-
-func buildProviderConfigDomains(provider ProviderType) map[string]struct{} {
-	cfgMu.RLock()
-	defer cfgMu.RUnlock()
-
-	out := make(map[string]struct{})
-	for _, dc := range cfg.DomainConfigs {
-		if dc.Provider != provider {
-			continue
-		}
-		fqdn := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(dc.FQDN), "."))
-		if fqdn != "" {
-			out[fqdn] = struct{}{}
-		}
-	}
-	return out
 }
 
 // ============================================================================

@@ -139,19 +139,18 @@ func startDomainWorker(
 }
 
 func acquireWorkerSlot(ctx context.Context, fqdn string) bool {
-	select {
-	case workerSemaphore <- struct{}{}:
+	if workerLimiter.Acquire(ctx) {
 		debugLog("WORKER", fqdn, t(T.WorkerSlotAcquired, "Worker slot acquired"))
 		return true
-	case <-ctx.Done():
-		debugLog("WORKER", fqdn, t(T.WorkerCancelledContext, "Cancelled: context cancelled"))
-		return false
 	}
+
+	debugLog("WORKER", fqdn, t(T.WorkerCancelledContext, "Cancelled: context cancelled"))
+	return false
 }
 
 func releaseWorkerSlot(fqdn string) {
 	debugLog("WORKER", fqdn, t(T.WorkerSlotReleased, "Worker slot released"))
-	<-workerSemaphore
+	workerLimiter.Release()
 }
 
 func buildDomainUpdateJob(
