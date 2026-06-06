@@ -39,7 +39,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 FROM alpine:3.23 AS suexec-builder
 RUN apk add --no-cache su-exec
 
-FROM busybox:stable-musl
+# FROM busybox:stable-musl
+FROM alpine:3.23
 
 ARG VERSION=2.5.0
 ARG BUILD_DATE
