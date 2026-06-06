@@ -10,7 +10,7 @@ if [ "$(id -u)" = "0" ]; then
     if [ "$CURRENT_OWNER" != "1000" ]; then
         chown 1000:1000 "$CONFIG_DIR"
     fi
-    exec su-exec dyndns /app/dyndns "$@"
+    exec /sbin/su-exec dyndns /app/dyndns "$@"
 fi
 
 exec /app/dyndns "$@"

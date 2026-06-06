@@ -62,6 +62,8 @@ WORKDIR /app
 RUN adduser -D -H -u 1000 -s /sbin/nologin dyndns
 
 COPY --from=suexec-builder /sbin/su-exec /sbin/su-exec
+RUN chmod +x /sbin/su-exec
+
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=builder --chown=dyndns:dyndns /out/dyndns /app/dyndns
