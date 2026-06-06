@@ -1040,6 +1040,7 @@ async function refreshDashboardDomains() {
 		initIPTimelines();
 		initChangedBadges();
 		initChartTooltips();
+		startUptimeClocks();
 	} catch (err) {
 		console.error('Domains reload failed:', err);
 		if (typeof showToast === 'function') {
@@ -1734,14 +1735,16 @@ function formatUptime(lastChangedStr) {
 }
 
 function startUptimeClocks() {
-	document.querySelectorAll('[data-last-changed]').forEach(el => {
-		const id = el.dataset.uptimeId;
-		const target = document.getElementById('uptime-' + id);
-		if (!target) return;
-		const update = () => target.textContent = formatUptime(el.dataset.lastChanged);
-		update();
-		setInterval(update, 30000);
-	});
+    document.querySelectorAll('[data-last-changed]').forEach(el => {
+        if (el.dataset.uptimeReady === '1') return;
+        el.dataset.uptimeReady = '1';
+        const id = el.dataset.uptimeId;
+        const target = document.getElementById('uptime-' + id);
+        if (!target) return;
+        const update = () => target.textContent = formatUptime(el.dataset.lastChanged);
+        update();
+        setInterval(update, 30000);
+    });
 }
 
 let _dotTooltip = null;
