@@ -56,7 +56,7 @@ ENV CONFIG_DIR="/config" \
 
 WORKDIR /app
 
-RUN adduser -D -H -u 1000 -s /sbin/nologin dyndns
+RUN adduser -D -H -u 1000 -s /bin/sh dyndns
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
