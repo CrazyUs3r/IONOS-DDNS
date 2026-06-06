@@ -36,6 +36,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # =============================================================================
 # Runtime Stage
 # =============================================================================
+FROM alpine:3.23 AS suexec-builder
+RUN apk add --no-cache su-exec
+
 FROM busybox:stable-musl
 
 ARG VERSION=2.5.0
@@ -56,18 +59,16 @@ ENV CONFIG_DIR="/config" \
 
 WORKDIR /app
 
-RUN adduser -D -H -u 1000 -s /bin/sh dyndns
+RUN adduser -D -H -u 1000 -s /sbin/nologin dyndns
 
+COPY --from=suexec-builder /sbin/su-exec /sbin/su-exec
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=builder --chown=dyndns:dyndns /out/dyndns /app/dyndns
 
-COPY docker-entrypoint.sh /docker-entrypoint.sh
-
-RUN chmod +x /docker-entrypoint.sh /app/dyndns
+COPY --chmod=755 docker-entrypoint.sh /docker-entrypoint.sh
 
 VOLUME ["/config"]
-
 EXPOSE 8080
 
 HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
