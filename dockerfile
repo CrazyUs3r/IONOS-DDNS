@@ -62,13 +62,15 @@ COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certifi
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=builder --chown=dyndns:dyndns /out/dyndns /app/dyndns
 
+COPY docker-entrypoint.sh /docker-entrypoint.sh
 
-USER dyndns:dyndns
+RUN chmod +x /docker-entrypoint.sh /app/dyndns
 
 VOLUME ["/config"]
-EXPOSE ${HEALTH_PORT}
+
+EXPOSE 8080
 
 HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
     CMD wget -qO- "http://localhost:${HEALTH_PORT}/health" || exit 1
 
-ENTRYPOINT ["/app/dyndns"]
+ENTRYPOINT ["/docker-entrypoint.sh"]
