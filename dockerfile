@@ -16,7 +16,6 @@ RUN echo "dyndns:x:1000:1000::/:" > /etc/passwd && \
 
 RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev
 
-# su-exec direkt aus Source bauen – ein einzelnes C-File, ~20KB
 RUN wget -qO /tmp/su-exec.c https://raw.githubusercontent.com/ncopa/su-exec/master/su-exec.c && \
     gcc -O2 -static -o /usr/local/bin/su-exec /tmp/su-exec.c && \
     rm /tmp/su-exec.c
