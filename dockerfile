@@ -14,7 +14,12 @@ WORKDIR /app
 RUN echo "dyndns:x:1000:1000::/:" > /etc/passwd && \
     echo "dyndns:x:1000:" > /etc/group
 
-RUN apk add --no-cache git ca-certificates tzdata
+RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev
+
+# su-exec direkt aus Source bauen – ein einzelnes C-File, ~20KB
+RUN wget -qO /tmp/su-exec.c https://raw.githubusercontent.com/ncopa/su-exec/master/su-exec.c && \
+    gcc -O2 -static -o /usr/local/bin/su-exec /tmp/su-exec.c && \
+    rm /tmp/su-exec.c
 
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod \
@@ -36,11 +41,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # =============================================================================
 # Runtime Stage
 # =============================================================================
-FROM alpine:3.23 AS suexec-builder
-RUN apk add --no-cache su-exec
-
-# FROM busybox:stable-musl
-FROM alpine:3.23
+FROM busybox:stable-musl
 
 ARG VERSION=2.5.0
 ARG BUILD_DATE
@@ -62,9 +63,7 @@ WORKDIR /app
 
 RUN adduser -D -H -u 1000 -s /sbin/nologin dyndns
 
-COPY --from=suexec-builder /sbin/su-exec /sbin/su-exec
-RUN chmod +x /sbin/su-exec
-
+COPY --from=builder /usr/local/bin/su-exec /sbin/su-exec
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=builder --chown=dyndns:dyndns /out/dyndns /app/dyndns
