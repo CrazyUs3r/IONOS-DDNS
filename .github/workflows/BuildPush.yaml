@@ -171,9 +171,6 @@ jobs:
           build linux arm 7 "linux-armv7"
           build linux arm 6 "linux-armv6"
 
-          build darwin amd64 "" "darwin-amd64"
-          build darwin arm64 "" "darwin-arm64"
-
           build windows amd64 "" "windows-amd64"
           build windows arm64 "" "windows-arm64"
 
@@ -228,8 +225,6 @@ jobs:
             | `ionos-ddns-linux-arm64` | Linux ARM64 |
             | `ionos-ddns-linux-armv7` | Linux ARMv7 32-bit |
             | `ionos-ddns-linux-armv6` | Linux ARMv6 32-bit |
-            | `ionos-ddns-darwin-amd64` | macOS Intel |
-            | `ionos-ddns-darwin-arm64` | macOS Apple Silicon |
             | `ionos-ddns-windows-amd64.exe` | Windows x86_64 |
             | `ionos-ddns-windows-arm64.exe` | Windows ARM64 |
 
