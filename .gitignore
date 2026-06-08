@@ -8,3 +8,12 @@ logs/
 # OS-spezifische Dateien
 .DS_Store
 Thumbs.db
+
+.git
+.github
+bin
+dist
+tmp
+*.log
+.env
+.env.*
