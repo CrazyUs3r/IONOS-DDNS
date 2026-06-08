@@ -34,6 +34,9 @@ jobs:
       contents: write
       packages: write
 
+    env:
+      APP_NAME: ionos-ddns
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -43,19 +46,24 @@ jobs:
       - name: Set version from input
         run: |
           VERSION="${{ inputs.version }}"
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "TAG_NAME=v$VERSION" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "TAG_NAME=v$VERSION" >> "$GITHUB_ENV"
+          echo "BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
+          echo "VCS_REF=${{ github.sha }}" >> "$GITHUB_ENV"
           echo "✅ Version gesetzt auf $VERSION"
 
       - name: Generate Changelog
         id: changelog
+        shell: bash
+        env:
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
         run: |
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 
           if [ -z "$LAST_TAG" ]; then
             RAW=$(git log --pretty=format:"%s|%h|%an" -20)
           else
-            RAW=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s|%h|%an")
+            RAW=$(git log "${LAST_TAG}"..HEAD --pretty=format:"%s|%h|%an")
           fi
 
           FEATURES=""
@@ -65,22 +73,26 @@ jobs:
 
           while IFS= read -r line; do
             [ -z "$line" ] && continue
+
             MSG=$(echo "$line" | cut -d'|' -f1)
             HASH=$(echo "$line" | cut -d'|' -f2)
             AUTHOR=$(echo "$line" | cut -d'|' -f3)
 
-            # Hier ist die entscheidende Änderung für die Verlinkung:
-            ENTRY="- ${MSG} ([${HASH}](${{ github.server_url }}/${{ github.repository }}/commit/${HASH})) – ${AUTHOR}"
+            ENTRY="- ${MSG} ([${HASH}](${REPO_URL}/commit/${HASH})) - ${AUTHOR}"
 
             case "$MSG" in
               feat*|feature*|add*|Add*|Feat*)
-                FEATURES="${FEATURES}${ENTRY}"$'\n' ;;
+                FEATURES="${FEATURES}${ENTRY}"$'\n'
+                ;;
               fix*|Fix*|bug*|Bug*|hotfix*)
-                FIXES="${FIXES}${ENTRY}"$'\n' ;;
+                FIXES="${FIXES}${ENTRY}"$'\n'
+                ;;
               perf*|Perf*|opt*|Opt*|speed*|latenz*|Latenz*)
-                PERF="${PERF}${ENTRY}"$'\n' ;;
+                PERF="${PERF}${ENTRY}"$'\n'
+                ;;
               *)
-                OTHER="${OTHER}${ENTRY}"$'\n' ;;
+                OTHER="${OTHER}${ENTRY}"$'\n'
+                ;;
             esac
           done <<< "$RAW"
 
@@ -89,12 +101,15 @@ jobs:
           if [ -n "$FEATURES" ]; then
             BODY="${BODY}### ✨ Neue Features"$'\n'"${FEATURES}"$'\n'
           fi
+
           if [ -n "$FIXES" ]; then
             BODY="${BODY}### 🐛 Bugfixes"$'\n'"${FIXES}"$'\n'
           fi
+
           if [ -n "$PERF" ]; then
             BODY="${BODY}### ⚡ Performance"$'\n'"${PERF}"$'\n'
           fi
+
           if [ -n "$OTHER" ]; then
             BODY="${BODY}### 🔧 Weitere Änderungen"$'\n'"${OTHER}"$'\n'
           fi
@@ -103,9 +118,11 @@ jobs:
             BODY="Keine Commits seit dem letzten Release."
           fi
 
-          echo "changelog<<EOF" >> $GITHUB_OUTPUT
-          echo "$BODY" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          {
+            echo "changelog<<EOF"
+            echo "$BODY"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -117,12 +134,53 @@ jobs:
         run: go mod download
 
       - name: Build Binaries
+        shell: bash
         run: |
-          GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${{ env.VERSION }}" -o ionos-ddns-linux-amd64 .
-          GOOS=windows GOARCH=amd64 go build -o ionos-ddns-windows-amd64.exe .
+          mkdir -p dist
+
+          LDFLAGS="-s -w \
+            -X main.Version=${VERSION} \
+            -X main.BuildDate=${BUILD_DATE} \
+            -X main.VCSRef=${VCS_REF}"
+
+          build() {
+            local goos="$1"
+            local goarch="$2"
+            local goarm="$3"
+            local suffix="$4"
+
+            local output="dist/${APP_NAME}-${suffix}"
+
+            if [ "$goos" = "windows" ]; then
+              output="${output}.exe"
+            fi
+
+            echo "🔨 Building ${suffix}"
+
+            if [ -n "$goarm" ]; then
+              CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" GOARM="$goarm" \
+                go build -tags timetzdata -trimpath -ldflags="$LDFLAGS" -o "$output" .
+            else
+              CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
+                go build -tags timetzdata -trimpath -ldflags="$LDFLAGS" -o "$output" .
+            fi
+          }
+
+          build linux amd64 "" "linux-amd64"
+          build linux arm64 "" "linux-arm64"
+          build linux arm 7 "linux-armv7"
+          build linux arm 6 "linux-armv6"
+
+          build darwin amd64 "" "darwin-amd64"
+          build darwin arm64 "" "darwin-arm64"
+
+          build windows amd64 "" "windows-amd64"
+          build windows arm64 "" "windows-arm64"
+
       - name: Generate checksums
         run: |
-          sha256sum ionos-ddns-linux-amd64 ionos-ddns-linux-arm64 > checksums.txt
+          cd dist
+          sha256sum * > checksums.txt
           echo "📋 Checksums:"
           cat checksums.txt
 
@@ -151,6 +209,15 @@ jobs:
             image: ${{ secrets.DOCKERHUB_USERNAME }}/ionos-ddns:${{ env.VERSION }}
             ```
 
+            ### Unterstützte Docker-Plattformen
+
+            | Plattform | Ziel |
+            |----------|------|
+            | `linux/amd64` | x86_64 Server / Desktop |
+            | `linux/arm64` | ARM64 / Raspberry Pi 4/5 64-bit |
+            | `linux/arm/v7` | ARMv7 / Raspberry Pi 2/3 32-bit |
+            | `linux/arm/v6` | ARMv6 / Raspberry Pi Zero / ältere Pi-Modelle |
+
             ---
 
             ## 📦 Binaries
@@ -158,13 +225,17 @@ jobs:
             | Datei | Plattform |
             |-------|-----------|
             | `ionos-ddns-linux-amd64` | Linux x86_64 |
-            | `ionos-ddns-linux-arm64` | Linux ARM64 (Raspberry Pi etc.) |
+            | `ionos-ddns-linux-arm64` | Linux ARM64 |
+            | `ionos-ddns-linux-armv7` | Linux ARMv7 32-bit |
+            | `ionos-ddns-linux-armv6` | Linux ARMv6 32-bit |
+            | `ionos-ddns-darwin-amd64` | macOS Intel |
+            | `ionos-ddns-darwin-arm64` | macOS Apple Silicon |
+            | `ionos-ddns-windows-amd64.exe` | Windows x86_64 |
+            | `ionos-ddns-windows-arm64.exe` | Windows ARM64 |
 
             > SHA256-Checksums in `checksums.txt`
           files: |
-            ionos-ddns-linux-amd64
-            ionos-ddns-linux-arm64
-            checksums.txt
+            dist/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -186,13 +257,22 @@ jobs:
           context: .
           file: ./dockerfile
           push: true
-          platforms: linux/amd64,linux/arm64
+          platforms: |
+            linux/amd64
+            linux/arm64
+            linux/arm/v7
+            linux/arm/v6
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/ionos-ddns:${{ env.VERSION }}
             ${{ inputs.docker_latest == 'true' && format('{0}/ionos-ddns:latest', secrets.DOCKERHUB_USERNAME) || '' }}
           build-args: |
             VERSION=${{ env.VERSION }}
+            BUILD_DATE=${{ env.BUILD_DATE }}
+            VCS_REF=${{ github.sha }}
           labels: |
             org.opencontainers.image.version=${{ env.VERSION }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ env.BUILD_DATE }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
