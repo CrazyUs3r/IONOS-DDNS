@@ -629,7 +629,8 @@ func build2FASettingsFragment(user *DashboardUser, pendingSecret string, hasPend
 	formAction := "/settings/2fa?fragment=1"
 	var mainContent string
 
-	if hasPending {
+	switch {
+	case hasPending:
 		uri := totpProvisioningURI(pendingSecret, user.Username, issuer)
 		mainContent = `
 <p class="totp-help">
@@ -662,7 +663,7 @@ func build2FASettingsFragment(user *DashboardUser, pendingSecret string, hasPend
 	</button>
 </form>`
 
-	} else if totpEnabledForUser(user) {
+	case totpEnabledForUser(user):
 		activeSubtitle := fmt.Sprintf(
 			t(T.TotpActiveSubtitle, "Your account is protected with TOTP (%s)"),
 			issuer,
@@ -699,7 +700,8 @@ func build2FASettingsFragment(user *DashboardUser, pendingSecret string, hasPend
 		` + esc(t(T.TotpReplaceSecretButton, "🔄 Replace with new secret")) + `
 	</button>
 </form>`
-	} else {
+
+	default:
 		mainContent = `
 <div class="totp-status-box">
 	<span class="totp-status-icon">🔓</span>
