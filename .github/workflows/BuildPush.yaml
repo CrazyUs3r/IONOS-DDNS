@@ -1,4 +1,4 @@
-name: Docker Build and Release (Manual)
+name: Docker Build and Release
 
 on:
   workflow_dispatch:
@@ -25,6 +25,10 @@ on:
         options:
           - "true"
           - "false"
+
+  push:
+    branches:
+      - main
 
 jobs:
   build-and-release:
