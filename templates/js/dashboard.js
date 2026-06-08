@@ -7,14 +7,36 @@ let editIndex = null;
 let tempDomainConfigs = [];
 const reconnectDelayMax = 10000;
 
+function isDashboardRuntime() {
+	return !!document.querySelector('.app-layout, .sidebar, .main-content, #page-title, .page-section');
+}
+
+function isAuthRuntime() {
+	return !!document.querySelector('.auth-wrap, .auth-card, form[action="/login"], form[action="/setup"], form[action="/2fa"]');
+}
+
+function shouldRunDashboardBoot() {
+	const path = window.location.pathname || '';
+	if (
+		path === '/login' ||
+		path === '/setup' ||
+		path === '/2fa' ||
+		path.startsWith('/settings/2fa')
+	) {
+		return false;
+	}
+	return isDashboardRuntime() && !isAuthRuntime();
+}
+
 // ============================================================================
 // SIDEBAR NAVIGATION
 // ============================================================================
-const PAGES = ['dashboard', 'domains', 'metrics', 'diagnose', 'logs', 'debug', 'backup', 'settings', 'users'];
+const PAGES = ['dashboard', 'domains', 'metrics', 'diagnose', 'logs', 'debug', 'backup', 'settings', 'totp', 'users'];
 
 let currentPage = 'dashboard';
 
 function navTo(page) {
+	if (!isDashboardRuntime()) return;
 	if (!PAGES.includes(page)) page = 'dashboard';
 	currentPage = page;
 
@@ -42,6 +64,7 @@ function navTo(page) {
 		debug: tr('nav_debug', '🐞 Debug'),
 		backup: tr('nav_backup', '💾 Backup & Restore'),
 		settings: tr('nav_settings', '⚙️ Settings'),
+		totp: tr('nav_totp', '🔐 2FA / Account Security'),
 		users: tr('nav_users', '👥 User Management'),
 	};
 	const titleEl = document.getElementById('page-title');
@@ -49,6 +72,10 @@ function navTo(page) {
 
 	if (page === 'settings') {
 		_initSettingsFields();
+	}
+
+	if (page === 'totp') {
+		initTOTPSettings(false);
 	}
 
 	if (page === 'users') {
@@ -68,6 +95,10 @@ function navTo(page) {
 	}
 
 	try { localStorage.setItem('nav-page', page); } catch { }
+	try {
+		const newHash = '#' + page;
+		if (window.location.hash !== newHash) history.replaceState(null, '', newHash);
+	} catch { }
 
 	const sb = document.getElementById('sidebar');
 	if (sb && window.innerWidth < 768) sb.classList.remove('sidebar-open');
@@ -78,7 +109,113 @@ function toggleSidebar() {
 	if (sb) sb.classList.toggle('sidebar-open');
 }
 
+
+// ============================================================================
+// 2FA SETTINGS INLINE SECTION
+// ============================================================================
+function initTOTPSettings(forceReload = false) {
+	const container = document.getElementById('totp-settings-content');
+	if (!container) return;
+	bindTOTPForms();
+	if (forceReload || !container.querySelector('.totp-settings-inline')) {
+		loadTOTPSettings();
+	}
+}
+
+async function loadTOTPSettings() {
+	const container = document.getElementById('totp-settings-content');
+	if (!container) return;
+
+	try {
+		const res = await fetch('/settings/2fa?fragment=1', {
+			method: 'GET',
+			credentials: 'same-origin',
+			headers: { 'X-Requested-With': 'fetch' },
+		});
+		if (res.redirected && res.url.includes('/login')) {
+			window.location.href = res.url;
+			return;
+		}
+		if (res.status === 401) {
+			window.location.href = '/login?redirect=/';
+			return;
+		}
+		if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+		container.innerHTML = await res.text();
+		bindTOTPForms();
+		focusTOTPCodeInput();
+	} catch (err) {
+		container.innerHTML = `<div class="auth-error">⚠️ ${escapeHtml(tr('totp_settings_load_failed', '2FA settings could not be loaded'))}: ${escapeHtml(String(err.message || err))}</div>`;
+	}
+}
+
+function bindTOTPForms() {
+	const container = document.getElementById('totp-settings-content');
+	if (!container) return;
+
+	container.querySelectorAll('form[data-totp-form]').forEach(form => {
+		if (form.dataset.bound === '1') return;
+		form.dataset.bound = '1';
+		form.addEventListener('submit', submitTOTPForm);
+	});
+}
+
+async function submitTOTPForm(event) {
+	event.preventDefault();
+	const form = event.currentTarget;
+	const container = document.getElementById('totp-settings-content');
+	if (!form || !container) return;
+
+	const submitBtn = form.querySelector('button[type="submit"]');
+	if (submitBtn) submitBtn.disabled = true;
+
+	try {
+		const url = new URL(form.getAttribute('action') || '/settings/2fa?fragment=1', window.location.origin);
+		url.searchParams.set('fragment', '1');
+
+		const res = await fetch(url.toString(), {
+			method: 'POST',
+			body: new FormData(form),
+			credentials: 'same-origin',
+			headers: { 'X-Requested-With': 'fetch' },
+		});
+		if (res.redirected && res.url.includes('/login')) {
+			window.location.href = res.url;
+			return;
+		}
+		if (res.status === 401) {
+			window.location.href = '/login?redirect=/';
+			return;
+		}
+		if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+		container.innerHTML = await res.text();
+		bindTOTPForms();
+		focusTOTPCodeInput();
+
+		if (document.getElementById('users-list')) {
+			loadUsers();
+		}
+	} catch (err) {
+		showToast('❌ ' + tr('totp_action_failed', '2FA action failed') + ': ' + String(err.message || err), 'error');
+	} finally {
+		if (submitBtn) submitBtn.disabled = false;
+	}
+}
+
+function focusTOTPCodeInput() {
+	const input = document.querySelector('#totp-settings-content input[name="totp_code"]');
+	if (input) input.focus();
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
+	if (!shouldRunDashboardBoot()) {
+		const savedTheme = localStorage.getItem('theme');
+		if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
+		return;
+	}
+
 	await loadInitialConfig();
 	renderSettingsDomainList();
 	if (!localStorage.getItem('theme')) {
@@ -101,7 +238,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 	initDomainDetailsState();
 
 	document.addEventListener('visibilitychange', () => {
-		if (document.visibilityState === 'visible') {
+		if (document.visibilityState === 'visible' && shouldRunDashboardBoot()) {
 			if (!ws || ws.readyState === WebSocket.CLOSED) {
 				reconnectDelay = 1000;
 				connectWS();
@@ -109,7 +246,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 		}
 	});
 
-	const savedPage = localStorage.getItem('nav-page') || 'dashboard';
+	const hashPage = (window.location.hash || '').replace(/^#/, '');
+	const savedPage = PAGES.includes(hashPage) ? hashPage : (localStorage.getItem('nav-page') || 'dashboard');
 	navTo(savedPage);
 
 	document.getElementById('sidebar-overlay')?.addEventListener('click', () => {
@@ -231,6 +369,7 @@ function calcLevelFromMetrics(m) {
 }
 
 async function loadInitialConfig() {
+	if (!shouldRunDashboardBoot()) return;
 	try {
 		const r = await fetch('/api/config');
 		if (!r.ok) return;
@@ -443,6 +582,9 @@ function initChartTooltips(root = document) {
 let isSettingsOpen = false;
 
 function connectWS() {
+	if (!shouldRunDashboardBoot()) return;
+	if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+
 	const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
 	ws = new WebSocket(proto + location.host + '/ws');
 	ws.onmessage = (e) => {
@@ -474,11 +616,18 @@ function connectWS() {
 			});
 		}
 	};
-	ws.onclose = () => scheduleReconnect();
+	ws.onclose = () => {
+		ws = null;
+		scheduleReconnect();
+	};
+	ws.onerror = () => {
+		try { ws.close(); } catch { }
+	};
 	ws.onopen = () => { reconnectDelay = 1000; if (reconnectTimer) clearTimeout(reconnectTimer); };
 }
 
 function scheduleReconnect() {
+	if (!shouldRunDashboardBoot() || document.visibilityState !== 'visible') return;
 	if (reconnectTimer) return;
 	reconnectTimer = setTimeout(() => { reconnectTimer = null; connectWS(); }, reconnectDelay);
 	reconnectDelay = Math.min(reconnectDelay * 2, reconnectDelayMax);
@@ -769,15 +918,18 @@ function closeSettings() {
 function closeSettingsOutside(e) { /* noop - no modal */ }
 
 function saveToken() {
-	const val = (document.getElementById('s-token').value || '').trim();
+	const input = document.getElementById('s-token');
+	if (!input) return;
+
+	const val = (input.value || '').trim();
 	if (val) {
 		localStorage.setItem('triggerToken', val);
-		document.getElementById('s-token').value = '';
-		document.getElementById('s-token').placeholder = tr('token_saved_masked', '●●●●●● (gespeichert)');
+		input.value = '';
+		input.placeholder = tr('token_saved_masked', '●●●●●● (gespeichert)');
 		showToast(tr('token_saved', '✅ Token gespeichert'), 'success');
 	} else {
 		localStorage.removeItem('triggerToken');
-		document.getElementById('s-token').placeholder = tr('token_enter', 'Token eingeben...');
+		input.placeholder = tr('token_enter', 'Token eingeben...');
 		showToast(tr('token_deleted', '🗑️ Token gelöscht'), 'info');
 	}
 }
@@ -814,7 +966,16 @@ function renderSettingsDomainList() {
 }
 
 function escHtml(s) {
-	return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+	return String(s ?? '')
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#39;');
+}
+
+function jsStringAttr(v) {
+	return escHtml(JSON.stringify(String(v ?? '')));
 }
 
 function openAddDomainSection() {
@@ -887,17 +1048,29 @@ function editDomain(index) {
 }
 
 function toggleProviderFields() {
-	const p = document.getElementById('new-domain-provider').value;
-	document.getElementById('fields-ionos').style.display = p === 'IONOS' ? 'block' : 'none';
-	document.getElementById('fields-cloudflare').style.display = p === 'CLOUDFLARE' ? 'block' : 'none';
-	document.getElementById('fields-ipv64').style.display = p === 'IPV64' ? 'block' : 'none';
-	document.getElementById('fields-hetzner').style.display = p === 'HETZNER' ? 'block' : 'none';
-	document.getElementById('fields-hetznercloud').style.display = p === 'HETZNERCLOUD' ? 'block' : 'none';
+	const providerSelect = document.getElementById('new-domain-provider');
+	if (!providerSelect) return;
+
+	const p = providerSelect.value;
+	const show = (id, visible) => {
+		const el = document.getElementById(id);
+		if (el) el.style.display = visible ? 'block' : 'none';
+	};
+
+	show('fields-ionos', p === 'IONOS');
+	show('fields-cloudflare', p === 'CLOUDFLARE');
+	show('fields-ipv64', p === 'IPV64');
+	show('fields-hetzner', p === 'HETZNER');
+	show('fields-hetznercloud', p === 'HETZNERCLOUD');
 }
 
 function addDomainToList() {
-	const fqdn = document.getElementById('new-domain-fqdn').value.trim().toLowerCase();
-	const provider = document.getElementById('new-domain-provider').value;
+	const fqdnInput = document.getElementById('new-domain-fqdn');
+	const providerSelect = document.getElementById('new-domain-provider');
+	if (!fqdnInput || !providerSelect) return;
+
+	const fqdn = fqdnInput.value.trim().toLowerCase();
+	const provider = providerSelect.value;
 	const ttlRaw = _getVal('new-domain-ttl').trim();
 	const ipMode = _getVal('new-domain-ip-mode').trim();
 	const ttl = ttlRaw === '' ? 0 : parseInt(ttlRaw, 10);
@@ -935,7 +1108,7 @@ function addDomainToList() {
 	renderSettingsDomainList();
 	resetDomainForm();
 
-	document.getElementById('new-domain-fqdn').value = '';
+	fqdnInput.value = '';
 	[
 		'new-domain-ttl',
 		'new-ionos-prefix',
@@ -1481,6 +1654,9 @@ function clearDebugLog() {
 // USER MANAGEMENT
 // ============================================================================
 function loadUsers() {
+	const container = document.getElementById('users-list');
+	if (!container) return;
+
 	fetch('/api/users')
 		.then(r => {
 			if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -1488,7 +1664,7 @@ function loadUsers() {
 		})
 		.then(users => renderUsersList(users))
 		.catch(err => {
-			document.getElementById('users-list').innerHTML =
+			container.innerHTML =
 				'<div class="user-load-error">' + tr('user_load_failed', 'Fehler beim Laden') + '</div>';
 			console.error(err);
 		});
@@ -1508,23 +1684,28 @@ function renderUsersList(users) {
 		<option value="editor" ${currentRole === 'editor' ? 'selected' : ''}>✏️ ${tr('role_editor', 'Editor')}</option>
 		<option value="admin" ${currentRole === 'admin' ? 'selected' : ''}>👑 ${tr('role_admin', 'Admin')}</option>
 	`;
-	container.innerHTML = users.map(u => `
+	container.innerHTML = users.map(u => {
+		const totpEnabled = Boolean(u.totp_enabled ?? u.totpEnabled ?? u.TOTPEnabled);
+		return `
 		<div class="domain-pill">
 			<div class="user-pill-info">
 				<span class="user-pill-username">${escHtml(u.username)}</span>
 				<span class="provider-badge user-role-badge">
-					${roleIcon[u.role] || '?'} ${roleOptions[u.role] || u.role}
+					${roleIcon[u.role] || '?'} ${escHtml(u.role || '')}
 				</span>
-				${u.last_login ? `<span class="user-last-login">Letzter Login: ${new Date(u.last_login).toLocaleString()}</span>` : ''}
+				<span class="provider-badge ${totpEnabled ? 'user-2fa-badge-on' : 'user-2fa-badge-off'}">
+					${totpEnabled ? tr('totp_badge_active', '🔐 2FA active') : tr('totp_badge_inactive', '🔓 2FA inactive')}
+				</span>
+				${u.last_login ? `<span class="user-last-login">Letzter Login: ${escHtml(new Date(u.last_login).toLocaleString())}</span>` : ''}
 			</div>
 			<div class="domain-pill-actions">
-					<select onchange="changeUserRole('${u.id}', this.value)" class="user-role-select">
+				<select onchange="changeUserRole(${jsStringAttr(u.id)}, this.value)" class="user-role-select">
 						${roleOptions(u.role)}
 					</select>
-				<button onclick="deleteUser('${u.id}', '${escHtml(u.username)}')" class="user-delete-btn">✕</button>
+				<button onclick="deleteUser(${jsStringAttr(u.id)}, ${jsStringAttr(u.username)})" class="user-delete-btn">✕</button>
 			</div>
-		</div>`
-	).join('');
+		</div>`;
+	}).join('');
 }
 
 function addUser() {
@@ -1545,8 +1726,10 @@ function addUser() {
 		.then(({ ok, j }) => {
 			if (!ok) return showToast('❌ ' + (j.error || 'Fehler'), 'error');
 			showToast('✅ ' + tr('user_created', 'Benutzer erstellt'), 'success');
-			document.getElementById('new-user-name').value = '';
-			document.getElementById('new-user-pass').value = '';
+			const nameInput = document.getElementById('new-user-name');
+			const passInput = document.getElementById('new-user-pass');
+			if (nameInput) nameInput.value = '';
+			if (passInput) passInput.value = '';
 			loadUsers();
 		})
 		.catch(() => showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'));
@@ -1622,7 +1805,7 @@ function renderEndpointStatus() {
 		} else {
 			ageStr = Math.round(diff / 60000) + 'm';
 		}
-		return `<span class="endpoint-chip">${icon} ${host} <span class="endpoint-chip-age">${ageStr}</span></span>`;
+		return `<span class="endpoint-chip">${icon} ${escHtml(host)} <span class="endpoint-chip-age">${escHtml(ageStr)}</span></span>`;
 	}).join('');
 }
 
@@ -1642,7 +1825,8 @@ function showLoadingToast(text = '⏳ Speichere...') {
 		document.body.appendChild(el);
 	} else {
 		el.style.display = 'block';
-		document.getElementById('loading-text').textContent = text;
+		const textEl = document.getElementById('loading-text');
+		if (textEl) textEl.textContent = text;
 	}
 	el._timeout = setTimeout(() => {
 		const txt = document.getElementById('loading-text');
@@ -1735,16 +1919,16 @@ function formatUptime(lastChangedStr) {
 }
 
 function startUptimeClocks() {
-    document.querySelectorAll('[data-last-changed]').forEach(el => {
-        if (el.dataset.uptimeReady === '1') return;
-        el.dataset.uptimeReady = '1';
-        const id = el.dataset.uptimeId;
-        const target = document.getElementById('uptime-' + id);
-        if (!target) return;
-        const update = () => target.textContent = formatUptime(el.dataset.lastChanged);
-        update();
-        setInterval(update, 30000);
-    });
+	document.querySelectorAll('[data-last-changed]').forEach(el => {
+		if (el.dataset.uptimeReady === '1') return;
+		el.dataset.uptimeReady = '1';
+		const id = el.dataset.uptimeId;
+		const target = document.getElementById('uptime-' + id);
+		if (!target) return;
+		const update = () => target.textContent = formatUptime(el.dataset.lastChanged);
+		update();
+		setInterval(update, 30000);
+	});
 }
 
 let _dotTooltip = null;
@@ -1931,8 +2115,8 @@ function renderNotifCenter() {
 	list.innerHTML = _notifHistory.map(n => {
 		const color = n.type === 'error' ? 'var(--error)' : n.type === 'warning' ? 'var(--warning)' : 'var(--success)';
 		return `<div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:0.78rem;">
-            <span style="color:${color};margin-right:6px;">●</span>${n.message}
-            <span style="float:right;opacity:0.4;">${n.time}</span>
+            <span style="color:${color};margin-right:6px;">●</span>${escHtml(n.message)}
+            <span style="float:right;opacity:0.4;">${escHtml(n.time)}</span>
         </div>`;
 	}).join('');
 }
