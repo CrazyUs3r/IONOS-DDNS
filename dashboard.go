@@ -795,6 +795,11 @@ func dashboardI18NJSON() string {
 		"backup_restore_running":        t(T.BackupRestoreRunning, "⏳ Restore running..."),
 		"backup_restore_success_format": t(T.BackupRestoreSuccessFormat, "✅ Restored: {restored}"),
 		"backup_restore_failed":         t(T.BackupRestoreFailed, "❌ Restore failed"),
+		"nav_totp":                      t(T.NavTotpJS, "🔐 2FA / Account Security"),
+		"totp_settings_load_failed":     t(T.TotpSettingsLoadFailedJS, "2FA settings could not be loaded"),
+		"totp_action_failed":            t(T.TotpActionFailedJS, "2FA action failed"),
+		"totp_badge_active":             t(T.TotpBadgeActiveJS, "🔐 2FA active"),
+		"totp_badge_inactive":           t(T.TotpBadgeInactiveJS, "🔓 2FA inactive"),
 	}
 
 	b, err := json.Marshal(m)
@@ -849,6 +854,7 @@ func registerPageRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/login", handleLogin)
 	mux.HandleFunc("/logout", handleLogout)
 	mux.HandleFunc("/setup", handleSetup)
+	register2FARoutes(mux)
 	mux.HandleFunc("/", handleDashboard)
 }
 
@@ -1876,6 +1882,7 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeSettingsSection(w, cfg)
+	writeTOTPSection(w, sess, authEnabled && sess != nil)
 	writeUsersSection(w, isAdmin)
 
 	_, _ = fmt.Fprint(w, `<div id="settingsOverlay" class="modal-overlay"></div>`)
@@ -2083,6 +2090,7 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 	logoutBtn := ""
 	userInfo := ""
 	userPage := ""
+	totpPage := ""
 	if authEnabled && sess != nil {
 		roleIcon := map[UserRole]string{
 			RoleAdmin:  "👑",
@@ -2091,6 +2099,7 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 		}[sess.Role]
 		userInfo = fmt.Sprintf(`<span class="sidebar-user-info">%s %s</span>`, roleIcon, html.EscapeString(sess.Username))
 		logoutBtn = `<a href="/logout" class="action-btn topbar-action-btn logout-btn">🚪 Logout</a>`
+		totpPage = `<div class="nav-item" data-page="totp" onclick="navTo('totp')"><span class="nav-item-icon">🔐</span> 2FA / Konto-Sicherheit</div>`
 		if sess.Role == RoleAdmin {
 			userPage = `<div class="nav-item" data-page="users" onclick="navTo('users')">` + T.SettingsUserManagement + `</div>`
 		}
@@ -2166,6 +2175,7 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 				<span class="nav-item-icon">⚙️</span> `+T.SettingsTitle+`
 			</div>
 			%s
+			%s
 
 			<div class="nav-spacer"></div>
 
@@ -2230,6 +2240,7 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 	`,
 		html.EscapeString(T.DashboardTitle),
 		cssData,
+		totpPage,
 		userPage,
 		userInfo,
 		logoutBtn,
@@ -2755,6 +2766,24 @@ func writeSettingsSection(w http.ResponseWriter, c Config) {
 				`+buildSettingsInlineSection(T.SettingsSystem, systemSection)+`
 				`+buildSettingsInlineSection(T.SettingsDomains, domainsSection)+`
 				`+buildSettingsInlineSection(T.SettingsNotify, notifySection)+`
+			</div>
+		</div>
+	</div>
+	`)
+}
+
+func writeTOTPSection(w http.ResponseWriter, sess *Session, enabled bool) {
+	if !enabled {
+		_, _ = fmt.Fprint(w, `<div class="page-section" data-section="totp"></div>`)
+		return
+	}
+
+	_, _ = fmt.Fprint(w, `
+	<div class="page-section" data-section="totp">
+		<div class="card totp-settings-card">
+			<div class="card-header">🔐 2FA / Konto-Sicherheit</div>
+			<div class="card-content totp-settings-wrap" id="totp-settings-content">
+				`+build2FASettingsFragmentForSession(sess, "", "")+`
 			</div>
 		</div>
 	</div>

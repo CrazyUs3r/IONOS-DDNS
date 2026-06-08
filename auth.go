@@ -48,6 +48,8 @@ type DashboardUser struct {
 	Role         UserRole  `json:"role"`
 	CreatedAt    time.Time `json:"created_at"`
 	LastLogin    time.Time `json:"last_login"`
+	TOTPSecret   string    `json:"totp_secret,omitempty"`
+	TOTPEnabled  bool      `json:"totp_enabled,omitempty"`
 }
 
 type Session struct {
@@ -247,8 +249,8 @@ func loadUsers() []DashboardUser {
 	if err != nil {
 		return nil
 	}
-	var users []DashboardUser
-	if err := json.Unmarshal(data, &users); err != nil {
+	users, err := unmarshalUsersWithTOTP(data)
+	if err != nil {
 		return nil
 	}
 	usersCache = users
@@ -256,7 +258,7 @@ func loadUsers() []DashboardUser {
 }
 
 func saveUsers(users []DashboardUser) error {
-	data, err := json.MarshalIndent(users, "", "  ")
+	data, err := marshalUsersWithTOTP(users)
 	if err != nil {
 		return err
 	}
@@ -307,7 +309,8 @@ func authMiddleware(next http.Handler) http.Handler {
 		path := r.URL.Path
 
 		if path == "/health" || path == "/favicon.svg" ||
-			path == "/login" || path == "/logout" || path == "/setup" {
+			path == "/login" || path == "/logout" || path == "/setup" ||
+			path == "/login/totp" {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -424,34 +427,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 
 		user, found := findUserByUsername(username)
 		if found && checkPassword(password, user.PasswordHash) {
-			maxAge := DefaultSessionMaxAge
-			sess := sessionStore.Create(user, maxAge)
-
-			http.SetCookie(w, &http.Cookie{
-				Name:     SessionCookieName,
-				Value:    sess.Token,
-				Path:     "/",
-				MaxAge:   int(maxAge.Seconds()),
-				HttpOnly: true,
-				SameSite: http.SameSiteLaxMode,
-			})
-
-			allUsers := loadUsers()
-			for i, u := range allUsers {
-				if u.ID == user.ID {
-					allUsers[i].LastLogin = time.Now()
-					break
-				}
-			}
-			_ = saveUsers(allUsers)
-
-			log(LogContext{
-				Level:   LogInfo,
-				Action:  ActionConfig,
-				Message: fmt.Sprintf(T.LoginSuccessLog, username, user.Role, getClientIP(r)),
-			})
-
-			http.Redirect(w, r, redirect, http.StatusFound)
+			handleLoginPost2FA(w, r, user, redirect)
 			return
 		}
 
@@ -579,15 +555,16 @@ func handleAPIUsers(w http.ResponseWriter, r *http.Request) {
 	case MethodGET:
 		users := loadUsers()
 		type safeUser struct {
-			ID        string    `json:"id"`
-			Username  string    `json:"username"`
-			Role      UserRole  `json:"role"`
-			CreatedAt time.Time `json:"created_at"`
-			LastLogin time.Time `json:"last_login"`
+			ID          string    `json:"id"`
+			Username    string    `json:"username"`
+			Role        UserRole  `json:"role"`
+			CreatedAt   time.Time `json:"created_at"`
+			LastLogin   time.Time `json:"last_login"`
+			TOTPEnabled bool      `json:"totp_enabled"`
 		}
 		out := make([]safeUser, len(users))
 		for i, u := range users {
-			out[i] = safeUser{u.ID, u.Username, u.Role, u.CreatedAt, u.LastLogin}
+			out[i] = safeUser{u.ID, u.Username, u.Role, u.CreatedAt, u.LastLogin, u.TOTPEnabled}
 		}
 		writeJSON(w, http.StatusOK, out)
 

@@ -331,6 +331,17 @@ type Phrases struct {
 	ShutdownSignalReceived, WaitingForRunningUpdates, AllUpdatesFinished, WaitForUpdatesTimeout            string
 	WaitingForLogQueue, MetricsSaveFailed, Providers                                                       string
 
+	// TOTP
+	TotpSettingsPageTitle, TotpVerificationPageTitle, TotpTitle, TotpAccountMeta                      string
+	TotpScanQrInstruction, TotpShowURIManually, TotpCodeFromAppLabel, TotpConfirmActivateButton       string
+	TotpGenerateNewSecretButton, TotpActiveTitle, TotpActiveSubtitle, TotpDisableInstruction          string
+	TotpCurrentCodeLabel, TotpDisableButton, TotpReplaceSecretButton, TotpInactiveTitle               string
+	TotpInactiveSubtitle, TotpSetupButton, TotpBackToDashboard, TotpLoginSubtitle, TotpLoginCodeLabel string
+	TotpVerifyButton, TotpBackToLogin, TotpQRAlt, TotpFlashGenerateSecretFailed, TotpFlashScanConfirm string
+	TotpFlashSetupExpired, TotpFlashCodeInvalid, TotpFlashSaveFailed, TotpFlashEnabled                string
+	TotpFlashDisableInvalid, TotpFlashDisabled, TotpLoginInvalidCode, TotpUserNotFound                string
+	NavTotpJS, TotpSettingsLoadFailedJS, TotpActionFailedJS, TotpBadgeActiveJS, TotpBadgeInactiveJS   string
+
 	// Misc
 	ExportBtn string
 }
