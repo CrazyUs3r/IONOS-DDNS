@@ -548,6 +548,8 @@
   "notify_event_dry_run_label": "🔍 Test",
   "notify_event_error_desc": "Błąd API lub sieci",
   "notify_event_error_label": "❌ Błąd",
+  "notify_event_info_desc": "Wystąpiło zdarzenie informacyjne",
+  "notify_event_info_label": "ℹ️ Informacja",
   "notify_event_retry_desc": "Operacja ponowiona",
   "notify_event_retry_label": "🔁 Ponowienie",
   "notify_event_server_desc": "Wystąpiło zdarzenie związane z serwerem",

@@ -548,6 +548,8 @@
   "notify_event_dry_run_label": "🔍 Testovací běh",
   "notify_event_error_desc": "Chyba API nebo sítě",
   "notify_event_error_label": "❌ Chyba",
+  "notify_event_info_desc": "Informative Meldung aufgetreten",
+  "notify_event_info_label": "ℹ️ Info",
   "notify_event_retry_desc": "Operace zopakována",
   "notify_event_retry_label": "🔁 Opakování",
   "notify_event_server_desc": "Došlo k události související se serverem",

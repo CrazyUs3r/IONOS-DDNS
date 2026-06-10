@@ -548,6 +548,8 @@
   "notify_event_dry_run_label": "🔍 Dry run",
   "notify_event_error_desc": "API or network error",
   "notify_event_error_label": "❌ Error",
+  "notify_event_info_desc": "Informational event occurred",
+  "notify_event_info_label": "ℹ️ Info",
   "notify_event_retry_desc": "Operation retried",
   "notify_event_retry_label": "🔁 Retry",
   "notify_event_server_desc": "Server-related event occurred",

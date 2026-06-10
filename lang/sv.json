@@ -548,6 +548,8 @@
   "notify_event_dry_run_label": "🔍 Testkörning",
   "notify_event_error_desc": "API- eller nätverksfel",
   "notify_event_error_label": "❌ Fel",
+  "notify_event_info_desc": "Informativ händelse inträffade",
+  "notify_event_info_label": "ℹ️ Info",
   "notify_event_retry_desc": "Åtgärd försökt igen",
   "notify_event_retry_label": "🔁 Nytt försök",
   "notify_event_server_desc": "Serverrelaterad händelse inträffade",

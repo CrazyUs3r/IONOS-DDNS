@@ -548,6 +548,8 @@
   "notify_event_dry_run_label": "🔍 Testkørsel",
   "notify_event_error_desc": "API- eller netværksfejl",
   "notify_event_error_label": "❌ Fejl",
+  "notify_event_info_desc": "Informativ hændelse opstod",
+  "notify_event_info_label": "ℹ️ Info",
   "notify_event_retry_desc": "Handling forsøgt igen",
   "notify_event_retry_label": "🔁 Nyt forsøg",
   "notify_event_server_desc": "Serverrelateret hændelse opstået",

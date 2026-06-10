@@ -548,6 +548,8 @@
   "notify_event_dry_run_label": "🔍 Testlauf",
   "notify_event_error_desc": "API- oder Netzwerkfehler",
   "notify_event_error_label": "❌ Fehler",
+  "notify_event_info_desc": "Informative Meldung aufgetreten",
+  "notify_event_info_label": "ℹ️ Info",
   "notify_event_retry_desc": "Vorgang erneut versucht",
   "notify_event_retry_label": "🔁 Erneuter Versuch",
   "notify_event_server_desc": "Serverbezogenes Ereignis aufgetreten",

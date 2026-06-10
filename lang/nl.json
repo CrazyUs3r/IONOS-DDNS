@@ -548,6 +548,8 @@
   "notify_event_dry_run_label": "🔍 Proefrun",
   "notify_event_error_desc": "API- of netwerkfout",
   "notify_event_error_label": "❌ Fout",
+  "notify_event_info_desc": "Informatieve gebeurtenis opgetreden",
+  "notify_event_info_label": "ℹ️ Info",
   "notify_event_retry_desc": "Bewerking opnieuw geprobeerd",
   "notify_event_retry_label": "🔁 Opnieuw proberen",
   "notify_event_server_desc": "Servergerelateerde gebeurtenis opgetreden",
