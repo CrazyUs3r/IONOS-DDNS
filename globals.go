@@ -169,6 +169,7 @@ const (
 	ActionSkip    = "SKIP"
 	ActionAPI     = "API"
 	ActionServer  = "SERVER"
+	ActionInfo    = "INFO"
 )
 
 var persistOnWarnError = map[string]struct{}{
@@ -198,6 +199,7 @@ var persistOnOtherLevels = map[string]struct{}{
 	ActionConfig:  {},
 	ActionZone:    {},
 	ActionServer:  {},
+	ActionInfo:    {},
 }
 
 // ============================================================================
@@ -243,6 +245,7 @@ var actionIcons = map[string]string{
 	ActionSkip:    IconSkip,
 	ActionAPI:     IconAPI,
 	ActionServer:  IconServer,
+	ActionInfo:    IconInfo,
 	"FAIL":        IconError,
 	"SUCCESS":     IconSuccess,
 	"ADDED":       IconSuccess,

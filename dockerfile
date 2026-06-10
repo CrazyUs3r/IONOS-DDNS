@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 # Builder Stage
 # =============================================================================
 FROM --platform=${BUILDPLATFORM} golang:1.26.4-alpine AS builder
@@ -41,7 +41,7 @@ RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
 # =============================================================================
 # Runtime tools for target platform
 # =============================================================================
-FROM --platform=${TARGETPLATFORM} alpine:3.23 AS runtime-tools
+FROM --platform=${BUILDPLATFORM} alpine:3.23 AS runtime-tools
 
 RUN apk add --no-cache ca-certificates tzdata su-exec
 

@@ -580,7 +580,7 @@ func qrCodeImgTag(uri string) string {
 	_ = uri
 	return `<img src="/settings/2fa/qr"
 		alt="` + esc(t(T.TotpQRAlt, "QR Code")) + `" width="220" height="220"
-		style="border:8px solid #fff;border-radius:8px;display:block;margin:12px auto;background:#fff;">`
+		class="totp-qr-img">`
 }
 
 // ============================================================================
@@ -608,20 +608,26 @@ func build2FASettingsFragmentForSession(sess *Session, flash, flashType string) 
 	return build2FASettingsFragment(currentUser, pendingSecret, hasPending, flash, flashType)
 }
 
+func totpFlashClass(flashType string) string {
+	switch flashType {
+	case flashTypeSuccess:
+		return "totp-flash--success"
+	case flashTypeError:
+		return "totp-flash--error"
+	case flashTypeInfo:
+		return "totp-flash--info"
+	default:
+		return "totp-flash--info"
+	}
+}
+
 func build2FASettingsFragment(user *DashboardUser, pendingSecret string, hasPending bool, flash, flashType string) string {
 	flashHTML := ""
 	if flash != "" {
-		color := map[string]string{
-			flashTypeSuccess: "#4ade80",
-			flashTypeError:   "#f87171",
-			flashTypeInfo:    "#93c5fd",
-		}[flashType]
-		if color == "" {
-			color = "#93c5fd"
-		}
 		flashHTML = fmt.Sprintf(
-			`<div class="totp-flash" style="border-color:%s;color:%s;">%s</div>`,
-			color, color, esc(flash),
+			`<div class="totp-flash %s">%s</div>`,
+			totpFlashClass(flashType),
+			esc(flash),
 		)
 	}
 
@@ -737,8 +743,8 @@ func build2FAPage(user *DashboardUser, pendingSecret string, hasPending bool, fl
 		return body
 	}
 	body += `
-<div style="margin-top:24px;text-align:center;">
-	<a href="/" style="color:var(--btn-text);font-size:0.82rem;text-decoration:none;">` + esc(t(T.TotpBackToDashboard, "← Back to Dashboard")) + `</a>
+<div class="totp-page-link-row">
+	<a href="/" class="totp-page-link">` + esc(t(T.TotpBackToDashboard, "← Back to Dashboard")) + `</a>
 </div>`
 	return authPageShell(t(T.TotpSettingsPageTitle, "2FA Settings"), body)
 }
@@ -757,31 +763,19 @@ func buildTOTPLoginPage(errMsg string) string {
 <form method="POST" action="/login/totp">
 	<div class="auth-field">
 		<label class="auth-label">` + esc(t(T.TotpLoginCodeLabel, "Authentication Code")) + `</label>
-		<input class="auth-input" type="text" name="totp_code" inputmode="numeric"
+		<input class="auth-input totp-login-code-input" type="text" name="totp_code" inputmode="numeric"
 			pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code"
-			placeholder="000000" autofocus required
-			style="letter-spacing:0.4em;font-size:1.6rem;text-align:center;">
+			placeholder="000000" autofocus required>
 	</div>
 	<button class="auth-btn" type="submit">` + esc(t(T.TotpVerifyButton, "🔓 Verify")) + `</button>
 </form>
-<div style="margin-top:18px;text-align:center;">
-	<a href="/login" style="color:var(--btn-text);font-size:0.82rem;text-decoration:none;">
+<div class="totp-page-link-row totp-page-link-row--compact">
+	<a href="/login" class="totp-page-link">
 		` + esc(t(T.TotpBackToLogin, "← Back to login")) + `
 	</a>
 </div>`
 
 	return authPageShell(t(T.TotpVerificationPageTitle, "2FA Verification"), body)
-}
-
-// ============================================================================
-// REGISTER ROUTES  — call from dashboard.go registerPageRoutes
-// ============================================================================
-
-func register2FARoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/login/totp", handleLoginTOTP)
-	mux.HandleFunc("/settings/2fa", handleSettings2FA)
-	mux.HandleFunc("/settings/2fa/qr", handleSettings2FAQRCode)
-	mux.HandleFunc("/api/2fa/status", handleAPI2FAStatus)
 }
 
 // ============================================================================

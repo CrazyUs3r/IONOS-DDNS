@@ -26,6 +26,7 @@ const (
 	NotifyOnSkip    NotifyEvent = NotifyEvent(ActionSkip)
 	NotifyOnAPI     NotifyEvent = NotifyEvent(ActionAPI)
 	NotifyOnServer  NotifyEvent = NotifyEvent(ActionServer)
+	NotifyInfo      NotifyEvent = NotifyEvent(ActionInfo)
 )
 
 type Notifier interface {

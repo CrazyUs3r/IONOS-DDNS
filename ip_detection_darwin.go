@@ -1,21 +1,21 @@
-//go:build linux
+//go:build darwin
 
 // Package main
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"os/exec"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
-
-	"github.com/vishvananda/netlink"
 )
 
 // ============================================================================
@@ -147,87 +147,181 @@ func getPublicIPFromAny(parent context.Context, urls []string, want IPVersion) (
 	return "", fmt.Errorf("%s: %w", T.AllIPEndpointsFailed, lastErr)
 }
 
-const (
-	ifaFFlagDadFailed  = 0x08
-	ifaFFlagDeprecated = 0x20
-	ifaFFlagTentative  = 0x40
-)
+type darwinIPv6Candidate struct {
+	ip         net.IP
+	source     string
+	flags      string
+	temporary  bool
+	deprecated bool
+}
 
-type ipv6Candidate struct {
-	ip           net.IP
-	flags        int
-	preferredLft int
-	validLft     int
+type darwinIPv6ScanResult struct {
+	candidate *darwinIPv6Candidate
+	sawGlobal bool
 }
 
 func getIPv6FromInterface(ifaceName string) (string, error) {
 	debugLog("IP-CHECK", "", fmt.Sprintf("🔍 %s: %s", T.CheckingInterface, ifaceName))
 
-	link, err := netlink.LinkByName(ifaceName)
+	iface, err := net.InterfaceByName(ifaceName)
 	if err != nil {
 		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", T.InterfaceNotFound, err))
 		return "", err
 	}
 
-	addrs, err := netlink.AddrList(link, syscall.AF_INET6)
+	if scan, err := getDarwinIPv6FromIfconfig(ifaceName); err == nil {
+		if scan.candidate != nil {
+			return selectIPv6FromInterface(ifaceName, scan.candidate)
+		}
+
+		if scan.sawGlobal {
+			debugLog("IP-CHECK", "", "⚠️  "+T.NoIPv6OnInterface)
+			return "", errors.New(T.NoIPv6OnInterface)
+		}
+	} else {
+		debugLog("IP-CHECK", "", fmt.Sprintf("⚠️ ifconfig IPv6 lookup failed, falling back to net.Interface.Addrs: %v", err))
+	}
+
+	addrs, err := iface.Addrs()
 	if err != nil {
 		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", T.AddressesNotReadable, err))
 		return "", err
 	}
 
-	var fallbackDeprecated *ipv6Candidate
-
 	for _, addr := range addrs {
-		if addr.IPNet == nil || addr.IP == nil {
-			continue
-		}
-
-		ip := addr.IP
+		ip := ipFromNetAddr(addr)
 		if !isUsableGlobalIPv6(ip) {
 			continue
 		}
 
-		if isInvalidIPv6Addr(addr) {
-			ipLog(fmt.Sprintf("⚠️ SKIP invalid IPv6: %s", ip.String()))
-			continue
-		}
-
-		if isDeprecatedIPv6Addr(addr) {
-			ipLog(fmt.Sprintf("⚠️ SKIP deprecated/expired IPv6: %s", ip.String()))
-
-			if fallbackDeprecated == nil {
-				fallbackDeprecated = &ipv6Candidate{
-					ip:           ip,
-					flags:        addr.Flags,
-					preferredLft: addr.PreferedLft,
-					validLft:     addr.ValidLft,
-				}
-			}
-
-			continue
-		}
-
-		return selectIPv6FromInterface(
-			ifaceName,
-			ip,
-			addr.Flags,
-			addr.PreferedLft,
-			addr.ValidLft,
-		)
-	}
-
-	if fallbackDeprecated != nil {
-		return selectIPv6FromInterface(
-			ifaceName,
-			fallbackDeprecated.ip,
-			fallbackDeprecated.flags,
-			fallbackDeprecated.preferredLft,
-			fallbackDeprecated.validLft,
-		)
+		return selectIPv6FromInterface(ifaceName, &darwinIPv6Candidate{
+			ip:     ip,
+			source: "net.Interface.Addrs",
+			flags:  "unknown",
+		})
 	}
 
 	debugLog("IP-CHECK", "", "⚠️  "+T.NoIPv6OnInterface)
 	return "", errors.New(T.NoIPv6OnInterface)
+}
+
+func getDarwinIPv6FromIfconfig(ifaceName string) (darwinIPv6ScanResult, error) {
+	out, err := exec.Command("/sbin/ifconfig", ifaceName).CombinedOutput()
+	if err != nil {
+		out, err = exec.Command("ifconfig", ifaceName).CombinedOutput()
+		if err != nil {
+			return darwinIPv6ScanResult{}, err
+		}
+	}
+
+	return parseDarwinIfconfigIPv6(out), nil
+}
+
+func parseDarwinIfconfigIPv6(out []byte) darwinIPv6ScanResult {
+	var fallbackTemporary *darwinIPv6Candidate
+	var fallbackDeprecated *darwinIPv6Candidate
+	result := darwinIPv6ScanResult{}
+
+	scanner := bufio.NewScanner(bytes.NewReader(out))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		fields := strings.Fields(line)
+		if len(fields) < 2 || fields[0] != "inet6" {
+			continue
+		}
+
+		ip := parseDarwinInet6Field(fields[1])
+		if !isUsableGlobalIPv6(ip) {
+			continue
+		}
+
+		result.sawGlobal = true
+
+		if hasDarwinIPv6Flag(fields, "tentative", "duplicated", "duplicate", "dadfailed", "detached", "invalid") {
+			ipLog(fmt.Sprintf("⚠️ SKIP invalid IPv6: %s", ip.String()))
+			continue
+		}
+
+		candidate := &darwinIPv6Candidate{
+			ip:         ip,
+			source:     "ifconfig",
+			flags:      strings.Join(fields[2:], " "),
+			temporary:  hasDarwinIPv6Flag(fields, "temporary"),
+			deprecated: hasDarwinIPv6Flag(fields, "deprecated"),
+		}
+
+		if candidate.deprecated {
+			ipLog(fmt.Sprintf("⚠️ SKIP deprecated/expired IPv6: %s", ip.String()))
+			if fallbackDeprecated == nil {
+				fallbackDeprecated = candidate
+			}
+			continue
+		}
+
+		if candidate.temporary {
+			if fallbackTemporary == nil {
+				fallbackTemporary = candidate
+			}
+			continue
+		}
+
+		result.candidate = candidate
+		return result
+	}
+
+	if fallbackTemporary != nil {
+		result.candidate = fallbackTemporary
+		return result
+	}
+
+	if fallbackDeprecated != nil {
+		result.candidate = fallbackDeprecated
+		return result
+	}
+
+	return result
+}
+
+func parseDarwinInet6Field(raw string) net.IP {
+	ipStr := strings.TrimSpace(raw)
+	if i := strings.IndexByte(ipStr, '%'); i >= 0 {
+		ipStr = ipStr[:i]
+	}
+	return net.ParseIP(ipStr)
+}
+
+func hasDarwinIPv6Flag(fields []string, flags ...string) bool {
+	wanted := make(map[string]struct{}, len(flags))
+	for _, flag := range flags {
+		wanted[strings.ToLower(strings.TrimSpace(flag))] = struct{}{}
+	}
+
+	for _, field := range fields {
+		key := strings.Trim(strings.ToLower(field), ",;[]()")
+		if _, ok := wanted[key]; ok {
+			return true
+		}
+	}
+
+	return false
+}
+
+func ipFromNetAddr(addr net.Addr) net.IP {
+	switch v := addr.(type) {
+	case *net.IPNet:
+		return v.IP
+	case *net.IPAddr:
+		return v.IP
+	default:
+		ipPart := addr.String()
+		if i := strings.IndexByte(ipPart, '/'); i >= 0 {
+			ipPart = ipPart[:i]
+		}
+		if i := strings.IndexByte(ipPart, '%'); i >= 0 {
+			ipPart = ipPart[:i]
+		}
+		return net.ParseIP(ipPart)
+	}
 }
 
 func isUsableGlobalIPv6(ip net.IP) bool {
@@ -255,33 +349,17 @@ func isUsableGlobalIPv6(ip net.IP) bool {
 	return true
 }
 
-func isInvalidIPv6Addr(addr netlink.Addr) bool {
-	if addr.ValidLft == 0 {
-		return true
-	}
-
-	return addr.Flags&(ifaFFlagTentative|ifaFFlagDadFailed) != 0
-}
-
-func isDeprecatedIPv6Addr(addr netlink.Addr) bool {
-	if addr.PreferedLft == 0 {
-		return true
-	}
-
-	return addr.Flags&ifaFFlagDeprecated != 0
-}
-
-func selectIPv6FromInterface(ifaceName string, ip net.IP, flags int, preferredLft int, validLft int) (string, error) {
+func selectIPv6FromInterface(ifaceName string, candidate *darwinIPv6Candidate) (string, error) {
 	ipLog(fmt.Sprintf(
-		T.IPv6ViaInterface+" | flags=%d preferred_lft=%d valid_lft=%d",
-		ifaceName,
-		ip.String(),
-		flags,
-		preferredLft,
-		validLft,
+		"%s | source=%s flags=%s temporary=%t deprecated=%t",
+		fmt.Sprintf(T.IPv6ViaInterface, ifaceName, candidate.ip.String()),
+		candidate.source,
+		candidate.flags,
+		candidate.temporary,
+		candidate.deprecated,
 	))
 
-	return ip.String(), nil
+	return candidate.ip.String(), nil
 }
 
 func getIPv6(ctx context.Context, ifaceName string) (string, error) {

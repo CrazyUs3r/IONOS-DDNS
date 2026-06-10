@@ -194,6 +194,7 @@ type Phrases struct {
 	NotifyEventStopLabel, NotifyEventStopDesc                                  string
 	NotifyEventCleanupLabel, NotifyEventCleanupDesc                            string
 	NotifyEventCurrentLabel, NotifyEventCurrentDesc                            string
+	NotifyEventInfoLabel, NotifyEventInfoDesc                                  string
 	NotifyEventRetryLabel, NotifyEventRetryDesc                                string
 	NotifyEventConfigLabel, NotifyEventConfigDesc                              string
 	NotifyEventZoneLabel, NotifyEventZoneDesc                                  string

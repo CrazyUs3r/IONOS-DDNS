@@ -322,6 +322,7 @@ func buildSettingsNotifyEventCheckboxes(current []string) string {
 		{ActionUpdate, T.NotifyEventUpdateLabel, T.NotifyEventUpdateDesc},
 		{ActionCreate, T.NotifyEventCreateLabel, T.NotifyEventCreateDesc},
 		{ActionCurrent, T.NotifyEventCurrentLabel, T.NotifyEventCurrentDesc},
+		{ActionInfo, T.NotifyEventInfoLabel, T.NotifyEventInfoDesc},
 		{ActionRetry, T.NotifyEventRetryLabel, T.NotifyEventRetryDesc},
 		{ActionError, T.NotifyEventErrorLabel, T.NotifyEventErrorDesc},
 		{ActionStart, T.NotifyEventStartLabel, T.NotifyEventStartDesc},
@@ -854,7 +855,10 @@ func registerPageRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/login", handleLogin)
 	mux.HandleFunc("/logout", handleLogout)
 	mux.HandleFunc("/setup", handleSetup)
-	register2FARoutes(mux)
+	mux.HandleFunc("/login/totp", handleLoginTOTP)
+	mux.HandleFunc("/settings/2fa", handleSettings2FA)
+	mux.HandleFunc("/settings/2fa/qr", handleSettings2FAQRCode)
+	mux.HandleFunc("/api/2fa/status", handleAPI2FAStatus)
 	mux.HandleFunc("/", handleDashboard)
 }
 
