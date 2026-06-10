@@ -61,7 +61,7 @@ body {
 }
 
 /* ============================================================================
-   LAYOUT â€” SIDEBAR + TOPBAR + MAIN
+   LAYOUT — SIDEBAR + TOPBAR + MAIN
    ============================================================================ */
 .app-layout {
 	display: flex;
@@ -390,7 +390,7 @@ details.card>summary::-webkit-details-marker {
 }
 
 details.card>summary::after {
-	content: 'â–¼';
+	content: '?';
 	transition: transform 0.2s;
 	font-size: 0.8em;
 	opacity: 0.5;
@@ -2317,7 +2317,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   SETTINGS â€“ domain pill edit/remove buttons
+   SETTINGS – domain pill edit/remove buttons
    ============================================================================ */
 .domain-pill-edit-btn {
 	background: none;
@@ -2356,7 +2356,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   SETTINGS â€“ cancel-edit button
+   SETTINGS – cancel-edit button
    ============================================================================ */
 .s-btn--cancel {
 	background: none;
@@ -2371,7 +2371,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   SETTINGS â€“ notify test section
+   SETTINGS – notify test section
    ============================================================================ */
 .notify-test-box {
 	margin-top: 12px;
@@ -2418,7 +2418,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   SETTINGS â€“ save section
+   SETTINGS – save section
    ============================================================================ */
 .settings-save-box {
 	margin-top: 20px;
@@ -2471,7 +2471,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   METRICS CARD â€“ top stats
+   METRICS CARD – top stats
    ============================================================================ */
 .metrics-top-grid {
 	display: grid;
@@ -2485,7 +2485,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   METRICS CARD â€“ latency percentile box
+   METRICS CARD – latency percentile box
    ============================================================================ */
 .latency-box {
 	margin-top: 14px;
@@ -2556,7 +2556,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   METRICS CARD â€“ usage bar
+   METRICS CARD – usage bar
    ============================================================================ */
 .usage-section {
 	margin-top: 20px;
@@ -2595,7 +2595,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   METRICS CARD â€“ http methods grid
+   METRICS CARD – http methods grid
    ============================================================================ */
 .http-methods-box {
 	padding: 12px 14px;
@@ -2671,7 +2671,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   METRICS CARD â€“ IP latency box
+   METRICS CARD – IP latency box
    ============================================================================ */
 .ip-latency-box {
 	padding: 12px 14px;
@@ -2712,7 +2712,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   METRICS â€“ reset button
+   METRICS – reset button
    ============================================================================ */
 .metrics-reset-btn {
 	background: var(--error);
@@ -2722,14 +2722,14 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   LOGS â€“ export buttons
+   LOGS – export buttons
    ============================================================================ */
 .filter-btn--export {
 	margin-left: auto;
 }
 
 /* ============================================================================
-   LOGS â€“ no-entries row
+   LOGS – no-entries row
    ============================================================================ */
 .log-empty {
 	padding: 20px;
@@ -2739,7 +2739,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   DOMAINS â€“ IPv64 management card
+   DOMAINS – IPv64 management card
    ============================================================================ */
 .ipv64-mgmt-card {
 	margin-bottom: 15px;
@@ -2793,14 +2793,14 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   DOMAINS â€“ orphan card border
+   DOMAINS – orphan card border
    ============================================================================ */
 .domain-item--orphan {
 	border-color: #f8717180;
 }
 
 /* ============================================================================
-   DOMAIN STATUS â€“ hidden changed badge
+   DOMAIN STATUS – hidden changed badge
    ============================================================================ */
 .changed-badge--hidden {
 	display: none;
@@ -3032,21 +3032,21 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   STATUS BANNER â€“ notifier item gap
+   STATUS BANNER – notifier item gap
    ============================================================================ */
 .status-notifier-group {
 	gap: 6px;
 }
 
 /* ============================================================================
-   STATUS ITEMS â€“ cursor pointer (bereits teilweise inline)
+   STATUS ITEMS – cursor pointer (bereits teilweise inline)
    ============================================================================ */
 .status-item--clickable {
 	cursor: pointer;
 }
 
 /* ============================================================================
-   DASHBOARD â€“ config overview grid
+   DASHBOARD – config overview grid
    ============================================================================ */
 .config-overview-grid {
 	display: grid;
@@ -3063,7 +3063,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   CHART â€“ current hour label
+   CHART – current hour label
    ============================================================================ */
 .chart-x-current {
 	color: #e5e7eb;
@@ -3081,7 +3081,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   DEBUG â€“ disabled notice
+   DEBUG – disabled notice
    ============================================================================ */
 .debug-disabled-note {
 	opacity: 0.5;
@@ -3110,22 +3110,22 @@ form[action="/setup"] {
 	border-radius: 12px;
 	margin-bottom: 16px;
 	border: 1px solid var(--border);
-	background: rgba(255, 255, 255, 0.03);
+	background: #ffffff08;
 }
 
 .diag-status-card.diag-ok {
-	background: rgba(74, 222, 128, 0.08);
-	border-color: rgba(74, 222, 128, 0.35);
+	background: #4ade8014;
+	border-color: #4ade8059;
 }
 
 .diag-status-card.diag-warn {
-	background: rgba(250, 204, 21, 0.08);
-	border-color: rgba(250, 204, 21, 0.35);
+	background: #facc1514;
+	border-color: #facc1559;
 }
 
 .diag-status-card.diag-bad {
-	background: rgba(248, 113, 113, 0.08);
-	border-color: rgba(248, 113, 113, 0.35);
+	background: #f8717114;
+	border-color: #f8717159;
 }
 
 .diag-status-icon {
@@ -3217,13 +3217,13 @@ form[action="/setup"] {
 	border-radius: 999px;
 	font-size: 0.75rem;
 	border: 1px solid var(--border);
-	background: rgba(255, 255, 255, 0.04);
+	background: #ffffff0a;
 }
 
 .diag-badge.diag-ok {
 	color: #4ade80;
-	border-color: rgba(74, 222, 128, 0.35);
-	background: rgba(74, 222, 128, 0.08);
+	border-color: #4ade8059;
+	background: #4ade8014;
 }
 
 .diag-badge.diag-muted {
@@ -3234,8 +3234,8 @@ form[action="/setup"] {
 	padding: 8px 10px;
 	border-radius: 8px;
 	margin-bottom: 6px;
-	background: rgba(250, 204, 21, 0.08);
-	border: 1px solid rgba(250, 204, 21, 0.25);
+	background: #facc1514;
+	border: 1px solid #facc1540;
 	color: #facc15;
 	font-size: 0.85rem;
 }
@@ -3243,8 +3243,8 @@ form[action="/setup"] {
 .diag-success-line {
 	padding: 8px 10px;
 	border-radius: 8px;
-	background: rgba(74, 222, 128, 0.08);
-	border: 1px solid rgba(74, 222, 128, 0.25);
+	background: #4ade8014;
+	border: 1px solid #4ade8040;
 	color: #4ade80;
 	font-size: 0.85rem;
 }
@@ -3273,7 +3273,7 @@ form[action="/setup"] {
 }
 
 .backup-box {
-	background: rgba(255, 255, 255, 0.03);
+	background: #ffffff08;
 	border: 1px solid var(--border);
 	border-radius: 10px;
 	padding: 16px;
@@ -3300,8 +3300,8 @@ form[action="/setup"] {
 .backup-warning {
 	padding: 14px;
 	border-radius: 8px;
-	background: rgba(250, 204, 21, 0.08);
-	border: 1px solid rgba(250, 204, 21, 0.3);
+	background: #facc1514;
+	border: 1px solid #facc154d;
 	color: #facc15;
 }
 
@@ -3316,21 +3316,21 @@ form[action="/setup"] {
 	margin-top: 12px;
 	padding: 10px 12px;
 	border-radius: 8px;
-	background: rgba(255, 255, 255, 0.04);
+	background: #ffffff0a;
 	border: 1px solid var(--border);
 	font-size: 0.85rem;
 }
 
 .backup-result-ok {
 	color: #4ade80;
-	background: rgba(74, 222, 128, 0.08);
-	border-color: rgba(74, 222, 128, 0.3);
+	background: #4ade8014;
+	border-color: #4ade804d;
 }
 
 .backup-result-error {
 	color: #f87171;
-	background: rgba(248, 113, 113, 0.08);
-	border-color: rgba(248, 113, 113, 0.3);
+	background: #f8717114;
+	border-color: #f871714d;
 }
 
 @media (max-width: 768px) {
@@ -3369,8 +3369,26 @@ form[action="/setup"] {
 	padding: 10px 14px;
 	border-radius: 8px;
 	margin-bottom: 18px;
-	border: 1px solid;
+	border: 1px solid transparent;
 	font-size: 0.88rem;
+}
+
+.totp-flash--success {
+	color: #4ade80;
+	border-color: #4ade8073;
+	background: #4ade801a;
+}
+
+.totp-flash--error {
+	color: #f87171;
+	border-color: #f8717173;
+	background: #f871711a;
+}
+
+.totp-flash--info {
+	color: #93c5fd;
+	border-color: #93c5fd73;
+	background: #93c5fd1a;
 }
 
 .totp-help {
@@ -3393,7 +3411,7 @@ form[action="/setup"] {
 	word-break: break-all;
 	margin-top: 6px;
 	font-family: monospace;
-	background: rgba(255, 255, 255, 0.05);
+	background: #ffffff0d;
 	padding: 8px;
 	border-radius: 6px;
 	font-size: 0.72rem;
@@ -3477,4 +3495,58 @@ form[action="/setup"] {
 	.totp-settings-wrap {
 		max-width: 100%;
 	}
+
+	.totp-login-code-input {
+		letter-spacing: 0.3em;
+		font-size: 1.45rem;
+		padding-left: calc(12px + 0.3em);
+	}
+
+	.totp-qr-img {
+		width: 200px;
+		height: 200px;
+	}
+}
+
+/* ============================================================================
+   TOTP / 2FA – extracted remaining inline styles
+   ============================================================================ */
+
+.totp-qr-img {
+	width: 220px;
+	height: 220px;
+	border: 8px solid #fff;
+	border-radius: 8px;
+	display: block;
+	margin: 12px auto;
+	background: #fff;
+}
+
+.totp-page-link-row {
+	margin-top: 24px;
+	text-align: center;
+}
+
+.totp-page-link-row--compact {
+	margin-top: 18px;
+}
+
+.totp-page-link {
+	color: var(--btn-text);
+	font-size: 0.82rem;
+	text-decoration: none;
+	transition: color 0.15s ease, opacity 0.15s ease;
+}
+
+.totp-page-link:hover {
+	color: var(--btn-border);
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+
+.totp-login-code-input {
+	letter-spacing: 0.4em;
+	font-size: 1.6rem;
+	text-align: center;
+	padding-left: calc(12px + 0.4em);
 }
