@@ -61,7 +61,7 @@ body {
 }
 
 /* ============================================================================
-   LAYOUT — SIDEBAR + TOPBAR + MAIN
+   LAYOUT â€” SIDEBAR + TOPBAR + MAIN
    ============================================================================ */
 .app-layout {
 	display: flex;
@@ -390,7 +390,7 @@ details.card>summary::-webkit-details-marker {
 }
 
 details.card>summary::after {
-	content: '?';
+	content: 'â–¼';
 	transition: transform 0.2s;
 	font-size: 0.8em;
 	opacity: 0.5;
@@ -851,6 +851,11 @@ button:disabled {
 	border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
+.domain-uptime-small {
+	display: block;
+	opacity: 0.5;
+}
+
 .ip-timeline {
 	position: relative;
 	height: 38px;
@@ -917,6 +922,11 @@ button:disabled {
 
 .ip-dot-tooltip.visible {
 	opacity: 1;
+}
+
+.ip-timeline-wrap {
+	padding: 8px 0 4px;
+	opacity: 0.7;
 }
 
 [data-theme="light"] .ip-dot-tooltip {
@@ -2317,7 +2327,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   SETTINGS – domain pill edit/remove buttons
+   SETTINGS â€“ domain pill edit/remove buttons
    ============================================================================ */
 .domain-pill-edit-btn {
 	background: none;
@@ -2356,7 +2366,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   SETTINGS – cancel-edit button
+   SETTINGS â€“ cancel-edit button
    ============================================================================ */
 .s-btn--cancel {
 	background: none;
@@ -2371,7 +2381,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   SETTINGS – notify test section
+   SETTINGS â€“ notify test section
    ============================================================================ */
 .notify-test-box {
 	margin-top: 12px;
@@ -2418,7 +2428,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   SETTINGS – save section
+   SETTINGS â€“ save section
    ============================================================================ */
 .settings-save-box {
 	margin-top: 20px;
@@ -2471,7 +2481,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   METRICS CARD – top stats
+   METRICS CARD â€“ top stats
    ============================================================================ */
 .metrics-top-grid {
 	display: grid;
@@ -2485,7 +2495,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   METRICS CARD – latency percentile box
+   METRICS CARD â€“ latency percentile box
    ============================================================================ */
 .latency-box {
 	margin-top: 14px;
@@ -2556,8 +2566,15 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   METRICS CARD – usage bar
+   METRICS CARD â€“ usage bar
    ============================================================================ */
+.usage-bar {
+	width: var(--usage-width, 0%);
+	height: 100%;
+	background: var(--usage-color, var(--success));
+	transition: width 0.5s ease;
+}
+
 .usage-section {
 	margin-top: 20px;
 }
@@ -2595,7 +2612,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   METRICS CARD – http methods grid
+   METRICS CARD â€“ http methods grid
    ============================================================================ */
 .http-methods-box {
 	padding: 12px 14px;
@@ -2671,7 +2688,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   METRICS CARD – IP latency box
+   METRICS CARD â€“ IP latency box
    ============================================================================ */
 .ip-latency-box {
 	padding: 12px 14px;
@@ -2712,7 +2729,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   METRICS – reset button
+   METRICS â€“ reset button
    ============================================================================ */
 .metrics-reset-btn {
 	background: var(--error);
@@ -2722,14 +2739,14 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   LOGS – export buttons
+   LOGS â€“ export buttons
    ============================================================================ */
 .filter-btn--export {
 	margin-left: auto;
 }
 
 /* ============================================================================
-   LOGS – no-entries row
+   LOGS â€“ no-entries row
    ============================================================================ */
 .log-empty {
 	padding: 20px;
@@ -2739,7 +2756,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   DOMAINS – IPv64 management card
+   DOMAINS â€“ IPv64 management card
    ============================================================================ */
 .ipv64-mgmt-card {
 	margin-bottom: 15px;
@@ -2793,14 +2810,14 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   DOMAINS – orphan card border
+   DOMAINS â€“ orphan card border
    ============================================================================ */
 .domain-item--orphan {
 	border-color: #f8717180;
 }
 
 /* ============================================================================
-   DOMAIN STATUS – hidden changed badge
+   DOMAIN STATUS â€“ hidden changed badge
    ============================================================================ */
 .changed-badge--hidden {
 	display: none;
@@ -2900,6 +2917,14 @@ form[action="/setup"] {
 	cursor: pointer;
 }
 
+.notifier-icon--active {
+	filter: drop-shadow(0 0 3px #4ade80);
+}
+
+.notifier-icon--disconnected {
+	filter: drop-shadow(0 0 3px #f87171);
+}
+
 /* ============================================================================
    NOTIFIER TOOLTIP  (JS: showNotifierTooltip)
    ============================================================================ */
@@ -2981,6 +3006,11 @@ form[action="/setup"] {
 	opacity: 0.4;
 }
 
+.endpoint-waiting {
+	opacity: 0.4;
+	font-size: 0.82rem;
+}
+
 /* ============================================================================
    LOADING TOAST  (JS: showLoadingToast)
    ============================================================================ */
@@ -3032,21 +3062,21 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   STATUS BANNER – notifier item gap
+   STATUS BANNER â€“ notifier item gap
    ============================================================================ */
 .status-notifier-group {
 	gap: 6px;
 }
 
 /* ============================================================================
-   STATUS ITEMS – cursor pointer (bereits teilweise inline)
+   STATUS ITEMS â€“ cursor pointer (bereits teilweise inline)
    ============================================================================ */
 .status-item--clickable {
 	cursor: pointer;
 }
 
 /* ============================================================================
-   DASHBOARD – config overview grid
+   DASHBOARD â€“ config overview grid
    ============================================================================ */
 .config-overview-grid {
 	display: grid;
@@ -3063,7 +3093,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   CHART – current hour label
+   CHART â€“ current hour label
    ============================================================================ */
 .chart-x-current {
 	color: #e5e7eb;
@@ -3081,7 +3111,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   DEBUG – disabled notice
+   DEBUG â€“ disabled notice
    ============================================================================ */
 .debug-disabled-note {
 	opacity: 0.5;
@@ -3509,7 +3539,7 @@ form[action="/setup"] {
 }
 
 /* ============================================================================
-   TOTP / 2FA – extracted remaining inline styles
+   TOTP / 2FA â€“ extracted remaining inline styles
    ============================================================================ */
 
 .totp-qr-img {
