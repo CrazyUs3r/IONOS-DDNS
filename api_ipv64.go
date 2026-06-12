@@ -688,19 +688,18 @@ func ipv64OwnIPs(domain IPv64Domain, praefix, recordType string) (own, cdn []str
 	return own, cdn
 }
 
-func updateIPv64DNS(ctx context.Context, fqdn, ipv4, ipv6 string) (bool, error) {
-	baseDomain, praefix := splitIPv64FQDN(fqdn)
-
-	ipv64DC := findIPv64DomainConfig()
-	if ipv64DC == nil {
-		return false, fmt.Errorf("no ipv64 configuration found")
+func updateIPv64DNS(ctx context.Context, dc *DomainConfig, fqdn, ipv4, ipv6 string) (bool, error) {
+	if dc == nil || strings.TrimSpace(dc.IPv64Token) == "" {
+		return false, fmt.Errorf("no ipv64 token configured for %s", fqdn)
 	}
+
+	baseDomain, praefix := splitIPv64FQDN(fqdn)
 
 	domain, err := getIPv64DomainFromCache(baseDomain)
 	if err != nil {
 		debugLog("IPv64", fqdn, fmt.Sprintf("domain %s not in cache, forcing refresh", baseDomain))
 		lastIPv64DomainsLoadNano.Store(0)
-		if refreshErr := loadAllIPv64Domains(ctx, ipv64DC); refreshErr != nil {
+		if refreshErr := loadAllIPv64Domains(ctx, dc); refreshErr != nil {
 			debugLog("IPv64", fqdn, fmt.Sprintf("cache refresh failed: %v", refreshErr))
 		}
 		domain, err = getIPv64DomainFromCache(baseDomain)

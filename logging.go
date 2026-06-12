@@ -139,7 +139,7 @@ func getCategoryIcon(category string) string {
 	if icon, ok := categoryIcons[category]; ok {
 		return icon
 	}
-	return "🐞"
+	return IconDBG
 }
 
 func shouldPersistLevel(level LogLevel, action string) bool {

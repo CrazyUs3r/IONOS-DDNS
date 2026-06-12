@@ -2204,35 +2204,34 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 						onclick="saveFullConfig()">`+T.SettingsSaveBtn+`</button>
 
 					<button class="action-btn topbar-action-btn"
-						id="update-button"
-						onmouseenter="showNotifierTooltip(this,'`+jsString("Update jetzt ausführen")+`')"
-						onfocus="showNotifierTooltip(this,'`+jsString("Update jetzt ausführen")+`')"
+						onmouseenter="showNotifierTooltip(this,'`+jsString(T.SettingsUpdateHint)+`')"
+						onfocus="showNotifierTooltip(this,'`+jsString(T.SettingsUpdateHint)+`')"
 						onclick="triggerUpdate()">🔄 `+T.Update+`</button>
 
 					<button class="action-btn topbar-action-btn"
-						onmouseenter="showNotifierTooltip(this,'`+jsString("Daten exportieren")+`')"
-						onfocus="showNotifierTooltip(this,'`+jsString("Daten exportieren")+`')"
+						onmouseenter="showNotifierTooltip(this,'`+jsString(T.SettingsExportHint)+`')"
+						onfocus="showNotifierTooltip(this,'`+jsString(T.SettingsExportHint)+`')"
 						onclick="exportData()">📥 `+T.ExportBtn+`</button>
 
 					<div class="notif-wrap">
 						<button class="theme-toggle notif-toggle"
-							onmouseenter="showNotifierTooltip(this,'`+jsString("Benachrichtigungen anzeigen")+`')"
-							onfocus="showNotifierTooltip(this,'`+jsString("Benachrichtigungen anzeigen")+`')"
+							onmouseenter="showNotifierTooltip(this,'`+jsString(T.SettingsNotifierHint)+`')"
+							onfocus="showNotifierTooltip(this,'`+jsString(T.SettingsNotifierHint)+`')"
 							onclick="toggleNotifCenter()">🔔
 							<span id="notif-badge" class="notif-badge"></span>
 						</button>
 
 						<div id="notif-panel" class="notif-panel">
 							<div class="notif-panel-header">
-								🔔 Benachrichtigungen
+								🔔 `+T.SettingsNotifyHint+`
 							</div>
 							<div id="notif-list"></div>
 						</div>
 					</div>
 
 					<button class="theme-toggle"
-						onmouseenter="showNotifierTooltip(this,'`+jsString("Design wechseln")+`')"
-						onfocus="showNotifierTooltip(this,'`+jsString("Design wechseln")+`')"
+						onmouseenter="showNotifierTooltip(this,'`+jsString(T.SettingsThemeHint)+`')"
+						onfocus="showNotifierTooltip(this,'`+jsString(T.SettingsThemeHint)+`')"
 						onclick="toggleTheme()">🌓</button>
 				</div>
 			</header>
@@ -2283,16 +2282,16 @@ func buildNotifierStatusHTML() string {
 			connected = m.isConnected()
 		}
 
-		color := "#4ade80"
+		stateClass := "notifier-icon--active"
 		title := name + " " + T.NotifierActive
 		if !connected {
-			color = "#f87171"
+			stateClass = "notifier-icon--disconnected"
 			title = name + " " + T.NotifierDisconnected
 		}
 
 		fmt.Fprintf(&sb,
-			`<span class="notifier-icon" title="%s" onclick="showNotifierTooltip(this, '%s')" style="filter:drop-shadow(0 0 3px %s);">%s</span>`,
-			esc(title), jsString(title), esc(color), esc(icon),
+			`<span class="notifier-icon %s" title="%s" onclick="showNotifierTooltip(this, '%s')">%s</span>`,
+			stateClass, esc(title), jsString(title), esc(icon),
 		)
 	}
 
@@ -2333,7 +2332,7 @@ func writeDashboardTop(w http.ResponseWriter, statusClass, statusText string) {
 			<div class="card-header">`+T.IPEndpointStatusTitle+`</div>
 			<div class="card-content">
 				<div id="endpoint-status" class="endpoint-status">
-					<span style="opacity:0.4;font-size:0.82rem;">`+T.IPEndpointStatusWaiting+`</span>
+					<span class="endpoint-waiting">`+T.IPEndpointStatusWaiting+`</span>
 				</div>
 			</div>
 		</div>
@@ -2389,39 +2388,30 @@ func writeDashboardMetricsCard(
 	isViewer bool,
 ) {
 	resetBtn := `<button class="action-btn metrics-reset-btn" onclick="event.preventDefault();resetMetrics()">🗑️ ` + T.MetricsResetBtn + `</button>`
-
 	if isViewer {
 		resetBtn = ""
 	}
-
 	_, _ = fmt.Fprintf(w, `
 <div class="page-section" data-section="metrics">
-
 	<div class="card" id="metrics-card">
-
 		<div class="card-header card-header--space-between">
 			📊 %s`+resetBtn+`
 		</div>
-
 		<div class="card-content">
-
 			<!-- TOP STATS -->
 			<div class="metrics-top-grid">
 				<div>
 					<strong>`+T.TotalRequests+`:</strong>
 					<span id="mTotal">%v</span>
 				</div>
-
 				<div>
 					<strong>`+T.SuccessRate+`:</strong>
 					<span id="mSuccess" class="metric-success">%v</span>
 				</div>
-
 				<div>
 					<strong>`+T.AvgLatency+`:</strong>
 					<span id="mLatency">%v</span>
 				</div>
-
 				<div title="`+T.ClientErrors+` / `+T.ServerErrors+`">
 					<strong>`+T.Errors+`:</strong>
 					<span id="mErrors">%v / %v</span>
@@ -2430,46 +2420,36 @@ func writeDashboardMetricsCard(
 
 			<!-- LATENCY PERCENTILES -->
 			<div class="latency-box">
-
 				<div class="latency-box-label">
 					`+T.MetricLatencyPercentile+`
 				</div>
-
 				<div class="latency-grid">
-
 					<div class="latency-cell latency-cell--p50">
 						<div class="latency-cell-label">P50</div>
 						<div id="mP50" class="latency-cell-value">%v</div>
 					</div>
-
 					<div class="latency-cell latency-cell--p85">
 						<div class="latency-cell-label">P85</div>
 						<div id="mP85" class="latency-cell-value">%v</div>
 					</div>
-
 					<div class="latency-cell latency-cell--p99">
 						<div class="latency-cell-label">P99</div>
 						<div id="mP99" class="latency-cell-value">%v</div>
 					</div>
-
 				</div>
 			</div>
 
 			<!-- USAGE -->
 			<div class="usage-section">
-
 				<div class="usage-header">
 					<span class="usage-limit-label">`+T.HourlyLimitEst+`</span>
-
 					<span id="mUsage" class="usage-count">
 						%v / %v `+T.RequestsLabel+`
 					</span>
 				</div>
-
 				<div class="usage-track">
-					<div id="mUsageBar" style="width:%v%%;height:100%%;background:%s;transition:width 0.5s ease;"></div>
+					<div id="mUsageBar" class="usage-bar" style="--usage-width:%v%%;--usage-color:%s;"></div>
 				</div>
-
 				<div class="usage-hint">
 					`+T.UsageLast60Min+`
 				</div>
@@ -2477,31 +2457,24 @@ func writeDashboardMetricsCard(
 
 			<!-- BOTTOM GRID -->
 			<div class="metrics-bottom-grid">
-
 				<!-- HTTP METHODS -->
 				<div class="http-methods-box">
-
 					<div class="http-methods-label">
 						`+T.MetricHTTPMethods+`
 					</div>
-
 					<div class="http-methods-grid">
-
 						<div class="http-method-row http-method-row--get">
 							<span class="http-method-key">GET</span>
 							<span id="mDailyGET" class="http-method-val">%v</span>
 						</div>
-
 						<div class="http-method-row http-method-row--post">
 							<span class="http-method-key">POST</span>
 							<span id="mDailyPOST" class="http-method-val">%v</span>
 						</div>
-
 						<div class="http-method-row http-method-row--put">
 							<span class="http-method-key">PUT</span>
 							<span id="mDailyPUT" class="http-method-val">%v</span>
 						</div>	
-
 						<div class="http-method-row http-method-row--del">
 							<span class="http-method-key">DEL</span>
 							<span id="mDailyDELETE" class="http-method-val">%v</span>
@@ -2514,35 +2487,26 @@ func writeDashboardMetricsCard(
 
 				<!-- IP LATENCY -->
 				<div class="ip-latency-box">
-
 					<div class="ip-latency-label">
 						`+T.MetricIPLatency+`
 					</div>
-
 					<div class="ip-latency-center">
-
 						<div id="mIPLatency" class="ip-latency-value">
 							%v
 						</div>
-
 						<div class="ip-latency-meta">
 							`+T.MetricAvgFrom+`
 							<span id="mIPCount">%v</span>
 							`+T.ChecksLabel+`
 						</div>
-
 						<div class="ip-latency-meta">
 							`+T.MetricLastCheck+`
 							<span id="mLastIPCheck">%v</span>
 						</div>
-
 					</div>
 				</div>
-
 			</div> <!-- metrics-bottom-grid -->
-
 		</div> <!-- card-content -->
-
 	</div> <!-- card -->
 
 	%s
@@ -2639,6 +2603,7 @@ func writeLogsCard(w io.Writer, logs []LogEntry, logTimeRange string) {
 					<button class="filter-btn" data-filter="CLEANUP" onclick="filterLogs('CLEANUP')">`+T.FilterCleanup+`</button>
 					<button class="filter-btn" data-filter="SKIP" onclick="filterLogs('SKIP')">`+T.FilterSkip+`</button>
 					<button class="filter-btn" data-filter="CONFIG" onclick="filterLogs('CONFIG')">`+T.FilterConfig+`</button>
+					<button class="filter-btn" data-filter="INFO" onclick="filterLogs('INFO')">`+T.FilterInfo+`</button>
 					<button class="filter-btn filter-btn--export" onclick="exportLogs('txt')">📄 TXT</button>
 					<button class="filter-btn" onclick="exportLogs('json')">📋 JSON</button>
 				</div>
@@ -2888,7 +2853,7 @@ func writeSingleDomainCard(w io.Writer, domain string, h DomainHistory, configur
 					</div>
 					<div class="domain-card-meta" data-last-changed="%s" data-uptime-id="%s">
 						<small>`+T.LastShort+` %s</small>
-						<small style="opacity:0.5;display:block;">⏱️ <span id="uptime-%s">—</span></small>
+						<small class="domain-uptime-small">⏱️ <span id="uptime-%s">—</span></small>
 					</div>
 				</div>
 			</div>
@@ -2931,7 +2896,7 @@ func writeSingleDomainCard(w io.Writer, domain string, h DomainHistory, configur
 						</tbody>
 					</table>
 				</div>
-			<div class="ip-timeline-wrap" style="padding:8px 0 4px;opacity:0.7;"></div>
+			<div class="ip-timeline-wrap"></div>
 		</div>
 	</details>`)
 }

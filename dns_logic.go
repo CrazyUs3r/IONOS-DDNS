@@ -285,7 +285,7 @@ func currentIPMode() string {
 
 func processIPv64DomainUpdate(
 	ctx context.Context,
-	_ *DomainConfig,
+	dc *DomainConfig,
 	job domainUpdateJob,
 	result domainUpdateResult,
 	ipMode string,
@@ -300,7 +300,7 @@ func processIPv64DomainUpdate(
 		ipv6 = job.IPv6
 	}
 
-	changed, err := updateIPv64DNS(ctx, job.Domain, ipv4, ipv6)
+	changed, err := updateIPv64DNS(ctx, dc, job.Domain, ipv4, ipv6)
 	if err != nil {
 		if isNonRecoverableError(err) {
 			result.Error = fmt.Errorf(t(T.NonRecoverableIPv64Error, "Non-recoverable IPv64 error: %w"), err)

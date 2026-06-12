@@ -31,14 +31,14 @@ type Phrases struct {
 	GenericErrorJS, RoleAdminJS, RoleEditorJS, RoleViewerJS, AuthUserMinJS, AuthPassMinJS string
 	UserLoading, UserNewTitle, UserPlaceholderName, UserPlaceholderPass                   string
 	UserRoleViewer, UserRoleEditor, UserRoleAdmin, UserBtnCreate, NotifyTestDesc          string
-	NavDashboardJS, NavDomainsJS, NavMetricsJS, NavLogsJS, NavDebugJS                     string
-	NavSettingsJS, NavDashboard, NavDomains, IPv64ActionDelete                            string
 	IPv64DomainManagement, IPv64DomainFQDN, IPv64DomainPlaceholder, IPv64ActionAdd        string
 	ProviderStatusOK, ProviderStatusError, IPv64DomainPlaceholderToken                    string
 	IPv64DomainAPITokenOptional                                                           string
 
 	// Diagnose / Backup
 	NavOverview, NavMonitoring, NavTools, NavConfig, NavDiagnoseJS, NavBackupJS string
+	NavDashboardJS, NavDomainsJS, NavMetricsJS, NavLogsJS, NavDebugJS           string
+	NavSettingsJS, NavDashboard, NavDomains, IPv64ActionDelete                  string
 
 	DiagnoseTitle, DiagnoseRefreshBtn, DiagnoseLoading, DiagnoseLoadFailed         string
 	DiagnoseConnectionFailed                                                       string
@@ -154,8 +154,8 @@ type Phrases struct {
 	DomainSearchPlaceholder, NoMoreEntries, ChecksLabel, EntriesLabel     string
 	BadgeChanged, FilterAll, FilterErrors, FilterWarnings                 string
 	FilterUpdates, FilterStarts, FilterStop, FilterCreated, FilterCleanup string
-	FilterSkip, FilterConfig, NoDomainsConfigured, DomainContext          string
-	ThemeLabelJS, NoIPToCopyJS, CopiedJS, CopyFailedJS                    string
+	FilterSkip, FilterConfig, FilterInfo, NoDomainsConfigured             string
+	DomainContext, ThemeLabelJS, NoIPToCopyJS, CopiedJS, CopyFailedJS     string
 	UpdateStartingJS, UpdateStartedJS, ConnectionErrorJS                  string
 	ExportStartedJS, ExportFailedJS, FQDNMissingJS                        string
 	SaveConfigConfirmJS, SavedReloadJS, ErrorPrefixJS                     string
@@ -291,6 +291,8 @@ type Phrases struct {
 	SettingsNotifyEvents, SettingsTGToken, SettingsTGChatID                  string
 	SettingsTokenUnchanged, SettingsDNSHint                                  string
 	SettingsSaveBtn, SettingsSaveHint, SettingsRestartHint                   string
+	SettingsThemeHint, SettingsNotifierHint, SettingsUpdateHint              string
+	SettingsExportHint, SettingsNotifyHint                                   string
 	SettingsDebugVerboseHint, SettingsDebugHTTPHint                          string
 	SettingsIfacePlaceholder, SettingsAPIPrefix, SettingsAPISecret           string
 	SettingsCFEmail, SettingsCFGlobalKey, NotifyMqttActive                   string

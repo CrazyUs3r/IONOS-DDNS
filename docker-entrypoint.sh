@@ -1,6 +1,14 @@
 #!/bin/sh
 set -e
+
 CONFIG_DIR="${CONFIG_DIR:-/config}"
+
+case "$CONFIG_DIR" in
+    ""|"/"|"/app"|"/bin"|"/sbin"|"/usr"|"/etc")
+        echo "Refusing unsafe CONFIG_DIR: $CONFIG_DIR" >&2
+        exit 1
+        ;;
+esac
 
 if [ "$(id -u)" = "0" ]; then
     mkdir -p "$CONFIG_DIR"

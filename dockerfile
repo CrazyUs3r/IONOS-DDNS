@@ -5,7 +5,7 @@ FROM --platform=${BUILDPLATFORM} golang:1.26.4-alpine AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
-ARG VERSION=2.5.1
+ARG VERSION=2.5.3
 ARG BUILD_DATE
 ARG VCS_REF
 
@@ -51,7 +51,7 @@ RUN apk add --no-cache ca-certificates tzdata su-exec
 # =============================================================================
 FROM busybox:stable-musl
 
-ARG VERSION=2.5.1
+ARG VERSION=2.5.3
 ARG BUILD_DATE
 ARG VCS_REF
 
