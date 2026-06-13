@@ -909,19 +909,19 @@ func securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
-func handleDashboardCSS(w http.ResponseWriter, r *http.Request) {
+func handleDashboardCSS(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/css; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
 	_, _ = io.WriteString(w, cssData)
 }
 
-func handleDashboardJS(w http.ResponseWriter, r *http.Request) {
+func handleDashboardJS(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
 	_, _ = io.WriteString(w, jsData)
 }
 
-func handleDashboardI18NJS(w http.ResponseWriter, r *http.Request) {
+func handleDashboardI18NJS(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = fmt.Fprintf(w, "window.I18N = %s;\n", dashboardI18NJSON())
