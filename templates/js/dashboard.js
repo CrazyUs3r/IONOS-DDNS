@@ -1,3 +1,191 @@
+// ============================================================================
+// SECURITY BOOTSTRAP — CSRF + declarative event handlers
+// ============================================================================
+const nativeFetch = window.fetch.bind(window);
+
+function currentCSRFToken() {
+	const meta = document.querySelector('meta[name="csrf-token"]');
+	return meta ? String(meta.content || '') : '';
+}
+
+window.fetch = function secureFetch(input, init = {}) {
+	const requestURL = new URL(
+		typeof input === 'string' || input instanceof URL ? input : input.url,
+		window.location.href
+	);
+	const method = String(init.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+	const isUnsafe = !['GET', 'HEAD', 'OPTIONS'].includes(method);
+
+	if (requestURL.origin === window.location.origin && isUnsafe) {
+		const headers = new Headers(input instanceof Request ? input.headers : undefined);
+		new Headers(init.headers || {}).forEach((value, key) => headers.set(key, value));
+		const csrfToken = currentCSRFToken();
+		if (csrfToken) headers.set('X-CSRF-Token', csrfToken);
+		init = { ...init, headers };
+	}
+
+	return nativeFetch(input, init);
+};
+
+function splitDeclarativeArgs(source) {
+	const args = [];
+	let current = '';
+	let quote = '';
+	let escaped = false;
+
+	for (const ch of source) {
+		if (escaped) {
+			current += '\\' + ch;
+			escaped = false;
+			continue;
+		}
+		if (ch === '\\' && quote) {
+			escaped = true;
+			continue;
+		}
+		if (quote) {
+			current += ch;
+			if (ch === quote) quote = '';
+			continue;
+		}
+		if (ch === "'" || ch === '"') {
+			quote = ch;
+			current += ch;
+			continue;
+		}
+		if (ch === ',') {
+			args.push(current.trim());
+			current = '';
+			continue;
+		}
+		current += ch;
+	}
+	if (current.trim() || source.trim()) args.push(current.trim());
+	return args;
+}
+
+function decodeDeclarativeString(raw) {
+	const value = String(raw || '').trim();
+	if (value.length < 2 || !['"', "'"].includes(value[0]) || value.at(-1) !== value[0]) {
+		return value;
+	}
+	return value.slice(1, -1).replace(/\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|n|r|t|b|f|v|0|.|$)/g, (_, escape) => {
+		if (escape.startsWith('x')) return String.fromCharCode(parseInt(escape.slice(1), 16));
+		if (escape.startsWith('u')) return String.fromCharCode(parseInt(escape.slice(1), 16));
+		return ({ n: '\n', r: '\r', t: '\t', b: '\b', f: '\f', v: '\v', 0: '\0' })[escape] ?? escape;
+	});
+}
+
+function runDeclarativeAction(rawCommand, element, event) {
+	let command = String(rawCommand || '').trim();
+	if (!command) return;
+
+	while (command.startsWith('event.preventDefault();') || command.startsWith('event.stopPropagation();')) {
+		if (command.startsWith('event.preventDefault();')) {
+			event.preventDefault();
+			command = command.slice('event.preventDefault();'.length).trim();
+		}
+		if (command.startsWith('event.stopPropagation();')) {
+			event.stopPropagation();
+			command = command.slice('event.stopPropagation();'.length).trim();
+		}
+	}
+
+	const match = command.match(/^([A-Za-z_$][\w$]*)\((.*)\);?$/s);
+	if (!match) {
+		console.warn('Blocked unknown declarative action:', command);
+		return;
+	}
+	const name = match[1];
+	const args = splitDeclarativeArgs(match[2]).map(arg => {
+		if (arg === 'this') return element;
+		if (arg === 'this.value') return element.value;
+		return decodeDeclarativeString(arg);
+	});
+
+	const allowed = {
+		addDomainToList: () => addDomainToList(),
+		addUser: () => addUser(),
+		cancelEdit: () => cancelEdit(),
+		clearDebugLog: () => clearDebugLog(),
+		closeSidebar: () => closeSidebar(),
+		copyIP: () => copyIP(args[0]),
+		copyLogEntry: () => copyLogEntry(element),
+		deleteDomain: () => deleteDomain(args[0], element),
+		deleteUser: () => deleteUser(args[0], args[1]),
+		editDomain: () => editDomain(Number(args[0])),
+		downloadFullBackup: () => downloadFullBackup(),
+		exportData: () => exportData(),
+		exportLogs: () => exportLogs(args[0]),
+		filterDebugLog: () => filterDebugLog(element.value),
+		filterDomains: () => filterDomains(element.value),
+		filterLogs: () => filterLogs(args[0]),
+		changeUserRole: () => changeUserRole(args[0], element.value),
+		ipv64AddDomain: () => ipv64AddDomain(),
+		ipv64DeleteDomain: () => ipv64DeleteDomain(),
+		navTo: () => navTo(args[0]),
+		removeDomainFromList: () => removeDomainFromList(Number(args[0])),
+		refreshDiagnosis: () => refreshDiagnosis(),
+		resetMetrics: () => resetMetrics(),
+		restoreFullBackup: () => restoreFullBackup(),
+		saveFullConfig: () => saveFullConfig(),
+		saveToken: () => saveToken(),
+		sendNotifyTest: () => sendNotifyTest(),
+		showNotifierTooltip: () => showNotifierTooltip(element, element.dataset.tooltip || args[1] || args[0] || ''),
+		toggleNotifCenter: () => toggleNotifCenter(),
+		togglePassword: () => togglePassword(args[0], element),
+		toggleProviderFields: () => toggleProviderFields(),
+		toggleSidebar: () => toggleSidebar(),
+		toggleTheme: () => toggleTheme(),
+		triggerUpdate: () => triggerUpdate(),
+		updateCheckboxLabel: () => updateCheckboxLabel(element),
+	};
+
+	if (!Object.prototype.hasOwnProperty.call(allowed, name)) {
+		console.warn('Blocked non-allowlisted action:', name);
+		return;
+	}
+	allowed[name]();
+}
+
+function declarativeTarget(event, attribute) {
+	const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+	return target ? target.closest(`[${attribute}]`) : null;
+}
+
+document.addEventListener('click', event => {
+	const element = declarativeTarget(event, 'data-click');
+	if (element) runDeclarativeAction(element.getAttribute('data-click'), element, event);
+});
+document.addEventListener('change', event => {
+	const element = declarativeTarget(event, 'data-change');
+	if (element) runDeclarativeAction(element.getAttribute('data-change'), element, event);
+});
+document.addEventListener('input', event => {
+	const element = declarativeTarget(event, 'data-input');
+	if (element) runDeclarativeAction(element.getAttribute('data-input'), element, event);
+});
+document.addEventListener('mouseover', event => {
+	const element = declarativeTarget(event, 'data-mouseenter');
+	if (element && !element.contains(event.relatedTarget)) {
+		runDeclarativeAction(element.getAttribute('data-mouseenter'), element, event);
+	}
+}, true);
+document.addEventListener('focusin', event => {
+	const element = declarativeTarget(event, 'data-focus');
+	if (element) runDeclarativeAction(element.getAttribute('data-focus'), element, event);
+});
+document.addEventListener('keydown', event => {
+	if (
+		event.key === 'Enter' &&
+		event.target instanceof HTMLInputElement &&
+		event.target.id === 'ipv64-domain-input'
+	) {
+		event.preventDefault();
+		ipv64AddDomain();
+	}
+});
+
 let blinkTimer = null;
 let currentLevel = 'ok';
 let ws = null;
@@ -109,6 +297,13 @@ function toggleSidebar() {
 	if (sb) sb.classList.toggle('sidebar-open');
 }
 
+function closeSidebar() {
+	const sb = document.getElementById('sidebar');
+	if (sb) sb.classList.remove('sidebar-open');
+	const overlay = document.getElementById('sidebar-overlay');
+	if (overlay) overlay.style.display = 'none';
+}
+
 
 // ============================================================================
 // 2FA SETTINGS INLINE SECTION
@@ -146,7 +341,12 @@ async function loadTOTPSettings() {
 		bindTOTPForms();
 		focusTOTPCodeInput();
 	} catch (err) {
-		container.innerHTML = `<div class="auth-error">⚠️ ${escapeHtml(tr('totp_settings_load_failed', '2FA settings could not be loaded'))}: ${escapeHtml(String(err.message || err))}</div>`;
+		replaceWithTextElement(
+			container,
+			'div',
+			'auth-error',
+			`⚠️ ${tr('totp_settings_load_failed', '2FA settings could not be loaded')}: ${String(err.message || err)}`,
+		);
 	}
 }
 
@@ -690,7 +890,7 @@ function filterLogs(filter) {
 
 function triggerUpdate() {
 	const btn = document.getElementById('update-button');
-	const token = localStorage.getItem('triggerToken') || '';
+	const token = sessionStorage.getItem('triggerToken') || '';
 	if (btn) btn.disabled = true;
 	showToast(tr('update_starting', '⏳ Update wird gestartet...'), 'info');
 	fetch('/api/trigger', {
@@ -712,72 +912,118 @@ function triggerUpdate() {
 		});
 }
 
-function sendNotifyTest() {
+async function sendNotifyTest() {
 	const btn = document.getElementById('notify-test-btn');
 	const result = document.getElementById('notify-test-result');
-	const token = localStorage.getItem('triggerToken') || '';
+	const token = sessionStorage.getItem('triggerToken') || '';
 
-	if (btn) { btn.disabled = true; btn.textContent = tr('notify_btn_sending', '⏳ Sende...'); }
-	if (result) { result.style.display = 'none'; result.innerHTML = ''; }
+	if (btn) {
+		btn.disabled = true;
+		btn.textContent = tr('notify_btn_sending', '⏳ Sende...');
+	}
+	if (result) {
+		result.style.display = 'none';
+		result.className = 'notify-test-result';
+		result.replaceChildren();
+	}
 
-	fetch('/api/notify/test', {
-		method: 'POST',
-		headers: token ? { 'X-Trigger-Token': token } : {}
-	})
-		.then(r => {
-			if (r.status === 401) {
-				if (btn) { btn.disabled = false; btn.textContent = tr('notify_btn_test', '🧪 Test-Nachricht senden'); }
-				if (result) {
-					result.style.display = 'block';
-					result.innerHTML = `<span class="notify-result--error">${tr('notify_test_unauthorized', '❌ Unauthorized (check token)')}</span>`;
-				}
-				return null;
-			}
-			return r.json();
-		})
-		.then(data => {
-			if (!data) return;
-			if (btn) { btn.disabled = false; btn.textContent = tr('notify_btn_test', '🧪 Test-Nachricht senden'); }
-			if (!result) return;
+	try {
+		const response = await fetch('/api/notify/test', {
+			method: 'POST',
+			headers: token ? { 'X-Trigger-Token': token } : {},
+		});
 
-			result.style.display = 'block';
-
-			if (data.status === 'no_notifiers') {
-				result.innerHTML = `<span class="notify-result--warn">${tr('notify_no_notifier', '⚠️ Keine aktiven Notifier konfiguriert.')}</span>`;
-				return;
-			}
-
-			if (data.status !== 'done') {
-				result.innerHTML = `<span class="notify-result--error">${tr('notify_test_error', '❌ Error while sending')}</span>`;
-				return;
-			}
-
-			const lines = (data.results || []).map(r => {
-				const icon = r.ok ? '✅' : '❌';
-				const err = r.error ? ` <span class="notify-result--detail">(${escHtml(r.error)})</span>` : '';
-				return `${icon} <strong>${escHtml(r.name)}</strong>${err}`;
-			});
-
-			const allOk = data.sent === data.total;
-			const successText = tr('notify_stat_success', 'erfolgreich');
-			const summary = allOk
-				? `<div class="notify-result-summary">${tr('notify_test_success', '✅ Test message sent successfully!')}</div>`
-				: `<div class="notify-result-summary">${data.sent}/${data.total} ${successText}</div>`;
-
-			result.innerHTML = summary + lines.join('<br>');
-			result.className = allOk ? 'notify-test-result notify-result--ok' : 'notify-test-result notify-result--warn';
-		})
-		.catch(() => {
-			if (btn) { btn.disabled = false; btn.textContent = tr('notify_btn_test', '🧪 Test-Nachricht senden'); }
+		if (response.status === 401) {
 			if (result) {
 				result.style.display = 'block';
-				result.innerHTML = `<span class="notify-result--error">${tr('notify_test_conn_error', '❌ Connection error to server')}</span>`;
+				replaceWithTextElement(
+					result,
+					'span',
+					'notify-result--error',
+					tr('notify_test_unauthorized', '❌ Unauthorized (check token)'),
+				);
+			}
+			return;
+		}
+
+		if (!response.ok) throw new Error(`HTTP ${response.status}`);
+		const data = await response.json();
+		if (!result) return;
+
+		result.style.display = 'block';
+
+		if (data.status === 'no_notifiers') {
+			replaceWithTextElement(
+				result,
+				'span',
+				'notify-result--warn',
+				tr('notify_no_notifier', '⚠️ Keine aktiven Notifier konfiguriert.'),
+			);
+			return;
+		}
+
+		if (data.status !== 'done') {
+			replaceWithTextElement(
+				result,
+				'span',
+				'notify-result--error',
+				tr('notify_test_error', '❌ Error while sending'),
+			);
+			return;
+		}
+
+		const sent = Number(data.sent) || 0;
+		const total = Number(data.total) || 0;
+		const allOk = sent === total;
+		const fragment = document.createDocumentFragment();
+		const summary = document.createElement('div');
+		summary.className = 'notify-result-summary';
+		summary.textContent = allOk
+			? tr('notify_test_success', '✅ Test message sent successfully!')
+			: `${sent}/${total} ${tr('notify_stat_success', 'erfolgreich')}`;
+		fragment.appendChild(summary);
+
+		(data.results || []).forEach((entry, index) => {
+			if (index > 0) fragment.appendChild(document.createElement('br'));
+			fragment.appendChild(document.createTextNode(entry.ok ? '✅ ' : '❌ '));
+
+			const name = document.createElement('strong');
+			name.textContent = String(entry.name || '');
+			fragment.appendChild(name);
+
+			if (entry.error) {
+				const detail = document.createElement('span');
+				detail.className = 'notify-result--detail';
+				detail.textContent = ` (${String(entry.error)})`;
+				fragment.appendChild(detail);
 			}
 		});
+
+		result.className = allOk
+			? 'notify-test-result notify-result--ok'
+			: 'notify-test-result notify-result--warn';
+		result.replaceChildren(fragment);
+	} catch (err) {
+		console.error(err);
+		if (result) {
+			result.style.display = 'block';
+			replaceWithTextElement(
+				result,
+				'span',
+				'notify-result--error',
+				tr('notify_test_conn_error', '❌ Connection error to server'),
+			);
+		}
+	} finally {
+		if (btn) {
+			btn.disabled = false;
+			btn.textContent = tr('notify_btn_test', '🧪 Test-Nachricht senden');
+		}
+	}
 }
 
 function exportData() {
-	const token = localStorage.getItem('triggerToken') || '';
+	const token = sessionStorage.getItem('triggerToken') || '';
 	fetch('/api/export', {
 		headers: token ? { 'X-Trigger-Token': token } : {}
 	})
@@ -856,7 +1102,7 @@ function openSettings() {
 function _initSettingsFields() {
 	isSettingsOpen = true;
 
-	const saved = localStorage.getItem('triggerToken') || '';
+	const saved = sessionStorage.getItem('triggerToken') || '';
 	const inp = document.getElementById('s-token');
 	if (inp) inp.placeholder = saved ? tr('token_saved_masked', '●●●●●● (gespeichert)') : tr('token_enter', 'Token eingeben...');
 
@@ -923,12 +1169,12 @@ function saveToken() {
 
 	const val = (input.value || '').trim();
 	if (val) {
-		localStorage.setItem('triggerToken', val);
+		sessionStorage.setItem('triggerToken', val);
 		input.value = '';
 		input.placeholder = tr('token_saved_masked', '●●●●●● (gespeichert)');
 		showToast(tr('token_saved', '✅ Token gespeichert'), 'success');
 	} else {
-		localStorage.removeItem('triggerToken');
+		sessionStorage.removeItem('triggerToken');
 		input.placeholder = tr('token_enter', 'Token eingeben...');
 		showToast(tr('token_deleted', '🗑️ Token gelöscht'), 'info');
 	}
@@ -937,32 +1183,80 @@ function saveToken() {
 function renderSettingsDomainList() {
 	const container = document.getElementById('settings-domain-list');
 	if (!container) return;
-	container.innerHTML = '';
+	container.replaceChildren();
 
 	const sorted = [...tempDomainConfigs].sort((a, b) => {
 		if (a.provider !== b.provider) return a.provider.localeCompare(b.provider);
 		return a.fqdn.localeCompare(b.fqdn);
 	});
 
-	sorted.forEach((d) => {
-		const origIndex = tempDomainConfigs.indexOf(d);
-		const providerColor = { IONOS: '#3b82f6', CLOUDFLARE: '#f97316', IPV64: '#a855f7', HETZNER: '#14b8a6', HETZNERCLOUD: '#06b6d4' }[d.provider] || '#64748b';
-		const div = document.createElement('div');
-		div.className = 'domain-pill';
-		div.innerHTML =
-			'<div class="domain-pill-info">' +
-			'<span class="domain-pill-fqdn">' + escHtml(d.fqdn) + '</span>' +
-			'<span class="provider-badge" style="background:' + providerColor + '20;color:' + providerColor + ';border:1px solid ' + providerColor + '40;margin-left:6px;">' + escHtml(d.provider) + '</span>' +
-			(d.ttl ? '<span class="provider-badge" style="margin-left:6px;">TTL ' + escHtml(d.ttl) + '</span>' : '') +
-			(d.ip_mode ? '<span class="provider-badge" style="margin-left:6px;">' + escHtml(d.ip_mode) + '</span>' : '') +
-			(d.provider === 'CLOUDFLARE' && d.cf_proxied ? '<span class="provider-badge" style="margin-left:6px;">proxied</span>' : '') +
-			'</div>' +
-			'<div class="domain-pill-actions">' +
-			'<button onclick="editDomain(' + origIndex + ')" class="domain-pill-edit-btn">✏️</button>' +
-			'<button onclick="removeDomainFromList(' + origIndex + ')" class="domain-pill-remove-btn">✕</button>' +
-			'</div>';
-		container.appendChild(div);
-	});
+	const providerColors = {
+		IONOS: '#3b82f6',
+		CLOUDFLARE: '#f97316',
+		IPV64: '#a855f7',
+		HETZNER: '#14b8a6',
+		HETZNERCLOUD: '#06b6d4',
+	};
+
+	for (const domain of sorted) {
+		const originalIndex = tempDomainConfigs.indexOf(domain);
+		const providerColor = providerColors[domain.provider] || '#64748b';
+		const pill = document.createElement('div');
+		pill.className = 'domain-pill';
+
+		const info = document.createElement('div');
+		info.className = 'domain-pill-info';
+
+		const fqdn = document.createElement('span');
+		fqdn.className = 'domain-pill-fqdn';
+		fqdn.textContent = String(domain.fqdn || '');
+		info.appendChild(fqdn);
+
+		const addBadge = (text, decorateProvider = false) => {
+			const badge = document.createElement('span');
+			badge.className = 'provider-badge';
+			badge.style.marginLeft = '6px';
+			badge.textContent = String(text);
+			if (decorateProvider) {
+				badge.style.background = `${providerColor}20`;
+				badge.style.color = providerColor;
+				badge.style.border = `1px solid ${providerColor}40`;
+			}
+			info.appendChild(badge);
+		};
+
+		addBadge(domain.provider || '', true);
+		if (domain.ttl) addBadge(`TTL ${domain.ttl}`);
+		if (domain.ip_mode) addBadge(domain.ip_mode);
+		if (domain.provider === 'CLOUDFLARE' && domain.cf_proxied) addBadge('proxied');
+
+		const actions = document.createElement('div');
+		actions.className = 'domain-pill-actions';
+
+		const editButton = document.createElement('button');
+		editButton.type = 'button';
+		editButton.className = 'domain-pill-edit-btn';
+		editButton.textContent = '✏️';
+		editButton.addEventListener('click', () => editDomain(originalIndex));
+
+		const removeButton = document.createElement('button');
+		removeButton.type = 'button';
+		removeButton.className = 'domain-pill-remove-btn';
+		removeButton.textContent = '✕';
+		removeButton.addEventListener('click', () => removeDomainFromList(originalIndex));
+
+		actions.append(editButton, removeButton);
+		pill.append(info, actions);
+		container.appendChild(pill);
+	}
+}
+
+function replaceWithTextElement(container, tagName, className, text) {
+	const element = document.createElement(tagName);
+	if (className) element.className = className;
+	element.textContent = String(text ?? '');
+	container.replaceChildren(element);
+	return element;
 }
 
 function escHtml(s) {
@@ -972,10 +1266,6 @@ function escHtml(s) {
 		.replace(/>/g, '&gt;')
 		.replace(/"/g, '&quot;')
 		.replace(/'/g, '&#39;');
-}
-
-function jsStringAttr(v) {
-	return escHtml(JSON.stringify(String(v ?? '')));
 }
 
 function openAddDomainSection() {
@@ -1042,7 +1332,7 @@ function editDomain(index) {
 
 	renderSettingsDomainList();
 	openAddDomainSection();
-	const addBtn = document.querySelector('#add-domain-section button[onclick="addDomainToList()"]');
+	const addBtn = document.querySelector('#add-domain-section button[data-click="addDomainToList()"]');
 	if (addBtn) addBtn.textContent = tr('edit_domain_saved', 'Änderungen übernehmen');
 	document.getElementById('new-domain-fqdn')?.focus();
 }
@@ -1122,14 +1412,14 @@ function addDomainToList() {
 	].forEach(id => _setVal(id, ''));
 
 	_setChk('new-cf-proxied', false);
-	const addBtn = document.querySelector('#add-domain-section button[onclick="addDomainToList()"]');
+	const addBtn = document.querySelector('#add-domain-section button[data-click="addDomainToList()"]');
 	if (addBtn) addBtn.textContent = tr('settings_add_btn', 'Hinzufügen');
 }
 
 function cancelEdit() {
 	editIndex = null;
 	resetDomainForm();
-	const addBtn = document.querySelector('#add-domain-section button[onclick="addDomainToList()"]');
+	const addBtn = document.querySelector('#add-domain-section button[data-click="addDomainToList()"]');
 	if (addBtn) addBtn.textContent = tr('settings_add_btn', 'Hinzufügen');
 	const section = document.getElementById('add-domain-section');
 	if (section) section.open = false;
@@ -1225,7 +1515,7 @@ async function refreshDashboardDomains() {
 async function saveFullConfig() {
 	if (!confirm(tr('save_config_confirm', 'Alle Einstellungen in config.json speichern?'))) return;
 
-	const token = localStorage.getItem('triggerToken') || '';
+	const token = sessionStorage.getItem('triggerToken') || '';
 
 	const notifyEvents = [...document.querySelectorAll('input[name="notify-event"]:checked')]
 		.map(cb => cb.value);
@@ -1315,7 +1605,7 @@ async function saveFullConfig() {
 
 function resetMetrics() {
 	if (!confirm(tr('reset_metrics_confirm', 'Möchtest du wirklich alle Metriken (Statistiken) löschen?'))) return;
-	const token = localStorage.getItem('triggerToken') || '';
+	const token = sessionStorage.getItem('triggerToken') || '';
 	fetch('/api/metrics/reset', {
 		method: 'POST',
 		headers: token ? { 'X-Trigger-Token': token } : {}
@@ -1435,7 +1725,7 @@ function filterDomains(query) {
 
 function deleteDomain(domain, btn) {
 	if (!confirm(trf('delete_domain_confirm', { domain }, 'Domain "{domain}" wirklich aus dem Status entfernen?'))) return;
-	const token = localStorage.getItem('triggerToken') || '';
+	const token = sessionStorage.getItem('triggerToken') || '';
 	btn.disabled = true;
 	btn.textContent = '⏳';
 	fetch('/api/domain/delete?domain=' + encodeURIComponent(domain), {
@@ -1471,8 +1761,8 @@ function _ipv64DomainAction(action) {
 		return;
 	}
 
-	const token = localStorage.getItem('triggerToken') || '';
-	if (result) { result.style.display = 'none'; result.innerHTML = ''; }
+	const token = sessionStorage.getItem('triggerToken') || '';
+	if (result) { result.style.display = 'none'; result.replaceChildren(); }
 
 	const label = action === 'add' ? 'Hinzufügen' : 'Löschen';
 	showToast(`⏳ IPv64 Domain wird ${action === 'add' ? 'hinzugefügt' : 'gelöscht'}...`, 'info');
@@ -1493,17 +1783,24 @@ function _ipv64DomainAction(action) {
 				if (result) {
 					result.style.display = 'block';
 					result.className = 'ipv64-result notify-result--error';
-					result.innerHTML = msg;
+					result.textContent = msg;
 				}
 				return;
 			}
 			const icon = action === 'add' ? '✅' : '🗑️';
-			const msg = `${icon} Domain <strong>${escHtml(j.fqdn)}</strong> ${j.status}`;
-			showToast(`${icon} IPv64 Domain ${j.status}: ${j.fqdn}`, 'success');
+			const fqdnText = String(j.fqdn || '');
+			const statusText = String(j.status || '');
+			showToast(`${icon} IPv64 Domain ${statusText}: ${fqdnText}`, 'success');
 			if (result) {
+				const strong = document.createElement('strong');
+				strong.textContent = fqdnText;
 				result.style.display = 'block';
 				result.className = 'ipv64-result notify-result--ok';
-				result.innerHTML = msg;
+				result.replaceChildren(
+					document.createTextNode(`${icon} Domain `),
+					strong,
+					document.createTextNode(` ${statusText}`),
+				);
 			}
 			if (input) input.value = '';
 			if (apiTokenInput) apiTokenInput.value = '';
@@ -1572,7 +1869,7 @@ function appendDebugLog(entry) {
 		container.firstElementChild &&
 		container.firstElementChild.classList.contains('debug-placeholder')
 	) {
-		container.innerHTML = '';
+		container.replaceChildren();
 	}
 
 	const line = document.createElement('div');
@@ -1641,7 +1938,7 @@ function clearDebugLog() {
 	const container = document.getElementById('debug-log-container');
 	if (!container) return;
 
-	container.innerHTML = '';
+	container.replaceChildren();
 
 	const placeholder = document.createElement('span');
 	placeholder.className = 'debug-placeholder';
@@ -1658,14 +1955,18 @@ function loadUsers() {
 	if (!container) return;
 
 	fetch('/api/users')
-		.then(r => {
-			if (!r.ok) throw new Error('HTTP ' + r.status);
-			return r.json();
+		.then(response => {
+			if (!response.ok) throw new Error('HTTP ' + response.status);
+			return response.json();
 		})
 		.then(users => renderUsersList(users))
 		.catch(err => {
-			container.innerHTML =
-				'<div class="user-load-error">' + tr('user_load_failed', 'Fehler beim Laden') + '</div>';
+			replaceWithTextElement(
+				container,
+				'div',
+				'user-load-error',
+				tr('user_load_failed', 'Fehler beim Laden'),
+			);
 			console.error(err);
 		});
 }
@@ -1673,39 +1974,84 @@ function loadUsers() {
 function renderUsersList(users) {
 	const container = document.getElementById('users-list');
 	if (!container) return;
-	if (!users || users.length === 0) {
-		container.innerHTML = '<div class="users-empty">' + tr('no_users_found', 'Keine Benutzer gefunden.') + '</div>';
+	container.replaceChildren();
+
+	if (!Array.isArray(users) || users.length === 0) {
+		replaceWithTextElement(
+			container,
+			'div',
+			'users-empty',
+			tr('no_users_found', 'Keine Benutzer gefunden.'),
+		);
 		return;
 	}
 
-	const roleIcon = { admin: '👑', editor: '✏️', viewer: '👁️' };
-	const roleOptions = (currentRole) => `
-		<option value="viewer" ${currentRole === 'viewer' ? 'selected' : ''}>👁️ ${tr('role_viewer', 'Viewer')}</option>
-		<option value="editor" ${currentRole === 'editor' ? 'selected' : ''}>✏️ ${tr('role_editor', 'Editor')}</option>
-		<option value="admin" ${currentRole === 'admin' ? 'selected' : ''}>👑 ${tr('role_admin', 'Admin')}</option>
-	`;
-	container.innerHTML = users.map(u => {
-		const totpEnabled = Boolean(u.totp_enabled ?? u.totpEnabled ?? u.TOTPEnabled);
-		return `
-		<div class="domain-pill">
-			<div class="user-pill-info">
-				<span class="user-pill-username">${escHtml(u.username)}</span>
-				<span class="provider-badge user-role-badge">
-					${roleIcon[u.role] || '?'} ${escHtml(u.role || '')}
-				</span>
-				<span class="provider-badge ${totpEnabled ? 'user-2fa-badge-on' : 'user-2fa-badge-off'}">
-					${totpEnabled ? tr('totp_badge_active', '🔐 2FA active') : tr('totp_badge_inactive', '🔓 2FA inactive')}
-				</span>
-				${u.last_login ? `<span class="user-last-login">Letzter Login: ${escHtml(new Date(u.last_login).toLocaleString())}</span>` : ''}
-			</div>
-			<div class="domain-pill-actions">
-				<select onchange="changeUserRole(${jsStringAttr(u.id)}, this.value)" class="user-role-select">
-						${roleOptions(u.role)}
-					</select>
-				<button onclick="deleteUser(${jsStringAttr(u.id)}, ${jsStringAttr(u.username)})" class="user-delete-btn">✕</button>
-			</div>
-		</div>`;
-	}).join('');
+	const roleIcons = { admin: '👑', editor: '✏️', viewer: '👁️' };
+	const roles = [
+		{ value: 'viewer', icon: '👁️', label: tr('role_viewer', 'Viewer') },
+		{ value: 'editor', icon: '✏️', label: tr('role_editor', 'Editor') },
+		{ value: 'admin', icon: '👑', label: tr('role_admin', 'Admin') },
+	];
+
+	for (const user of users) {
+		const userID = String(user.id || '');
+		const username = String(user.username || '');
+		const role = String(user.role || '');
+		const totpEnabled = Boolean(user.totp_enabled ?? user.totpEnabled ?? user.TOTPEnabled);
+
+		const pill = document.createElement('div');
+		pill.className = 'domain-pill';
+
+		const info = document.createElement('div');
+		info.className = 'user-pill-info';
+
+		const usernameElement = document.createElement('span');
+		usernameElement.className = 'user-pill-username';
+		usernameElement.textContent = username;
+
+		const roleBadge = document.createElement('span');
+		roleBadge.className = 'provider-badge user-role-badge';
+		roleBadge.textContent = `${roleIcons[role] || '?'} ${role}`;
+
+		const totpBadge = document.createElement('span');
+		totpBadge.className = `provider-badge ${totpEnabled ? 'user-2fa-badge-on' : 'user-2fa-badge-off'}`;
+		totpBadge.textContent = totpEnabled
+			? tr('totp_badge_active', '🔐 2FA active')
+			: tr('totp_badge_inactive', '🔓 2FA inactive');
+
+		info.append(usernameElement, roleBadge, totpBadge);
+
+		if (user.last_login) {
+			const lastLogin = document.createElement('span');
+			lastLogin.className = 'user-last-login';
+			lastLogin.textContent = `Letzter Login: ${new Date(user.last_login).toLocaleString()}`;
+			info.appendChild(lastLogin);
+		}
+
+		const actions = document.createElement('div');
+		actions.className = 'domain-pill-actions';
+
+		const select = document.createElement('select');
+		select.className = 'user-role-select';
+		for (const item of roles) {
+			const option = document.createElement('option');
+			option.value = item.value;
+			option.textContent = `${item.icon} ${item.label}`;
+			option.selected = role === item.value;
+			select.appendChild(option);
+		}
+		select.addEventListener('change', () => changeUserRole(userID, select.value));
+
+		const deleteButton = document.createElement('button');
+		deleteButton.type = 'button';
+		deleteButton.className = 'user-delete-btn';
+		deleteButton.textContent = '✕';
+		deleteButton.addEventListener('click', () => deleteUser(userID, username));
+
+		actions.append(select, deleteButton);
+		pill.append(info, actions);
+		container.appendChild(pill);
+	}
 }
 
 function addUser() {
@@ -1716,7 +2062,7 @@ function addUser() {
 	if (username.length < 3) return showToast(tr('auth_user_min', 'Benutzername min. 3 Zeichen'), 'error');
 	if (password.length < 8) return showToast(tr('auth_pass_min', 'Passwort min. 8 Zeichen'), 'error');
 
-	const token = localStorage.getItem('triggerToken') || '';
+	const token = sessionStorage.getItem('triggerToken') || '';
 	fetch('/api/users', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json', ...(token ? { 'X-Trigger-Token': token } : {}) },
@@ -1736,7 +2082,7 @@ function addUser() {
 }
 
 function changeUserRole(id, role) {
-	const token = localStorage.getItem('triggerToken') || '';
+	const token = sessionStorage.getItem('triggerToken') || '';
 	fetch('/api/users/' + id, {
 		method: 'PUT',
 		headers: { 'Content-Type': 'application/json', ...(token ? { 'X-Trigger-Token': token } : {}) },
@@ -1753,7 +2099,7 @@ function changeUserRole(id, role) {
 
 function deleteUser(id, username) {
 	if (!confirm(`Benutzer "${username}" wirklich löschen?`)) return;
-	const token = localStorage.getItem('triggerToken') || '';
+	const token = sessionStorage.getItem('triggerToken') || '';
 	fetch('/api/users/' + id, {
 		method: 'DELETE',
 		headers: token ? { 'X-Trigger-Token': token } : {}
@@ -1788,25 +2134,39 @@ function updateEndpointStatus(data) {
 }
 
 function renderEndpointStatus() {
-	const el = document.getElementById('endpoint-status');
-	if (!el) return;
+	const container = document.getElementById('endpoint-status');
+	if (!container) return;
+
 	const entries = Object.entries(endpointStatus);
+	container.replaceChildren();
 	if (entries.length === 0) return;
-	el.innerHTML = entries.map(([url, s]) => {
+
+	for (const [url, status] of entries) {
 		let host;
-		try { host = new URL(url).hostname; } catch { host = url; }
-		const icon = s.ok ? '✅' : '❌';
-		const diff = Date.now() - s.ts;
-		let ageStr;
-		if (diff < 1000) {
-			ageStr = diff + 'ms';
-		} else if (diff < 60000) {
-			ageStr = (diff / 1000).toFixed(0) + 's';
-		} else {
-			ageStr = Math.round(diff / 60000) + 'm';
+		try {
+			host = new URL(url).hostname;
+		} catch {
+			host = url;
 		}
-		return `<span class="endpoint-chip">${icon} ${escHtml(host)} <span class="endpoint-chip-age">${escHtml(ageStr)}</span></span>`;
-	}).join('');
+
+		const diff = Date.now() - status.ts;
+		const age = diff < 1000
+			? `${diff}ms`
+			: diff < 60000
+				? `${(diff / 1000).toFixed(0)}s`
+				: `${Math.round(diff / 60000)}m`;
+
+		const chip = document.createElement('span');
+		chip.className = 'endpoint-chip';
+		chip.appendChild(document.createTextNode(`${status.ok ? '✅' : '❌'} ${host} `));
+
+		const ageElement = document.createElement('span');
+		ageElement.className = 'endpoint-chip-age';
+		ageElement.textContent = age;
+		chip.appendChild(ageElement);
+
+		container.appendChild(chip);
+	}
 }
 
 function showLoadingToast(text = '⏳ Speichere...') {
@@ -1815,12 +2175,16 @@ function showLoadingToast(text = '⏳ Speichere...') {
 		el = document.createElement('div');
 		el.id = 'loading-toast';
 
-		el.innerHTML = `
-			<div id="loading-text">${text}</div>
-			<div class="loading-toast-track">
-        		<div id="loading-bar"></div>
-			</div>
-		`;
+		const textElement = document.createElement('div');
+		textElement.id = 'loading-text';
+		textElement.textContent = String(text);
+
+		const track = document.createElement('div');
+		track.className = 'loading-toast-track';
+		const bar = document.createElement('div');
+		bar.id = 'loading-bar';
+		track.appendChild(bar);
+		el.replaceChildren(textElement, track);
 
 		document.body.appendChild(el);
 	} else {
@@ -2064,7 +2428,7 @@ function buildIPTimeline(domainEl) {
 		wrap.appendChild(lbl);
 	}
 
-	container.innerHTML = '';
+	container.replaceChildren();
 	container.appendChild(wrap);
 }
 
@@ -2108,18 +2472,40 @@ function toggleNotifCenter() {
 function renderNotifCenter() {
 	const list = document.getElementById('notif-list');
 	if (!list) return;
+	list.replaceChildren();
+
 	if (_notifHistory.length === 0) {
-		list.innerHTML = '<div style="padding:10px;opacity:0.4;font-size:0.8rem;">Keine Ereignisse</div>';
+		const empty = document.createElement('div');
+		empty.style.cssText = 'padding:10px;opacity:0.4;font-size:0.8rem;';
+		empty.textContent = 'Keine Ereignisse';
+		list.appendChild(empty);
 		return;
 	}
-	list.innerHTML = _notifHistory.map(n => {
-		const color = n.type === 'error' ? 'var(--error)' : n.type === 'warning' ? 'var(--warning)' : 'var(--success)';
-		return `<div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:0.78rem;">
-            <span style="color:${color};margin-right:6px;">●</span>${escHtml(n.message)}
-            <span style="float:right;opacity:0.4;">${escHtml(n.time)}</span>
-        </div>`;
-	}).join('');
+
+	for (const notification of _notifHistory) {
+		const row = document.createElement('div');
+		row.style.cssText = 'padding:8px 12px;border-bottom:1px solid var(--border);font-size:0.78rem;';
+
+		const dot = document.createElement('span');
+		dot.style.marginRight = '6px';
+		dot.style.color = notification.type === 'error'
+			? 'var(--error)'
+			: notification.type === 'warning'
+				? 'var(--warning)'
+				: 'var(--success)';
+		dot.textContent = '●';
+
+		const message = document.createTextNode(String(notification.message || ''));
+
+		const time = document.createElement('span');
+		time.style.cssText = 'float:right;opacity:0.4;';
+		time.textContent = String(notification.time || '');
+
+		row.append(dot, message, time);
+		list.appendChild(row);
+	}
 }
+
 
 function initChangedBadges() {
 	document.querySelectorAll('.changed-badge[data-changed-at]').forEach(badge => {
@@ -2145,20 +2531,36 @@ async function refreshDiagnosis() {
 	const box = document.getElementById('diagnose-content');
 	if (!box) return;
 
-	box.innerHTML = '<div class="diag-loading">⏳ ' + escHtml(tr('diagnose_loading', 'Loading diagnosis...')) + '</div>';
+	replaceWithTextElement(
+		box,
+		'div',
+		'diag-loading',
+		'⏳ ' + tr('diagnose_loading', 'Loading diagnosis...'),
+	);
 
 	try {
-		const r = await fetch('/api/diagnose');
-		const data = await r.json();
+		const response = await fetch('/api/diagnose');
+		const data = await response.json();
 
-		if (!r.ok) {
-			box.innerHTML = '<div class="diag-error-box">❌ ' + escHtml(data.error || tr('diagnose_load_failed', 'Diagnosis failed')) + '</div>';
+		if (!response.ok) {
+			replaceWithTextElement(
+				box,
+				'div',
+				'diag-error-box',
+				'❌ ' + (data.error || tr('diagnose_load_failed', 'Diagnosis failed')),
+			);
 			return;
 		}
 
 		renderDiagnosis(data);
 	} catch (err) {
-		box.innerHTML = '<div class="diag-error-box">❌ ' + escHtml(tr('diagnose_connection_failed', 'Connection failed')) + '</div>';
+		console.error(err);
+		replaceWithTextElement(
+			box,
+			'div',
+			'diag-error-box',
+			'❌ ' + tr('diagnose_connection_failed', 'Connection failed'),
+		);
 	}
 }
 
@@ -2187,7 +2589,7 @@ function yesNo(v) {
 
 function renderBoolBadge(label, value) {
 	return '<span class="diag-badge ' + (value ? 'diag-ok' : 'diag-muted') + '">' +
-		escHtml(label) + ': ' + yesNo(value) +
+		escHtml(label) + ': ' + escHtml(yesNo(value)) +
 		'</span>';
 }
 
@@ -2237,9 +2639,9 @@ function renderDiagnosis(d) {
 			<div class="diag-card">
 				<h3>${escHtml(tr('diagnose_system_title', 'System'))}</h3>
 				<div class="diag-row"><span>${escHtml(tr('diagnose_uptime', 'Uptime'))}</span><strong>${escHtml(d.uptime || '-')}</strong></div>
-				<div class="diag-row"><span>${escHtml(tr('diagnose_scheduler_ran', 'Scheduler ran'))}</span><strong>${yesNo(d.scheduler_ran_once)}</strong></div>
-				<div class="diag-row"><span>${escHtml(tr('diagnose_last_run_ok', 'Last run OK'))}</span><strong>${yesNo(d.last_ok)}</strong></div>
-				<div class="diag-row"><span>${escHtml(tr('diagnose_update_running', 'Update running'))}</span><strong>${yesNo(d.update_in_progress)}</strong></div>
+				<div class="diag-row"><span>${escHtml(tr('diagnose_scheduler_ran', 'Scheduler ran'))}</span><strong>${escHtml(yesNo(d.scheduler_ran_once))}</strong></div>
+				<div class="diag-row"><span>${escHtml(tr('diagnose_last_run_ok', 'Last run OK'))}</span><strong>${escHtml(yesNo(d.last_ok))}</strong></div>
+				<div class="diag-row"><span>${escHtml(tr('diagnose_update_running', 'Update running'))}</span><strong>${escHtml(yesNo(d.update_in_progress))}</strong></div>
 				<div class="diag-row"><span>${escHtml(tr('diagnose_active_updates', 'Active updates'))}</span><strong>${escHtml(d.active_updates ?? 0)}</strong></div>
 			</div>
 
