@@ -10,7 +10,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"html"
+	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -24,13 +27,15 @@ import (
 // ============================================================================
 
 const (
-	SessionCookieName    = "dyndns_session"
-	DefaultSessionMaxAge = 7 * 24 * time.Hour
-	sessionCleanupEvery  = 1 * time.Hour
-	pbkdf2Iter           = 600_000
-	pbkdf2SaltLen        = 16
-	pbkdf2KeyLen         = 32
-	setupTokenLength     = 32
+	legacySessionCookieName = "dyndns_session"
+	sessionCookieNameHTTP   = "dyndns_session_http"
+	sessionCookieNameHTTPS  = "dyndns_session_https"
+	DefaultSessionMaxAge    = 7 * 24 * time.Hour
+	sessionCleanupEvery     = 1 * time.Hour
+	pbkdf2Iter              = 600_000
+	pbkdf2SaltLen           = 16
+	pbkdf2KeyLen            = 32
+	setupTokenLength        = 32
 )
 
 type UserRole string
@@ -54,6 +59,7 @@ type DashboardUser struct {
 
 type Session struct {
 	Token     string
+	CSRFToken string
 	UserID    string
 	Username  string
 	Role      UserRole
@@ -157,18 +163,33 @@ var exactPaths = map[string]struct{}{
 	pathMetrics: {},
 }
 
-func (s *SessionStore) Create(user *DashboardUser, maxAge time.Duration) *Session {
-	b := make([]byte, 32)
-	_, _ = rand.Read(b)
-	token := hex.EncodeToString(b)
+func randomHexToken(size int) (string, error) {
+	b := make([]byte, size)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
 
+func (s *SessionStore) Create(user *DashboardUser, maxAge time.Duration) *Session {
+	token, err := randomHexToken(32)
+	if err != nil {
+		return nil
+	}
+	csrfToken, err := randomHexToken(32)
+	if err != nil {
+		return nil
+	}
+
+	now := time.Now()
 	sess := &Session{
 		Token:     token,
+		CSRFToken: csrfToken,
 		UserID:    user.ID,
 		Username:  user.Username,
 		Role:      user.Role,
-		CreatedAt: time.Now(),
-		ExpiresAt: time.Now().Add(maxAge),
+		CreatedAt: now,
+		ExpiresAt: now.Add(maxAge),
 	}
 
 	s.mu.Lock()
@@ -195,6 +216,23 @@ func (s *SessionStore) Get(token string) (*Session, bool) {
 func (s *SessionStore) Delete(token string) {
 	s.mu.Lock()
 	delete(s.sessions, token)
+	s.mu.Unlock()
+}
+
+func (s *SessionStore) DeleteByUserID(userID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for token, sess := range s.sessions {
+		if sess.UserID == userID {
+			delete(s.sessions, token)
+		}
+	}
+}
+
+func (s *SessionStore) DeleteAll() {
+	s.mu.Lock()
+	clear(s.sessions)
 	s.mu.Unlock()
 }
 
@@ -286,10 +324,139 @@ func findUserByUsername(username string) (*DashboardUser, bool) {
 	return nil, false
 }
 
+func findUserByID(userID string) (*DashboardUser, bool) {
+	users := loadUsers()
+	for i := range users {
+		if users[i].ID == userID {
+			u := users[i]
+			return &u, true
+		}
+	}
+	return nil, false
+}
+
 func generateUserID() string {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+func safeLocalRedirect(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || strings.HasPrefix(raw, "//") || strings.Contains(raw, "\\") {
+		return "/"
+	}
+
+	u, err := url.Parse(raw)
+	if err != nil || u.IsAbs() || u.Host != "" || u.User != nil || !strings.HasPrefix(u.Path, "/") {
+		return "/"
+	}
+	decodedPath, err := url.PathUnescape(u.EscapedPath())
+	if err != nil || strings.HasPrefix(decodedPath, "//") || strings.Contains(decodedPath, "\\") {
+		return "/"
+	}
+	return u.RequestURI()
+}
+
+func requestUsesHTTPS(r *http.Request) bool {
+	return r != nil && r.TLS != nil
+}
+
+func sessionCookieName(r *http.Request) string {
+	if requestUsesHTTPS(r) {
+		return sessionCookieNameHTTPS
+	}
+	return sessionCookieNameHTTP
+}
+
+func secureCookieEnabled(r *http.Request) bool {
+	// A Secure cookie is never sent over plain HTTP. HTTP must therefore always
+	// use Secure=false when both listeners are enabled.
+	if !requestUsesHTTPS(r) {
+		return false
+	}
+
+	// HTTPS is secure by default. An explicit false value is retained only for
+	// compatibility with existing installations.
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("DASHBOARD_COOKIE_SECURE"))) {
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return true
+	}
+}
+
+func setSessionCookie(w http.ResponseWriter, r *http.Request, sess *Session) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookieName(r),
+		Value:    sess.Token,
+		Path:     "/",
+		MaxAge:   int(DefaultSessionMaxAge.Seconds()),
+		Expires:  sess.ExpiresAt,
+		HttpOnly: true,
+		Secure:   secureCookieEnabled(r),
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func expireSessionCookie(w http.ResponseWriter, name string, secure bool) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     name,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		Expires:  time.Unix(1, 0),
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
+	expireSessionCookie(w, sessionCookieName(r), secureCookieEnabled(r))
+
+	// Remove the old shared cookie when possible. This keeps upgrades clean.
+	expireSessionCookie(w, legacySessionCookieName, secureCookieEnabled(r))
+}
+
+func isUnsafeMethod(method string) bool {
+	return method != http.MethodGet && method != http.MethodHead && method != http.MethodOptions
+}
+
+func validCSRFRequest(r *http.Request, sess *Session) bool {
+	if sess == nil || sess.CSRFToken == "" {
+		return false
+	}
+
+	provided := strings.TrimSpace(r.Header.Get("X-CSRF-Token"))
+	if provided == "" {
+		contentType := strings.ToLower(r.Header.Get("Content-Type"))
+		if !strings.HasPrefix(contentType, "application/x-www-form-urlencoded") || r.ContentLength > 64<<10 {
+			return false
+		}
+		if err := r.ParseForm(); err != nil {
+			return false
+		}
+		provided = strings.TrimSpace(r.PostForm.Get("csrf_token"))
+	}
+	return subtle.ConstantTimeCompare([]byte(provided), []byte(sess.CSRFToken)) == 1
+}
+
+func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(dst); err != nil {
+		return err
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return fmt.Errorf("multiple JSON values")
+		}
+		return err
+	}
+	return nil
 }
 
 // ============================================================================
@@ -297,47 +464,118 @@ func generateUserID() string {
 // ============================================================================
 
 func sessionFromRequest(r *http.Request) (*Session, bool) {
-	cookie, err := r.Cookie(SessionCookieName)
-	if err != nil {
-		return nil, false
+	// Prefer the protocol-specific cookie so HTTP and HTTPS sessions cannot
+	// shadow each other. Fall back to the legacy name during upgrades.
+	for _, name := range []string{sessionCookieName(r), legacySessionCookieName} {
+		cookie, err := r.Cookie(name)
+		if err != nil {
+			continue
+		}
+		if sess, ok := sessionStore.Get(cookie.Value); ok {
+			return sess, true
+		}
 	}
-	return sessionStore.Get(cookie.Value)
+	return nil, false
+}
+
+func isPublicAuthPath(path string) bool {
+	return path == "/health" || path == "/favicon.svg" ||
+		strings.HasPrefix(path, "/assets/") ||
+		path == "/login" || path == "/setup" || path == "/login/totp"
+}
+
+func sessionMatchesUser(sess *Session) bool {
+	currentUser, exists := findUserByID(sess.UserID)
+	return exists &&
+		currentUser.Role == sess.Role &&
+		currentUser.Username == sess.Username
+}
+
+func rejectUnauthenticated(w http.ResponseWriter, r *http.Request) {
+	if isAPIPath(r.URL.Path) {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "unauthorized",
+		})
+		return
+	}
+
+	target := safeLocalRedirect(r.URL.RequestURI())
+	http.Redirect(
+		w,
+		r,
+		"/login?redirect="+url.QueryEscape(target),
+		http.StatusSeeOther,
+	)
+}
+
+func rejectRevokedSession(w http.ResponseWriter, r *http.Request, sess *Session) {
+	sessionStore.Delete(sess.Token)
+	clearSessionCookie(w, r)
+
+	if isAPIPath(r.URL.Path) {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "session revoked",
+		})
+		return
+	}
+
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
+}
+
+func rejectForbidden(
+	w http.ResponseWriter,
+	r *http.Request,
+	apiError string,
+	pageError string,
+) {
+	if isAPIPath(r.URL.Path) {
+		writeJSON(w, http.StatusForbidden, map[string]string{
+			"error": apiError,
+		})
+		return
+	}
+
+	http.Error(w, pageError, http.StatusForbidden)
 }
 
 func authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		setSecurityHeaders(w, r)
 		path := r.URL.Path
 
-		if path == "/health" || path == "/favicon.svg" ||
-			path == "/login" || path == "/logout" || path == "/setup" ||
-			path == "/login/totp" {
+		if isPublicAuthPath(path) || !authEnabled {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		users := loadUsers()
-
-		if len(users) == 0 {
-			http.Redirect(w, r, "/setup", http.StatusFound)
+		if len(loadUsers()) == 0 {
+			http.Redirect(w, r, "/setup", http.StatusSeeOther)
 			return
 		}
 
 		sess, ok := sessionFromRequest(r)
 		if !ok {
-			if isAPIPath(path) {
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-				return
-			}
-			http.Redirect(w, r, "/login?redirect="+r.URL.Path, http.StatusFound)
+			rejectUnauthenticated(w, r)
+			return
+		}
+
+		if !sessionMatchesUser(sess) {
+			rejectRevokedSession(w, r, sess)
+			return
+		}
+
+		if isUnsafeMethod(r.Method) && !validCSRFRequest(r, sess) {
+			rejectForbidden(
+				w,
+				r,
+				"invalid csrf token",
+				"invalid csrf token",
+			)
 			return
 		}
 
 		if !hasPermission(sess.Role, r.Method, path) {
-			if isAPIPath(path) {
-				writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
-				return
-			}
-			http.Error(w, "Forbidden", http.StatusForbidden)
+			rejectForbidden(w, r, "forbidden", "Forbidden")
 			return
 		}
 
@@ -383,6 +621,10 @@ func hasPermission(role UserRole, method, path string) bool {
 // ============================================================================
 
 func handleLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	if !authEnabled {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
@@ -394,10 +636,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	redirect := r.URL.Query().Get("redirect")
-	if redirect == "" || !strings.HasPrefix(redirect, "/") || strings.HasPrefix(redirect, "//") {
-		redirect = "/"
-	}
+	redirect := safeLocalRedirect(r.URL.Query().Get("redirect"))
 
 	if _, ok := sessionFromRequest(r); ok {
 		http.Redirect(w, r, redirect, http.StatusFound)
@@ -448,18 +687,16 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 // ============================================================================
 
 func handleLogout(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie(SessionCookieName)
-	if err == nil {
-		sessionStore.Delete(cookie.Value)
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     SessionCookieName,
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		HttpOnly: true,
-	})
-	http.Redirect(w, r, "/login", http.StatusFound)
+
+	if sess, ok := sessionFromRequest(r); ok {
+		sessionStore.Delete(sess.Token)
+	}
+	clearSessionCookie(w, r)
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
 // ============================================================================
@@ -467,6 +704,10 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 // ============================================================================
 
 func handleSetup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	if !authEnabled {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
@@ -523,15 +764,12 @@ func handleSetup(w http.ResponseWriter, r *http.Request) {
 			})
 
 			sess := sessionStore.Create(&newUser, DefaultSessionMaxAge)
-			http.SetCookie(w, &http.Cookie{
-				Name:     SessionCookieName,
-				Value:    sess.Token,
-				Path:     "/",
-				MaxAge:   int(DefaultSessionMaxAge.Seconds()),
-				HttpOnly: true,
-				SameSite: http.SameSiteLaxMode,
-			})
-			http.Redirect(w, r, "/", http.StatusFound)
+			if sess == nil {
+				errMsg = T.ErrAccountCreate
+				break
+			}
+			setSessionCookie(w, r, sess)
+			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
 		}
 	}
@@ -574,7 +812,7 @@ func handleAPIUsers(w http.ResponseWriter, r *http.Request) {
 			Password string   `json:"password"`
 			Role     UserRole `json:"role"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := decodeJSONBody(w, r, &req); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": T.ErrInvalidJSON})
 			return
 		}
@@ -653,7 +891,7 @@ func handleUpdateUser(w http.ResponseWriter, r *http.Request, id string) {
 		Password string   `json:"password"`
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": T.ErrInvalidJSON})
 		return
 	}
@@ -684,7 +922,11 @@ func updateUserByID(id string, role UserRole, password string) bool {
 			}
 		}
 
-		return saveUsers(users) == nil
+		if err := saveUsers(users); err != nil {
+			return false
+		}
+		sessionStore.DeleteByUserID(id)
+		return true
 	}
 
 	return false
@@ -696,7 +938,7 @@ func isValidRole(role UserRole) bool {
 
 func requireAdmin(w http.ResponseWriter, r *http.Request) (*Session, bool) {
 	if !authEnabled {
-		return nil, true
+		return &Session{Username: t(T.AuthDisabledActor, "auth-disabled"), Role: RoleAdmin}, true
 	}
 
 	sess, ok := sessionFromRequest(r)
@@ -744,7 +986,11 @@ func removeUserByID(id string) (bool, error) {
 		return false, nil
 	}
 
-	return true, saveUsers(filtered)
+	if err := saveUsers(filtered); err != nil {
+		return false, err
+	}
+	sessionStore.DeleteByUserID(id)
+	return true, nil
 }
 
 func hashPassword(password string) (string, error) {
@@ -803,17 +1049,10 @@ func authPageShell(title, body string) string {
 	return `<!DOCTYPE html><html><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>` + title + ` · DynDNS</title>
-<style>
-` + cssData + `
-
-body {
-	margin: 0;
-	overflow: hidden;
-}
-</style>
+<title>` + html.EscapeString(title) + ` · DynDNS</title>
+<link rel="stylesheet" href="/assets/style.css">
 </head>
-<body>
+<body class="auth-page">
 
 <div class="auth-bg">
 	<div class="auth-sun"></div>
@@ -826,24 +1065,24 @@ body {
 ` + body + `
 	</div>
 </div>
-<script>` + jsData + `</script>
-</script>
-
+<script src="/assets/i18n.js" defer></script>
+<script src="/assets/dashboard.js" defer></script>
 </body></html>`
 }
 
 func buildLoginPage(errMsg, redirect string) string {
 	errHTML := ""
 	if errMsg != "" {
-		errHTML = `<div class="auth-error">⚠️ ` + errMsg + `</div>`
+		errHTML = `<div class="auth-error">⚠️ ` + html.EscapeString(errMsg) + `</div>`
 	}
 
+	action := "/login?redirect=" + url.QueryEscape(safeLocalRedirect(redirect))
 	body := `
 <div class="auth-logo">🌐</div>
 <div class="auth-title">` + T.DashboardTitle + `</div>
 <div class="auth-sub">` + T.LoginSubtitle + `</div>
 ` + errHTML + `
-<form method="POST" action="/login?redirect=` + redirect + `">
+<form method="POST" action="` + html.EscapeString(action) + `">
 	<div class="auth-field">
 		<label class="auth-label">` + T.Username + `</label>
 		<input class="auth-input" type="text" name="username" autofocus autocomplete="username" required>
@@ -862,7 +1101,7 @@ func buildLoginPage(errMsg, redirect string) string {
 func buildSetupPage(errMsg string) string {
 	errHTML := ""
 	if errMsg != "" {
-		errHTML = `<div class="auth-error">⚠️ ` + errMsg + `</div>`
+		errHTML = `<div class="auth-error">⚠️ ` + html.EscapeString(errMsg) + `</div>`
 	}
 
 	body := `

@@ -64,6 +64,7 @@ LABEL org.opencontainers.image.title="Go-DynDNS" \
 
 ENV CONFIG_DIR="/config" \
     HEALTH_PORT="8080" \
+    DASHBOARD_HTTPS_PORT="8443" \
     LANG="de" \
     DEBUG="false" \
     DEBUG_HTTP_RAW="false" \

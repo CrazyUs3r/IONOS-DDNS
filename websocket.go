@@ -11,6 +11,8 @@ import (
 // ============================================================================
 // WEBSOCKET
 // ============================================================================
+const wsMaxInboundMessageSize int64 = 1024
+
 func (h *WSHub) run() {
 	for {
 		select {
@@ -107,6 +109,7 @@ func (c *WSClient) readPump(h *WSHub) {
 		}
 	}()
 
+	c.conn.SetReadLimit(wsMaxInboundMessageSize)
 	_ = c.conn.SetReadDeadline(time.Now().Add(WSPongTimeout))
 	c.conn.SetPongHandler(func(string) error {
 		_ = c.conn.SetReadDeadline(time.Now().Add(WSPongTimeout))

@@ -115,15 +115,24 @@ func run() int {
 
 	startMaintenanceWorkers()
 
-	srv := newHTTPServer()
-	startHTTPServer(srv)
+	servers, err := newDashboardServers()
+	if err != nil {
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: fmt.Sprintf("Dashboard server configuration failed: %v", err),
+		})
+		return 1
+	}
+
+	startDashboardServers(servers)
 	startWebSocketHub()
 
 	if hasDomainConfig() {
 		runUpdate(true)
 	}
 
-	return runMainLoop(srv)
+	return runMainLoop(servers)
 }
 
 type runtimePaths struct {
@@ -579,7 +588,15 @@ func startMaintenanceWorkers() {
 	startLogRotationWorker()
 }
 
-func newHTTPServer() *http.Server {
+type dashboardServers struct {
+	http       *http.Server
+	https      *http.Server
+	certFile   string
+	keyFile    string
+	selfSigned bool
+}
+
+func newDashboardHandler() http.Handler {
 	mux := createMux()
 
 	var handler http.Handler = mux
@@ -587,13 +604,41 @@ func newHTTPServer() *http.Server {
 		handler = authMiddleware(mux)
 	}
 
-	handler = cspMiddleware(handler)
+	return cspMiddleware(handler)
+}
 
+func newDashboardServer(addr string, handler http.Handler) *http.Server {
 	return &http.Server{
-		Addr:              ":" + cfg.HealthPort,
+		Addr:              addr,
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
+}
+
+func newDashboardServers() (*dashboardServers, error) {
+	handler := newDashboardHandler()
+	servers := &dashboardServers{
+		http: newDashboardServer(":"+cfg.HealthPort, handler),
+	}
+
+	certFile, keyFile, selfSigned, err := resolveDashboardTLSFiles()
+	if err != nil {
+		return nil, err
+	}
+
+	httpsPort := strings.TrimSpace(os.Getenv("DASHBOARD_HTTPS_PORT"))
+	if httpsPort == "" {
+		httpsPort = "8443"
+	}
+	if httpsPort == cfg.HealthPort {
+		return nil, fmt.Errorf("HTTP and HTTPS cannot use the same port %s", httpsPort)
+	}
+
+	servers.https = newDashboardServer(":"+httpsPort, handler)
+	servers.certFile = certFile
+	servers.keyFile = keyFile
+	servers.selfSigned = selfSigned
+	return servers, nil
 }
 
 func cspMiddleware(next http.Handler) http.Handler {
@@ -621,14 +666,21 @@ func cspMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func startDashboardServers(servers *dashboardServers) {
+	startHTTPServer(servers.http)
+	if servers.https != nil {
+		startHTTPSServer(servers.https, servers.certFile, servers.keyFile, servers.selfSigned)
+	}
+}
+
 func startHTTPServer(srv *http.Server) {
 	ip := getLocalIP()
 	go func() {
-		debugLog("SYSTEM", "", fmt.Sprintf("%s (http://%s:%s)", T.DashboardStarted, ip, cfg.HealthPort))
+		debugLog("SYSTEM", "", fmt.Sprintf("%s (http://%s%s)", T.DashboardStarted, ip, srv.Addr))
 		log(LogContext{
 			Level:   LogInfo,
 			Action:  ActionServer,
-			Message: fmt.Sprintf("%s (http://%s:%s)", T.DashboardStarted, ip, cfg.HealthPort),
+			Message: fmt.Sprintf("%s (http://%s%s)", T.DashboardStarted, ip, srv.Addr),
 		})
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -641,12 +693,36 @@ func startHTTPServer(srv *http.Server) {
 	}()
 }
 
+func startHTTPSServer(srv *http.Server, certFile, keyFile string, selfSigned bool) {
+	ip := getLocalIP()
+	go func() {
+		message := fmt.Sprintf("%s (https://%s%s)", T.DashboardStarted, ip, srv.Addr)
+		if selfSigned {
+			message += " [self-signed certificate]"
+		}
+		debugLog("SYSTEM", "", message)
+		log(LogContext{
+			Level:   LogInfo,
+			Action:  ActionServer,
+			Message: message,
+		})
+
+		if err := srv.ListenAndServeTLS(certFile, keyFile); err != nil && err != http.ErrServerClosed {
+			log(LogContext{
+				Level:   LogError,
+				Action:  ActionError,
+				Message: fmt.Sprintf("%s (HTTPS): %v", T.ServerError, err),
+			})
+		}
+	}()
+}
+
 func startWebSocketHub() {
 	go wsHub.run()
 	debugLog("SYSTEM", "", t(T.WebSocketHubStarted, "WebSocket hub started"))
 }
 
-func runMainLoop(srv *http.Server) int {
+func runMainLoop(servers *dashboardServers) int {
 	currentInterval := cfg.Interval
 	ticker := time.NewTicker(time.Duration(currentInterval) * time.Second)
 	defer ticker.Stop()
@@ -658,18 +734,18 @@ func runMainLoop(srv *http.Server) int {
 		select {
 		case <-shutdownCtx.Done():
 			debugLog("SCHEDULER", "", t(T.SchedulerShutdownActive, "Shutdown active, stopping scheduler"))
-			return handleContextShutdown(ticker, srv)
+			return handleContextShutdown(ticker, servers)
 
 		case <-ticker.C:
 			ticker = handleSchedulerTick(ticker, &currentInterval)
 
 		case sig := <-stop:
-			return handleShutdownSignal(sig, ticker, srv)
+			return handleShutdownSignal(sig, ticker, servers)
 		}
 	}
 }
 
-func handleContextShutdown(ticker *time.Ticker, srv *http.Server) int {
+func handleContextShutdown(ticker *time.Ticker, servers *dashboardServers) int {
 	ticker.Stop()
 
 	if httpClient != nil {
@@ -687,7 +763,7 @@ func handleContextShutdown(ticker *time.Ticker, srv *http.Server) int {
 	}
 
 	safeCloseLogWriteQueue()
-	shutdownHTTPServer(srv)
+	shutdownDashboardServers(servers)
 
 	return 0
 }
@@ -736,7 +812,7 @@ func handleSchedulerTick(ticker *time.Ticker, currentInterval *int) *time.Ticker
 	return ticker
 }
 
-func handleShutdownSignal(sig os.Signal, ticker *time.Ticker, srv *http.Server) int {
+func handleShutdownSignal(sig os.Signal, ticker *time.Ticker, servers *dashboardServers) int {
 	debugLog("SYSTEM", "", fmt.Sprintf(t(T.ShutdownSignalReceived, "Shutdown signal received: %v"), sig))
 
 	stopCtx := LogContext{
@@ -766,7 +842,7 @@ func handleShutdownSignal(sig os.Signal, ticker *time.Ticker, srv *http.Server) 
 	}
 
 	safeCloseLogWriteQueue()
-	shutdownHTTPServer(srv)
+	shutdownDashboardServers(servers)
 
 	return 0
 }
@@ -803,20 +879,24 @@ func waitForRunningUpdates() {
 	}
 }
 
-func shutdownHTTPServer(srv *http.Server) {
+func shutdownDashboardServers(servers *dashboardServers) {
 	ctx, cancel := context.WithTimeout(context.Background(), ShutdownGraceTimeout)
 	defer cancel()
 
 	debugLog("SYSTEM", "", T.ServerShuttingDown)
-	if err := srv.Shutdown(ctx); err != nil {
-		log(LogContext{
-			Level:   LogWarn,
-			Action:  ActionError,
-			Message: fmt.Sprintf("%s: %v", T.ShutdownError, err),
-		})
-	} else {
-		debugLog("SYSTEM", "", T.ServerShutdownComplete)
+	for _, srv := range []*http.Server{servers.http, servers.https} {
+		if srv == nil {
+			continue
+		}
+		if err := srv.Shutdown(ctx); err != nil {
+			log(LogContext{
+				Level:   LogWarn,
+				Action:  ActionError,
+				Message: fmt.Sprintf("%s (%s): %v", T.ShutdownError, srv.Addr, err),
+			})
+		}
 	}
+	debugLog("SYSTEM", "", T.ServerShutdownComplete)
 }
 
 func applyEnvOverrides(

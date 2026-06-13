@@ -542,8 +542,8 @@ func ipv64PraefixFromCachedRecordName(domainName, recordName string) string {
 	}
 
 	suffix := "." + domainName
-	if strings.HasSuffix(recordName, suffix) {
-		return strings.TrimSuffix(recordName, suffix)
+	if before, ok := strings.CutSuffix(recordName, suffix); ok {
+		return before
 	}
 
 	return recordName
@@ -1237,14 +1237,195 @@ func deleteIPv64Domain(ctx context.Context, dc *DomainConfig, fqdn string) error
 	return nil
 }
 
-func findAnyIPv64DomainConfig() *DomainConfig {
+func selectIPv64DomainConfigForAction(
+	ctx context.Context,
+	action string,
+	fqdn string,
+	apiToken string,
+) (*DomainConfig, int, error) {
+	fqdn = normalizeIPv64FQDN(fqdn)
+	apiToken = strings.TrimSpace(apiToken)
+
+	if fqdn == "" {
+		return nil, http.StatusBadRequest, fmt.Errorf("%s", T.IPv64FQDNEmpty)
+	}
+
+	if apiToken != "" {
+		dc := findIPv64DomainConfigForFQDN(fqdn)
+		if dc == nil {
+			dc = &DomainConfig{
+				FQDN:     fqdn,
+				Provider: ProviderIPv64,
+			}
+		}
+
+		dc.IPv64Token = apiToken
+
+		if action == MethodDELETE {
+			owns, err := ipv64TokenOwnsDomain(ctx, dc, fqdn)
+			if err != nil {
+				return nil, http.StatusBadGateway, fmt.Errorf(T.IPv64TokenOwnershipVerifyFailed, fqdn, err)
+			}
+			if !owns {
+				return nil, http.StatusForbidden, fmt.Errorf(T.IPv64TokenDoesNotOwnDomain, fqdn)
+			}
+		}
+
+		return dc, http.StatusOK, nil
+	}
+
+	if action == MethodDELETE {
+		dc, err := findIPv64DomainConfigOwningFQDN(ctx, fqdn)
+		if err != nil {
+			return nil, http.StatusBadGateway, err
+		}
+		if dc == nil {
+			return nil, http.StatusBadRequest, fmt.Errorf(T.IPv64NoTokenOwnsDomain, fqdn)
+		}
+		return dc, http.StatusOK, nil
+	}
+
+	dc := findIPv64DomainConfigForFQDN(fqdn)
+	if dc == nil || strings.TrimSpace(dc.IPv64Token) == "" {
+		return nil, http.StatusBadRequest, fmt.Errorf(T.IPv64NoMatchingTokenConfigured, fqdn)
+	}
+
+	return dc, http.StatusOK, nil
+}
+
+func findIPv64DomainConfigForFQDN(fqdn string) *DomainConfig {
+	fqdn = normalizeIPv64FQDN(fqdn)
+
 	cfgMu.RLock()
 	defer cfgMu.RUnlock()
+
+	var best DomainConfig
+	bestLen := -1
+	found := false
+
 	for i := range cfg.DomainConfigs {
-		if cfg.DomainConfigs[i].Provider == ProviderIPv64 {
-			dc := cfg.DomainConfigs[i]
-			return &dc
+		dc := cfg.DomainConfigs[i]
+		if dc.Provider != ProviderIPv64 {
+			continue
+		}
+		if strings.TrimSpace(dc.IPv64Token) == "" {
+			continue
+		}
+
+		configFQDN := normalizeIPv64FQDN(dc.FQDN)
+		if !ipv64ConfigCoversFQDN(configFQDN, fqdn) {
+			continue
+		}
+
+		if len(configFQDN) > bestLen {
+			best = dc
+			bestLen = len(configFQDN)
+			found = true
 		}
 	}
-	return nil
+
+	if !found {
+		return nil
+	}
+
+	return &best
+}
+
+func ipv64ConfigCoversFQDN(configFQDN, fqdn string) bool {
+	configFQDN = normalizeIPv64FQDN(configFQDN)
+	fqdn = normalizeIPv64FQDN(fqdn)
+
+	if configFQDN == "" || fqdn == "" {
+		return false
+	}
+
+	return fqdn == configFQDN || strings.HasSuffix(fqdn, "."+configFQDN)
+}
+
+func findIPv64DomainConfigOwningFQDN(ctx context.Context, fqdn string) (*DomainConfig, error) {
+	fqdn = normalizeIPv64FQDN(fqdn)
+
+	configs := ipv64DomainConfigsSnapshot()
+	seenTokens := make(map[string]struct{})
+	var lastErr error
+	checked := 0
+
+	for _, dc := range configs {
+		token := strings.TrimSpace(dc.IPv64Token)
+		if token == "" {
+			continue
+		}
+		if _, seen := seenTokens[token]; seen {
+			continue
+		}
+		seenTokens[token] = struct{}{}
+
+		dcCopy := dc
+		owns, err := ipv64TokenOwnsDomain(ctx, &dcCopy, fqdn)
+		if err != nil {
+			lastErr = err
+			debugLog("IPv64", fqdn, fmt.Sprintf(T.IPv64OwnershipCheckFailed, err))
+			continue
+		}
+
+		checked++
+
+		if owns {
+			return &dcCopy, nil
+		}
+	}
+
+	if checked == 0 && lastErr != nil {
+		return nil, fmt.Errorf(T.IPv64AnyTokenVerifyFailed, fqdn, lastErr)
+	}
+
+	return nil, nil
+}
+
+func ipv64DomainConfigsSnapshot() []DomainConfig {
+	cfgMu.RLock()
+	defer cfgMu.RUnlock()
+
+	out := make([]DomainConfig, 0, len(cfg.DomainConfigs))
+
+	for _, dc := range cfg.DomainConfigs {
+		if dc.Provider != ProviderIPv64 {
+			continue
+		}
+		if strings.TrimSpace(dc.IPv64Token) == "" {
+			continue
+		}
+
+		out = append(out, dc)
+	}
+
+	return out
+}
+
+func ipv64TokenOwnsDomain(ctx context.Context, dc *DomainConfig, fqdn string) (bool, error) {
+	fqdn = normalizeIPv64FQDN(fqdn)
+	if fqdn == "" {
+		return false, fmt.Errorf("%s", T.IPv64FQDNEmpty)
+	}
+
+	if dc == nil || strings.TrimSpace(dc.IPv64Token) == "" {
+		return false, fmt.Errorf("%s", T.IPv64TokenMissing)
+	}
+
+	params := map[string]string{
+		"get_domains": dc.IPv64Token,
+	}
+
+	data, err := ipv64API(ctx, dc, params)
+	if err != nil {
+		return false, err
+	}
+
+	var resp IPv64Response
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return false, fmt.Errorf("%s: %w", T.IPv64ParseError, err)
+	}
+
+	_, ok := resp.Subdomains[fqdn]
+	return ok, nil
 }

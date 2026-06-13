@@ -20,8 +20,8 @@ type Phrases struct {
 	SettingsCFProxyLabel, SetupToken, PasswordMinHint, PasswordConfirm, SetupButton       string
 	NotifierActive, NotifierDisconnected, SetupHint, SetupTitle                           string
 	TooltipLastCheck, TooltipClock, TooltipUptime, FirstAdminCreatedLog                   string
-	LoadingSavingJS, LoadingSlowJS, NoLogEntries, AuthDisabled, SetupRequired             string
-	SetupTokenLabel, SetupOpenURL, LoginSuccessLog, LoginFailedLog                        string
+	LoadingSavingJS, LoadingSlowJS, NoLogEntries, AuthDisabled, AuthDisabledActor         string
+	SetupRequired, SetupTokenLabel, SetupOpenURL, LoginSuccessLog, LoginFailedLog         string
 	ErrInvalidLogin, ErrInvalidSetupToken, ErrUsernameTooShort                            string
 	ErrPasswordTooShort, ErrPasswordsMismatch, ErrAccountCreate, ErrAccountSave           string
 	ErrInvalidJSON, ErrUsernamePasswordMin, ErrHash, ErrSave, UserCreatedLog              string
@@ -264,15 +264,19 @@ type Phrases struct {
 	CFUnmanagedRecord                             string
 
 	// IPv64
-	IPv64BaseDomainNotFound, IPv64CDNIgnoredV4, IPv64CDNIgnoredV6    string
-	IPv64UpdateURL, IPv64HTMLResponse, IPv64ParseError               string
-	IPv64APIError, IPv64APIFailed, IPv64HTTPError, IPv64UpdateFailed string
-	IPv64RateLimitHeader, IPv64RateLimitBackoff, IPv64RetriableWait  string
-	IPv64CacheBuilt, IPv64CacheUsed, IPv64CacheLoadDisk              string
-	IPv64CacheLoadedDisk, IPv64CacheAPIError, IPv64CacheDiskError    string
-	IPv64CacheFallback, IPv64ParseHTMLCache, IPv64CacheSaveError     string
-	IPv64CachedDomain, IPv64RecordUpdated, IPv64RecordUpdatedV6      string
-	IPv64CacheUpdated, IPv64DeleteResponse                           string
+	IPv64BaseDomainNotFound, IPv64CDNIgnoredV4, IPv64CDNIgnoredV6       string
+	IPv64UpdateURL, IPv64HTMLResponse, IPv64ParseError                  string
+	IPv64APIError, IPv64APIFailed, IPv64HTTPError, IPv64UpdateFailed    string
+	IPv64RateLimitHeader, IPv64RateLimitBackoff, IPv64RetriableWait     string
+	IPv64CacheBuilt, IPv64CacheUsed, IPv64CacheLoadDisk                 string
+	IPv64CacheLoadedDisk, IPv64CacheAPIError, IPv64CacheDiskError       string
+	IPv64CacheFallback, IPv64ParseHTMLCache, IPv64CacheSaveError        string
+	IPv64CachedDomain, IPv64RecordUpdated, IPv64RecordUpdatedV6         string
+	IPv64CacheUpdated, IPv64DeleteResponse                              string
+	IPv64ActionInvalid, IPv64FQDNEmpty, IPv64TokenOwnershipVerifyFailed string
+	IPv64TokenDoesNotOwnDomain, IPv64NoTokenOwnsDomain                  string
+	IPv64NoMatchingTokenConfigured, IPv64AnyTokenVerifyFailed           string
+	IPv64OwnershipCheckFailed, IPv64TokenMissing                        string
 
 	// Retry attempts
 	CFAttempt, IPv64Attempt, IonosAttempt string
