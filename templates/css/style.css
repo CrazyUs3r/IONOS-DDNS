@@ -3580,3 +3580,20 @@ form[action="/setup"] {
 	text-align: center;
 	padding-left: calc(12px + 0.4em);
 }
+/* ============================================================================
+   SECURITY / EXTERNAL-ASSET SUPPORT
+   ============================================================================ */
+body.auth-page {
+	margin: 0;
+	overflow: hidden;
+}
+
+.logout-form {
+	margin: 0;
+	display: flex;
+	flex: 1;
+}
+
+.logout-form .logout-btn {
+	width: 100%;
+}
