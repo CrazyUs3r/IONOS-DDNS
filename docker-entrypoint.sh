@@ -17,7 +17,11 @@ if [ "$(id -u)" = "0" ]; then
         echo "Adjusting ownership of $CONFIG_DIR"
         chown -R 1000:1000 "$CONFIG_DIR"
     fi
-    exec /sbin/su-exec dyndns /app/dyndns "$@"
+    if [ -f /sbin/su-exec ]; then
+        exec /sbin/su-exec dyndns /app/dyndns "$@"
+    else
+        exec su -s /bin/sh -c "/app/dyndns $@" dyndns
+    fi
 fi
 
 exec /app/dyndns "$@"
