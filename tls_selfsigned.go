@@ -1,9 +1,9 @@
+// package main
 package main
 
 import (
-	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -120,7 +120,7 @@ func ensureSelfSignedCertificate(certFile, keyFile string, dnsNames []string, ip
 		}
 	}
 
-	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return fmt.Errorf("generate TLS private key: %w", err)
 	}
@@ -164,17 +164,14 @@ func ensureSelfSignedCertificate(certFile, keyFile string, dnsNames []string, ip
 		return fmt.Errorf("create self-signed TLS certificate: %w", err)
 	}
 
-	privateKeyDER, err := x509.MarshalECPrivateKey(privateKey)
-	if err != nil {
-		return fmt.Errorf("marshal TLS private key: %w", err)
-	}
+	privateKeyDER := x509.MarshalPKCS1PrivateKey(privateKey)
 
 	certificatePEM := pem.EncodeToMemory(&pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: certificateDER,
 	})
 	privateKeyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "EC PRIVATE KEY",
+		Type:  "RSA PRIVATE KEY",
 		Bytes: privateKeyDER,
 	})
 
