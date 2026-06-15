@@ -86,7 +86,7 @@ type totpPending struct {
 
 var (
 	totpPendingMu    sync.Mutex
-	totpPendingStore = map[string]totpPending{} // key = userID
+	totpPendingStore = map[string]totpPending{}
 )
 
 func storeTOTPPending(userID, secret string) {

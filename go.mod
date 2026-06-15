@@ -15,5 +15,5 @@ require (
 require (
 	github.com/boombuler/barcode v1.1.0 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
-	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/net v0.56.0 // indirect
 )

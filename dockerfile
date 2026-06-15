@@ -41,10 +41,22 @@ RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
 # =============================================================================
 # Runtime tools for target platform
 # =============================================================================
-FROM --platform=${TARGETPLATFORM} alpine:3.23 AS runtime-tools
+FROM alpine:3.23 AS runtime-tools
 
-RUN apk add --no-cache ca-certificates tzdata su-exec
+ARG SU_EXEC_COMMIT=89c016e6e08749d583efdeda04b9f73e1218e253
 
+RUN apk add --no-cache \
+    build-base \
+    ca-certificates \
+    git \
+    tzdata && \
+    git clone https://github.com/ncopa/su-exec.git /tmp/su-exec && \
+    cd /tmp/su-exec && \
+    git checkout "${SU_EXEC_COMMIT}" && \
+    make su-exec-static && \
+    strip su-exec-static && \
+    mkdir -p /out && \
+    cp su-exec-static /out/su-exec
 
 # =============================================================================
 # Runtime Stage
@@ -73,21 +85,40 @@ ENV CONFIG_DIR="/config" \
 WORKDIR /app
 
 RUN mkdir -p /app /config && \
-    echo 'dyndns:x:1000:1000:dyndns:/nonexistent:/sbin/nologin' >> /etc/passwd && \
     echo 'dyndns:x:1000:' >> /etc/group && \
+    echo 'dyndns:x:1000:1000:dyndns:/nonexistent:/bin/false' >> /etc/passwd && \
     chown -R 1000:1000 /app /config
 
-COPY --from=runtime-tools /sbin/su-exec /sbin/su-exec
-COPY --from=runtime-tools /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-COPY --from=runtime-tools /usr/share/zoneinfo /usr/share/zoneinfo
+COPY --from=runtime-tools \
+    --chmod=0755 \
+    /out/su-exec /sbin/su-exec
 
-COPY --from=builder --chown=1000:1000 /out/dyndns /app/dyndns
-COPY --chmod=755 docker-entrypoint.sh /docker-entrypoint.sh
+COPY --from=runtime-tools \
+    /etc/ssl/certs/ca-certificates.crt \
+    /etc/ssl/certs/ca-certificates.crt
+
+COPY --from=runtime-tools \
+    /usr/share/zoneinfo \
+    /usr/share/zoneinfo
+
+COPY --from=builder \
+    --chown=1000:1000 \
+    --chmod=0755 \
+    /out/dyndns /app/dyndns
+
+COPY --chown=0:0 \
+    --chmod=0755 \
+    docker-entrypoint.sh /docker-entrypoint.sh
 
 VOLUME ["/config"]
-EXPOSE 8080
 
-HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
-    CMD wget -qO- "http://localhost:${HEALTH_PORT}/health" || exit 1
+EXPOSE 8080 8443
+
+HEALTHCHECK \
+    --interval=60s \
+    --timeout=10s \
+    --start-period=30s \
+    --retries=3 \
+    CMD wget -q -O /dev/null "http://127.0.0.1:${HEALTH_PORT}/health" || exit 1
 
 ENTRYPOINT ["/docker-entrypoint.sh"]

@@ -804,7 +804,7 @@ func getSecretReplacer() *strings.Replacer {
 	}
 	secretReplacerMu.Lock()
 	defer secretReplacerMu.Unlock()
-	if secretReplacer == nil { // double-checked
+	if secretReplacer == nil {
 		secretReplacer = buildSecretReplacer(snapshotDomainConfigs())
 	}
 	return secretReplacer
@@ -929,7 +929,7 @@ func sanitizeID(s string) string {
 	return out
 }
 
-var sanitizeIDCache sync.Map // string → string
+var sanitizeIDCache sync.Map
 
 func sanitizeIDWithHash(s string) string {
 	if cached, ok := sanitizeIDCache.Load(s); ok {

@@ -597,14 +597,13 @@ type dashboardServers struct {
 }
 
 func newDashboardHandler() http.Handler {
-	mux := createMux()
+	var handler http.Handler = createMux()
 
-	var handler http.Handler = mux
 	if authEnabled {
-		handler = authMiddleware(mux)
+		handler = authMiddleware(handler)
 	}
 
-	return cspMiddleware(handler)
+	return securityHeaders(handler)
 }
 
 func newDashboardServer(addr string, handler http.Handler) *http.Server {
@@ -639,31 +638,6 @@ func newDashboardServers() (*dashboardServers, error) {
 	servers.keyFile = keyFile
 	servers.selfSigned = selfSigned
 	return servers, nil
-}
-
-func cspMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		isHTML := path == "/" ||
-			path == "/login" ||
-			path == "/setup" ||
-			path == "/logout"
-
-		if isHTML {
-			w.Header().Set("X-Content-Type-Options", "nosniff")
-			w.Header().Set("X-Frame-Options", "DENY")
-			w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-			w.Header().Set("Content-Security-Policy",
-				"default-src 'self'; "+
-					"script-src 'self' 'unsafe-inline'; "+
-					"style-src 'self' 'unsafe-inline'; "+
-					"img-src 'self' data:; "+
-					"connect-src 'self' ws: wss:; "+
-					"frame-ancestors 'none';",
-			)
-		}
-		next.ServeHTTP(w, r)
-	})
 }
 
 func startDashboardServers(servers *dashboardServers) {

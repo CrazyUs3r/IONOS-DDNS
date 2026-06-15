@@ -812,14 +812,12 @@ func dashboardI18NJSON() string {
 }
 
 func createMux() *http.ServeMux {
-	routes := http.NewServeMux()
-
-	registerStaticRoutes(routes)
-	registerAPIroutes(routes)
-	registerPageRoutes(routes)
-
 	mux := http.NewServeMux()
-	mux.Handle("/", securityHeaders(routes))
+
+	registerStaticRoutes(mux)
+	registerAPIroutes(mux)
+	registerPageRoutes(mux)
+
 	return mux
 }
 
@@ -879,6 +877,7 @@ func dashboardHSTSEnabled() bool {
 
 func setSecurityHeaders(w http.ResponseWriter, r *http.Request) {
 	h := w.Header()
+
 	h.Set("Content-Security-Policy", strings.Join([]string{
 		"default-src 'self'",
 		"base-uri 'none'",
@@ -892,11 +891,13 @@ func setSecurityHeaders(w http.ResponseWriter, r *http.Request) {
 		"script-src-attr 'none'",
 		"connect-src 'self'",
 	}, "; "))
+
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("X-Frame-Options", "DENY")
 	h.Set("Referrer-Policy", "no-referrer")
 	h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 	h.Set("Cross-Origin-Opener-Policy", "same-origin")
+
 	if r != nil && r.TLS != nil && dashboardHSTSEnabled() {
 		h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 	}
@@ -909,19 +910,19 @@ func securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
-func handleDashboardCSS(w http.ResponseWriter, _ *http.Request) {
+func handleDashboardCSS(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/css; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
 	_, _ = io.WriteString(w, cssData)
 }
 
-func handleDashboardJS(w http.ResponseWriter, _ *http.Request) {
+func handleDashboardJS(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
 	_, _ = io.WriteString(w, jsData)
 }
 
-func handleDashboardI18NJS(w http.ResponseWriter, _ *http.Request) {
+func handleDashboardI18NJS(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = fmt.Fprintf(w, "window.I18N = %s;\n", dashboardI18NJSON())
@@ -1929,6 +1930,17 @@ func readLastUpdateTimeFromStatusFile() string {
 }
 
 func handleDashboard(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
 	sess, _ := sessionFromRequest(r)
 	isAdmin := !authEnabled || (sess != nil && sess.Role == RoleAdmin)
 	isViewer := authEnabled && sess != nil && sess.Role == RoleViewer
@@ -1941,7 +1953,6 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 	chartSVG, latencySVG, nicHTML := buildDashboardMetricsParts(stats)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	setSecurityHeaders(w, r)
 
 	w.Header().Set(
 		"Cache-Control",

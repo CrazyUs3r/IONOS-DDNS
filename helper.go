@@ -3,12 +3,13 @@ package main
 
 import (
 	"context"
+	cryptorand "crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
 	"math"
-	"math/rand"
+	"math/big"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -385,9 +386,29 @@ func doSingleflight[T any](
 }
 
 func calculateRetryDelay(attempt int, isServerError bool) time.Duration {
-	baseWait := min(max(time.Duration(math.Pow(RetryExponentBase, float64(attempt+1)))*RetryBaseDelay, RetryBaseDelay), RetryMaxDelay)
+	baseWait := min(
+		max(
+			time.Duration(math.Pow(
+				RetryExponentBase,
+				float64(attempt+1),
+			))*RetryBaseDelay,
+			RetryBaseDelay,
+		),
+		RetryMaxDelay,
+	)
 
-	jitter := time.Duration(rand.Intn(RetryJitterMaxMs)) * time.Millisecond // #nosec G404
+	var jitter time.Duration
+
+	if RetryJitterMaxMs > 0 {
+		randomValue, err := cryptorand.Int(
+			cryptorand.Reader,
+			big.NewInt(int64(RetryJitterMaxMs)),
+		)
+		if err == nil {
+			jitter = time.Duration(randomValue.Int64()) * time.Millisecond
+		}
+	}
+
 	wait := baseWait + jitter
 
 	if isServerError {

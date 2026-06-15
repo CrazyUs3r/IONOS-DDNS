@@ -370,14 +370,10 @@ func sessionCookieName(r *http.Request) string {
 }
 
 func secureCookieEnabled(r *http.Request) bool {
-	// A Secure cookie is never sent over plain HTTP. HTTP must therefore always
-	// use Secure=false when both listeners are enabled.
 	if !requestUsesHTTPS(r) {
 		return false
 	}
 
-	// HTTPS is secure by default. An explicit false value is retained only for
-	// compatibility with existing installations.
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("DASHBOARD_COOKIE_SECURE"))) {
 	case "0", "false", "no", "off":
 		return false
@@ -414,8 +410,6 @@ func expireSessionCookie(w http.ResponseWriter, name string, secure bool) {
 
 func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
 	expireSessionCookie(w, sessionCookieName(r), secureCookieEnabled(r))
-
-	// Remove the old shared cookie when possible. This keeps upgrades clean.
 	expireSessionCookie(w, legacySessionCookieName, secureCookieEnabled(r))
 }
 
@@ -464,8 +458,6 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
 // ============================================================================
 
 func sessionFromRequest(r *http.Request) (*Session, bool) {
-	// Prefer the protocol-specific cookie so HTTP and HTTPS sessions cannot
-	// shadow each other. Fall back to the legacy name during upgrades.
 	for _, name := range []string{sessionCookieName(r), legacySessionCookieName} {
 		cookie, err := r.Cookie(name)
 		if err != nil {
@@ -479,9 +471,19 @@ func sessionFromRequest(r *http.Request) (*Session, bool) {
 }
 
 func isPublicAuthPath(path string) bool {
-	return path == "/health" || path == "/favicon.svg" ||
-		strings.HasPrefix(path, "/assets/") ||
-		path == "/login" || path == "/setup" || path == "/login/totp"
+	switch path {
+	case "/health",
+		"/favicon.svg",
+		"/assets/style.css",
+		"/assets/dashboard.js",
+		"/assets/i18n.js",
+		"/login",
+		"/setup",
+		"/login/totp":
+		return true
+	default:
+		return false
+	}
 }
 
 func sessionMatchesUser(sess *Session) bool {
@@ -540,7 +542,6 @@ func rejectForbidden(
 
 func authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		setSecurityHeaders(w, r)
 		path := r.URL.Path
 
 		if isPublicAuthPath(path) || !authEnabled {
