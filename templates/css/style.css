@@ -1858,14 +1858,34 @@ select.s-input option {
 /* ============================================================================
    AUTH PAGES
    ============================================================================ */
-.auth-wrap {
+body.auth-page {
 	position: relative;
 	z-index: 10;
+	display: flex;
+	flex-direction: column;
 	min-height: 100dvh;
+	overflow-x: hidden;
+	overflow-y: auto;
+}
+
+body.auth-page .auth-wrap {
+	position: relative;
+	z-index: 10;
+	flex: 1 1 auto;
+	min-height: 0;
+	width: 100%;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	padding: 20px;
+}
+
+body.auth-page .dashboard-footer {
+	position: relative;
+	z-index: 10;
+	flex-shrink: 0;
+	margin-top: 0;
+	padding: 10px 20px;
 }
 
 .auth-card {
@@ -1964,24 +1984,6 @@ select.s-input option {
 	opacity: 0.45;
 	text-align: center;
 	margin-top: 18px;
-}
-
-.auth-page-wrapper {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	min-height: 100dvh;
-	padding: 20px;
-	box-sizing: border-box;
-	overflow-y: auto;
-}
-
-form[action="/login"],
-form[action="/setup"] {
-	max-height: min(650px, 80dvh);
-	overflow-y: auto;
-	overscroll-behavior: contain;
-	padding-right: 8px;
 }
 
 /* ============================================================================
@@ -2235,6 +2237,11 @@ form[action="/setup"] {
 	.dashboard-footer {
 		padding: 10px 20px;
 		padding-bottom: calc(10px + env(safe-area-inset-bottom, 0));
+	}
+
+	body.auth-page .dashboard-footer {
+		padding: 8px 12px;
+		padding-bottom: calc(8px + env(safe-area-inset-bottom));
 	}
 }
 
@@ -3580,14 +3587,10 @@ form[action="/setup"] {
 	text-align: center;
 	padding-left: calc(12px + 0.4em);
 }
+
 /* ============================================================================
    SECURITY / EXTERNAL-ASSET SUPPORT
    ============================================================================ */
-body.auth-page {
-	margin: 0;
-	overflow: hidden;
-}
-
 .logout-form {
 	margin: 0;
 	display: flex;
@@ -3596,4 +3599,4 @@ body.auth-page {
 
 .logout-form .logout-btn {
 	width: 100%;
-}
+		}
