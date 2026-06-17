@@ -647,7 +647,7 @@ func handleMetricsReset(w http.ResponseWriter, r *http.Request) {
 
 	stats := apiMetrics.GetStats()
 	setLatestMetrics(stats)
-	broadcastNotification("📊 "+T.MetricsResetNotification, "info")
+	broadcastNotification("📊 "+phrases().MetricsResetNotification, "info")
 
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(map[string]string{"status": "reset_success"}); err != nil {

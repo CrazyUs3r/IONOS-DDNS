@@ -159,7 +159,7 @@ func (t *telegramNotifier) enqueue(chatID, text string, kb *tgInlineKeyboard) {
 		select {
 		case dropped := <-t.sendQueue:
 			debugLog("NOTIFY", "", fmt.Sprintf(
-				T.TgQueueFull,
+				phrases().TgQueueFull,
 				time.Since(dropped.enqueued).Round(time.Second),
 			))
 		default:
@@ -167,7 +167,7 @@ func (t *telegramNotifier) enqueue(chatID, text string, kb *tgInlineKeyboard) {
 		select {
 		case t.sendQueue <- msg:
 		default:
-			debugLog("NOTIFY", "", T.TgQueuePushFailed)
+			debugLog("NOTIFY", "", phrases().TgQueuePushFailed)
 		}
 	}
 }
@@ -198,13 +198,13 @@ func (t *telegramNotifier) drainQueue() {
 			case msg := <-t.sendQueue:
 				if time.Since(msg.enqueued) > tgQueueMaxAge {
 					debugLog("NOTIFY", "", fmt.Sprintf(
-						T.TgMsgDiscarded,
+						phrases().TgMsgDiscarded,
 						time.Since(msg.enqueued).Round(time.Second),
 					))
 					continue
 				}
 				if err := t.sendTextWithRetry(msg.chatID, msg.text, msg.kb); err != nil {
-					debugLog("NOTIFY", "", fmt.Sprintf(T.TgSendFailed, err))
+					debugLog("NOTIFY", "", fmt.Sprintf(phrases().TgSendFailed, err))
 				}
 			default:
 
@@ -224,7 +224,7 @@ func (t *telegramNotifier) sendTextWithRetry(chatID, text string, kb *tgInlineKe
 		}
 		if strings.Contains(err.Error(), "429") {
 			debugLog("NOTIFY", "", fmt.Sprintf(
-				T.TgRateLimit,
+				phrases().TgRateLimit,
 				wait, attempt+1, maxRetries,
 			))
 			select {
@@ -237,7 +237,7 @@ func (t *telegramNotifier) sendTextWithRetry(chatID, text string, kb *tgInlineKe
 		}
 		return err
 	}
-	return errors.New(T.TgMaxRetries)
+	return errors.New(phrases().TgMaxRetries)
 }
 
 func (t *telegramNotifier) sendText(chatID, text string, kb *tgInlineKeyboard) error {
@@ -274,7 +274,7 @@ func (t *telegramNotifier) sendText(chatID, text string, kb *tgInlineKeyboard) e
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf(T.TgHTTPError, resp.StatusCode, string(b))
+		return fmt.Errorf(phrases().TgHTTPError, resp.StatusCode, string(b))
 	}
 
 	var result struct {
@@ -285,7 +285,7 @@ func (t *telegramNotifier) sendText(chatID, text string, kb *tgInlineKeyboard) e
 		return fmt.Errorf("decode: %w", err)
 	}
 	if !result.OK {
-		return fmt.Errorf(T.TgSendError, result.Description)
+		return fmt.Errorf(phrases().TgSendError, result.Description)
 	}
 
 	return nil
@@ -348,21 +348,21 @@ func (t *telegramNotifier) StopPolling() {
 }
 
 func (t *telegramNotifier) pollingLoop() {
-	debugLog("NOTIFY", "", T.TgPollingStarted)
+	debugLog("NOTIFY", "", phrases().TgPollingStarted)
 	go t.deleteWebhook()
 	go t.registerCommands()
 
 	for {
 		select {
 		case <-t.pollCtx.Done():
-			debugLog("NOTIFY", "", T.TgPollingStopped)
+			debugLog("NOTIFY", "", phrases().TgPollingStopped)
 			return
 		default:
 		}
 
 		updates, err := t.getUpdates(int(t.lastOffset.Load()) + 1)
 		if err != nil {
-			debugLog("NOTIFY", "", fmt.Sprintf(T.TgGetUpdatesFailed, err))
+			debugLog("NOTIFY", "", fmt.Sprintf(phrases().TgGetUpdatesFailed, err))
 			select {
 			case <-t.pollCtx.Done():
 				return
@@ -430,7 +430,7 @@ func (t *telegramNotifier) getUpdates(offset int) ([]tgUpdateFull, error) {
 		return nil, err
 	}
 	if !result.OK {
-		return nil, fmt.Errorf(T.TgGetUpdatesNotOk, result.ErrorCode, result.Description)
+		return nil, fmt.Errorf(phrases().TgGetUpdatesNotOk, result.ErrorCode, result.Description)
 	}
 
 	return result.Result, nil
@@ -438,13 +438,13 @@ func (t *telegramNotifier) getUpdates(offset int) ([]tgUpdateFull, error) {
 
 func (t *telegramNotifier) registerCommands() {
 	commands := []map[string]string{
-		{"command": "start", "description": T.TgCmdStart},
-		{"command": "status", "description": T.TgCmdStatus},
-		{"command": "metrics", "description": T.TgCmdMetrics},
-		{"command": "domains", "description": T.TgCmdDomains},
-		{"command": "update", "description": T.TgCmdUpdate},
-		{"command": "health", "description": T.TgCmdHealth},
-		{"command": "help", "description": T.TgCmdHelp},
+		{"command": "start", "description": phrases().TgCmdStart},
+		{"command": "status", "description": phrases().TgCmdStatus},
+		{"command": "metrics", "description": phrases().TgCmdMetrics},
+		{"command": "domains", "description": phrases().TgCmdDomains},
+		{"command": "update", "description": phrases().TgCmdUpdate},
+		{"command": "health", "description": phrases().TgCmdHealth},
+		{"command": "help", "description": phrases().TgCmdHelp},
 	}
 	payload := map[string]any{"commands": commands}
 	body, _ := json.Marshal(payload)
@@ -459,11 +459,11 @@ func (t *telegramNotifier) registerCommands() {
 	req.Header.Set("User-Agent", ManagedComment)
 	resp, err := getHTTPClient().Do(req)
 	if err != nil {
-		debugLog("NOTIFY", "", fmt.Sprintf(T.TgSetCmdsFailed, err))
+		debugLog("NOTIFY", "", fmt.Sprintf(phrases().TgSetCmdsFailed, err))
 		return
 	}
 	_ = resp.Body.Close()
-	debugLog("NOTIFY", "", T.TgBotCmdsReg)
+	debugLog("NOTIFY", "", phrases().TgBotCmdsReg)
 }
 
 func (t *telegramNotifier) deleteWebhook() {
@@ -472,17 +472,17 @@ func (t *telegramNotifier) deleteWebhook() {
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, MethodGET, url, nil)
 	if err != nil {
-		debugLog("NOTIFY", "", fmt.Sprintf(T.TgWebhookDeleteRequestError, err))
+		debugLog("NOTIFY", "", fmt.Sprintf(phrases().TgWebhookDeleteRequestError, err))
 		return
 	}
 	req.Header.Set("User-Agent", ManagedComment)
 	resp, err := t.getPollClient().Do(req)
 	if err != nil {
-		debugLog("NOTIFY", "", fmt.Sprintf(T.TgWebhookDeleteFailed, err))
+		debugLog("NOTIFY", "", fmt.Sprintf(phrases().TgWebhookDeleteFailed, err))
 		return
 	}
 	_ = resp.Body.Close()
-	debugLog("NOTIFY", "", T.TgWebhookUnregistered)
+	debugLog("NOTIFY", "", phrases().TgWebhookUnregistered)
 }
 
 // ============================================================================
@@ -502,7 +502,7 @@ func chatIDStr(id int64) string {
 func (t *telegramNotifier) handleCommand(msg *tgMessage) {
 	chatID := chatIDStr(msg.Chat.ID)
 	if !t.isAuthorized(chatID) {
-		debugLog("NOTIFY", "", fmt.Sprintf(T.TgUnauthAccess, chatID))
+		debugLog("NOTIFY", "", fmt.Sprintf(phrases().TgUnauthAccess, chatID))
 		return
 	}
 
@@ -527,7 +527,7 @@ func (t *telegramNotifier) handleCommand(msg *tgMessage) {
 		t.sendHealth(chatID)
 	default:
 		if strings.HasPrefix(cmd, "/") {
-			t.enqueue(chatID, T.TgUnknownCommand, nil)
+			t.enqueue(chatID, phrases().TgUnknownCommand, nil)
 		}
 	}
 }
@@ -567,18 +567,18 @@ func mainKeyboard() *tgInlineKeyboard {
 	return &tgInlineKeyboard{
 		InlineKeyboard: [][]tgInlineButton{
 			{
-				{Text: T.TgBtnStatus, CallbackData: "status"},
-				{Text: T.TgBtnMetrics, CallbackData: "metrics"},
+				{Text: phrases().TgBtnStatus, CallbackData: "status"},
+				{Text: phrases().TgBtnMetrics, CallbackData: "metrics"},
 			},
 			{
-				{Text: T.TgBtnDomains, CallbackData: "domains"},
-				{Text: T.TgBtnHealth, CallbackData: "health"},
+				{Text: phrases().TgBtnDomains, CallbackData: "domains"},
+				{Text: phrases().TgBtnHealth, CallbackData: "health"},
 			},
 			{
-				{Text: T.TgBtnUpdate, CallbackData: "update"},
+				{Text: phrases().TgBtnUpdate, CallbackData: "update"},
 			},
 			{
-				{Text: T.TgBtnClose, CallbackData: "close"},
+				{Text: phrases().TgBtnClose, CallbackData: "close"},
 			},
 		},
 	}
@@ -588,11 +588,11 @@ func backKeyboard() *tgInlineKeyboard {
 	return &tgInlineKeyboard{
 		InlineKeyboard: [][]tgInlineButton{
 			{
-				{Text: T.TgBtnMenu, CallbackData: "menu"},
-				{Text: T.TgBtnUpdate, CallbackData: "update"},
+				{Text: phrases().TgBtnMenu, CallbackData: "menu"},
+				{Text: phrases().TgBtnUpdate, CallbackData: "update"},
 			},
 			{
-				{Text: T.TgBtnClose, CallbackData: "close"},
+				{Text: phrases().TgBtnClose, CallbackData: "close"},
 			},
 		},
 	}
@@ -603,7 +603,7 @@ func backKeyboard() *tgInlineKeyboard {
 // ============================================================================
 func (t *telegramNotifier) sendMainMenu(chatID string) {
 	text := fmt.Sprintf(
-		"<b>🌐 Go-DynDNS</b>  <code>%s</code>\n\n"+T.TgMenuPrompt,
+		"<b>🌐 Go-DynDNS</b>  <code>%s</code>\n\n"+phrases().TgMenuPrompt,
 		t.instanceTag,
 	)
 	t.enqueue(chatID, text, mainKeyboard())
@@ -619,25 +619,25 @@ func (t *telegramNotifier) sendStatus(chatID string) {
 
 	stats := apiMetrics.GetStats()
 
-	status := T.TgStatusOnline
+	status := phrases().TgStatusOnline
 	if !lastOk.Load() {
-		status = T.TgStatusError
+		status = phrases().TgStatusError
 	}
 	if !schedulerRanOnce.Load() {
-		status = T.TgStatusStarting
+		status = phrases().TgStatusStarting
 	}
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "<b>%s</b>  <code>%s</code>\n\n", T.TgStatusHeading, t.instanceTag)
-	fmt.Fprintf(&sb, "🔸 %s      <b>%s</b>\n", T.TgStatusLabelStatus, status)
-	fmt.Fprintf(&sb, "🔸 %s    <code>%s</code>\n", T.TgStatusLabelIPMode, ipMode)
-	fmt.Fprintf(&sb, "🔸 %s     <code>%d</code>\n", T.TgStatusLabelDomains, domainCount)
-	fmt.Fprintf(&sb, "🔸 %s   <code>%ds</code>\n", T.TgStatusLabelInterval, interval)
-	fmt.Fprintf(&sb, "🔸 %s     <code>%v</code>\n", T.TgStatusLabelDryRun, dryRun)
-	fmt.Fprintf(&sb, "🔸 %s    <code>%v</code>\n", T.TgStatusLabelRequests, stats["total_requests"])
-	fmt.Fprintf(&sb, "🔸 %s: <code>%v</code>\n", T.TgStatusLabelSuccessRate, stats["success_rate"])
-	fmt.Fprintf(&sb, "🔸 %s    <code>%v</code>\n", T.TgStatusLabelLatency, stats["avg_latency"])
-	fmt.Fprintf(&sb, "🔸 %s  <code>%v</code>\n", T.TgStatusLabelLastOk, stats["last_success_time"])
+	fmt.Fprintf(&sb, "<b>%s</b>  <code>%s</code>\n\n", phrases().TgStatusHeading, t.instanceTag)
+	fmt.Fprintf(&sb, "🔸 %s      <b>%s</b>\n", phrases().TgStatusLabelStatus, status)
+	fmt.Fprintf(&sb, "🔸 %s    <code>%s</code>\n", phrases().TgStatusLabelIPMode, ipMode)
+	fmt.Fprintf(&sb, "🔸 %s     <code>%d</code>\n", phrases().TgStatusLabelDomains, domainCount)
+	fmt.Fprintf(&sb, "🔸 %s   <code>%ds</code>\n", phrases().TgStatusLabelInterval, interval)
+	fmt.Fprintf(&sb, "🔸 %s     <code>%v</code>\n", phrases().TgStatusLabelDryRun, dryRun)
+	fmt.Fprintf(&sb, "🔸 %s    <code>%v</code>\n", phrases().TgStatusLabelRequests, stats["total_requests"])
+	fmt.Fprintf(&sb, "🔸 %s: <code>%v</code>\n", phrases().TgStatusLabelSuccessRate, stats["success_rate"])
+	fmt.Fprintf(&sb, "🔸 %s    <code>%v</code>\n", phrases().TgStatusLabelLatency, stats["avg_latency"])
+	fmt.Fprintf(&sb, "🔸 %s  <code>%v</code>\n", phrases().TgStatusLabelLastOk, stats["last_success_time"])
 	fmt.Fprintf(&sb, "\n🕒 <i>%s</i>", time.Now().Format("02.01.2006 15:04:05"))
 
 	t.enqueue(chatID, sb.String(), backKeyboard())
@@ -647,30 +647,30 @@ func (t *telegramNotifier) sendMetrics(chatID string) {
 	stats := apiMetrics.GetStats()
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "<b>%s</b>  <code>%s</code>\n\n", T.TgMetricsHeading, t.instanceTag)
+	fmt.Fprintf(&sb, "<b>%s</b>  <code>%s</code>\n\n", phrases().TgMetricsHeading, t.instanceTag)
 
-	fmt.Fprintf(&sb, "<b>%s</b>\n", T.TgMetricsRequests)
-	fmt.Fprintf(&sb, "  %s <code>%v</code>\n", T.TgMetricsTotal, stats["total_requests"])
-	fmt.Fprintf(&sb, "  %s <code>%v</code>\n", T.TgMetricsSuccessRate, stats["success_rate"])
-	fmt.Fprintf(&sb, "  %s  <code>%v</code>\n", T.TgMetricsClientErr, stats["client_errors"])
-	fmt.Fprintf(&sb, "  %s  <code>%v</code>\n", T.TgMetricsServerErr, stats["server_errors"])
+	fmt.Fprintf(&sb, "<b>%s</b>\n", phrases().TgMetricsRequests)
+	fmt.Fprintf(&sb, "  %s <code>%v</code>\n", phrases().TgMetricsTotal, stats["total_requests"])
+	fmt.Fprintf(&sb, "  %s <code>%v</code>\n", phrases().TgMetricsSuccessRate, stats["success_rate"])
+	fmt.Fprintf(&sb, "  %s  <code>%v</code>\n", phrases().TgMetricsClientErr, stats["client_errors"])
+	fmt.Fprintf(&sb, "  %s  <code>%v</code>\n", phrases().TgMetricsServerErr, stats["server_errors"])
 
-	fmt.Fprintf(&sb, "\n<b>%s</b>\n", T.TgMetricsLatency)
+	fmt.Fprintf(&sb, "\n<b>%s</b>\n", phrases().TgMetricsLatency)
 	fmt.Fprintf(&sb, "  Ø:   <code>%v</code>\n", stats["avg_latency"])
 	fmt.Fprintf(&sb, "  P50: <code>%v</code>\n", stats["p50_latency"])
 	fmt.Fprintf(&sb, "  P85: <code>%v</code>\n", stats["p85_latency"])
 	fmt.Fprintf(&sb, "  P99: <code>%v</code>\n", stats["p99_latency"])
 
-	fmt.Fprintf(&sb, "\n<b>%s</b>\n", T.TgMetricsIPCheck)
+	fmt.Fprintf(&sb, "\n<b>%s</b>\n", phrases().TgMetricsIPCheck)
 	fmt.Fprintf(&sb, "  Ø:       <code>%v</code>\n", stats["ip_latency_avg"])
-	fmt.Fprintf(&sb, "  %s  <code>%v</code>\n", T.TgMetricsChecks, stats["ip_latency_count"])
-	fmt.Fprintf(&sb, "  %s: <code>%v</code>\n", T.TgMetricsLast, stats["last_ip_check"])
+	fmt.Fprintf(&sb, "  %s  <code>%v</code>\n", phrases().TgMetricsChecks, stats["ip_latency_count"])
+	fmt.Fprintf(&sb, "  %s: <code>%v</code>\n", phrases().TgMetricsLast, stats["last_ip_check"])
 
-	fmt.Fprintf(&sb, "\n<b>%s</b>\n", T.TgMetricsHourlyLimit)
-	fmt.Fprintf(&sb, "  %s <code>%v / %v</code>\n", T.TgMetricsUsed, stats["usage_count"], stats["hourly_limit"])
-	fmt.Fprintf(&sb, "  %s <code>%v%%</code>\n", T.TgMetricsLoad, stats["usage_percent"])
+	fmt.Fprintf(&sb, "\n<b>%s</b>\n", phrases().TgMetricsHourlyLimit)
+	fmt.Fprintf(&sb, "  %s <code>%v / %v</code>\n", phrases().TgMetricsUsed, stats["usage_count"], stats["hourly_limit"])
+	fmt.Fprintf(&sb, "  %s <code>%v%%</code>\n", phrases().TgMetricsLoad, stats["usage_percent"])
 
-	fmt.Fprintf(&sb, "\n<b>%s</b>\n", T.TgMetricsTodayHTTP)
+	fmt.Fprintf(&sb, "\n<b>%s</b>\n", phrases().TgMetricsTodayHTTP)
 	fmt.Fprintf(&sb, "  GET: <code>%v</code>  POST: <code>%v</code>  PUT: <code>%v</code>  DEL: <code>%v</code>",
 		stats["daily_get"], stats["daily_post"], stats["daily_put"], stats["daily_delete"])
 	if v, ok := stats["daily_nic"]; ok {
@@ -687,10 +687,10 @@ func (t *telegramNotifier) sendDomains(chatID string) {
 	copy(domainConfigs, cfg.DomainConfigs)
 	cfgMu.RUnlock()
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "<b>%s</b>  <code>%s</code>\n\n", T.TgDomainsHeading, t.instanceTag)
+	fmt.Fprintf(&sb, "<b>%s</b>  <code>%s</code>\n\n", phrases().TgDomainsHeading, t.instanceTag)
 
 	if len(domainConfigs) == 0 {
-		sb.WriteString(T.NoDomainsConfigured)
+		sb.WriteString(phrases().NoDomainsConfigured)
 	} else {
 		for _, dc := range domainConfigs {
 			fmt.Fprintf(&sb, "🔹 <code>%s</code>  <i>(%s)</i>\n", dc.FQDN, dc.Provider)
@@ -705,7 +705,7 @@ func (t *telegramNotifier) sendDomains(chatID string) {
 	statusMutex.Unlock()
 
 	if len(statusData) > 0 {
-		fmt.Fprintf(&sb, "\n<b>%s</b>\n", T.TgDomainsCurrentIPs)
+		fmt.Fprintf(&sb, "\n<b>%s</b>\n", phrases().TgDomainsCurrentIPs)
 		for domain, h := range statusData {
 			if len(h.IPs) == 0 {
 				continue
@@ -728,25 +728,25 @@ func (t *telegramNotifier) sendDomains(chatID string) {
 
 func (t *telegramNotifier) sendHealth(chatID string) {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "<b>%s</b>  <code>%s</code>\n\n", T.TgHealthHeading, t.instanceTag)
+	fmt.Fprintf(&sb, "<b>%s</b>  <code>%s</code>\n\n", phrases().TgHealthHeading, t.instanceTag)
 
 	switch {
 	case !schedulerRanOnce.Load():
-		fmt.Fprintf(&sb, "%s\n", T.TgHealthStarting)
-		fmt.Fprintf(&sb, "%s\n", T.TgHealthWaitingDetail)
+		fmt.Fprintf(&sb, "%s\n", phrases().TgHealthStarting)
+		fmt.Fprintf(&sb, "%s\n", phrases().TgHealthWaitingDetail)
 	case lastOk.Load():
-		fmt.Fprintf(&sb, "%s\n", T.TgHealthHealthy)
+		fmt.Fprintf(&sb, "%s\n", phrases().TgHealthHealthy)
 	default:
-		fmt.Fprintf(&sb, "%s\n", T.TgHealthUnhealthy)
+		fmt.Fprintf(&sb, "%s\n", phrases().TgHealthUnhealthy)
 		if lastErr := lastErrorMsg.Get(); lastErr != "" {
-			fmt.Fprintf(&sb, "%s <code>%s</code>\n", T.TgHealthErrorLabel, lastErr)
+			fmt.Fprintf(&sb, "%s <code>%s</code>\n", phrases().TgHealthErrorLabel, lastErr)
 		}
 	}
 
 	stats := apiMetrics.GetStats()
-	fmt.Fprintf(&sb, "\n🔸 %s <code>%v</code>\n", T.TgStatusLabelSuccessRate, stats["success_rate"])
-	fmt.Fprintf(&sb, "🔸 %s    <code>%v</code>\n", T.TgStatusLabelLatency, stats["avg_latency"])
-	fmt.Fprintf(&sb, "🔸 %s  <code>%v</code>\n", T.TgStatusLabelLastOk, stats["last_success_time"])
+	fmt.Fprintf(&sb, "\n🔸 %s <code>%v</code>\n", phrases().TgStatusLabelSuccessRate, stats["success_rate"])
+	fmt.Fprintf(&sb, "🔸 %s    <code>%v</code>\n", phrases().TgStatusLabelLatency, stats["avg_latency"])
+	fmt.Fprintf(&sb, "🔸 %s  <code>%v</code>\n", phrases().TgStatusLabelLastOk, stats["last_success_time"])
 	fmt.Fprintf(&sb, "\n🕒 <i>%s</i>", time.Now().Format("02.01.2006 15:04:05"))
 
 	t.enqueue(chatID, sb.String(), backKeyboard())
@@ -754,17 +754,17 @@ func (t *telegramNotifier) sendHealth(chatID string) {
 
 func (t *telegramNotifier) triggerUpdate(chatID string) {
 	if !updateInProgress.CompareAndSwap(false, true) {
-		t.enqueue(chatID, T.TgUpdateAlreadyRunning, backKeyboard())
+		t.enqueue(chatID, phrases().TgUpdateAlreadyRunning, backKeyboard())
 		return
 	}
-	t.enqueue(chatID, T.TgUpdateStarting, backKeyboard())
+	t.enqueue(chatID, phrases().TgUpdateStarting, backKeyboard())
 	go func() {
 		defer updateInProgress.Store(false)
-		debugLog("NOTIFY", "", T.NotifyTelegramManualUpdate)
+		debugLog("NOTIFY", "", phrases().NotifyTelegramManualUpdate)
 		forceNextUpdate.Store(true)
 		runUpdate(false)
 		t.enqueue(chatID,
-			fmt.Sprintf(T.TgUpdateDone+"\n🕒 <i>%s</i>",
+			fmt.Sprintf(phrases().TgUpdateDone+"\n🕒 <i>%s</i>",
 				time.Now().Format("02.01.2006 15:04:05")),
 			backKeyboard())
 	}()

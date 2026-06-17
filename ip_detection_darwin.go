@@ -26,37 +26,37 @@ func fetchIPResponse(ctx context.Context, url string) (string, int, time.Duratio
 
 	req, err := http.NewRequestWithContext(ctx, MethodGET, url, nil)
 	if err != nil {
-		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", T.RequestCreationFailed, err))
-		return "", 0, 0, fmt.Errorf("%s: %w", t(T.ErrRequestCreate, "request create failed"), err)
+		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", phrases().RequestCreationFailed, err))
+		return "", 0, 0, fmt.Errorf("%s: %w", t(phrases().ErrRequestCreate, "request create failed"), err)
 	}
 
 	start := time.Now()
 	resp, err := getHTTPClient().Do(req)
 	duration := time.Since(start)
 	if err != nil {
-		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", T.HTTPError, err))
-		return "", 0, duration, fmt.Errorf("%s: %w", t(T.ErrNetworkError, "network error"), err)
+		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", phrases().HTTPError, err))
+		return "", 0, duration, fmt.Errorf("%s: %w", t(phrases().ErrNetworkError, "network error"), err)
 	}
 	defer func() {
 		if cerr := resp.Body.Close(); cerr != nil {
 			log(LogContext{
 				Level:   LogError,
 				Action:  ActionError,
-				Message: fmt.Sprintf(t(T.FailedCloseResponseBody, "Failed to close response body: %v"), cerr),
+				Message: fmt.Sprintf(t(phrases().FailedCloseResponseBody, "Failed to close response body: %v"), cerr),
 			})
 		}
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		err := fmt.Errorf("%s: %d", T.BadStatusCode, resp.StatusCode)
+		err := fmt.Errorf("%s: %d", phrases().BadStatusCode, resp.StatusCode)
 		debugLog("IP-CHECK", "", "❌ "+err.Error())
 		return "", resp.StatusCode, duration, err
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, IPCheckBodyMaxBytes))
 	if err != nil {
-		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", T.BodyReadError, err))
-		return "", resp.StatusCode, duration, fmt.Errorf("%s: %w", t(T.ErrBodyRead, "body read failed"), err)
+		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", phrases().BodyReadError, err))
+		return "", resp.StatusCode, duration, fmt.Errorf("%s: %w", t(phrases().ErrBodyRead, "body read failed"), err)
 	}
 
 	return strings.TrimSpace(string(body)), resp.StatusCode, duration, nil
@@ -65,17 +65,17 @@ func fetchIPResponse(ctx context.Context, url string) (string, int, time.Duratio
 func validatePublicIP(ipStr string, want IPVersion) (string, error) {
 	parsed := net.ParseIP(ipStr)
 	if parsed == nil {
-		return "", fmt.Errorf(T.InvalidIPDetected, ipStr)
+		return "", fmt.Errorf(phrases().InvalidIPDetected, ipStr)
 	}
 
 	switch want {
 	case IPV4:
 		if parsed.To4() == nil {
-			return "", fmt.Errorf(T.ExpectedIPv4ButGot, ipStr)
+			return "", fmt.Errorf(phrases().ExpectedIPv4ButGot, ipStr)
 		}
 	case IPV6:
 		if parsed.To4() != nil {
-			return "", fmt.Errorf(T.ExpectedIPv6ButGot, ipStr)
+			return "", fmt.Errorf(phrases().ExpectedIPv6ButGot, ipStr)
 		}
 	}
 
@@ -96,8 +96,8 @@ func getPublicIP(ctx context.Context, url string, want IPVersion) (string, error
 		return "", err
 	}
 
-	debugLog("IP-CHECK", "", fmt.Sprintf("✅ %s: %s | %s: %v", T.ReceivedIP, validatedIP, T.AvgLatency, duration))
-	ipLog(fmt.Sprintf(T.PublicIPDetectedVia, want, url, validatedIP, T.AvgLatency, duration))
+	debugLog("IP-CHECK", "", fmt.Sprintf("✅ %s: %s | %s: %v", phrases().ReceivedIP, validatedIP, phrases().AvgLatency, duration))
+	ipLog(fmt.Sprintf(phrases().PublicIPDetectedVia, want, url, validatedIP, phrases().AvgLatency, duration))
 
 	apiMetrics.RecordSuccess("IP", duration)
 	apiMetrics.RecordIPLatency(duration)
@@ -107,7 +107,7 @@ func getPublicIP(ctx context.Context, url string, want IPVersion) (string, error
 
 func getPublicIPFromAny(parent context.Context, urls []string, want IPVersion) (string, error) {
 	if len(urls) == 0 {
-		return "", errors.New(T.NoIPEndpointsConfigured)
+		return "", errors.New(phrases().NoIPEndpointsConfigured)
 	}
 
 	var lastErr error
@@ -137,14 +137,14 @@ func getPublicIPFromAny(parent context.Context, urls []string, want IPVersion) (
 			"want": fmt.Sprintf("%d", int(want)),
 		})
 		lastErr = err
-		debugLog("IP-CHECK", "", fmt.Sprintf(T.FallbackFailed, u, err))
+		debugLog("IP-CHECK", "", fmt.Sprintf(phrases().FallbackFailed, u, err))
 	}
 
 	if lastErr == nil {
-		lastErr = errors.New(T.NoIPEndpointsConfigured)
+		lastErr = errors.New(phrases().NoIPEndpointsConfigured)
 	}
 
-	return "", fmt.Errorf("%s: %w", T.AllIPEndpointsFailed, lastErr)
+	return "", fmt.Errorf("%s: %w", phrases().AllIPEndpointsFailed, lastErr)
 }
 
 type darwinIPv6Candidate struct {
@@ -161,11 +161,11 @@ type darwinIPv6ScanResult struct {
 }
 
 func getIPv6FromInterface(ifaceName string) (string, error) {
-	debugLog("IP-CHECK", "", fmt.Sprintf("🔍 %s: %s", T.CheckingInterface, ifaceName))
+	debugLog("IP-CHECK", "", fmt.Sprintf("🔍 %s: %s", phrases().CheckingInterface, ifaceName))
 
 	iface, err := net.InterfaceByName(ifaceName)
 	if err != nil {
-		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", T.InterfaceNotFound, err))
+		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", phrases().InterfaceNotFound, err))
 		return "", err
 	}
 
@@ -175,8 +175,8 @@ func getIPv6FromInterface(ifaceName string) (string, error) {
 		}
 
 		if scan.sawGlobal {
-			debugLog("IP-CHECK", "", "⚠️  "+T.NoIPv6OnInterface)
-			return "", errors.New(T.NoIPv6OnInterface)
+			debugLog("IP-CHECK", "", "⚠️  "+phrases().NoIPv6OnInterface)
+			return "", errors.New(phrases().NoIPv6OnInterface)
 		}
 	} else {
 		debugLog("IP-CHECK", "", fmt.Sprintf("⚠️ ifconfig IPv6 lookup failed, falling back to net.Interface.Addrs: %v", err))
@@ -184,7 +184,7 @@ func getIPv6FromInterface(ifaceName string) (string, error) {
 
 	addrs, err := iface.Addrs()
 	if err != nil {
-		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", T.AddressesNotReadable, err))
+		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", phrases().AddressesNotReadable, err))
 		return "", err
 	}
 
@@ -201,8 +201,8 @@ func getIPv6FromInterface(ifaceName string) (string, error) {
 		})
 	}
 
-	debugLog("IP-CHECK", "", "⚠️  "+T.NoIPv6OnInterface)
-	return "", errors.New(T.NoIPv6OnInterface)
+	debugLog("IP-CHECK", "", "⚠️  "+phrases().NoIPv6OnInterface)
+	return "", errors.New(phrases().NoIPv6OnInterface)
 }
 
 func getDarwinIPv6FromIfconfig(ifaceName string) (darwinIPv6ScanResult, error) {
@@ -352,7 +352,7 @@ func isUsableGlobalIPv6(ip net.IP) bool {
 func selectIPv6FromInterface(ifaceName string, candidate *darwinIPv6Candidate) (string, error) {
 	ipLog(fmt.Sprintf(
 		"%s | source=%s flags=%s temporary=%t deprecated=%t",
-		fmt.Sprintf(T.IPv6ViaInterface, ifaceName, candidate.ip.String()),
+		fmt.Sprintf(phrases().IPv6ViaInterface, ifaceName, candidate.ip.String()),
 		candidate.source,
 		candidate.flags,
 		candidate.temporary,
@@ -368,8 +368,8 @@ func getIPv6(ctx context.Context, ifaceName string) (string, error) {
 			return ip, nil
 		}
 	}
-	ipLog(T.IPv6PublicFallback)
-	debugLog("IP-CHECK", "", T.IPv6FallbackEndpoints)
+	ipLog(phrases().IPv6PublicFallback)
+	debugLog("IP-CHECK", "", phrases().IPv6FallbackEndpoints)
 	return getPublicIPFromAny(ctx, activeIPv6Endpoints(), IPV6)
 }
 
@@ -384,14 +384,14 @@ func fetchCurrentIPs(ctx context.Context) (ipv4, ipv6 string, err error) {
 	var wg sync.WaitGroup
 
 	if ipMode != IPModeV6 {
-		ipLog("🔎 " + T.CheckingIPv4 + " ...")
+		ipLog("🔎 " + phrases().CheckingIPv4 + " ...")
 		wg.Go(func() {
 			resV4, errV4 = getPublicIPFromAny(ctx, activeIPv4Endpoints(), IPV4)
 			if errV4 != nil {
 				log(LogContext{
 					Level:   LogError,
 					Action:  ActionError,
-					Message: T.IPv4CheckFailed,
+					Message: phrases().IPv4CheckFailed,
 					Error:   errV4,
 				})
 			}
@@ -399,14 +399,14 @@ func fetchCurrentIPs(ctx context.Context) (ipv4, ipv6 string, err error) {
 	}
 
 	if ipMode != IPModeV4 {
-		ipLog("🔎 " + T.CheckingIPv6 + " ...")
+		ipLog("🔎 " + phrases().CheckingIPv6 + " ...")
 		wg.Go(func() {
 			resV6, errV6 = getIPv6(ctx, ifaceName)
 			if errV6 != nil {
 				log(LogContext{
 					Level:   LogError,
 					Action:  ActionError,
-					Message: T.IPv6CheckFailed,
+					Message: phrases().IPv6CheckFailed,
 					Error:   errV6,
 				})
 			}
@@ -434,27 +434,27 @@ func finalizeFetchedIPs(ipMode, ipv4, ipv6 string, errV4, errV6 error) (string, 
 
 func finalizeIPv4Only(ipv4 string, errV4 error) (string, string, error) {
 	if errV4 != nil {
-		return "", "", fmt.Errorf("%s: %w", T.IPv4RequiredButFailed, errV4)
+		return "", "", fmt.Errorf("%s: %w", phrases().IPv4RequiredButFailed, errV4)
 	}
 	if ipv4 != "" {
-		ipLog(fmt.Sprintf(T.IPv4Current, ipv4))
+		ipLog(fmt.Sprintf(phrases().IPv4Current, ipv4))
 	}
 	return ipv4, "", nil
 }
 
 func finalizeIPv6Only(ipv6 string, errV6 error) (string, string, error) {
 	if errV6 != nil {
-		return "", "", fmt.Errorf("%s: %w", T.IPv6RequiredButFailed, errV6)
+		return "", "", fmt.Errorf("%s: %w", phrases().IPv6RequiredButFailed, errV6)
 	}
 	if ipv6 != "" {
-		ipLog(fmt.Sprintf(T.IPv6Current, ipv6))
+		ipLog(fmt.Sprintf(phrases().IPv6Current, ipv6))
 	}
 	return "", ipv6, nil
 }
 
 func finalizeBothIPs(ipv4, ipv6 string, errV4, errV6 error) (string, string, error) {
 	if errV4 != nil && errV6 != nil {
-		return "", "", fmt.Errorf("%s: v4=%v, v6=%v", T.BothIPVersionsFailed, errV4, errV6)
+		return "", "", fmt.Errorf("%s: v4=%v, v6=%v", phrases().BothIPVersionsFailed, errV4, errV6)
 	}
 	logFetchedIPs(ipv4, ipv6)
 	return ipv4, ipv6, nil
@@ -462,10 +462,10 @@ func finalizeBothIPs(ipv4, ipv6 string, errV4, errV6 error) (string, string, err
 
 func logFetchedIPs(ipv4, ipv6 string) {
 	if ipv4 != "" {
-		ipLog(fmt.Sprintf(T.IPv4Current, ipv4))
+		ipLog(fmt.Sprintf(phrases().IPv4Current, ipv4))
 	}
 	if ipv6 != "" {
-		ipLog(fmt.Sprintf(T.IPv6Current, ipv6))
+		ipLog(fmt.Sprintf(phrases().IPv6Current, ipv6))
 	}
 }
 

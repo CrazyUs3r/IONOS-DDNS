@@ -12,33 +12,33 @@ import (
 // ============================================================================
 func validateDomainConfigs() error {
 	if len(cfg.DomainConfigs) == 0 {
-		return fmt.Errorf("%s", T.NoDomainsConfigured)
+		return fmt.Errorf("%s", phrases().NoDomainsConfigured)
 	}
 
 	for i, dc := range cfg.DomainConfigs {
 		if err := validateDomain(dc.FQDN); err != nil {
-			return fmt.Errorf(T.DomainContext, i, dc.FQDN, err.Error())
+			return fmt.Errorf(phrases().DomainContext, i, dc.FQDN, err.Error())
 		}
 
 		switch dc.Provider {
 		case ProviderIONOS:
 			if dc.APIPrefix == "" || dc.APISecret == "" {
-				return fmt.Errorf(T.IonosAPIRequired, dc.FQDN)
+				return fmt.Errorf(phrases().IonosAPIRequired, dc.FQDN)
 			}
 		case ProviderIPv64:
 			if dc.IPv64Token == "" {
-				return fmt.Errorf(T.Ipv64TokenRequired, dc.FQDN)
+				return fmt.Errorf(phrases().Ipv64TokenRequired, dc.FQDN)
 			}
 		case ProviderCloudflare:
 			if dc.CFToken == "" && (dc.CFEmail == "" || dc.CFSecret == "") {
-				return fmt.Errorf(T.CloudflareAuthRequired, dc.FQDN)
+				return fmt.Errorf(phrases().CloudflareAuthRequired, dc.FQDN)
 			}
 		case ProviderHetzner, ProviderHetznerCloud:
 			if hetznerToken(&dc) == "" {
-				return fmt.Errorf(T.HetznerAuthRequired, dc.FQDN)
+				return fmt.Errorf(phrases().HetznerAuthRequired, dc.FQDN)
 			}
 		default:
-			return fmt.Errorf(T.UnknownProvider, dc.FQDN, dc.Provider)
+			return fmt.Errorf(phrases().UnknownProvider, dc.FQDN, dc.Provider)
 		}
 	}
 
@@ -49,7 +49,7 @@ func validateConfig() error {
 	var errs []string
 
 	if len(cfg.DomainConfigs) == 0 {
-		errs = append(errs, T.NoDomainsConfigured)
+		errs = append(errs, phrases().NoDomainsConfigured)
 	}
 
 	port, err := strconv.Atoi(cfg.HealthPort)
@@ -57,7 +57,7 @@ func validateConfig() error {
 		log(LogContext{
 			Level:   LogWarn,
 			Action:  ActionConfig,
-			Message: fmt.Sprintf(T.InvalidPort, cfg.HealthPort),
+			Message: fmt.Sprintf(phrases().InvalidPort, cfg.HealthPort),
 		})
 		cfg.HealthPort = "8080"
 	}
@@ -67,14 +67,14 @@ func validateConfig() error {
 			log(LogContext{
 				Level:   LogWarn,
 				Action:  ActionConfig,
-				Message: T.IntervalTooSmall,
+				Message: phrases().IntervalTooSmall,
 			})
 			cfg.Interval = 60
 		} else if len(cfg.DomainConfigs) > 10 {
 			log(LogContext{
 				Level:   LogWarn,
 				Action:  ActionConfig,
-				Message: "⚠️ " + T.ShortIntervalWarning,
+				Message: "⚠️ " + phrases().ShortIntervalWarning,
 			})
 		}
 	}
@@ -84,13 +84,13 @@ func validateConfig() error {
 		log(LogContext{
 			Level:   LogWarn,
 			Action:  ActionConfig,
-			Message: fmt.Sprintf(T.InvalidIPMode, cfg.IPMode),
+			Message: fmt.Sprintf(phrases().InvalidIPMode, cfg.IPMode),
 		})
 		cfg.IPMode = "BOTH"
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf(T.ConfigErrorPrefix, strings.Join(errs, ", "))
+		return fmt.Errorf(phrases().ConfigErrorPrefix, strings.Join(errs, ", "))
 	}
 
 	return nil
@@ -98,23 +98,23 @@ func validateConfig() error {
 
 func validateDomain(domain string) error {
 	if domain == "" {
-		return fmt.Errorf("%s", T.DomainIsEmpty)
+		return fmt.Errorf("%s", phrases().DomainIsEmpty)
 	}
 
 	if len(domain) > 253 {
-		return fmt.Errorf(T.DomainTooLong, len(domain))
+		return fmt.Errorf(phrases().DomainTooLong, len(domain))
 	}
 
 	if !domainRegex.MatchString(domain) {
-		return fmt.Errorf(T.InvalidDomainFormat, domain)
+		return fmt.Errorf(phrases().InvalidDomainFormat, domain)
 	}
 
 	for label := range strings.SplitSeq(domain, ".") {
 		if len(label) > 63 {
-			return fmt.Errorf(T.LabelTooLong, label, len(label))
+			return fmt.Errorf(phrases().LabelTooLong, label, len(label))
 		}
 		if !labelRegex.MatchString(label) {
-			return fmt.Errorf(T.InvalidLabel, label)
+			return fmt.Errorf(phrases().InvalidLabel, label)
 		}
 	}
 

@@ -21,21 +21,21 @@ import (
 // GLOBALE VARIABLEN
 // ============================================================================
 var (
-	cfg        Config
-	T          Phrases
-	startTime  = time.Now()
-	configDir  string
-	langDir    string
-	logPath    string
-	configPath string
-	updatePath string
+	cfg          Config
+	phraseStore  atomic.Pointer[Phrases]
+	emptyPhrases Phrases
+	startTime    = time.Now()
+	configDir    string
+	langDir      string
+	logPath      string
+	configPath   string
+	updatePath   string
 
 	lastOk             atomic.Bool
 	schedulerRanOnce   atomic.Bool
 	atomicDebugEnabled atomic.Bool
 	atomicDebugHTTPRaw atomic.Bool
 	cfgMu              sync.RWMutex
-	phraseMu           sync.RWMutex
 	logMutex           sync.Mutex
 	logFile            *os.File
 	logWriter          *bufio.Writer

@@ -101,13 +101,13 @@ func handleProviderNetworkError(
 	apiMetrics.RecordError(method, 0, err, duration)
 
 	wait := calculateRetryDelay(attempt, serverBusy)
-	debugLog("HTTP", "", fmt.Sprintf("⏱️  %s %v", T.RetryIn, wait))
+	debugLog("HTTP", "", fmt.Sprintf("⏱️  %s %v", phrases().RetryIn, wait))
 
 	if !sleepOrCancel(ctx, wait) {
-		return false, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
+		return false, fmt.Errorf("%s: %w", phrases().ErrContextCancelled, ctx.Err())
 	}
 
-	return true, fmt.Errorf("%s: %w", T.ErrNetworkError, err)
+	return true, fmt.Errorf("%s: %w", phrases().ErrNetworkError, err)
 }
 
 func handleProviderReadError(
@@ -123,10 +123,10 @@ func handleProviderReadError(
 
 	wait := calculateRetryDelay(attempt, false)
 	if !sleepOrCancel(ctx, wait) {
-		return false, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
+		return false, fmt.Errorf("%s: %w", phrases().ErrContextCancelled, ctx.Err())
 	}
 
-	return true, fmt.Errorf("%s: %w", T.ErrBodyRead, err)
+	return true, fmt.Errorf("%s: %w", phrases().ErrBodyRead, err)
 }
 
 func handleProviderHTTPResponse(
@@ -194,7 +194,7 @@ func handleProviderAPIError(
 	debugLog("HTTP", "", fmt.Sprintf("🔄 %s retry #%d in %v", providerName, attempt+2, wait))
 
 	if !sleepOrCancel(ctx, wait) {
-		return false, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
+		return false, fmt.Errorf("%s: %w", phrases().ErrContextCancelled, ctx.Err())
 	}
 
 	return true, apiErr

@@ -94,14 +94,14 @@ func loadIPv64ZoneCache(cache *ZoneRecordCache, zones []Zone) {
 	for _, z := range zones {
 		domain, ok := providerCache.ipv64Records[z.Name]
 		if !ok {
-			debugLog("CACHE", z.Name, T.IPv64CacheNoData)
+			debugLog("CACHE", z.Name, phrases().IPv64CacheNoData)
 			continue
 		}
 
 		records := convertIPv64DomainRecords(domain)
 		cache.Set(z.ID, records)
 
-		debugLog("CACHE", z.Name, fmt.Sprintf(T.IPv64CacheRecordsLoaded, len(records)))
+		debugLog("CACHE", z.Name, fmt.Sprintf(phrases().IPv64CacheRecordsLoaded, len(records)))
 	}
 }
 
@@ -114,9 +114,9 @@ func ensureIPv64CacheLoaded() {
 		return
 	}
 
-	debugLog("CACHE", "", T.IPv64CacheLoadDisk)
+	debugLog("CACHE", "", phrases().IPv64CacheLoadDisk)
 	if err := loadIPv64CacheFromDisk(); err != nil {
-		debugLog("CACHE", "", fmt.Sprintf(T.IPv64CacheLoadDiskFailed, err))
+		debugLog("CACHE", "", fmt.Sprintf(phrases().IPv64CacheLoadDiskFailed, err))
 	}
 }
 
@@ -172,7 +172,7 @@ func shouldSkipZoneCacheLoad(cache *ZoneRecordCache, z Zone) bool {
 		"CACHE",
 		z.Name,
 		fmt.Sprintf(
-			t(T.ZoneCacheHitSkipAPI, "✅ Zone bereits im Cache (%d Records) – überspringe API-Call"),
+			t(phrases().ZoneCacheHitSkipAPI, "✅ Zone bereits im Cache (%d Records) – überspringe API-Call"),
 			len(existingRecords),
 		),
 	)
@@ -198,12 +198,12 @@ func startZoneCacheLoad(
 		records, err := loadZoneRecordsForProvider(ctx, domainConfig, zone, prov)
 		if err != nil {
 			recordZoneCacheError(cacheErrors, cacheErrorsMu, zone, err)
-			debugLog("CACHE", zone.Name, fmt.Sprintf(T.CacheLoadError, err))
+			debugLog("CACHE", zone.Name, fmt.Sprintf(phrases().CacheLoadError, err))
 			return
 		}
 
 		cache.Set(zone.ID, records)
-		debugLog("CACHE", zone.Name, fmt.Sprintf(T.CacheRecordsLoaded, len(records)))
+		debugLog("CACHE", zone.Name, fmt.Sprintf(phrases().CacheRecordsLoaded, len(records)))
 	}(z, dc, provider)
 }
 
@@ -262,7 +262,7 @@ func finalizeZoneCacheErrors(cacheErrors []string, zonesByProvider map[string][]
 	log(LogContext{
 		Level:   LogWarn,
 		Action:  ActionError,
-		Message: fmt.Sprintf(T.RecordCacheErrorZone, len(cacheErrors), strings.Join(cacheErrors, "; ")),
+		Message: fmt.Sprintf(phrases().RecordCacheErrorZone, len(cacheErrors), strings.Join(cacheErrors, "; ")),
 	})
 
 	totalZones := countTotalZones(zonesByProvider)

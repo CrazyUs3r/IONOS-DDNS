@@ -18,9 +18,9 @@ func saveConfigToFile() error {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionError,
-			Message: fmt.Sprintf(T.FailedToCreateConfigDirectoryFormat, err),
+			Message: fmt.Sprintf(phrases().FailedToCreateConfigDirectoryFormat, err),
 		})
-		return fmt.Errorf(T.CreateConfigDirectoryFormat, err)
+		return fmt.Errorf(phrases().CreateConfigDirectoryFormat, err)
 	}
 
 	data, err := json.MarshalIndent(cfg, "", "  ")
@@ -28,9 +28,9 @@ func saveConfigToFile() error {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionError,
-			Message: fmt.Sprintf(T.FailedToMarshalConfigFormat, err),
+			Message: fmt.Sprintf(phrases().FailedToMarshalConfigFormat, err),
 		})
-		return fmt.Errorf(T.MarshalConfigFormat, err)
+		return fmt.Errorf(phrases().MarshalConfigFormat, err)
 	}
 
 	tmp := configPath + ".tmp"
@@ -39,18 +39,18 @@ func saveConfigToFile() error {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionError,
-			Message: fmt.Sprintf(T.FailedToWriteTempConfigFileFormat, err),
+			Message: fmt.Sprintf(phrases().FailedToWriteTempConfigFileFormat, err),
 		})
-		return fmt.Errorf(T.WriteTempConfigFileFormat, err)
+		return fmt.Errorf(phrases().WriteTempConfigFileFormat, err)
 	}
 
 	if err := os.Rename(tmp, configPath); err != nil {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionError,
-			Message: fmt.Sprintf(T.FailedToReplaceConfigFileFormat, err),
+			Message: fmt.Sprintf(phrases().FailedToReplaceConfigFileFormat, err),
 		})
-		return fmt.Errorf(T.ReplaceConfigFileFormat, err)
+		return fmt.Errorf(phrases().ReplaceConfigFileFormat, err)
 	}
 
 	return nil
@@ -63,11 +63,11 @@ func initProviderConfig() error {
 
 	configJSON := os.Getenv("DOMAINS_CONFIG")
 	if configJSON != "" {
-		debugLog("CONFIG", "", T.ConfigJSONMissingMigratingFromDomainsConfig)
+		debugLog("CONFIG", "", phrases().ConfigJSONMissingMigratingFromDomainsConfig)
 
 		var raw []rawEntry
 		if err := json.Unmarshal([]byte(configJSON), &raw); err != nil {
-			return fmt.Errorf(T.InvalidDomainsConfigJSONFormat, err)
+			return fmt.Errorf(phrases().InvalidDomainsConfigJSONFormat, err)
 		}
 
 		cfg.DomainConfigs = expandDomainConfigs(raw)
@@ -77,15 +77,15 @@ func initProviderConfig() error {
 		}
 
 		if err := saveConfigToFile(); err != nil {
-			debugLog("CONFIG", "", fmt.Sprintf(T.CouldNotCreateConfigJSONFormat, err))
+			debugLog("CONFIG", "", fmt.Sprintf(phrases().CouldNotCreateConfigJSONFormat, err))
 		} else {
-			debugLog("CONFIG", "", T.ConfigJSONSuccessfullyCreatedFromEnv)
+			debugLog("CONFIG", "", phrases().ConfigJSONSuccessfullyCreatedFromEnv)
 		}
 		return nil
 	}
 
 	if strings.TrimSpace(os.Getenv("DOMAINS")) != "" {
-		debugLog("CONFIG", "", T.NoConfigJSONAndNoDomainsConfigFoundUsingLegacyMode)
+		debugLog("CONFIG", "", phrases().NoConfigJSONAndNoDomainsConfigFoundUsingLegacyMode)
 		err := initLegacyConfig()
 		if err == nil {
 			_ = saveConfigToFile()
@@ -182,7 +182,7 @@ func legacyProviderEnv() string {
 func legacyDomainsFromEnv() ([]string, error) {
 	domainsEnv := os.Getenv("DOMAINS")
 	if domainsEnv == "" {
-		return nil, fmt.Errorf("%s", T.NoDomainsConfigured)
+		return nil, fmt.Errorf("%s", phrases().NoDomainsConfigured)
 	}
 
 	rawDomains := strings.Split(domainsEnv, ",")
@@ -211,7 +211,7 @@ func buildLegacyDomainConfigs(providerEnv string, domains []string) ([]DomainCon
 	case "HETZNERCLOUD":
 		return buildLegacyHetznerCloudConfigs(domains)
 	default:
-		return nil, fmt.Errorf(T.UnknownProviderFormat, providerEnv)
+		return nil, fmt.Errorf(phrases().UnknownProviderFormat, providerEnv)
 	}
 }
 
@@ -232,7 +232,7 @@ func buildLegacyIONOSConfigs(domains []string) ([]DomainConfig, error) {
 	apiSecret := os.Getenv("API_SECRET")
 
 	if apiPrefix == "" || apiSecret == "" {
-		return nil, fmt.Errorf("%s", T.IonosRequiresAPIPrefixAndAPISecret)
+		return nil, fmt.Errorf("%s", phrases().IonosRequiresAPIPrefixAndAPISecret)
 	}
 
 	return buildLegacyConfigs(domains, DomainConfig{
@@ -248,7 +248,7 @@ func buildLegacyCloudflareConfigs(domains []string) ([]DomainConfig, error) {
 	cfSecret := os.Getenv("CLOUDFLARE_API_SECRET")
 
 	if cfToken == "" && (cfEmail == "" || cfSecret == "") {
-		return nil, fmt.Errorf("%s", T.CloudflareRequiresTokenOrEmailAndAPISecret)
+		return nil, fmt.Errorf("%s", phrases().CloudflareRequiresTokenOrEmailAndAPISecret)
 	}
 
 	return buildLegacyConfigs(domains, DomainConfig{
@@ -263,7 +263,7 @@ func buildLegacyIPv64Configs(domains []string) ([]DomainConfig, error) {
 	token := os.Getenv("IPV64_TOKEN")
 
 	if token == "" {
-		return nil, fmt.Errorf("%s", T.Ipv64RequiresToken)
+		return nil, fmt.Errorf("%s", phrases().Ipv64RequiresToken)
 	}
 
 	return buildLegacyConfigs(domains, DomainConfig{

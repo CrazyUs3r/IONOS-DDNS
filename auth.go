@@ -87,7 +87,7 @@ func initAuth(logsDir string) {
 		log(LogContext{
 			Level:   LogInfo,
 			Action:  ActionConfig,
-			Message: T.AuthDisabled,
+			Message: phrases().AuthDisabled,
 		})
 		return
 	}
@@ -100,9 +100,9 @@ func initAuth(logsDir string) {
 			setupToken = hex.EncodeToString(b)
 			ip := getLocalIP()
 
-			titleLine := T.SetupRequired
-			tokenLine := fmt.Sprintf("%s: %s", T.SetupTokenLabel, setupToken)
-			urlLine := fmt.Sprintf("%s: http://%s:%s/setup", T.SetupOpenURL, ip, cfg.HealthPort)
+			titleLine := phrases().SetupRequired
+			tokenLine := fmt.Sprintf("%s: %s", phrases().SetupTokenLabel, setupToken)
+			urlLine := fmt.Sprintf("%s: http://%s:%s/setup", phrases().SetupOpenURL, ip, cfg.HealthPort)
 
 			width := maxLen(titleLine, tokenLine, urlLine)
 
@@ -671,11 +671,11 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		errMsg = T.ErrInvalidLogin
+		errMsg = phrases().ErrInvalidLogin
 		log(LogContext{
 			Level:   LogWarn,
 			Action:  ActionConfig,
-			Message: fmt.Sprintf(T.LoginFailedLog, username, getClientIP(r)),
+			Message: fmt.Sprintf(phrases().LoginFailedLog, username, getClientIP(r)),
 		})
 	}
 
@@ -730,17 +730,17 @@ func handleSetup(w http.ResponseWriter, r *http.Request) {
 
 		switch {
 		case token != setupToken:
-			errMsg = T.ErrInvalidSetupToken
+			errMsg = phrases().ErrInvalidSetupToken
 		case len(username) < 3:
-			errMsg = T.ErrUsernameTooShort
+			errMsg = phrases().ErrUsernameTooShort
 		case len(password) < 8:
-			errMsg = T.ErrPasswordTooShort
+			errMsg = phrases().ErrPasswordTooShort
 		case password != password2:
-			errMsg = T.ErrPasswordsMismatch
+			errMsg = phrases().ErrPasswordsMismatch
 		default:
 			hash, err := hashPassword(password)
 			if err != nil {
-				errMsg = T.ErrAccountCreate
+				errMsg = phrases().ErrAccountCreate
 				break
 			}
 
@@ -753,7 +753,7 @@ func handleSetup(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if err := saveUsers([]DashboardUser{newUser}); err != nil {
-				errMsg = T.ErrAccountSave
+				errMsg = phrases().ErrAccountSave
 				break
 			}
 
@@ -761,12 +761,12 @@ func handleSetup(w http.ResponseWriter, r *http.Request) {
 			log(LogContext{
 				Level:   LogInfo,
 				Action:  ActionStart,
-				Message: fmt.Sprintf(T.FirstAdminCreatedLog, username),
+				Message: fmt.Sprintf(phrases().FirstAdminCreatedLog, username),
 			})
 
 			sess := sessionStore.Create(&newUser, DefaultSessionMaxAge)
 			if sess == nil {
-				errMsg = T.ErrAccountCreate
+				errMsg = phrases().ErrAccountCreate
 				break
 			}
 			setSessionCookie(w, r, sess)
@@ -814,27 +814,27 @@ func handleAPIUsers(w http.ResponseWriter, r *http.Request) {
 			Role     UserRole `json:"role"`
 		}
 		if err := decodeJSONBody(w, r, &req); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": T.ErrInvalidJSON})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": phrases().ErrInvalidJSON})
 			return
 		}
 
 		req.Username = strings.TrimSpace(req.Username)
 		if len(req.Username) < 3 || len(req.Password) < 8 {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": T.ErrUsernamePasswordMin})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": phrases().ErrUsernamePasswordMin})
 			return
 		}
 		if req.Role != RoleAdmin && req.Role != RoleEditor && req.Role != RoleViewer {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": T.ErrInvalidRole})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": phrases().ErrInvalidRole})
 			return
 		}
 		if _, exists := findUserByUsername(req.Username); exists {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": T.ErrUsernameTaken})
+			writeJSON(w, http.StatusConflict, map[string]string{"error": phrases().ErrUsernameTaken})
 			return
 		}
 
 		hash, err := hashPassword(req.Password)
 		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": T.ErrHash})
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": phrases().ErrHash})
 			return
 		}
 
@@ -848,16 +848,16 @@ func handleAPIUsers(w http.ResponseWriter, r *http.Request) {
 		})
 
 		if err := saveUsers(users); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": T.ErrSave})
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": phrases().ErrSave})
 			return
 		}
 
 		log(LogContext{
 			Level:   LogInfo,
 			Action:  ActionConfig,
-			Message: fmt.Sprintf(T.UserCreatedLog, req.Username, req.Role, sess.Username),
+			Message: fmt.Sprintf(phrases().UserCreatedLog, req.Username, req.Role, sess.Username),
 		})
-		writeJSON(w, http.StatusOK, map[string]string{"status": T.StatusCreated})
+		writeJSON(w, http.StatusOK, map[string]string{"status": phrases().StatusCreated})
 
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -872,7 +872,7 @@ func handleAPIUsersID(w http.ResponseWriter, r *http.Request) {
 
 	id := strings.TrimPrefix(r.URL.Path, "/api/users/")
 	if id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": T.ErrMissingID})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": phrases().ErrMissingID})
 		return
 	}
 
@@ -893,16 +893,16 @@ func handleUpdateUser(w http.ResponseWriter, r *http.Request, id string) {
 	}
 
 	if err := decodeJSONBody(w, r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": T.ErrInvalidJSON})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": phrases().ErrInvalidJSON})
 		return
 	}
 
 	if !updateUserByID(id, req.Role, req.Password) {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": T.ErrUserNotFound})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": phrases().ErrUserNotFound})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": T.StatusUpdated})
+	writeJSON(w, http.StatusOK, map[string]string{"status": phrases().StatusUpdated})
 }
 
 func updateUserByID(id string, role UserRole, password string) bool {
@@ -939,12 +939,12 @@ func isValidRole(role UserRole) bool {
 
 func requireAdmin(w http.ResponseWriter, r *http.Request) (*Session, bool) {
 	if !authEnabled {
-		return &Session{Username: t(T.AuthDisabledActor, "auth-disabled"), Role: RoleAdmin}, true
+		return &Session{Username: t(phrases().AuthDisabledActor, "auth-disabled"), Role: RoleAdmin}, true
 	}
 
 	sess, ok := sessionFromRequest(r)
 	if !ok || sess.Role != RoleAdmin {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": T.ErrForbidden})
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": phrases().ErrForbidden})
 		return nil, false
 	}
 
@@ -953,22 +953,22 @@ func requireAdmin(w http.ResponseWriter, r *http.Request) (*Session, bool) {
 
 func handleDeleteUser(w http.ResponseWriter, id, currentUserID string) {
 	if id == currentUserID {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": T.ErrOwnAccountDelete})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": phrases().ErrOwnAccountDelete})
 		return
 	}
 
 	found, err := removeUserByID(id)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": T.ErrSave})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": phrases().ErrSave})
 		return
 	}
 
 	if !found {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": T.ErrUserNotFound})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": phrases().ErrUserNotFound})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": T.StatusDeleted})
+	writeJSON(w, http.StatusOK, map[string]string{"status": phrases().StatusDeleted})
 }
 
 func removeUserByID(id string) (bool, error) {
@@ -1047,12 +1047,15 @@ func checkPassword(password, stored string) bool {
 // ============================================================================
 
 func authPageShell(title, body string) string {
-	return `<!DOCTYPE html><html><head>
+	return `<!DOCTYPE html>
+<html>
+<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>` + html.EscapeString(title) + ` · DynDNS</title>
 <link rel="stylesheet" href="/assets/style.css">
 </head>
+
 <body class="auth-page">
 
 <div class="auth-bg">
@@ -1063,12 +1066,16 @@ func authPageShell(title, body string) string {
 
 <div class="auth-wrap">
 	<div class="auth-card">
-` + body + `
+		` + body + `
 	</div>
 </div>
+
+` + appFooterHTML() + `
+
 <script src="/assets/i18n.js" defer></script>
 <script src="/assets/dashboard.js" defer></script>
-</body></html>`
+</body>
+</html>`
 }
 
 func buildLoginPage(errMsg, redirect string) string {
@@ -1080,23 +1087,23 @@ func buildLoginPage(errMsg, redirect string) string {
 	action := "/login?redirect=" + url.QueryEscape(safeLocalRedirect(redirect))
 	body := `
 <div class="auth-logo">🌐</div>
-<div class="auth-title">` + T.DashboardTitle + `</div>
-<div class="auth-sub">` + T.LoginSubtitle + `</div>
+<div class="auth-title">` + phrases().DashboardTitle + `</div>
+<div class="auth-sub">` + phrases().LoginSubtitle + `</div>
 ` + errHTML + `
 <form method="POST" action="` + html.EscapeString(action) + `">
 	<div class="auth-field">
-		<label class="auth-label">` + T.Username + `</label>
+		<label class="auth-label">` + phrases().Username + `</label>
 		<input class="auth-input" type="text" name="username" autofocus autocomplete="username" required>
 	</div>
 	<div class="auth-field">
-		<label class="auth-label">` + T.Password + `</label>
+		<label class="auth-label">` + phrases().Password + `</label>
 		<input class="auth-input" type="password" name="password" autocomplete="current-password" required>
 	</div>
-	<button class="auth-btn" type="submit">🔐 ` + T.LoginButton + `</button>
+	<button class="auth-btn" type="submit">🔐 ` + phrases().LoginButton + `</button>
 </form>
-<div class="auth-hint">` + T.LoginHint + `</div>`
+<div class="auth-hint">` + phrases().LoginHint + `</div>`
 
-	return authPageShell(T.LoginTitle, body)
+	return authPageShell(phrases().LoginTitle, body)
 }
 
 func buildSetupPage(errMsg string) string {
@@ -1107,30 +1114,30 @@ func buildSetupPage(errMsg string) string {
 
 	body := `
 <div class="auth-logo">🔐</div>
-<div class="auth-title">` + T.SetupHeading + `</div>
-<div class="auth-sub">` + T.SetupSubtitle + `</div>
+<div class="auth-title">` + phrases().SetupHeading + `</div>
+<div class="auth-sub">` + phrases().SetupSubtitle + `</div>
 ` + errHTML + `
 <form method="POST" action="/setup">
 	<div class="auth-field">
-		<label class="auth-label">` + T.SetupToken + `</label>
+		<label class="auth-label">` + phrases().SetupToken + `</label>
 		<input class="auth-input" type="text" name="setup_token" autofocus autocomplete="off" required
 			style="font-family:monospace;font-size:0.8rem;">
 	</div>
 	<div class="auth-field">
-		<label class="auth-label">` + T.Username + `</label>
+		<label class="auth-label">` + phrases().Username + `</label>
 		<input class="auth-input" type="text" name="username" autocomplete="username" required>
 	</div>
 	<div class="auth-field">
-		<label class="auth-label">` + T.Password + ` <small style="opacity:0.5">(` + T.PasswordMinHint + `)</small></label>
+		<label class="auth-label">` + phrases().Password + ` <small style="opacity:0.5">(` + phrases().PasswordMinHint + `)</small></label>
 		<input class="auth-input" type="password" name="password" autocomplete="new-password" required>
 	</div>
 	<div class="auth-field">
-		<label class="auth-label">` + T.PasswordConfirm + `</label>
+		<label class="auth-label">` + phrases().PasswordConfirm + `</label>
 		<input class="auth-input" type="password" name="password2" autocomplete="new-password" required>
 	</div>
-	<button class="auth-btn" type="submit">✅ ` + T.SetupButton + `</button>
+	<button class="auth-btn" type="submit">✅ ` + phrases().SetupButton + `</button>
 </form>
-<div class="auth-hint">` + T.SetupHint + `</div>`
+<div class="auth-hint">` + phrases().SetupHint + `</div>`
 
-	return authPageShell(T.SetupTitle, body)
+	return authPageShell(phrases().SetupTitle, body)
 }

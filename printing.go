@@ -20,10 +20,10 @@ func printGroupedDomains() {
 	cfgMu.RUnlock()
 
 	fmt.Printf("\n🚀  %s [%s] (%s: %s) [Multi-Provider]:\n",
-		T.ServiceStarted, lang, T.Mode, ipMode)
+		phrases().ServiceStarted, lang, phrases().Mode, ipMode)
 
 	if len(domainConfigs) == 0 {
-		fmt.Println("\n⚠️  " + T.NoDomains)
+		fmt.Println("\n⚠️  " + phrases().NoDomains)
 		return
 	}
 
@@ -67,7 +67,7 @@ func printGroupedDomains() {
 func printInfrastructure(ctx context.Context, zonesByProvider map[string][]Zone) {
 	domainConfigs := snapshotDomainConfigsForPrinting()
 
-	fmt.Println("\n" + T.InfraHeading)
+	fmt.Println("\n" + phrases().InfraHeading)
 
 	providerTypes := sortedProviderTypes(zonesByProvider)
 	for _, pt := range providerTypes {
@@ -211,7 +211,7 @@ func logHTTPClientStats() {
 		return
 	}
 
-	debugLog("CONFIG", "", "========== "+T.ConfigHeading+" ==========")
+	debugLog("CONFIG", "", "========== "+phrases().ConfigHeading+" ==========")
 
 	providerCounts := make(map[ProviderType]int)
 	for _, dc := range domainConfigs {
@@ -222,12 +222,12 @@ func logHTTPClientStats() {
 		debugLog("CONFIG", "", fmt.Sprintf("Provider: %s (%d domains)", provider, count))
 	}
 
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %ds", T.ConfigInterval, interval))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", T.ConfigIPMode, ipMode))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", T.ConfigInterface, ifaceName))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", T.ConfigHealthPort, healthPort))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %v", T.ConfigDryRun, dryRun))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", T.ConfigLogDir, logDir))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", T.ConfigLanguage, lang))
+	debugLog("CONFIG", "", fmt.Sprintf("%s: %ds", phrases().ConfigInterval, interval))
+	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", phrases().ConfigIPMode, ipMode))
+	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", phrases().ConfigInterface, ifaceName))
+	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", phrases().ConfigHealthPort, healthPort))
+	debugLog("CONFIG", "", fmt.Sprintf("%s: %v", phrases().ConfigDryRun, dryRun))
+	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", phrases().ConfigLogDir, logDir))
+	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", phrases().ConfigLanguage, lang))
 	debugLog("CONFIG", "", "===================================")
 }

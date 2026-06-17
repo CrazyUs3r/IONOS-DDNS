@@ -175,7 +175,7 @@ func persistLog(ctx LogContext) {
 			Level:      LogWarn,
 			Category:   "SYSTEM",
 			Action:     ActionError,
-			Message:    fmt.Sprintf(t(T.LogQueueFull, "Log queue full, dropped: %s"), entry.Message),
+			Message:    fmt.Sprintf(t(phrases().LogQueueFull, "Log queue full, dropped: %s"), entry.Message),
 			SkipNotify: true,
 		})
 	}
@@ -259,7 +259,7 @@ func recoverLogWriterPanic() {
 			Level:      LogError,
 			Category:   "SYSTEM",
 			Action:     ActionError,
-			Message:    t(T.LogWriterPanic, "Log writer panic"),
+			Message:    t(phrases().LogWriterPanic, "Log writer panic"),
 			Error:      fmt.Errorf("%v", r),
 			SkipNotify: true,
 		})
@@ -275,7 +275,7 @@ func handleLogWriterEntry(entry LogEntry, batchCount, maxBatchSize int) int {
 			Level:      LogError,
 			Category:   "SYSTEM",
 			Action:     ActionError,
-			Message:    fmt.Sprintf(t(T.LogCannotOpenFile, "Cannot open log file %s"), logPath),
+			Message:    fmt.Sprintf(t(phrases().LogCannotOpenFile, "Cannot open log file %s"), logPath),
 			Error:      err,
 			SkipNotify: true,
 		})
@@ -296,7 +296,7 @@ func handleLogWriterEntry(entry LogEntry, batchCount, maxBatchSize int) int {
 			Level:      LogError,
 			Category:   "SYSTEM",
 			Action:     ActionError,
-			Message:    t(T.LogWriteFailed, "Write failed"),
+			Message:    t(phrases().LogWriteFailed, "Write failed"),
 			Error:      err,
 			SkipNotify: true,
 		})
@@ -379,7 +379,7 @@ func startLogRotationWorker() {
 					Level:    LogError,
 					Category: "MAINTENANCE",
 					Action:   ActionError,
-					Message:  t(T.RotationWorkerPanic, "Log rotation worker panic"),
+					Message:  t(phrases().RotationWorkerPanic, "Log rotation worker panic"),
 					Error:    fmt.Errorf("%v", r),
 				})
 			}
@@ -452,7 +452,7 @@ func doLogRotation(path string, maxLines int) {
 		logMemCacheMu.Unlock()
 	}
 
-	debugLog("MAINTENANCE", "", fmt.Sprintf("✅ %s: %d → %d", T.LogRotated, totalCount, len(newLines)))
+	debugLog("MAINTENANCE", "", fmt.Sprintf("✅ %s: %d → %d", phrases().LogRotated, totalCount, len(newLines)))
 }
 
 func tailLines(path string, maxLines int) ([]string, int, error) {
@@ -471,7 +471,7 @@ func tailLines(path string, maxLines int) ([]string, int, error) {
 				Level:    LogError,
 				Category: "FILE",
 				Action:   ActionError,
-				Message:  fmt.Sprintf("%s: %v", t(T.FileCloseError, "Failed to close file"), err),
+				Message:  fmt.Sprintf("%s: %v", t(phrases().FileCloseError, "Failed to close file"), err),
 			})
 		}
 	}()
@@ -493,7 +493,7 @@ func tailLines(path string, maxLines int) ([]string, int, error) {
 			Level:    LogError,
 			Category: "FILE",
 			Action:   ActionError,
-			Message:  fmt.Sprintf("%s: %v", t(T.ScannerError, "Scanner error"), err),
+			Message:  fmt.Sprintf("%s: %v", t(phrases().ScannerError, "Scanner error"), err),
 		})
 		return nil, 0, err
 	}
@@ -512,9 +512,9 @@ func tailLines(path string, maxLines int) ([]string, int, error) {
 func rotateLogFile(path string, maxLines int) {
 	select {
 	case rotationQueue <- rotationJob{path: path, maxLines: maxLines}:
-		debugLog("MAINTENANCE", "", t(T.RotationQueued, "Log rotation queued"))
+		debugLog("MAINTENANCE", "", t(phrases().RotationQueued, "Log rotation queued"))
 	default:
-		debugLog("MAINTENANCE", "", t(T.RotationQueueFull, "Rotation queue full, skipping"))
+		debugLog("MAINTENANCE", "", t(phrases().RotationQueueFull, "Rotation queue full, skipping"))
 	}
 }
 
@@ -533,7 +533,7 @@ func flushLogQueue() {
 					Level:      LogWarn,
 					Category:   "SYSTEM",
 					Action:     ActionError,
-					Message:    fmt.Sprintf(t(T.LogFlushQueueNotEmptyWithN, "Log queue not fully flushed (%d remaining)"), n),
+					Message:    fmt.Sprintf(t(phrases().LogFlushQueueNotEmptyWithN, "Log queue not fully flushed (%d remaining)"), n),
 					SkipNotify: true,
 				})
 			}

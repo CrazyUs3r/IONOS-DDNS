@@ -57,7 +57,7 @@ func (g *gotifyNotifier) Send(msg NotifyMessage) error {
 		select {
 		case dropped := <-g.sendQueue:
 			debugLog("NOTIFY", "", fmt.Sprintf(
-				t(T.GotifyQueueFull, "⚠️ Gotify Queue voll – älteste Nachricht verworfen (Alter: %v)"),
+				t(phrases().GotifyQueueFull, "⚠️ Gotify Queue voll – älteste Nachricht verworfen (Alter: %v)"),
 				time.Since(dropped.enqueued).Round(time.Second),
 			))
 		default:
@@ -106,14 +106,14 @@ func (g *gotifyNotifier) drainQueue() {
 			case msg := <-g.sendQueue:
 				if time.Since(msg.enqueued) > gotifyQueueMaxAge {
 					debugLog("NOTIFY", "", fmt.Sprintf(
-						t(T.GotifyMsgDiscarded, "⚠️ Gotify Nachricht verworfen (zu alt: %v)"),
+						t(phrases().GotifyMsgDiscarded, "⚠️ Gotify Nachricht verworfen (zu alt: %v)"),
 						time.Since(msg.enqueued).Round(time.Second),
 					))
 					continue
 				}
 				if err := g.sendWithRetry(msg); err != nil {
 					debugLog("NOTIFY", "", fmt.Sprintf(
-						t(T.GotifySendFailed, "⚠️ Gotify Send fehlgeschlagen: %v"),
+						t(phrases().GotifySendFailed, "⚠️ Gotify Send fehlgeschlagen: %v"),
 						err,
 					))
 				}
@@ -139,7 +139,7 @@ func (g *gotifyNotifier) sendWithRetry(msg gotifyQueuedMsg) error {
 			return nil
 		}
 		debugLog("NOTIFY", "", fmt.Sprintf(
-			t(T.GotifyRetry, "⌛ Gotify Retry %d/%d nach Fehler: %v (warte %v)"),
+			t(phrases().GotifyRetry, "⌛ Gotify Retry %d/%d nach Fehler: %v (warte %v)"),
 			attempt+1, maxRetries, err, wait,
 		))
 		select {

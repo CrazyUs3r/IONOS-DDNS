@@ -192,7 +192,7 @@ func prepareRuntimeDirectories(paths runtimePaths) error {
 		log(LogContext{
 			Level:    LogError,
 			Category: "CONFIG",
-			Message:  fmt.Sprintf(t(T.LanguageDirCreateFailed, "Failed to create language directory: %v"), err),
+			Message:  fmt.Sprintf(t(phrases().LanguageDirCreateFailed, "Failed to create language directory: %v"), err),
 		})
 		return err
 	}
@@ -208,19 +208,19 @@ func logRuntimePaths(paths runtimePaths) {
 	log(LogContext{
 		Level:    LogInfo,
 		Category: "CONFIG",
-		Message:  fmt.Sprintf(t(T.ConfigDir, "Config directory: %s"), paths.configDir),
+		Message:  fmt.Sprintf(t(phrases().ConfigDir, "Config directory: %s"), paths.configDir),
 	})
 
 	log(LogContext{
 		Level:    LogInfo,
 		Category: "CONFIG",
-		Message:  fmt.Sprintf(t(T.ConfigLanguageDir, "Languages: %s"), paths.langDir),
+		Message:  fmt.Sprintf(t(phrases().ConfigLanguageDir, "Languages: %s"), paths.langDir),
 	})
 
 	log(LogContext{
 		Level:    LogInfo,
 		Category: "CONFIG",
-		Message:  fmt.Sprintf(t(T.ConfigLogsDir, "Logs: %s"), paths.logsDir),
+		Message:  fmt.Sprintf(t(phrases().ConfigLogsDir, "Logs: %s"), paths.logsDir),
 	})
 }
 
@@ -230,7 +230,7 @@ func loadPersistedMetrics(path string) {
 			Level:    LogWarn,
 			Category: "CONFIG",
 			Action:   ActionConfig,
-			Message:  fmt.Sprintf(t(T.MetricsLoadFailed, "Failed to load metrics: %v"), err),
+			Message:  fmt.Sprintf(t(phrases().MetricsLoadFailed, "Failed to load metrics: %v"), err),
 		})
 	}
 }
@@ -257,7 +257,7 @@ func readIntervalFromEnv() int {
 				Level:    LogWarn,
 				Category: "CONFIG",
 				Action:   ActionConfig,
-				Message:  fmt.Sprintf(t(T.InvalidInterval, "Invalid INTERVAL value '%s', using default 300"), s),
+				Message:  fmt.Sprintf(t(phrases().InvalidInterval, "Invalid INTERVAL value '%s', using default 300"), s),
 			})
 		}
 	}
@@ -293,7 +293,7 @@ func readMaxAPIRetriesFromEnv() int {
 			log(LogContext{
 				Level:   LogWarn,
 				Action:  ActionConfig,
-				Message: fmt.Sprintf(t(T.MaxAPIRetriesInvalid, "Invalid MAX_API_RETRIES value '%s', using default %d"), s, DefaultMaxAPIRetries),
+				Message: fmt.Sprintf(t(phrases().MaxAPIRetriesInvalid, "Invalid MAX_API_RETRIES value '%s', using default %d"), s, DefaultMaxAPIRetries),
 			})
 		}
 	}
@@ -311,7 +311,7 @@ func readMaxLogLinesFromEnv() int {
 			log(LogContext{
 				Level:   LogWarn,
 				Action:  ActionConfig,
-				Message: fmt.Sprintf(t(T.LogMaxLinesInvalid, "Invalid LOG_MAX_LINES value '%s', using default %d"), s, DefaultMaxLogLines),
+				Message: fmt.Sprintf(t(phrases().LogMaxLinesInvalid, "Invalid LOG_MAX_LINES value '%s', using default %d"), s, DefaultMaxLogLines),
 			})
 		}
 	}
@@ -369,7 +369,7 @@ func loadConfigFromFile() bool {
 		log(LogContext{
 			Level:   LogWarn,
 			Action:  ActionConfig,
-			Message: fmt.Sprintf(t(T.ConfigJSONReadFailed, "config.json could not be read, using defaults: %v"), err),
+			Message: fmt.Sprintf(t(phrases().ConfigJSONReadFailed, "config.json could not be read, using defaults: %v"), err),
 		})
 		return false
 	}
@@ -431,7 +431,7 @@ func configureLanguage(langDir string) error {
 		log(LogContext{
 			Level:    LogError,
 			Category: "CONFIG",
-			Message:  fmt.Sprintf(t(T.LanguageFileLoadFailed, "Failed to load language file: %v"), err),
+			Message:  fmt.Sprintf(t(phrases().LanguageFileLoadFailed, "Failed to load language file: %v"), err),
 		})
 		return err
 	}
@@ -448,7 +448,7 @@ func initializeProvidersAndNotifiers() error {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionConfig,
-			Message: fmt.Sprintf(t(T.ProviderConfigFailed, "Provider-%s failed: %v"), T.ConfigHeading, err),
+			Message: fmt.Sprintf(t(phrases().ProviderConfigFailed, "Provider-%s failed: %v"), phrases().ConfigHeading, err),
 		})
 		return err
 	}
@@ -462,11 +462,11 @@ func logDebugConfiguration() {
 		return
 	}
 
-	debugLog("CONFIG", "", fmt.Sprintf(t(T.DebugModeActive, "Debug mode active. Interval: %ds, mode: %s"), cfg.Interval, cfg.IPMode))
-	debugLog("CONFIG", "", fmt.Sprintf(t(T.LoadedDomains, "Loaded domains: %d"), len(cfg.DomainConfigs)))
-	debugLog("CONFIG", "", fmt.Sprintf(t(T.MaxLogLinesInfo, "Max log lines: %d"), cfg.MaxLogLines))
-	debugLog("CONFIG", "", fmt.Sprintf(t(T.MaxAPIRetriesInfo, "Max API retries: %d"), cfg.MaxAPIRetries))
-	debugLog("CONFIG", "", fmt.Sprintf(t(T.MaxConcurrentInfo, "Max concurrent: %d"), cfg.MaxConcurrent))
+	debugLog("CONFIG", "", fmt.Sprintf(t(phrases().DebugModeActive, "Debug mode active. Interval: %ds, mode: %s"), cfg.Interval, cfg.IPMode))
+	debugLog("CONFIG", "", fmt.Sprintf(t(phrases().LoadedDomains, "Loaded domains: %d"), len(cfg.DomainConfigs)))
+	debugLog("CONFIG", "", fmt.Sprintf(t(phrases().MaxLogLinesInfo, "Max log lines: %d"), cfg.MaxLogLines))
+	debugLog("CONFIG", "", fmt.Sprintf(t(phrases().MaxAPIRetriesInfo, "Max API retries: %d"), cfg.MaxAPIRetries))
+	debugLog("CONFIG", "", fmt.Sprintf(t(phrases().MaxConcurrentInfo, "Max concurrent: %d"), cfg.MaxConcurrent))
 
 	for _, dc := range cfg.DomainConfigs {
 		debugLog("CONFIG", "", fmt.Sprintf("  - %s (%s)", dc.FQDN, dc.Provider))
@@ -482,7 +482,7 @@ func ensureRuntimeDirs(paths runtimePaths) error {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionConfig,
-			Message: fmt.Sprintf(t(T.LogDirCreateFailed, "Failed to create log directory: %v"), err),
+			Message: fmt.Sprintf(t(phrases().LogDirCreateFailed, "Failed to create log directory: %v"), err),
 		})
 		return err
 	}
@@ -491,7 +491,7 @@ func ensureRuntimeDirs(paths runtimePaths) error {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionConfig,
-			Message: fmt.Sprintf(t(T.LanguageDirCreateFailed, "Failed to create lang directory: %v"), err),
+			Message: fmt.Sprintf(t(phrases().LanguageDirCreateFailed, "Failed to create lang directory: %v"), err),
 		})
 		return err
 	}
@@ -555,7 +555,7 @@ func logStartupProviders() {
 	log(LogContext{
 		Level:   LogInfo,
 		Action:  ActionStart,
-		Message: fmt.Sprintf("🚀 %s (%s: %s)", T.Startup, t(T.Providers, "Providers"), strings.Join(providerNames, ", ")),
+		Message: fmt.Sprintf("🚀 %s (%s: %s)", phrases().Startup, t(phrases().Providers, "Providers"), strings.Join(providerNames, ", ")),
 	})
 }
 
@@ -570,7 +570,7 @@ func refreshCaches() {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionError,
-			Message: fmt.Sprintf(t(T.DomainCacheUpdateFailed, "Failed to update domain cache: %v"), err),
+			Message: fmt.Sprintf(t(phrases().DomainCacheUpdateFailed, "Failed to update domain cache: %v"), err),
 		})
 	}
 
@@ -578,7 +578,7 @@ func refreshCaches() {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionError,
-			Message: fmt.Sprintf(t(T.MetricCacheUpdateFailed, "Failed to update metric cache: %v"), err),
+			Message: fmt.Sprintf(t(phrases().MetricCacheUpdateFailed, "Failed to update metric cache: %v"), err),
 		})
 	}
 }
@@ -650,18 +650,18 @@ func startDashboardServers(servers *dashboardServers) {
 func startHTTPServer(srv *http.Server) {
 	ip := getLocalIP()
 	go func() {
-		debugLog("SYSTEM", "", fmt.Sprintf("%s (http://%s%s)", T.DashboardStarted, ip, srv.Addr))
+		debugLog("SYSTEM", "", fmt.Sprintf("%s (http://%s%s)", phrases().DashboardStarted, ip, srv.Addr))
 		log(LogContext{
 			Level:   LogInfo,
 			Action:  ActionServer,
-			Message: fmt.Sprintf("%s (http://%s%s)", T.DashboardStarted, ip, srv.Addr),
+			Message: fmt.Sprintf("%s (http://%s%s)", phrases().DashboardStarted, ip, srv.Addr),
 		})
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log(LogContext{
 				Level:   LogError,
 				Action:  ActionError,
-				Message: fmt.Sprintf("%s: %v", T.ServerError, err),
+				Message: fmt.Sprintf("%s: %v", phrases().ServerError, err),
 			})
 		}
 	}()
@@ -670,7 +670,7 @@ func startHTTPServer(srv *http.Server) {
 func startHTTPSServer(srv *http.Server, certFile, keyFile string, selfSigned bool) {
 	ip := getLocalIP()
 	go func() {
-		message := fmt.Sprintf("%s (https://%s%s)", T.DashboardStarted, ip, srv.Addr)
+		message := fmt.Sprintf("%s (https://%s%s)", phrases().DashboardStarted, ip, srv.Addr)
 		if selfSigned {
 			message += " [self-signed certificate]"
 		}
@@ -685,7 +685,7 @@ func startHTTPSServer(srv *http.Server, certFile, keyFile string, selfSigned boo
 			log(LogContext{
 				Level:   LogError,
 				Action:  ActionError,
-				Message: fmt.Sprintf("%s (HTTPS): %v", T.ServerError, err),
+				Message: fmt.Sprintf("%s (HTTPS): %v", phrases().ServerError, err),
 			})
 		}
 	}()
@@ -693,7 +693,7 @@ func startHTTPSServer(srv *http.Server, certFile, keyFile string, selfSigned boo
 
 func startWebSocketHub() {
 	go wsHub.run()
-	debugLog("SYSTEM", "", t(T.WebSocketHubStarted, "WebSocket hub started"))
+	debugLog("SYSTEM", "", t(phrases().WebSocketHubStarted, "WebSocket hub started"))
 }
 
 func runMainLoop(servers *dashboardServers) int {
@@ -707,7 +707,7 @@ func runMainLoop(servers *dashboardServers) int {
 	for {
 		select {
 		case <-shutdownCtx.Done():
-			debugLog("SCHEDULER", "", t(T.SchedulerShutdownActive, "Shutdown active, stopping scheduler"))
+			debugLog("SCHEDULER", "", t(phrases().SchedulerShutdownActive, "Shutdown active, stopping scheduler"))
 			return handleContextShutdown(ticker, servers)
 
 		case <-ticker.C:
@@ -724,16 +724,16 @@ func handleContextShutdown(ticker *time.Ticker, servers *dashboardServers) int {
 
 	if httpClient != nil {
 		httpClient.CloseIdleConnections()
-		debugLog("SYSTEM", "", T.HTTPConnectionsClosed)
+		debugLog("SYSTEM", "", phrases().HTTPConnectionsClosed)
 	}
 
 	waitForRunningUpdates()
 
-	debugLog("SYSTEM", "", t(T.WaitingForLogQueue, "📝 Waiting for log queue..."))
+	debugLog("SYSTEM", "", t(phrases().WaitingForLogQueue, "📝 Waiting for log queue..."))
 	flushLogQueue()
 
 	if err := apiMetrics.SaveToFile(metricsPersistPath); err != nil {
-		debugLog("SYSTEM", "", fmt.Sprintf(t(T.MetricsSaveFailed, "Metrics could not be saved: %v"), err))
+		debugLog("SYSTEM", "", fmt.Sprintf(t(phrases().MetricsSaveFailed, "Metrics could not be saved: %v"), err))
 	}
 
 	safeCloseLogWriteQueue()
@@ -752,7 +752,7 @@ func handleSchedulerTick(ticker *time.Ticker, currentInterval *int) *time.Ticker
 		ticker.Stop()
 		*currentInterval = interval
 		ticker = time.NewTicker(time.Duration(*currentInterval) * time.Second)
-		debugLog("SCHEDULER", "", fmt.Sprintf(t(T.SchedulerIntervalChanged, "Interval changed → new ticker: %ds"), *currentInterval))
+		debugLog("SCHEDULER", "", fmt.Sprintf(t(phrases().SchedulerIntervalChanged, "Interval changed → new ticker: %ds"), *currentInterval))
 	}
 
 	if !hasDomainConfig() {
@@ -760,10 +760,10 @@ func handleSchedulerTick(ticker *time.Ticker, currentInterval *int) *time.Ticker
 		return ticker
 	}
 
-	debugLog("SCHEDULER", "", t(T.SchedulerIntervalReached, "Interval reached, starting runUpdate(false)"))
+	debugLog("SCHEDULER", "", t(phrases().SchedulerIntervalReached, "Interval reached, starting runUpdate(false)"))
 
 	if activeUpdates.Load() > 0 {
-		debugLog("SCHEDULER", "", t(T.SchedulerPreviousUpdateRunning, "⚠️ Previous update is still running. Skipping this cycle..."))
+		debugLog("SCHEDULER", "", t(phrases().SchedulerPreviousUpdateRunning, "⚠️ Previous update is still running. Skipping this cycle..."))
 
 		limit := maxLogLines
 		if interval > 500 && limit == DefaultMaxLogLines {
@@ -780,19 +780,19 @@ func handleSchedulerTick(ticker *time.Ticker, currentInterval *int) *time.Ticker
 		limit = 1000
 	}
 
-	debugLog("MAINTENANCE", "", T.MaintenanceStarting)
+	debugLog("MAINTENANCE", "", phrases().MaintenanceStarting)
 	rotateLogFile(logPath, limit)
 
 	return ticker
 }
 
 func handleShutdownSignal(sig os.Signal, ticker *time.Ticker, servers *dashboardServers) int {
-	debugLog("SYSTEM", "", fmt.Sprintf(t(T.ShutdownSignalReceived, "Shutdown signal received: %v"), sig))
+	debugLog("SYSTEM", "", fmt.Sprintf(t(phrases().ShutdownSignalReceived, "Shutdown signal received: %v"), sig))
 
 	stopCtx := LogContext{
 		Level:   LogInfo,
 		Action:  ActionStop,
-		Message: fmt.Sprintf("🛑 %s (Signal: %v)", T.Shutdown, sig),
+		Message: fmt.Sprintf("🛑 %s (Signal: %v)", phrases().Shutdown, sig),
 	}
 	notifySync(stopCtx)
 	stopCtx.SkipNotify = true
@@ -803,16 +803,16 @@ func handleShutdownSignal(sig os.Signal, ticker *time.Ticker, servers *dashboard
 
 	if httpClient != nil {
 		httpClient.CloseIdleConnections()
-		debugLog("SYSTEM", "", T.HTTPConnectionsClosed)
+		debugLog("SYSTEM", "", phrases().HTTPConnectionsClosed)
 	}
 
 	waitForRunningUpdates()
 
-	debugLog("SYSTEM", "", t(T.WaitingForLogQueue, "📝 Waiting for log queue..."))
+	debugLog("SYSTEM", "", t(phrases().WaitingForLogQueue, "📝 Waiting for log queue..."))
 	flushLogQueue()
 
 	if err := apiMetrics.SaveToFile(metricsPersistPath); err != nil {
-		debugLog("SYSTEM", "", fmt.Sprintf(t(T.MetricsSaveFailed, "Metrics could not be saved: %v"), err))
+		debugLog("SYSTEM", "", fmt.Sprintf(t(phrases().MetricsSaveFailed, "Metrics could not be saved: %v"), err))
 	}
 
 	safeCloseLogWriteQueue()
@@ -828,7 +828,7 @@ func safeCloseLogWriteQueue() {
 }
 
 func waitForRunningUpdates() {
-	debugLog("SYSTEM", "", t(T.WaitingForRunningUpdates, "⏳ Waiting for running updates..."))
+	debugLog("SYSTEM", "", t(phrases().WaitingForRunningUpdates, "⏳ Waiting for running updates..."))
 
 	waitCtx, waitCancel := context.WithTimeout(context.Background(), ShutdownWaitTimeout)
 	defer waitCancel()
@@ -847,9 +847,9 @@ func waitForRunningUpdates() {
 
 	select {
 	case <-done:
-		debugLog("SYSTEM", "", t(T.AllUpdatesFinished, "✅ All updates finished"))
+		debugLog("SYSTEM", "", t(phrases().AllUpdatesFinished, "✅ All updates finished"))
 	case <-waitCtx.Done():
-		debugLog("SYSTEM", "", t(T.WaitForUpdatesTimeout, "⚠️ Timeout while waiting for updates - force shutdown"))
+		debugLog("SYSTEM", "", t(phrases().WaitForUpdatesTimeout, "⚠️ Timeout while waiting for updates - force shutdown"))
 	}
 }
 
@@ -857,7 +857,7 @@ func shutdownDashboardServers(servers *dashboardServers) {
 	ctx, cancel := context.WithTimeout(context.Background(), ShutdownGraceTimeout)
 	defer cancel()
 
-	debugLog("SYSTEM", "", T.ServerShuttingDown)
+	debugLog("SYSTEM", "", phrases().ServerShuttingDown)
 	for _, srv := range []*http.Server{servers.http, servers.https} {
 		if srv == nil {
 			continue
@@ -866,11 +866,11 @@ func shutdownDashboardServers(servers *dashboardServers) {
 			log(LogContext{
 				Level:   LogWarn,
 				Action:  ActionError,
-				Message: fmt.Sprintf("%s (%s): %v", T.ShutdownError, srv.Addr, err),
+				Message: fmt.Sprintf("%s (%s): %v", phrases().ShutdownError, srv.Addr, err),
 			})
 		}
 	}
-	debugLog("SYSTEM", "", T.ServerShutdownComplete)
+	debugLog("SYSTEM", "", phrases().ServerShutdownComplete)
 }
 
 func applyEnvOverrides(

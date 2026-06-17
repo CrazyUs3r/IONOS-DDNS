@@ -471,7 +471,7 @@ func buildHTTPClient(dnsList []string) *http.Client {
 
 		debugLog("HTTP", "", fmt.Sprintf(
 			"🔧 %s %d Domains → MaxConns=%d, IdlePerHost=%d",
-			T.HTTPPool, domainCount, maxConnsPerHost, maxIdleConnsPerHost,
+			phrases().HTTPPool, domainCount, maxConnsPerHost, maxIdleConnsPerHost,
 		))
 	}
 
@@ -540,7 +540,7 @@ func buildHTTPClient(dnsList []string) *http.Client {
 		},
 	}
 
-	debugLog("SYSTEM", "", fmt.Sprintf(T.HTTPClientInitialized, len(dnsList), strings.Join(dnsList, ", ")))
+	debugLog("SYSTEM", "", fmt.Sprintf(phrases().HTTPClientInitialized, len(dnsList), strings.Join(dnsList, ", ")))
 	return client
 }
 

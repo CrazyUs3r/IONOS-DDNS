@@ -39,115 +39,392 @@ func (s *SafeErrorMsg) Get() string {
 // ============================================================================
 // HELPERS - DASHBOARD
 // ============================================================================
-func getAvailableLanguages(langDir string) (map[string]bool, error) {
-	files, err := os.ReadDir(langDir)
-	if err != nil {
-		return nil, err
-	}
-
+func getAvailableLanguages(dir string) (map[string]bool, error) {
 	langs := make(map[string]bool)
 
-	for _, f := range files {
-		if f.IsDir() {
-			continue
-		}
-
-		name := f.Name()
-		ext := filepath.Ext(name)
-		base := strings.TrimSuffix(name, ext)
-
-		if ext == ".json" && base != "" {
-			base = strings.ToLower(base)
-			if i := strings.Index(base, "_"); i != -1 {
-				base = base[:i]
+	addEntries := func(entries []os.DirEntry) {
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
 			}
 
-			langs[base] = true
+			addLanguageFilename(langs, entry.Name())
 		}
+	}
+
+	var readErr error
+	if entries, err := os.ReadDir(dir); err == nil {
+		addEntries(entries)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		readErr = err
+	}
+	if entries, err := embeddedLang.ReadDir("lang"); err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+
+			addLanguageFilename(langs, entry.Name())
+		}
+	} else if readErr == nil {
+		readErr = err
+	}
+
+	if len(langs) == 0 && readErr != nil {
+		return nil, readErr
 	}
 
 	return langs, nil
 }
 
-func normalizeLang(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-
-	if i := strings.Index(s, "_"); i != -1 {
-		s = s[:i]
-	}
-	if i := strings.Index(s, "."); i != -1 {
-		s = s[:i]
+func addLanguageFilename(langs map[string]bool, filename string) {
+	ext := filepath.Ext(filename)
+	if !strings.EqualFold(ext, ".json") {
+		return
 	}
 
-	return s
+	base := strings.TrimSuffix(filename, ext)
+	code := normalizeLang(base)
+
+	if code == "" {
+		return
+	}
+
+	langs[code] = true
+}
+
+func normalizeLang(value string) string {
+	value = prepareLanguageValue(value)
+	if value == "" {
+		return ""
+	}
+
+	parts := strings.Split(value, "-")
+	normalized := make([]string, 0, len(parts))
+
+	for index, part := range parts {
+		normalizedPart, ok := normalizeLanguagePart(index, part)
+		if !ok {
+			return ""
+		}
+
+		normalized = append(normalized, normalizedPart)
+	}
+
+	return strings.Join(normalized, "-")
+}
+
+func prepareLanguageValue(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+
+	if index := strings.IndexAny(value, ".@"); index >= 0 {
+		value = value[:index]
+	}
+
+	return strings.ReplaceAll(value, "_", "-")
+}
+
+func normalizeLanguagePart(index int, part string) (string, bool) {
+	if part == "" || !isASCIIAlphaNumeric(part) {
+		return "", false
+	}
+
+	if index == 0 {
+		return normalizePrimaryLanguage(part)
+	}
+
+	return normalizeLanguageSubtag(part), true
+}
+
+func normalizePrimaryLanguage(part string) (string, bool) {
+	if len(part) < 2 || len(part) > 8 {
+		return "", false
+	}
+
+	if !isASCIILetters(part) {
+		return "", false
+	}
+
+	return strings.ToLower(part), true
+}
+
+func normalizeLanguageSubtag(part string) string {
+	switch {
+	case isScriptSubtag(part):
+		return strings.ToUpper(part[:1]) +
+			strings.ToLower(part[1:])
+
+	case isRegionSubtag(part):
+		return strings.ToUpper(part)
+
+	default:
+		return strings.ToLower(part)
+	}
+}
+
+func isScriptSubtag(part string) bool {
+	return len(part) == 4 && isASCIILetters(part)
+}
+
+func isRegionSubtag(part string) bool {
+	if len(part) == 2 {
+		return isASCIILetters(part)
+	}
+
+	if len(part) == 3 {
+		return isASCIIDigits(part)
+	}
+
+	return false
+}
+
+func isASCIILetters(value string) bool {
+	if value == "" {
+		return false
+	}
+
+	for i := 0; i < len(value); i++ {
+		char := value[i]
+
+		if (char < 'a' || char > 'z') &&
+			(char < 'A' || char > 'Z') {
+			return false
+		}
+	}
+
+	return true
+}
+
+func isASCIIDigits(value string) bool {
+	if value == "" {
+		return false
+	}
+
+	for i := 0; i < len(value); i++ {
+		if value[i] < '0' || value[i] > '9' {
+			return false
+		}
+	}
+
+	return true
+}
+
+func isASCIIAlphaNumeric(value string) bool {
+	if value == "" {
+		return false
+	}
+
+	for i := 0; i < len(value); i++ {
+		char := value[i]
+
+		isLetter := (char >= 'a' && char <= 'z') ||
+			(char >= 'A' && char <= 'Z')
+
+		isDigit := char >= '0' && char <= '9'
+
+		if !isLetter && !isDigit {
+			return false
+		}
+	}
+
+	return true
+}
+
+func languageBase(code string) string {
+	code = normalizeLang(code)
+	if code == "" {
+		return ""
+	}
+
+	if before, _, ok := strings.Cut(code, "-"); ok {
+		return before
+	}
+
+	return code
+}
+
+func resolveAvailableLanguage(
+	preferred string,
+	available map[string]bool,
+) (string, bool) {
+	preferred = normalizeLang(preferred)
+	if preferred == "" {
+		return "", false
+	}
+
+	// 1. Exakte Sprache, beispielsweise de-AT.
+	if available[preferred] {
+		return preferred, true
+	}
+
+	base := languageBase(preferred)
+	defaultLocale := defaultLocaleByBase[base]
+
+	// Ein alter Konfigurationswert "de" wird zu "de-DE".
+	if preferred == base &&
+		defaultLocale != "" &&
+		available[defaultLocale] {
+		return defaultLocale, true
+	}
+
+	// Region fehlt: de-CH -> de.json, falls vorhanden.
+	if preferred != base && available[base] {
+		return base, true
+	}
+
+	// Danach Standardregion: de-CH -> de-DE.
+	if defaultLocale != "" && available[defaultLocale] {
+		return defaultLocale, true
+	}
+
+	// Letzter Fallback innerhalb derselben Sprachfamilie.
+	var family []string
+
+	for code := range available {
+		if languageBase(code) == base {
+			family = append(family, code)
+		}
+	}
+
+	sort.Strings(family)
+
+	if len(family) > 0 {
+		return family[0], true
+	}
+
+	return "", false
 }
 
 func detectLanguage(langDir, preferred string) string {
 	langs, err := getAvailableLanguages(langDir)
 	if err != nil {
-		fmt.Printf("[WARN] Konnte Sprachdateien nicht lesen: %v\n", err)
+		fmt.Printf(
+			"[WARN] Konnte Sprachdateien nicht lesen: %v\n",
+			err,
+		)
 		return "en"
 	}
 
-	preferred = normalizeLang(preferred)
-
-	if preferred != "" && langs[preferred] {
-		return preferred
+	if resolved, ok := resolveAvailableLanguage(preferred, langs); ok {
+		return resolved
 	}
 
-	if preferred != "" {
-		fmt.Printf("[WARN] Sprache '%s' nicht gefunden\n", preferred)
+	if strings.TrimSpace(preferred) != "" {
+		fmt.Printf(
+			"[WARN] Sprache '%s' nicht gefunden\n",
+			preferred,
+		)
 	}
 
-	if langs["en"] {
-		return "en"
+	if english, ok := resolveAvailableLanguage("en", langs); ok {
+		return english
 	}
 
-	for l := range langs {
-		return l
+	codes := make([]string, 0, len(langs))
+
+	for code := range langs {
+		codes = append(codes, code)
+	}
+
+	sort.Strings(codes)
+
+	if len(codes) > 0 {
+		return codes[0]
 	}
 
 	return "en"
 }
 
+var defaultLocaleByBase = map[string]string{
+	"de": "de-DE",
+	"en": "en-GB",
+	"fr": "fr-FR",
+	"es": "es-ES",
+	"it": "it-IT",
+	"nl": "nl-NL",
+	"pt": "pt-PT",
+}
+
 var knownLangLabels = map[string]string{
-	"de": "🇩🇪 Deutsch",
-	"en": "🇬🇧 English",
-	"fr": "🇫🇷 Français",
-	"es": "🇪🇸 Español",
-	"it": "🇮🇹 Italiano",
-	"nl": "🇳🇱 Nederlands",
-	"pl": "🇵🇱 Polski",
-	"sv": "🇸🇪 Svenska",
-	"da": "🇩🇰 Dansk",
-	"pt": "🇵🇹 Português",
-	"cs": "🇨🇿 Čeština",
-	"hu": "🇭🇺 Magyar",
-	"ro": "🇷🇴 Română",
-	"tr": "🇹🇷 Türkçe",
-	"ja": "🇯🇵 日本語",
-	"zh": "🇨🇳 中文",
-	"ru": "🇷🇺 Русский",
-	"uk": "🇺🇦 Українська",
-	"fi": "🇫🇮 Suomi",
-	"nb": "🇳🇴 Norsk",
+	"de":    "🇩🇪 Deutsch",
+	"de-DE": "🇩🇪 Deutsch (Deutschland)",
+	"de-AT": "🇦🇹 Deutsch (Österreich)",
+	"de-CH": "🇨🇭 Deutsch (Schweiz)",
+	"en":    "🇬🇧 English",
+	"en-GB": "🇬🇧 English (United Kingdom)",
+	"en-US": "🇺🇸 English (United States)",
+	"fr":    "🇫🇷 Français",
+	"fr-FR": "🇫🇷 Français (France)",
+	"fr-CA": "🇨🇦 Français (Canada)",
+	"fr-CH": "🇨🇭 Français (Suisse)",
+	"es":    "🇪🇸 Español",
+	"es-ES": "🇪🇸 Español (España)",
+	"es-MX": "🇲🇽 Español (México)",
+	"it":    "🇮🇹 Italiano",
+	"it-IT": "🇮🇹 Italiano (Italia)",
+	"nl":    "🇳🇱 Nederlands",
+	"nl-NL": "🇳🇱 Nederlands",
+	"nl-BE": "🇧🇪 Nederlands (België)",
+	"pt":    "🇵🇹 Português",
+	"pt-PT": "🇵🇹 Português (Portugal)",
+	"pt-BR": "🇧🇷 Português (Brasil)",
+	"pl":    "🇵🇱 Polski",
+	"pl-PL": "🇵🇱 Polski",
+	"sv":    "🇸🇪 Svenska",
+	"sv-SE": "🇸🇪 Svenska",
+	"da":    "🇩🇰 Dansk",
+	"da-DK": "🇩🇰 Dansk",
+	"cs":    "🇨🇿 Čeština",
+	"cs-CZ": "🇨🇿 Čeština",
+	"hu":    "🇭🇺 Magyar",
+	"ro":    "🇷🇴 Română",
+	"tr":    "🇹🇷 Türkçe",
+	"ja":    "🇯🇵 日本語",
+	"zh":    "🇨🇳 中文",
+	"ru":    "🇷🇺 Русский",
+	"uk":    "🇺🇦 Українська",
+	"fi":    "🇫🇮 Suomi",
+	"nb":    "🇳🇴 Norsk",
 }
 
 func getLangLabel(code string) string {
+	code = normalizeLang(code)
+
 	if label, ok := knownLangLabels[code]; ok {
 		return label
 	}
-	return strings.ToUpper(code)
+
+	return code
 }
 
 func buildDynamicLangOptions(current string) string {
 	langs, err := getAvailableLanguages(langDir)
+
 	if err != nil || len(langs) == 0 {
-		label := getLangLabel(current)
-		return `<option value="` + current + `" selected>` + label + `</option>`
+		current = normalizeLang(current)
+
+		if current == "" {
+			current = "en"
+		}
+
+		return `<option value="` +
+			esc(current) +
+			`" selected>` +
+			esc(getLangLabel(current)) +
+			`</option>`
+	}
+
+	if resolved, ok := resolveAvailableLanguage(current, langs); ok {
+		current = resolved
+	} else {
+		current = normalizeLang(current)
 	}
 
 	codes := make([]string, 0, len(langs))
+
 	for code := range langs {
 		codes = append(codes, code)
 	}
@@ -155,20 +432,23 @@ func buildDynamicLangOptions(current string) string {
 	sort.Strings(codes)
 
 	var out strings.Builder
+
 	for _, code := range codes {
-		sel := ""
+		selected := ""
+
 		if code == current {
-			sel = ` selected`
+			selected = ` selected`
 		}
-		label := getLangLabel(code)
+
 		out.WriteString(`<option value="`)
-		out.WriteString(code)
+		out.WriteString(esc(code))
 		out.WriteString(`"`)
-		out.WriteString(sel)
+		out.WriteString(selected)
 		out.WriteString(`>`)
-		out.WriteString(label)
+		out.WriteString(esc(getLangLabel(code)))
 		out.WriteString(`</option>`)
 	}
+
 	return out.String()
 }
 
@@ -183,12 +463,11 @@ func expectedTranslationKeys() []string {
 }
 
 func expectedTranslationKeySet() map[string]struct{} {
-	keys := make(map[string]struct{})
+	expected := expectedTranslationKeys()
+	keys := make(map[string]struct{}, len(expected))
 
-	v := reflect.ValueOf(T)
-	typ := v.Type()
-	for i := 0; i < v.NumField(); i++ {
-		keys[toSnakeCase(typ.Field(i).Name)] = struct{}{}
+	for _, key := range expected {
+		keys[key] = struct{}{}
 	}
 
 	return keys

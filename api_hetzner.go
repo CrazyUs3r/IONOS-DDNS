@@ -91,7 +91,7 @@ func hetznerAPIAttempt(
 
 	defer func() {
 		if err := res.Body.Close(); err != nil {
-			debugLog("HTTP", "", fmt.Sprintf(T.ErrBodyClose+": %v", err))
+			debugLog("HTTP", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
 		}
 	}()
 

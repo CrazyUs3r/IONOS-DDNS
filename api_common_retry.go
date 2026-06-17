@@ -18,7 +18,7 @@ func apiWithRetry(
 	attemptFn apiAttemptFunc,
 ) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("%s: %w", T.ErrContextError, err)
+		return nil, fmt.Errorf("%s: %w", phrases().ErrContextError, err)
 	}
 
 	maxRetries := cfg.MaxAPIRetries

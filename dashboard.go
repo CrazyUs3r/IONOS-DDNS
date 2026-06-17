@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -98,7 +99,7 @@ func generateSVGChart(data [24]int) string {
 					%s
 				</div>
 			</div>
-		</div>`, T.RequestHistory, renderMax, renderMax/2, pathData, pathData, tooltipPoints, timeLabels)
+		</div>`, phrases().RequestHistory, renderMax, renderMax/2, pathData, pathData, tooltipPoints, timeLabels)
 }
 
 func generateLatencyChart(data [24]time.Duration) string {
@@ -169,7 +170,7 @@ func generateLatencyChart(data [24]time.Duration) string {
 					%s
 				</div>
 			</div>
-		</div>`, T.LatencyHistory, renderMax, renderMax/2, pathData.String(), pathData.String(), tooltipPoints, timeLabels)
+		</div>`, phrases().LatencyHistory, renderMax, renderMax/2, pathData.String(), pathData.String(), tooltipPoints, timeLabels)
 }
 
 func toInt24(v any) ([24]int, bool) {
@@ -320,21 +321,21 @@ func buildSettingsNotifyEventCheckboxes(current []string) string {
 	}
 
 	events := []struct{ code, label, desc string }{
-		{ActionUpdate, T.NotifyEventUpdateLabel, T.NotifyEventUpdateDesc},
-		{ActionCreate, T.NotifyEventCreateLabel, T.NotifyEventCreateDesc},
-		{ActionCurrent, T.NotifyEventCurrentLabel, T.NotifyEventCurrentDesc},
-		{ActionInfo, T.NotifyEventInfoLabel, T.NotifyEventInfoDesc},
-		{ActionRetry, T.NotifyEventRetryLabel, T.NotifyEventRetryDesc},
-		{ActionError, T.NotifyEventErrorLabel, T.NotifyEventErrorDesc},
-		{ActionStart, T.NotifyEventStartLabel, T.NotifyEventStartDesc},
-		{ActionStop, T.NotifyEventStopLabel, T.NotifyEventStopDesc},
-		{ActionConfig, T.NotifyEventConfigLabel, T.NotifyEventConfigDesc},
-		{ActionZone, T.NotifyEventZoneLabel, T.NotifyEventZoneDesc},
-		{ActionDryRun, T.NotifyEventDryRunLabel, T.NotifyEventDryRunDesc},
-		{ActionCleanup, T.NotifyEventCleanupLabel, T.NotifyEventCleanupDesc},
-		{ActionSkip, T.NotifyEventSkipLabel, T.NotifyEventSkipDesc},
-		{ActionAPI, T.NotifyEventAPILabel, T.NotifyEventAPIDesc},
-		{ActionServer, T.NotifyEventServerLabel, T.NotifyEventServerDesc},
+		{ActionUpdate, phrases().NotifyEventUpdateLabel, phrases().NotifyEventUpdateDesc},
+		{ActionCreate, phrases().NotifyEventCreateLabel, phrases().NotifyEventCreateDesc},
+		{ActionCurrent, phrases().NotifyEventCurrentLabel, phrases().NotifyEventCurrentDesc},
+		{ActionInfo, phrases().NotifyEventInfoLabel, phrases().NotifyEventInfoDesc},
+		{ActionRetry, phrases().NotifyEventRetryLabel, phrases().NotifyEventRetryDesc},
+		{ActionError, phrases().NotifyEventErrorLabel, phrases().NotifyEventErrorDesc},
+		{ActionStart, phrases().NotifyEventStartLabel, phrases().NotifyEventStartDesc},
+		{ActionStop, phrases().NotifyEventStopLabel, phrases().NotifyEventStopDesc},
+		{ActionConfig, phrases().NotifyEventConfigLabel, phrases().NotifyEventConfigDesc},
+		{ActionZone, phrases().NotifyEventZoneLabel, phrases().NotifyEventZoneDesc},
+		{ActionDryRun, phrases().NotifyEventDryRunLabel, phrases().NotifyEventDryRunDesc},
+		{ActionCleanup, phrases().NotifyEventCleanupLabel, phrases().NotifyEventCleanupDesc},
+		{ActionSkip, phrases().NotifyEventSkipLabel, phrases().NotifyEventSkipDesc},
+		{ActionAPI, phrases().NotifyEventAPILabel, phrases().NotifyEventAPIDesc},
+		{ActionServer, phrases().NotifyEventServerLabel, phrases().NotifyEventServerDesc},
 	}
 
 	var out strings.Builder
@@ -363,9 +364,9 @@ func checkedAttr(v bool) string {
 
 func checkboxLabel(v bool) string {
 	if v {
-		return T.SettingsCheckboxActive
+		return phrases().SettingsCheckboxActive
 	}
-	return T.SettingsCheckboxDeactive
+	return phrases().SettingsCheckboxDeactive
 }
 
 func selected(v bool) string {
@@ -376,98 +377,149 @@ func selected(v bool) string {
 }
 
 func buildSettingsSecuritySection() string {
-	return `<div class="s-row s-row-stack s-gap-8"><span class="s-label">` + T.SettingsTriggerToken + `</span><div class="input-with-action"><input type="password" id="s-token" class="s-input" placeholder="` + T.SettingsTokenPlaceholder + `" autocomplete="off"><button type="button" class="input-action-btn" data-click="togglePassword('s-token', this)">👁️</button></div><button class="s-btn" data-click="saveToken()">` + T.SettingsTokenSave + `</button></div>`
+	return `<div class="s-row s-row-stack s-gap-8"><span class="s-label">` + phrases().SettingsTriggerToken + `</span><div class="input-with-action"><input type="password" id="s-token" class="s-input" placeholder="` + phrases().SettingsTokenPlaceholder + `" autocomplete="off"><button type="button" class="input-action-btn" data-click="togglePassword('s-token', this)">👁️</button></div><button class="s-btn" data-click="saveToken()">` + phrases().SettingsTokenSave + `</button></div>`
+}
+
+func buildNetworkInterfaceOptions(selectedName string) string {
+	selectedName = strings.TrimSpace(selectedName)
+
+	var out strings.Builder
+	fmt.Fprintf(&out, `<option value=""%s>%s</option>`, selected(selectedName == ""), html.EscapeString(phrases().SettingsIfacePlaceholder))
+
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		if selectedName != "" {
+			fmt.Fprintf(&out, `<option value="%s" selected>%s</option>`, html.EscapeString(selectedName), html.EscapeString(selectedName))
+		}
+		return out.String()
+	}
+
+	sort.Slice(interfaces, func(i, j int) bool {
+		return strings.ToLower(interfaces[i].Name) < strings.ToLower(interfaces[j].Name)
+	})
+
+	foundSelected := selectedName == ""
+	for _, iface := range interfaces {
+		name := strings.TrimSpace(iface.Name)
+		if name == "" {
+			continue
+		}
+
+		state := "DOWN"
+		if iface.Flags&net.FlagUp != 0 {
+			state = "UP"
+		}
+
+		label := fmt.Sprintf("%s (%s)", name, state)
+		if name == selectedName {
+			foundSelected = true
+		}
+		fmt.Fprintf(&out, `<option value="%s"%s>%s</option>`,
+			html.EscapeString(name),
+			selected(name == selectedName),
+			html.EscapeString(label),
+		)
+	}
+
+	if selectedName != "" && !foundSelected {
+		label := selectedName + " [?]"
+		fmt.Fprintf(&out, `<option value="%s" selected>%s</option>`, html.EscapeString(selectedName), html.EscapeString(label))
+	}
+
+	return out.String()
 }
 
 func buildSettingsSystemSection(c Config) string {
-	return `<div class="s-row"><span class="s-label">` + T.SettingsIPMode + `</span><select id="cfg-ip-mode" class="s-input s-select-auto-sm">` +
+	return `<div class="s-row"><span class="s-label">` + phrases().SettingsIPMode + `</span><select id="cfg-ip-mode" class="s-input s-select-auto-sm">` +
 		buildSettingsIPModeOptions(c.IPMode) +
 		`</select></div>` +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsInterval+`</span><input type="number" id="cfg-interval" class="s-input s-input-sm-right" min="30" max="86400" value="%d"></div>`, c.Interval) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsInterval+`</span><input type="number" id="cfg-interval" class="s-input s-input-sm-right" min="30" max="86400" value="%d"></div>`, c.Interval) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsHealthPort+`</span><input type="text" id="cfg-health-port" class="s-input s-input-sm-right" value="%s"></div>`, html.EscapeString(c.HealthPort)) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsHealthPort+`</span><input type="text" id="cfg-health-port" class="s-input s-input-sm-right" value="%s"></div>`, html.EscapeString(c.HealthPort)) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsIface+` <small class="s-label-hint-inline">`+T.SettingsIfaceHint+`</small></span><input type="text" id="cfg-iface" class="s-input s-input-md" placeholder="`+T.SettingsIfacePlaceholder+`" value="%s"></div>`, html.EscapeString(c.IfaceName)) +
+		`<div class="s-row"><span class="s-label">` + phrases().SettingsIface + ` <small class="s-label-hint-inline">` + phrases().SettingsIfaceHint + `</small></span><select id="cfg-iface" class="s-input s-input-md">` +
+		buildNetworkInterfaceOptions(c.IfaceName) +
+		`</select></div>` +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsDNS+` <small class="s-label-hint-inline">(`+T.SettingsDNSHint+`)</small></span><input type="text" id="cfg-dns" class="s-input s-input-lg" placeholder="1.1.1.1, 8.8.8.8:53" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsDNS+` <small class="s-label-hint-inline">(`+phrases().SettingsDNSHint+`)</small></span><input type="text" id="cfg-dns" class="s-input s-input-lg" placeholder="1.1.1.1, 8.8.8.8:53" value="%s"></div>`,
 			html.EscapeString(strings.Join(c.DNSServers, ", ")),
 		) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsMaxLog+`</span><input type="number" id="cfg-max-log" class="s-input s-input-sm-right" min="100" max="50000" value="%d"></div>`, c.MaxLogLines) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMaxLog+`</span><input type="number" id="cfg-max-log" class="s-input s-input-sm-right" min="100" max="50000" value="%d"></div>`, c.MaxLogLines) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsMaxRetries+`</span><input type="number" id="cfg-max-retries" class="s-input s-input-sm-right" min="0" max="20" value="%d"></div>`, c.MaxAPIRetries) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMaxRetries+`</span><input type="number" id="cfg-max-retries" class="s-input s-input-sm-right" min="0" max="20" value="%d"></div>`, c.MaxAPIRetries) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsMaxConcurrent+`</span><input type="number" id="cfg-max-concurrent" class="s-input s-input-sm-right" min="1" max="20" value="%d"></div>`, c.MaxConcurrent) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMaxConcurrent+`</span><input type="number" id="cfg-max-concurrent" class="s-input s-input-sm-right" min="1" max="20" value="%d"></div>`, c.MaxConcurrent) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsHourlyLimit+`</span><input type="number" id="cfg-hourly-limit" class="s-input s-input-sm-right" min="100" max="100000" value="%d"></div>`, c.HourlyRateLimit) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsHourlyLimit+`</span><input type="number" id="cfg-hourly-limit" class="s-input s-input-sm-right" min="100" max="100000" value="%d"></div>`, c.HourlyRateLimit) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsIPv4Endpoints+`<small class="s-label-hint-block">(`+T.SettingsDNSHint+`)</small></span><input type="text" id="cfg-ipv4_endpoints" class="s-input s-input-lg" placeholder="https://4.ident.me/, https://4.tnedi.me/" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsIPv4Endpoints+`<small class="s-label-hint-block">(`+phrases().SettingsDNSHint+`)</small></span><input type="text" id="cfg-ipv4_endpoints" class="s-input s-input-lg" placeholder="https://4.ident.me/, https://4.tnedi.me/" value="%s"></div>`,
 			html.EscapeString(strings.Join(c.IPv4Endpoints, ", ")),
 		) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsIPv6Endpoints+`<small class="s-label-hint-block">(`+T.SettingsDNSHint+`)</small></span><input type="text" id="cfg-ipv6_endpoints" class="s-input s-input-lg" placeholder="https://6.ident.me/, https://6.tnedi.me/" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsIPv6Endpoints+`<small class="s-label-hint-block">(`+phrases().SettingsDNSHint+`)</small></span><input type="text" id="cfg-ipv6_endpoints" class="s-input s-input-lg" placeholder="https://6.ident.me/, https://6.tnedi.me/" value="%s"></div>`,
 			html.EscapeString(strings.Join(c.IPv6Endpoints, ", ")),
 		) +
 
-		`<div class="s-row"><span class="s-label">` + T.SettingsLanguage + `</span><select id="cfg-lang" class="s-input s-select-auto-md">` +
+		`<div class="s-row"><span class="s-label">` + phrases().SettingsLanguage + `</span><select id="cfg-lang" class="s-input s-select-auto-md">` +
 		buildDynamicLangOptions(c.Lang) +
 		`</select></div>` +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsDryRun+`<small class="s-label-hint-block">`+T.SettingsDryRunHint+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-dry-run" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
-			T.SettingsCheckboxActive, T.SettingsCheckboxDeactive,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsDryRun+`<small class="s-label-hint-block">`+phrases().SettingsDryRunHint+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-dry-run" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
+			phrases().SettingsCheckboxActive, phrases().SettingsCheckboxDeactive,
 			checkedAttr(c.DryRun),
 			checkboxLabel(c.DryRun),
 		) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">Debug-Modus <small class="s-label-hint-block">`+T.SettingsDebugVerboseHint+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-debug" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
-			T.SettingsCheckboxActive, T.SettingsCheckboxDeactive,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Debug-Modus <small class="s-label-hint-block">`+phrases().SettingsDebugVerboseHint+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-debug" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
+			phrases().SettingsCheckboxActive, phrases().SettingsCheckboxDeactive,
 			checkedAttr(c.DebugEnabled),
 			checkboxLabel(c.DebugEnabled),
 		) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">Debug HTTP Raw <small class="s-label-hint-block">`+T.SettingsDebugHTTPHint+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-debug-http" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
-			T.SettingsCheckboxActive, T.SettingsCheckboxDeactive,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Debug HTTP Raw <small class="s-label-hint-block">`+phrases().SettingsDebugHTTPHint+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-debug-http" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
+			phrases().SettingsCheckboxActive, phrases().SettingsCheckboxDeactive,
 			checkedAttr(c.DebugHTTPRaw),
 			checkboxLabel(c.DebugHTTPRaw),
 		)
 }
 
 func buildSettingsDomainsSection() string {
-	addDomainForm := `<div class="add-domain-box"><input type="text" id="new-domain-fqdn" class="s-input mb-8" placeholder="` + T.SettingsDomainPlaceholder + `"><input type="number" id="new-domain-ttl" class="s-input mb-8" placeholder="TTL (z. B. 60)" min="1" step="1"><select id="new-domain-ip-mode" class="s-input mb-8"><option value="">` + T.SettingsIPMode + ` (` + T.SettingsIPMode + ` global)</option><option value="BOTH">BOTH – IPv4 + IPv6</option><option value="IPV4">IPV4 – nur IPv4</option><option value="IPV6">IPV6 – nur IPv6</option></select><select id="new-domain-provider" class="s-input mb-8" data-change="toggleProviderFields()"><option value="IONOS">IONOS</option><option value="CLOUDFLARE">Cloudflare</option><option value="IPV64">IPv64</option><option value="HETZNER">Hetzner DNS</option><option value="HETZNERCLOUD">Hetzner Cloud DNS</option></select><div id="fields-ionos"><input type="text" id="new-ionos-prefix" class="s-input mb-8" placeholder="` + T.SettingsAPIPrefix + `"><div class="input-with-action mt-8"><input type="password" id="new-ionos-secret" class="s-input" placeholder="` + T.SettingsAPISecret + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-ionos-secret', this)">👁️</button></div></div><div id="fields-cloudflare" class="is-hidden"><input type="text" id="new-cf-token" class="s-input mb-8" placeholder="` + T.SettingsCFTokenHint + `"><div class="center-note">` + T.SettingsCFOr + `</div><input type="text" id="new-cf-email" class="s-input mb-8" placeholder="` + T.SettingsCFEmail + `"><div class="input-with-action mt-8"><input type="password" id="new-cf-secret" class="s-input" placeholder="` + T.SettingsCFGlobalKey + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-cf-secret', this)">👁️</button></div><label class="inline-check"><input type="checkbox" id="new-cf-proxied"> ` + T.SettingsCFProxyLabel +
-		`</label></div><div id="fields-ipv64" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-ipv64-token" class="s-input" placeholder="` + T.SettingsIPv64Token + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-ipv64-token', this)">👁️</button></div></div><div id="fields-hetzner" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-hetzner-token" class="s-input" placeholder="Hetzner DNS API Token"><button type="button" class="input-action-btn" data-click="togglePassword('new-hetzner-token', this)">👁️</button></div></div><div id="fields-hetznercloud" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-hcloud-token" class="s-input" placeholder="Hetzner Cloud/Console Token"><button type="button" class="input-action-btn" data-click="togglePassword('new-hcloud-token', this)">👁️</button></div></div><div class="s-btn-row"><button class="s-btn s-btn-success-full" data-click="addDomainToList()">` +
-		T.SettingsAddBtn +
+	addDomainForm := `<div class="add-domain-box"><input type="text" id="new-domain-fqdn" class="s-input mb-8" placeholder="` + phrases().SettingsDomainPlaceholder + `"><input type="number" id="new-domain-ttl" class="s-input mb-8" placeholder="TTL (z. B. 60)" min="1" step="1"><select id="new-domain-ip-mode" class="s-input mb-8"><option value="">` + phrases().SettingsIPMode + ` (` + phrases().SettingsIPMode + ` global)</option><option value="BOTH">BOTH – IPv4 + IPv6</option><option value="IPV4">IPV4 – nur IPv4</option><option value="IPV6">IPV6 – nur IPv6</option></select><select id="new-domain-provider" class="s-input mb-8" data-change="toggleProviderFields()"><option value="IONOS">IONOS</option><option value="CLOUDFLARE">Cloudflare</option><option value="IPV64">IPv64</option><option value="HETZNER">Hetzner DNS</option><option value="HETZNERCLOUD">Hetzner Cloud DNS</option></select><div id="fields-ionos"><input type="text" id="new-ionos-prefix" class="s-input mb-8" placeholder="` + phrases().SettingsAPIPrefix + `"><div class="input-with-action mt-8"><input type="password" id="new-ionos-secret" class="s-input" placeholder="` + phrases().SettingsAPISecret + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-ionos-secret', this)">👁️</button></div></div><div id="fields-cloudflare" class="is-hidden"><input type="text" id="new-cf-token" class="s-input mb-8" placeholder="` + phrases().SettingsCFTokenHint + `"><div class="center-note">` + phrases().SettingsCFOr + `</div><input type="text" id="new-cf-email" class="s-input mb-8" placeholder="` + phrases().SettingsCFEmail + `"><div class="input-with-action mt-8"><input type="password" id="new-cf-secret" class="s-input" placeholder="` + phrases().SettingsCFGlobalKey + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-cf-secret', this)">👁️</button></div><label class="inline-check"><input type="checkbox" id="new-cf-proxied"> ` + phrases().SettingsCFProxyLabel +
+		`</label></div><div id="fields-ipv64" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-ipv64-token" class="s-input" placeholder="` + phrases().SettingsIPv64Token + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-ipv64-token', this)">👁️</button></div></div><div id="fields-hetzner" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-hetzner-token" class="s-input" placeholder="Hetzner DNS API Token"><button type="button" class="input-action-btn" data-click="togglePassword('new-hetzner-token', this)">👁️</button></div></div><div id="fields-hetznercloud" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-hcloud-token" class="s-input" placeholder="Hetzner Cloud/Console Token"><button type="button" class="input-action-btn" data-click="togglePassword('new-hcloud-token', this)">👁️</button></div></div><div class="s-btn-row"><button class="s-btn s-btn-success-full" data-click="addDomainToList()">` +
+		phrases().SettingsAddBtn +
 		`</button><button type="button" class="s-btn s-btn--cancel" data-click="cancelEdit()">` +
-		T.SettingsCancelBtn +
+		phrases().SettingsCancelBtn +
 		`</button></div>`
 
 	return `<div id="settings-domain-list" class="settings-domain-list"></div>` +
-		buildSettingsSubSection("add-domain-section", T.SettingsAddDomain, addDomainForm)
+		buildSettingsSubSection("add-domain-section", phrases().SettingsAddDomain, addDomainForm)
 }
 
 func buildSettingsNotifySection(c Config) string {
-	notifyEventsSection := `<div class="s-row s-row-stack s-gap-6"><span class="s-label">` + T.SettingsNotifyEvents + `</span>` +
+	notifyEventsSection := `<div class="s-row s-row-stack s-gap-6"><span class="s-label">` + phrases().SettingsNotifyEvents + `</span>` +
 		buildSettingsNotifyEventCheckboxes(c.Notifications.Events) +
 		`</div>`
 
 	telegramSection := `<div class="notify-box notify-telegram">` +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsTGChatID+`</span><input type="text" id="cfg-tg-chat-id" class="s-input s-input-lg" placeholder="-100xxxxxxxxx" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsTGChatID+`</span><input type="text" id="cfg-tg-chat-id" class="s-input s-input-lg" placeholder="-100xxxxxxxxx" value="%s"></div>`,
 			html.EscapeString(c.Notifications.Telegram.ChatID)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsTGToken+`</span><div class="input-with-action"><input type="password" id="cfg-tg-token" class="s-input s-input-lg" placeholder="`+T.SettingsTokenUnchanged+`" value="%s"><button type="button" class="input-action-btn" data-click="togglePassword('cfg-tg-token', this)">👁️</button></div></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsTGToken+`</span><div class="input-with-action"><input type="password" id="cfg-tg-token" class="s-input s-input-lg" placeholder="`+phrases().SettingsTokenUnchanged+`" value="%s"><button type="button" class="input-action-btn" data-click="togglePassword('cfg-tg-token', this)">👁️</button></div></div>`,
 			html.EscapeString(c.Notifications.Telegram.Token)) +
 		`</div>`
 
 	gotifySection := `<div class="notify-box notify-gotify">` +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsGotifyURL+`</span><input type="text" id="cfg-gotify-url" class="s-input s-input-lg" placeholder="https://gotify.example.com" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsGotifyURL+`</span><input type="text" id="cfg-gotify-url" class="s-input s-input-lg" placeholder="https://gotify.example.com" value="%s"></div>`,
 			html.EscapeString(c.Notifications.Gotify.URL)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsGotifyToken+`</span><div class="input-with-action"><input type="password" id="cfg-gotify-token" class="s-input s-input-lg" placeholder="`+T.SettingsTokenUnchanged+`" value="%s"><button type="button" class="input-action-btn" data-click="togglePassword('cfg-gotify-token', this)">👁️</button></div></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsGotifyToken+`</span><div class="input-with-action"><input type="password" id="cfg-gotify-token" class="s-input s-input-lg" placeholder="`+phrases().SettingsTokenUnchanged+`" value="%s"><button type="button" class="input-action-btn" data-click="togglePassword('cfg-gotify-token', this)">👁️</button></div></div>`,
 			html.EscapeString(c.Notifications.Gotify.Token)) +
 		`</div>`
 
 	webhookSection := `<div class="notify-box notify-webhook">` +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">URL</span><input type="text" id="cfg-webhook-url" class="s-input s-input-lg" placeholder="https://your-endpoint.com/api" value="%s"></div>`,
 			html.EscapeString(c.Notifications.Webhook.URL)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">Secret <small class="s-label-hint-inline">(opt.)</small></span><div class="input-with-action"><input type="password" id="cfg-webhook-secret" class="s-input s-input-lg" placeholder="`+T.SettingsTokenUnchanged+`" value="%s"><button type="button" class="input-action-btn" data-click="togglePassword('cfg-webhook-secret', this)">👁️</button></div></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Secret <small class="s-label-hint-inline">(opt.)</small></span><div class="input-with-action"><input type="password" id="cfg-webhook-secret" class="s-input s-input-lg" placeholder="`+phrases().SettingsTokenUnchanged+`" value="%s"><button type="button" class="input-action-btn" data-click="togglePassword('cfg-webhook-secret', this)">👁️</button></div></div>`,
 			html.EscapeString(c.Notifications.Webhook.Secret)) +
 		`</div>`
 
@@ -478,21 +530,21 @@ func buildSettingsNotifySection(c Config) string {
 			html.EscapeString(c.Notifications.MQTTConfig.ClientID)) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">Username</span><input type="text" id="cfg-mqtt-username" class="s-input s-input-lg" placeholder="optional" value="%s"></div>`,
 			html.EscapeString(c.Notifications.MQTTConfig.Username)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">Secret <small class="s-label-hint-inline">Password</small></span><div class="input-with-action"><input type="password" id="cfg-mqtt-password" class="s-input s-input-lg" placeholder="`+T.SettingsTokenUnchanged+`" value="%s"><button type="button" class="input-action-btn" data-click="togglePassword('cfg-mqtt-password', this)">👁️</button></div></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">Secret <small class="s-label-hint-inline">Password</small></span><div class="input-with-action"><input type="password" id="cfg-mqtt-password" class="s-input s-input-lg" placeholder="`+phrases().SettingsTokenUnchanged+`" value="%s"><button type="button" class="input-action-btn" data-click="togglePassword('cfg-mqtt-password', this)">👁️</button></div></div>`,
 			html.EscapeString(c.Notifications.MQTTConfig.Password)) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">Topic</span><input type="text" id="cfg-mqtt-topic" class="s-input s-input-lg" placeholder="dyndns/ip" value="%s"></div>`,
 			html.EscapeString(c.Notifications.MQTTConfig.Topic)) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">QoS</span><input type="number" min="0" max="2" id="cfg-mqtt-qos" class="s-input s-input-sm" value="%d"></div>`,
 			c.Notifications.MQTTConfig.QoS) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">Retain</span><label class="s-checkbox-container"><input type="checkbox" id="cfg-mqtt-retain" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
-			T.SettingsCheckboxActive,
-			T.SettingsCheckboxDeactive,
+			phrases().SettingsCheckboxActive,
+			phrases().SettingsCheckboxDeactive,
 			checkedAttr(c.Notifications.MQTTConfig.Retain),
 			checkboxLabel(c.Notifications.MQTTConfig.Retain),
 		) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">Auto Discovery <small class="s-label-hint-inline">Home Assistant</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-mqtt-discovery" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
-			T.SettingsCheckboxActive,
-			T.SettingsCheckboxDeactive,
+			phrases().SettingsCheckboxActive,
+			phrases().SettingsCheckboxDeactive,
 			checkedAttr(c.Notifications.MQTTConfig.Discovery),
 			checkboxLabel(c.Notifications.MQTTConfig.Discovery),
 		) +
@@ -522,23 +574,23 @@ func buildSettingsNotifySection(c Config) string {
 		) +
 		`</div>`
 
-	testSection := `<div class="notify-test-box"><p>` + T.NotifyTestDesc + `</p><button class="s-btn notify-test-btn" id="notify-test-btn" data-click="sendNotifyTest()">` +
-		T.NotifyBtnTest +
+	testSection := `<div class="notify-test-box"><p>` + phrases().NotifyTestDesc + `</p><button class="s-btn notify-test-btn" id="notify-test-btn" data-click="sendNotifyTest()">` +
+		phrases().NotifyBtnTest +
 		`</button><div id="notify-test-result" class="notify-test-result"></div>
 		</div>`
 
-	return fmt.Sprintf(`<div class="s-row"><span class="s-label">`+T.SettingsNotifyEnabled+`</span><label class="s-checkbox-container"><input type="checkbox" id="cfg-notify-enabled" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
-		T.SettingsCheckboxActive, T.SettingsCheckboxDeactive,
+	return fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsNotifyEnabled+`</span><label class="s-checkbox-container"><input type="checkbox" id="cfg-notify-enabled" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
+		phrases().SettingsCheckboxActive, phrases().SettingsCheckboxDeactive,
 		checkedAttr(c.Notifications.Enabled),
 		checkboxLabel(c.Notifications.Enabled),
 	) +
 
-		buildSettingsSubSection("", T.SettingsNotifyEvents, notifyEventsSection) +
-		buildSettingsSubSection("", T.SettingsTelegramHeading, telegramSection) +
-		buildSettingsSubSection("", T.SettingsGotifyHeading, gotifySection) +
-		buildSettingsSubSection("", T.SettingsWebhookHeading, webhookSection) +
-		buildSettingsSubSection("", T.SettingsMqttHeading, mqttSection) +
-		buildSettingsSubSection("", T.SettingsEmailHeading, emailSection) +
+		buildSettingsSubSection("", phrases().SettingsNotifyEvents, notifyEventsSection) +
+		buildSettingsSubSection("", phrases().SettingsTelegramHeading, telegramSection) +
+		buildSettingsSubSection("", phrases().SettingsGotifyHeading, gotifySection) +
+		buildSettingsSubSection("", phrases().SettingsWebhookHeading, webhookSection) +
+		buildSettingsSubSection("", phrases().SettingsMqttHeading, mqttSection) +
+		buildSettingsSubSection("", phrases().SettingsEmailHeading, emailSection) +
 		testSection
 }
 
@@ -683,125 +735,125 @@ func currentSystemConfig() safeSystemConfig {
 
 func dashboardI18NJSON() string {
 	m := map[string]string{
-		"theme":                         t(T.ThemeLabelJS, "Theme"),
-		"no_ip_to_copy":                 t(T.NoIPToCopyJS, "❌ No IP to copy"),
-		"copied":                        t(T.CopiedJS, "✓ Copied: "),
-		"copy_failed":                   t(T.CopyFailedJS, "❌ Copy failed"),
-		"copy_error":                    t(T.CopyFailedJS, "❌ Copy failed"),
-		"update_starting":               t(T.UpdateStartingJS, "⏳ Starting update..."),
-		"update_started":                t(T.UpdateStartedJS, "✅ Update started"),
-		"connection_error":              t(T.ConnectionErrorJS, "❌ Connection error"),
-		"export_started":                t(T.ExportStartedJS, "✓ Export started"),
-		"export_failed":                 t(T.ExportFailedJS, "Export failed"),
-		"fqdn_missing":                  t(T.FQDNMissingJS, "FQDN missing"),
-		"domain_updated":                t(T.DomainUpdatedJS, "✓ {domain} updated"),
-		"delete_domain_confirm":         t(T.DeleteDomainConfirmJS, `Domain "{domain}" remove from status?`),
-		"domain_removed":                t(T.DomainRemovedJS, "🗑️ {domain} removed"),
-		"delete_failed":                 t(T.DeleteFailedJS, "Deletion failed"),
-		"remove_btn":                    t(T.RemoveBtn, "🗑️ Remove"),
-		"save_config_confirm":           t(T.SaveConfigConfirmJS, "Save all settings to config.json?"),
-		"saved_reload":                  t(T.SavedReloadJS, "✅ Saved! Reloading..."),
-		"error_prefix":                  t(T.ErrorPrefixJS, "❌ Error: "),
-		"loading_saving":                t(T.LoadingSavingJS, "⏳ Saving configuration..."),
-		"loading_slow":                  t(T.LoadingSlowJS, "⚠️ Taking longer than expected..."),
-		"reset_metrics_confirm":         t(T.ResetMetricsConfirmJS, "Clear all metrics?"),
-		"metrics_reset_ok":              t(T.MetricsResetOKJS, "✅ Metrics reset"),
-		"metrics_reset_failed":          t(T.MetricsResetFailedJS, "❌ Reset failed"),
-		"token_saved":                   t(T.TokenSavedJS, "✅ Token saved"),
-		"token_deleted":                 t(T.TokenDeletedJS, "🗑️ Token deleted"),
-		"token_saved_masked":            t(T.TokenSavedMaskedJS, "●●●●●● (saved)"),
-		"token_enter":                   t(T.TokenEnterJS, "Enter token..."),
-		"cleared":                       t(T.ClearedJS, "Cleared."),
-		"no_log_entries":                t(T.NoLogEntries, "No log entries visible"),
-		"user_load_failed":              t(T.UserLoadFailedJS, "Failed to load"),
-		"no_users_found":                t(T.NoUsersFoundJS, "No users found."),
-		"user_created":                  t(T.UserCreatedJS, "User created"),
-		"user_deleted":                  t(T.UserDeletedJS, "User deleted"),
-		"role_changed":                  t(T.RoleChangedJS, "Role changed"),
-		"role_admin":                    t(T.RoleAdminJS, "Admin"),
-		"role_editor":                   t(T.RoleEditorJS, "Editor"),
-		"role_viewer":                   t(T.RoleViewerJS, "Viewer"),
-		"generic_error":                 t(T.GenericErrorJS, "Error"),
-		"auth_user_min":                 t(T.AuthUserMinJS, "Username min. 3 characters"),
-		"auth_pass_min":                 t(T.AuthPassMinJS, "Password min. 8 characters"),
-		"edit_domain_cancelled":         t(T.EditDomainCancelledJS, "Edit cancelled"),
-		"edit_domain_saved":             t(T.EditDomainSavedJS, "Changes saved"),
-		"settings_add_btn":              t(T.SettingsAddBtnJS, "➕ Add to list"),
-		"notify_test_success":           t(T.NotifyTestSuccess, "✅ Test message sent successfully!"),
-		"notify_test_unauthorized":      t(T.NotifyTestUnauthorized, "❌ Unauthorized (check token)"),
-		"notify_test_error":             t(T.NotifyTestError, "❌ Error while sending"),
-		"notify_test_conn_error":        t(T.NotifyTestConnError, "❌ Connection error to server"),
-		"notify_btn_sending":            t(T.NotifyBtnSending, "⏳ Sende..."),
-		"notify_btn_test":               t(T.NotifyBtnTest, "🧪 Test-Nachricht senden"),
-		"notify_no_notifier":            t(T.NotifyNoNotifier, "⚠️ Keine aktiven Notifier konfiguriert."),
-		"notify_stat_success":           t(T.NotifyStatSuccess, "erfolgreich"),
-		"nav_dashboard":                 t(T.NavDashboardJS, "🌐 Dashboard"),
-		"nav_domains":                   t(T.NavDomainsJS, "🌐 Domains"),
-		"nav_metrics":                   t(T.NavMetricsJS, "📊 Metrics"),
-		"nav_logs":                      t(T.NavLogsJS, "🧾 Logs"),
-		"nav_debug":                     t(T.NavDebugJS, "🐞 Debug"),
-		"nav_settings":                  t(T.NavSettingsJS, "⚙️ Settings"),
-		"nav_users":                     t(T.SettingsUserManagement, "👥 User Management"),
-		"nav_diagnose":                  t(T.NavDiagnoseJS, "🩺 Diagnose"),
-		"nav_backup":                    t(T.NavBackupJS, "💾 Backup & Restore"),
-		"diagnose_title":                t(T.DiagnoseTitle, "Diagnose / Health Center"),
-		"diagnose_loading":              t(T.DiagnoseLoading, "Loading diagnosis..."),
-		"diagnose_load_failed":          t(T.DiagnoseLoadFailed, "Diagnosis failed"),
-		"diagnose_connection_failed":    t(T.DiagnoseConnectionFailed, "Connection failed"),
-		"diagnose_status_healthy":       t(T.DiagnoseStatusHealthy, "Healthy"),
-		"diagnose_status_degraded":      t(T.DiagnoseStatusDegraded, "Degraded"),
-		"diagnose_status_starting":      t(T.DiagnoseStatusStarting, "Starting"),
-		"diagnose_status_unhealthy":     t(T.DiagnoseStatusUnhealthy, "Unhealthy"),
-		"diagnose_system_title":         t(T.DiagnoseSystemTitle, "System"),
-		"diagnose_ip_dns_title":         t(T.DiagnoseIPDNSTitle, "IP / DNS"),
-		"diagnose_api_metrics_title":    t(T.DiagnoseAPIMetricsTitle, "API metrics"),
-		"diagnose_config_title":         t(T.DiagnoseConfigTitle, "Config"),
-		"diagnose_provider_title":       t(T.DiagnoseProviderTitle, "Provider"),
-		"diagnose_notifier_title":       t(T.DiagnoseNotifierTitle, "Notifier"),
-		"diagnose_warnings_title":       t(T.DiagnoseWarningsTitle, "Warnings"),
-		"diagnose_files_title":          t(T.DiagnoseFilesTitle, "Files"),
-		"diagnose_uptime":               t(T.DiagnoseUptime, "Uptime"),
-		"diagnose_scheduler_ran":        t(T.DiagnoseSchedulerRan, "Scheduler ran"),
-		"diagnose_last_run_ok":          t(T.DiagnoseLastRunOK, "Last run OK"),
-		"diagnose_update_running":       t(T.DiagnoseUpdateRunning, "Update running"),
-		"diagnose_active_updates":       t(T.DiagnoseActiveUpdates, "Active updates"),
-		"diagnose_last_ipv4":            t(T.DiagnoseLastIPv4, "Last IPv4"),
-		"diagnose_last_ipv6":            t(T.DiagnoseLastIPv6, "Last IPv6"),
-		"diagnose_last_domain_change":   t(T.DiagnoseLastDomainChange, "Last domain change"),
-		"diagnose_configured_domains":   t(T.DiagnoseConfiguredDomains, "Domains in status"),
-		"diagnose_total_requests":       t(T.DiagnoseTotalRequests, "Total requests"),
-		"diagnose_success_rate":         t(T.DiagnoseSuccessRate, "Success rate"),
-		"diagnose_average_latency":      t(T.DiagnoseAverageLatency, "Average latency"),
-		"diagnose_log_errors":           t(T.DiagnoseLogErrors, "Log errors"),
-		"diagnose_log_warnings":         t(T.DiagnoseLogWarnings, "Log warnings"),
-		"diagnose_ip_mode":              t(T.DiagnoseIPMode, "IP mode"),
-		"diagnose_interval":             t(T.DiagnoseInterval, "Interval"),
-		"diagnose_ipv4_endpoints":       t(T.DiagnoseIPv4Endpoints, "IPv4 endpoints"),
-		"diagnose_ipv6_endpoints":       t(T.DiagnoseIPv6Endpoints, "IPv6 endpoints"),
-		"diagnose_no_providers":         t(T.DiagnoseNoProviders, "No providers found"),
-		"diagnose_no_notifiers":         t(T.DiagnoseNoNotifiers, "No notifiers"),
-		"diagnose_no_config_warnings":   t(T.DiagnoseNoConfigWarnings, "No config warnings"),
-		"diagnose_file_missing":         t(T.DiagnoseFileMissing, "missing"),
-		"diagnose_bytes":                t(T.DiagnoseBytes, "bytes"),
-		"diagnose_yes":                  t(T.DiagnoseYes, "Yes"),
-		"diagnose_no":                   t(T.DiagnoseNo, "No"),
-		"backup_download_success":       t(T.BackupDownloadSuccess, "✅ Backup downloaded"),
-		"backup_download_failed":        t(T.BackupDownloadFailed, "❌ Backup failed"),
-		"backup_select_file":            t(T.BackupSelectFile, "❌ Please select a backup file"),
-		"backup_select_area":            t(T.BackupSelectArea, "❌ Please select at least one area"),
-		"backup_confirm_title":          t(T.BackupConfirmTitle, "Really restore backup?"),
-		"backup_confirm_config":         t(T.BackupConfirmConfig, "• Config will be overwritten"),
-		"backup_confirm_status":         t(T.BackupConfirmStatus, "• Domain status will be overwritten"),
-		"backup_confirm_users":          t(T.BackupConfirmUsers, "• Users will be overwritten"),
-		"backup_confirm_hint":           t(T.BackupConfirmHint, "This action may replace existing data."),
-		"backup_restore_running":        t(T.BackupRestoreRunning, "⏳ Restore running..."),
-		"backup_restore_success_format": t(T.BackupRestoreSuccessFormat, "✅ Restored: {restored}"),
-		"backup_restore_failed":         t(T.BackupRestoreFailed, "❌ Restore failed"),
-		"nav_totp":                      t(T.NavTotpJS, "🔐 2FA / Account Security"),
-		"totp_settings_load_failed":     t(T.TotpSettingsLoadFailedJS, "2FA settings could not be loaded"),
-		"totp_action_failed":            t(T.TotpActionFailedJS, "2FA action failed"),
-		"totp_badge_active":             t(T.TotpBadgeActiveJS, "🔐 2FA active"),
-		"totp_badge_inactive":           t(T.TotpBadgeInactiveJS, "🔓 2FA inactive"),
+		"theme":                         t(phrases().ThemeLabelJS, "Theme"),
+		"no_ip_to_copy":                 t(phrases().NoIPToCopyJS, "❌ No IP to copy"),
+		"copied":                        t(phrases().CopiedJS, "✓ Copied: "),
+		"copy_failed":                   t(phrases().CopyFailedJS, "❌ Copy failed"),
+		"copy_error":                    t(phrases().CopyFailedJS, "❌ Copy failed"),
+		"update_starting":               t(phrases().UpdateStartingJS, "⏳ Starting update..."),
+		"update_started":                t(phrases().UpdateStartedJS, "✅ Update started"),
+		"connection_error":              t(phrases().ConnectionErrorJS, "❌ Connection error"),
+		"export_started":                t(phrases().ExportStartedJS, "✓ Export started"),
+		"export_failed":                 t(phrases().ExportFailedJS, "Export failed"),
+		"fqdn_missing":                  t(phrases().FQDNMissingJS, "FQDN missing"),
+		"domain_updated":                t(phrases().DomainUpdatedJS, "✓ {domain} updated"),
+		"delete_domain_confirm":         t(phrases().DeleteDomainConfirmJS, `Domain "{domain}" remove from status?`),
+		"domain_removed":                t(phrases().DomainRemovedJS, "🗑️ {domain} removed"),
+		"delete_failed":                 t(phrases().DeleteFailedJS, "Deletion failed"),
+		"remove_btn":                    t(phrases().RemoveBtn, "🗑️ Remove"),
+		"save_config_confirm":           t(phrases().SaveConfigConfirmJS, "Save all settings to config.json?"),
+		"saved_reload":                  t(phrases().SavedReloadJS, "✅ Saved! Reloading..."),
+		"error_prefix":                  t(phrases().ErrorPrefixJS, "❌ Error: "),
+		"loading_saving":                t(phrases().LoadingSavingJS, "⏳ Saving configuration..."),
+		"loading_slow":                  t(phrases().LoadingSlowJS, "⚠️ Taking longer than expected..."),
+		"reset_metrics_confirm":         t(phrases().ResetMetricsConfirmJS, "Clear all metrics?"),
+		"metrics_reset_ok":              t(phrases().MetricsResetOKJS, "✅ Metrics reset"),
+		"metrics_reset_failed":          t(phrases().MetricsResetFailedJS, "❌ Reset failed"),
+		"token_saved":                   t(phrases().TokenSavedJS, "✅ Token saved"),
+		"token_deleted":                 t(phrases().TokenDeletedJS, "🗑️ Token deleted"),
+		"token_saved_masked":            t(phrases().TokenSavedMaskedJS, "●●●●●● (saved)"),
+		"token_enter":                   t(phrases().TokenEnterJS, "Enter token..."),
+		"cleared":                       t(phrases().ClearedJS, "Cleared."),
+		"no_log_entries":                t(phrases().NoLogEntries, "No log entries visible"),
+		"user_load_failed":              t(phrases().UserLoadFailedJS, "Failed to load"),
+		"no_users_found":                t(phrases().NoUsersFoundJS, "No users found."),
+		"user_created":                  t(phrases().UserCreatedJS, "User created"),
+		"user_deleted":                  t(phrases().UserDeletedJS, "User deleted"),
+		"role_changed":                  t(phrases().RoleChangedJS, "Role changed"),
+		"role_admin":                    t(phrases().RoleAdminJS, "Admin"),
+		"role_editor":                   t(phrases().RoleEditorJS, "Editor"),
+		"role_viewer":                   t(phrases().RoleViewerJS, "Viewer"),
+		"generic_error":                 t(phrases().GenericErrorJS, "Error"),
+		"auth_user_min":                 t(phrases().AuthUserMinJS, "Username min. 3 characters"),
+		"auth_pass_min":                 t(phrases().AuthPassMinJS, "Password min. 8 characters"),
+		"edit_domain_cancelled":         t(phrases().EditDomainCancelledJS, "Edit cancelled"),
+		"edit_domain_saved":             t(phrases().EditDomainSavedJS, "Changes saved"),
+		"settings_add_btn":              t(phrases().SettingsAddBtnJS, "➕ Add to list"),
+		"notify_test_success":           t(phrases().NotifyTestSuccess, "✅ Test message sent successfully!"),
+		"notify_test_unauthorized":      t(phrases().NotifyTestUnauthorized, "❌ Unauthorized (check token)"),
+		"notify_test_error":             t(phrases().NotifyTestError, "❌ Error while sending"),
+		"notify_test_conn_error":        t(phrases().NotifyTestConnError, "❌ Connection error to server"),
+		"notify_btn_sending":            t(phrases().NotifyBtnSending, "⏳ Sende..."),
+		"notify_btn_test":               t(phrases().NotifyBtnTest, "🧪 Test-Nachricht senden"),
+		"notify_no_notifier":            t(phrases().NotifyNoNotifier, "⚠️ Keine aktiven Notifier konfiguriert."),
+		"notify_stat_success":           t(phrases().NotifyStatSuccess, "erfolgreich"),
+		"nav_dashboard":                 t(phrases().NavDashboardJS, "🌐 Dashboard"),
+		"nav_domains":                   t(phrases().NavDomainsJS, "🌐 Domains"),
+		"nav_metrics":                   t(phrases().NavMetricsJS, "📊 Metrics"),
+		"nav_logs":                      t(phrases().NavLogsJS, "🧾 Logs"),
+		"nav_debug":                     t(phrases().NavDebugJS, "🐞 Debug"),
+		"nav_settings":                  t(phrases().NavSettingsJS, "⚙️ Settings"),
+		"nav_users":                     t(phrases().SettingsUserManagement, "👥 User Management"),
+		"nav_diagnose":                  t(phrases().NavDiagnoseJS, "🩺 Diagnose"),
+		"nav_backup":                    t(phrases().NavBackupJS, "💾 Backup & Restore"),
+		"diagnose_title":                t(phrases().DiagnoseTitle, "Diagnose / Health Center"),
+		"diagnose_loading":              t(phrases().DiagnoseLoading, "Loading diagnosis..."),
+		"diagnose_load_failed":          t(phrases().DiagnoseLoadFailed, "Diagnosis failed"),
+		"diagnose_connection_failed":    t(phrases().DiagnoseConnectionFailed, "Connection failed"),
+		"diagnose_status_healthy":       t(phrases().DiagnoseStatusHealthy, "Healthy"),
+		"diagnose_status_degraded":      t(phrases().DiagnoseStatusDegraded, "Degraded"),
+		"diagnose_status_starting":      t(phrases().DiagnoseStatusStarting, "Starting"),
+		"diagnose_status_unhealthy":     t(phrases().DiagnoseStatusUnhealthy, "Unhealthy"),
+		"diagnose_system_title":         t(phrases().DiagnoseSystemTitle, "System"),
+		"diagnose_ip_dns_title":         t(phrases().DiagnoseIPDNSTitle, "IP / DNS"),
+		"diagnose_api_metrics_title":    t(phrases().DiagnoseAPIMetricsTitle, "API metrics"),
+		"diagnose_config_title":         t(phrases().DiagnoseConfigTitle, "Config"),
+		"diagnose_provider_title":       t(phrases().DiagnoseProviderTitle, "Provider"),
+		"diagnose_notifier_title":       t(phrases().DiagnoseNotifierTitle, "Notifier"),
+		"diagnose_warnings_title":       t(phrases().DiagnoseWarningsTitle, "Warnings"),
+		"diagnose_files_title":          t(phrases().DiagnoseFilesTitle, "Files"),
+		"diagnose_uptime":               t(phrases().DiagnoseUptime, "Uptime"),
+		"diagnose_scheduler_ran":        t(phrases().DiagnoseSchedulerRan, "Scheduler ran"),
+		"diagnose_last_run_ok":          t(phrases().DiagnoseLastRunOK, "Last run OK"),
+		"diagnose_update_running":       t(phrases().DiagnoseUpdateRunning, "Update running"),
+		"diagnose_active_updates":       t(phrases().DiagnoseActiveUpdates, "Active updates"),
+		"diagnose_last_ipv4":            t(phrases().DiagnoseLastIPv4, "Last IPv4"),
+		"diagnose_last_ipv6":            t(phrases().DiagnoseLastIPv6, "Last IPv6"),
+		"diagnose_last_domain_change":   t(phrases().DiagnoseLastDomainChange, "Last domain change"),
+		"diagnose_configured_domains":   t(phrases().DiagnoseConfiguredDomains, "Domains in status"),
+		"diagnose_total_requests":       t(phrases().DiagnoseTotalRequests, "Total requests"),
+		"diagnose_success_rate":         t(phrases().DiagnoseSuccessRate, "Success rate"),
+		"diagnose_average_latency":      t(phrases().DiagnoseAverageLatency, "Average latency"),
+		"diagnose_log_errors":           t(phrases().DiagnoseLogErrors, "Log errors"),
+		"diagnose_log_warnings":         t(phrases().DiagnoseLogWarnings, "Log warnings"),
+		"diagnose_ip_mode":              t(phrases().DiagnoseIPMode, "IP mode"),
+		"diagnose_interval":             t(phrases().DiagnoseInterval, "Interval"),
+		"diagnose_ipv4_endpoints":       t(phrases().DiagnoseIPv4Endpoints, "IPv4 endpoints"),
+		"diagnose_ipv6_endpoints":       t(phrases().DiagnoseIPv6Endpoints, "IPv6 endpoints"),
+		"diagnose_no_providers":         t(phrases().DiagnoseNoProviders, "No providers found"),
+		"diagnose_no_notifiers":         t(phrases().DiagnoseNoNotifiers, "No notifiers"),
+		"diagnose_no_config_warnings":   t(phrases().DiagnoseNoConfigWarnings, "No config warnings"),
+		"diagnose_file_missing":         t(phrases().DiagnoseFileMissing, "missing"),
+		"diagnose_bytes":                t(phrases().DiagnoseBytes, "bytes"),
+		"diagnose_yes":                  t(phrases().DiagnoseYes, "Yes"),
+		"diagnose_no":                   t(phrases().DiagnoseNo, "No"),
+		"backup_download_success":       t(phrases().BackupDownloadSuccess, "✅ Backup downloaded"),
+		"backup_download_failed":        t(phrases().BackupDownloadFailed, "❌ Backup failed"),
+		"backup_select_file":            t(phrases().BackupSelectFile, "❌ Please select a backup file"),
+		"backup_select_area":            t(phrases().BackupSelectArea, "❌ Please select at least one area"),
+		"backup_confirm_title":          t(phrases().BackupConfirmTitle, "Really restore backup?"),
+		"backup_confirm_config":         t(phrases().BackupConfirmConfig, "• Config will be overwritten"),
+		"backup_confirm_status":         t(phrases().BackupConfirmStatus, "• Domain status will be overwritten"),
+		"backup_confirm_users":          t(phrases().BackupConfirmUsers, "• Users will be overwritten"),
+		"backup_confirm_hint":           t(phrases().BackupConfirmHint, "This action may replace existing data."),
+		"backup_restore_running":        t(phrases().BackupRestoreRunning, "⏳ Restore running..."),
+		"backup_restore_success_format": t(phrases().BackupRestoreSuccessFormat, "✅ Restored: {restored}"),
+		"backup_restore_failed":         t(phrases().BackupRestoreFailed, "❌ Restore failed"),
+		"nav_totp":                      t(phrases().NavTotpJS, "🔐 2FA / Account Security"),
+		"totp_settings_load_failed":     t(phrases().TotpSettingsLoadFailedJS, "2FA settings could not be loaded"),
+		"totp_action_failed":            t(phrases().TotpActionFailedJS, "2FA action failed"),
+		"totp_badge_active":             t(phrases().TotpBadgeActiveJS, "🔐 2FA active"),
+		"totp_badge_inactive":           t(phrases().TotpBadgeInactiveJS, "🔓 2FA inactive"),
 	}
 
 	b, err := json.Marshal(m)
@@ -910,19 +962,19 @@ func securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
-func handleDashboardCSS(w http.ResponseWriter, r *http.Request) {
+func handleDashboardCSS(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/css; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
 	_, _ = io.WriteString(w, cssData)
 }
 
-func handleDashboardJS(w http.ResponseWriter, r *http.Request) {
+func handleDashboardJS(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
 	_, _ = io.WriteString(w, jsData)
 }
 
-func handleDashboardI18NJS(w http.ResponseWriter, r *http.Request) {
+func handleDashboardI18NJS(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = fmt.Fprintf(w, "window.I18N = %s;\n", dashboardI18NJSON())
@@ -1005,7 +1057,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		debugLog("WS", "", fmt.Sprintf(T.WSUpgradeFailed, err))
+		debugLog("WS", "", fmt.Sprintf(phrases().WSUpgradeFailed, err))
 		return
 	}
 
@@ -1028,7 +1080,7 @@ func handleAPIDomains(w http.ResponseWriter, r *http.Request) {
 
 func handleAPIDomainsHTML(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodGET {
-		http.Error(w, T.APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
 		return
 	}
 	data := loadStatusData()
@@ -1042,7 +1094,7 @@ func handleAPIDomainsHTML(w http.ResponseWriter, r *http.Request) {
 
 func handleAPIConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodGET {
-		http.Error(w, T.APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -1090,14 +1142,16 @@ func maskSecret(s string) string {
 }
 
 func handleAPILanguages(w http.ResponseWriter, r *http.Request) {
+	p := phrases()
+
 	if r.Method != MethodGET {
-		http.Error(w, T.APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		http.Error(w, p.APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
 		return
 	}
 
 	langs, err := getAvailableLanguages(langDir)
 	if err != nil {
-		http.Error(w, T.CouldNotLoadLanguages, http.StatusInternalServerError)
+		http.Error(w, p.CouldNotLoadLanguages, http.StatusInternalServerError)
 		return
 	}
 
@@ -1125,7 +1179,7 @@ func handleAPILanguages(w http.ResponseWriter, r *http.Request) {
 
 func handleAPISaveConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodPOST {
-		http.Error(w, T.APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
 		return
 	}
 	if !validateTriggerToken(r) {
@@ -1135,7 +1189,7 @@ func handleAPISaveConfig(w http.ResponseWriter, r *http.Request) {
 
 	var payload dashboardConfigPayload
 	if err := decodeJSONBody(w, r, &payload); err != nil {
-		http.Error(w, T.JSONParseError, http.StatusBadRequest)
+		http.Error(w, phrases().JSONParseError, http.StatusBadRequest)
 		return
 	}
 
@@ -1160,7 +1214,7 @@ func handleAPISaveConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := saveConfigToFile(); err != nil {
-		http.Error(w, T.SaveFailed, http.StatusInternalServerError)
+		http.Error(w, phrases().SaveFailed, http.StatusInternalServerError)
 		return
 	}
 
@@ -1170,7 +1224,7 @@ func handleAPISaveConfig(w http.ResponseWriter, r *http.Request) {
 	forceNextUpdate.Store(true)
 	lastCleanupNano.Store(0)
 
-	debugLog("API", getClientIP(r), T.ConfigHeading)
+	debugLog("API", getClientIP(r), phrases().ConfigHeading)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
 }
 
@@ -1358,39 +1412,64 @@ func mergeDomainConfigs(existingCfg []DomainConfig, incoming []safeDomainConfig)
 }
 
 func handleAPISetLanguage(w http.ResponseWriter, r *http.Request) {
+	p := phrases()
+
 	if r.Method != MethodPOST {
-		http.Error(w, T.APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		http.Error(w, p.APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
 		return
 	}
+
 	if !validateTriggerToken(r) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
-	lang := strings.TrimSpace(r.URL.Query().Get("lang"))
+	lang := normalizeLang(r.URL.Query().Get("lang"))
 	if lang == "" {
-		http.Error(w, T.LanguageParamMissing, http.StatusBadRequest)
+		http.Error(w, p.LanguageParamMissing, http.StatusBadRequest)
 		return
 	}
 
 	supported, err := getAvailableLanguages(langDir)
 	if err != nil || !supported[lang] {
-		http.Error(w, fmt.Sprintf(T.UnsupportedLanguage, lang), http.StatusBadRequest)
+		http.Error(
+			w,
+			fmt.Sprintf(p.UnsupportedLanguage, lang),
+			http.StatusBadRequest,
+		)
 		return
 	}
 
 	if err := loadLanguage(lang); err != nil {
-		http.Error(w, fmt.Sprintf(T.LanguageLoadFailed, err), http.StatusInternalServerError)
+		http.Error(
+			w,
+			fmt.Sprintf(p.LanguageLoadFailed, err),
+			http.StatusInternalServerError,
+		)
 		return
 	}
 
 	cfg.Lang = lang
+	p = phrases()
+
 	if err := saveConfigToFile(); err != nil {
-		debugLog("API", getClientIP(r), fmt.Sprintf(T.ConfigSaveWarnAfterLanguageChange, err))
+		debugLog(
+			"API",
+			getClientIP(r),
+			fmt.Sprintf(p.ConfigSaveWarnAfterLanguageChange, err),
+		)
 	}
 
-	debugLog("API", getClientIP(r), fmt.Sprintf(T.LanguageChangedLog, lang))
-	broadcastNotification(fmt.Sprintf(T.LanguageChangedNotification, lang), "info")
+	debugLog(
+		"API",
+		getClientIP(r),
+		fmt.Sprintf(p.LanguageChangedLog, lang),
+	)
+
+	broadcastNotification(
+		fmt.Sprintf(p.LanguageChangedNotification, lang),
+		"info",
+	)
 
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status": "ok",
@@ -1400,11 +1479,11 @@ func handleAPISetLanguage(w http.ResponseWriter, r *http.Request) {
 
 func handleAPIIPv64Domain(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodPOST {
-		http.Error(w, T.APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
 		return
 	}
 	if !validateTriggerToken(r) {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": T.InvalidToken})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": phrases().InvalidToken})
 		return
 	}
 
@@ -1415,19 +1494,19 @@ func handleAPIIPv64Domain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := decodeJSONBody(w, r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": T.ErrInvalidJSON})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": phrases().ErrInvalidJSON})
 		return
 	}
 
 	req.FQDN = normalizeIPv64FQDN(req.FQDN)
 	if req.FQDN == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": T.DomainIsEmpty})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": phrases().DomainIsEmpty})
 		return
 	}
 
 	req.Action = strings.ToUpper(strings.TrimSpace(req.Action))
 	if req.Action != MethodADD && req.Action != MethodDELETE {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": T.IPv64ActionInvalid})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": phrases().IPv64ActionInvalid})
 		return
 	}
 
@@ -1466,22 +1545,22 @@ func handleAPIIPv64Domain(w http.ResponseWriter, r *http.Request) {
 
 func handleAPIDomainDelete(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodPOST {
-		http.Error(w, T.APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
 		return
 	}
 	if !validateTriggerToken(r) {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": T.InvalidToken})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": phrases().InvalidToken})
 		return
 	}
 
 	domain := strings.TrimSpace(r.URL.Query().Get("domain"))
 	if domain == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": T.DomainParamMissing})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": phrases().DomainParamMissing})
 		return
 	}
 
 	if isDomainActiveInConfig(domain) {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": T.DomainStillActiveInConfig})
+		writeJSON(w, http.StatusConflict, map[string]string{"error": phrases().DomainStillActiveInConfig})
 		return
 	}
 
@@ -1494,8 +1573,8 @@ func handleAPIDomainDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	debugLog("API", getClientIP(r), fmt.Sprintf(T.DomainDeletedFromStatusLog, deleteKey))
-	broadcastNotification(fmt.Sprintf(T.DomainRemovedFromStatus, deleteKey), "info")
+	debugLog("API", getClientIP(r), fmt.Sprintf(phrases().DomainDeletedFromStatusLog, deleteKey))
+	broadcastNotification(fmt.Sprintf(phrases().DomainRemovedFromStatus, deleteKey), "info")
 
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status": "deleted",
@@ -1521,7 +1600,7 @@ func deleteDomainFromStatus(domain string) (string, int, string) {
 
 	deleteKey, found := findStatusDomainKey(fileData, domain)
 	if !found {
-		return "", http.StatusNotFound, T.DomainNotFoundInStatus
+		return "", http.StatusNotFound, phrases().DomainNotFoundInStatus
 	}
 
 	delete(fileData, deleteKey)
@@ -1537,7 +1616,7 @@ func deleteDomainFromStatus(domain string) (string, int, string) {
 func readStatusFileForDelete() (map[string]any, int, string) {
 	b, err := os.ReadFile(updatePath)
 	if err != nil {
-		return nil, http.StatusNotFound, T.NoStatusFileFound
+		return nil, http.StatusNotFound, phrases().NoStatusFileFound
 	}
 
 	var fileData map[string]any
@@ -1546,7 +1625,7 @@ func readStatusFileForDelete() (map[string]any, int, string) {
 	}
 
 	if fileData == nil {
-		return nil, http.StatusNotFound, T.NoStatusFileFound
+		return nil, http.StatusNotFound, phrases().NoStatusFileFound
 	}
 
 	return fileData, http.StatusOK, ""
@@ -1603,7 +1682,7 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1024)
 
 	if r.Method != MethodPOST {
-		http.Error(w, T.APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -1611,9 +1690,9 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 
 	if !validateTriggerToken(r) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
-			"error": T.InvalidOrMissingTriggerToken,
+			"error": phrases().InvalidOrMissingTriggerToken,
 		})
-		debugLog("API", clientIP, T.TriggerBlockedInvalidToken)
+		debugLog("API", clientIP, phrases().TriggerBlockedInvalidToken)
 		return
 	}
 
@@ -1628,11 +1707,11 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 	if !globalTriggerLimiter.Allow() {
 		w.Header().Set("Retry-After", "10")
 		writeJSON(w, http.StatusTooManyRequests, map[string]any{
-			"error":               T.GlobalRateLimitExceeded,
+			"error":               phrases().GlobalRateLimitExceeded,
 			"retry_after_seconds": 10,
 		})
-		debugLog("API", clientIP, T.TriggerBlockedGlobalRateLimit)
-		broadcastNotification(T.RateLimitGlobal, "warning")
+		debugLog("API", clientIP, phrases().TriggerBlockedGlobalRateLimit)
+		broadcastNotification(phrases().RateLimitGlobal, "warning")
 		return
 	}
 
@@ -1642,29 +1721,29 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Retry-After", "10")
 		w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
 		writeJSON(w, http.StatusTooManyRequests, map[string]any{
-			"error":               T.IPRateLimitExceeded,
+			"error":               phrases().IPRateLimitExceeded,
 			"retry_after_seconds": 10,
 			"remaining":           remaining,
 		})
-		debugLog("API", clientIP, T.TriggerBlockedIPRateLimit)
-		broadcastNotification(T.TooManyUpdateRequestsWait, "warning")
+		debugLog("API", clientIP, phrases().TriggerBlockedIPRateLimit)
+		broadcastNotification(phrases().TooManyUpdateRequestsWait, "warning")
 		return
 	}
 
 	if !updateInProgress.CompareAndSwap(false, true) {
 		writeJSON(w, http.StatusConflict, map[string]any{
-			"error":  T.UpdateAlreadyInProgressAPI,
-			"status": T.TriggerStatusBusy,
+			"error":  phrases().UpdateAlreadyInProgressAPI,
+			"status": phrases().TriggerStatusBusy,
 		})
-		debugLog("API", clientIP, T.TriggerBlockedUpdateRunning)
-		broadcastNotification(T.UpdateAlreadyRunningNotification, "info")
+		debugLog("API", clientIP, phrases().TriggerBlockedUpdateRunning)
+		broadcastNotification(phrases().UpdateAlreadyRunningNotification, "info")
 		return
 	}
 
 	go func() {
 		defer updateInProgress.Store(false)
-		debugLog("API", clientIP, T.ManualUpdateTriggeredLog)
-		broadcastNotification(T.ManualUpdateStartedNotification, "info")
+		debugLog("API", clientIP, phrases().ManualUpdateTriggeredLog)
+		broadcastNotification(phrases().ManualUpdateStartedNotification, "info")
 		forceNextUpdate.Store(true)
 		runUpdate(false)
 	}()
@@ -1673,14 +1752,14 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
 	writeJSON(w, http.StatusAccepted, map[string]any{
 		"status":               "triggered",
-		"message":              T.UpdateStartedMessage,
+		"message":              phrases().UpdateStartedMessage,
 		"rate_limit_remaining": remaining,
 	})
 }
 
 func handleAPINotifyTest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodPOST {
-		http.Error(w, T.APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
 		return
 	}
 	if !validateTriggerToken(r) {
@@ -1704,7 +1783,7 @@ func handleAPINotifyTest(w http.ResponseWriter, r *http.Request) {
 	testMsg := NotifyMessage{
 		Action:  ActionConfig,
 		Domain:  "",
-		Message: t(T.NotifyTestBody, "🔔 Test Notification: Your dashboard notification system is working perfectly!"),
+		Message: t(phrases().NotifyTestBody, "🔔 Test Notification: Your dashboard notification system is working perfectly!"),
 		Level:   LogInfo,
 	}
 
@@ -1754,7 +1833,7 @@ func handleAPITriggerStatus(w http.ResponseWriter, r *http.Request) {
 	ipLimiter := ipTriggerLimiter.GetLimiter(clientIP)
 
 	if !ipLimiter.Allow() {
-		http.Error(w, T.APIErrorRateLimitExceeded, http.StatusTooManyRequests)
+		http.Error(w, phrases().APIErrorRateLimitExceeded, http.StatusTooManyRequests)
 		return
 	}
 
@@ -1768,7 +1847,7 @@ func handleAPITriggerStatus(w http.ResponseWriter, r *http.Request) {
 
 func handleAPIExport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodGET {
-		http.Error(w, T.APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -1835,7 +1914,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	if !hasRun {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"status": "starting",
-			"reason": T.WaitingForFirstSchedulerRun,
+			"reason": phrases().WaitingForFirstSchedulerRun,
 		})
 		return
 	}
@@ -1846,17 +1925,17 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 			if _, err := fmt.Sscanf(successRateStr, "%f%%", &rate); err == nil {
 				if rate < 20.0 {
 					isHealthy = false
-					healthReason = T.HealthCriticalSuccessRate
+					healthReason = phrases().HealthCriticalSuccessRate
 				} else if rate < 50.0 {
 					degradedMode = true
-					healthReason = T.HealthDegradedSuccessRate
+					healthReason = phrases().HealthDegradedSuccessRate
 				}
 			}
 		}
 	}
 
 	if !isHealthy && healthReason == "" {
-		healthReason = T.HealthLastSchedulerFailed
+		healthReason = phrases().HealthLastSchedulerFailed
 	}
 
 	if degradedMode && isHealthy {
@@ -1976,7 +2055,7 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprint(w, `
 	<div class="page-section" data-section="debug">
 		<div class="card">
-			<div class="card-header">🐞 `+T.DebugLogTitle+`</div>
+			<div class="card-header">🐞 `+phrases().DebugLogTitle+`</div>
 			<div class="card-content">
 				<p class="debug-disabled-note">Debug-Modus ist deaktiviert. Aktiviere ihn in den Einstellungen unter System → Debug-Modus.</p>
 			</div>
@@ -2007,9 +2086,9 @@ func loadStatusData() map[string]any {
 
 func dashboardStatus() (string, string) {
 	if !lastOk.Load() {
-		return "status-error", T.StatusErr
+		return "status-error", phrases().StatusErr
 	}
-	return "status-ok", T.StatusOk
+	return "status-ok", phrases().StatusOk
 }
 
 func getDashboardStats() map[string]any {
@@ -2053,7 +2132,7 @@ func buildNICHTML(stats map[string]any) string {
 		return ""
 	}
 
-	return `<div class="nic-row"><span class="nic-label">NIC <span>(` + T.NicIPv64Updates + `)</span></span><span id="mDailyNIC" class="nic-value">` +
+	return `<div class="nic-row"><span class="nic-label">NIC <span>(` + phrases().NicIPv64Updates + `)</span></span><span id="mDailyNIC" class="nic-value">` +
 		fmt.Sprintf("%v", stats["daily_nic"]) +
 		`</span></div>`
 }
@@ -2102,7 +2181,7 @@ func loadDashboardLogsFresh() ([]LogEntry, string) {
 
 func handleAPILogs(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodGET {
-		http.Error(w, T.APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -2129,7 +2208,7 @@ func loadLogsFromMainFile() ([]LogEntry, string) {
 				Level:    LogError,
 				Category: "FILE",
 				Action:   ActionError,
-				Message:  fmt.Sprintf("%s: %v", t(T.FileCloseError, "Failed to close file"), err),
+				Message:  fmt.Sprintf("%s: %v", t(phrases().FileCloseError, "Failed to close file"), err),
 			})
 		}
 	}()
@@ -2153,7 +2232,7 @@ func loadLogsFromMainFile() ([]LogEntry, string) {
 			Level:    LogError,
 			Category: "FILE",
 			Action:   ActionError,
-			Message:  fmt.Sprintf("%s: %v", t(T.ScannerError, "Scanner error"), err),
+			Message:  fmt.Sprintf("%s: %v", t(phrases().ScannerError, "Scanner error"), err),
 		})
 	}
 
@@ -2206,10 +2285,10 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 		logoutBtn = `<form method="POST" action="/logout" class="logout-form"><input type="hidden" name="csrf_token" value="` + html.EscapeString(sess.CSRFToken) + `"><button type="submit" class="action-btn topbar-action-btn logout-btn">🚪 Logout</button></form>`
 		totpPage = `<div class="nav-item" data-page="totp" data-click="navTo('totp')"><span class="nav-item-icon">🔐</span> 2FA / Konto-Sicherheit</div>`
 		if sess.Role == RoleAdmin {
-			userPage = `<div class="nav-item" data-page="users" data-click="navTo('users')">` + T.SettingsUserManagement + `</div>`
+			userPage = `<div class="nav-item" data-page="users" data-click="navTo('users')">` + phrases().SettingsUserManagement + `</div>`
 		}
 	} else if !authEnabled {
-		userPage = `<div class="nav-item" data-page="users" data-click="navTo('users')">` + T.SettingsUserManagement + `</div>`
+		userPage = `<div class="nav-item" data-page="users" data-click="navTo('users')">` + phrases().SettingsUserManagement + `</div>`
 	}
 
 	_, _ = fmt.Fprintf(w, `<!DOCTYPE html><html><head>
@@ -2245,36 +2324,36 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 				</div>
 			</div>
 
-			<div class="nav-section-label">`+t(T.NavOverview, "Overview")+`</div>
+			<div class="nav-section-label">`+t(phrases().NavOverview, "Overview")+`</div>
 			<div class="nav-item" data-page="dashboard" data-click="navTo('dashboard')">
-				<span class="nav-item-icon">📊</span> `+T.NavDashboard+`
+				<span class="nav-item-icon">📊</span> `+phrases().NavDashboard+`
 			</div>
 			<div class="nav-item" data-page="domains" data-click="navTo('domains')">
-				<span class="nav-item-icon">🌐</span> `+T.NavDomains+`
+				<span class="nav-item-icon">🌐</span> `+phrases().NavDomains+`
 			</div>
 
-			<div class="nav-section-label">`+t(T.NavMonitoring, "Monitoring")+`</div>
+			<div class="nav-section-label">`+t(phrases().NavMonitoring, "Monitoring")+`</div>
 			<div class="nav-item" data-page="metrics" data-click="navTo('metrics')">
-				<span class="nav-item-icon">📈</span> `+T.APIPerformance+`
+				<span class="nav-item-icon">📈</span> `+phrases().APIPerformance+`
 			</div>
 			<div class="nav-item" data-page="diagnose" data-click="navTo('diagnose')">
-				<span class="nav-item-icon">🩺</span> `+t(T.DiagnoseTitle, "Diagnose / Health Center")+`
+				<span class="nav-item-icon">🩺</span> `+t(phrases().DiagnoseTitle, "Diagnose / Health Center")+`
 			</div>
 			<div class="nav-item" data-page="logs" data-click="navTo('logs')">
-				<span class="nav-item-icon">🧾</span> `+T.SystemEvents+`
+				<span class="nav-item-icon">🧾</span> `+phrases().SystemEvents+`
 			</div>
 			<div class="nav-item" data-page="debug" data-click="navTo('debug')">
-				<span class="nav-item-icon">🐞</span> `+T.DebugLogTitle+`
+				<span class="nav-item-icon">🐞</span> `+phrases().DebugLogTitle+`
 			</div>
 
-			<div class="nav-section-label">`+t(T.NavTools, "Tools")+`</div>
+			<div class="nav-section-label">`+t(phrases().NavTools, "Tools")+`</div>
 			<div class="nav-item" data-page="backup" data-click="navTo('backup')">
-				<span class="nav-item-icon">💾</span> `+t(T.BackupTitle, "Backup & Restore")+`
+				<span class="nav-item-icon">💾</span> `+t(phrases().BackupTitle, "Backup & Restore")+`
 			</div>
 
-			<div class="nav-section-label">`+t(T.NavConfig, "Config")+`</div>
+			<div class="nav-section-label">`+t(phrases().NavConfig, "Config")+`</div>
 			<div class="nav-item" data-page="settings" data-click="navTo('settings')">
-				<span class="nav-item-icon">⚙️</span> `+T.SettingsTitle+`
+				<span class="nav-item-icon">⚙️</span> `+phrases().SettingsTitle+`
 			</div>
 			%s
 			%s
@@ -2297,26 +2376,26 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 				<div class="topbar-right">
 					<button class="action-btn topbar-action-btn is-hidden"
 						id="topbar-save-config-button"
-						data-tooltip="`+html.EscapeString(T.SettingsSaveHint)+`"
+						data-tooltip="`+html.EscapeString(phrases().SettingsSaveHint)+`"
 						data-mouseenter="showNotifierTooltip()"
 						data-focus="showNotifierTooltip()"
-						data-click="saveFullConfig()">`+T.SettingsSaveBtn+`</button>
+						data-click="saveFullConfig()">`+phrases().SettingsSaveBtn+`</button>
 
 					<button class="action-btn topbar-action-btn"
-						data-tooltip="`+html.EscapeString(T.SettingsUpdateHint)+`"
+						data-tooltip="`+html.EscapeString(phrases().SettingsUpdateHint)+`"
 						data-mouseenter="showNotifierTooltip()"
 						data-focus="showNotifierTooltip()"
-						data-click="triggerUpdate()">🔄 `+T.Update+`</button>
+						data-click="triggerUpdate()">🔄 `+phrases().Update+`</button>
 
 					<button class="action-btn topbar-action-btn"
-						data-tooltip="`+html.EscapeString(T.SettingsExportHint)+`"
+						data-tooltip="`+html.EscapeString(phrases().SettingsExportHint)+`"
 						data-mouseenter="showNotifierTooltip()"
 						data-focus="showNotifierTooltip()"
-						data-click="exportData()">📥 `+T.ExportBtn+`</button>
+						data-click="exportData()">📥 `+phrases().ExportBtn+`</button>
 
 					<div class="notif-wrap">
 						<button class="theme-toggle notif-toggle"
-							data-tooltip="`+html.EscapeString(T.SettingsNotifierHint)+`"
+							data-tooltip="`+html.EscapeString(phrases().SettingsNotifierHint)+`"
 							data-mouseenter="showNotifierTooltip()"
 							data-focus="showNotifierTooltip()"
 							data-click="toggleNotifCenter()">🔔
@@ -2325,14 +2404,14 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 
 						<div id="notif-panel" class="notif-panel">
 							<div class="notif-panel-header">
-								🔔 `+T.SettingsNotifyHint+`
+								🔔 `+phrases().SettingsNotifyHint+`
 							</div>
 							<div id="notif-list"></div>
 						</div>
 					</div>
 
 					<button class="theme-toggle"
-						data-tooltip="`+html.EscapeString(T.SettingsThemeHint)+`"
+						data-tooltip="`+html.EscapeString(phrases().SettingsThemeHint)+`"
 						data-mouseenter="showNotifierTooltip()"
 						data-focus="showNotifierTooltip()"
 						data-click="toggleTheme()">🌓</button>
@@ -2344,7 +2423,7 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 			<!-- ═══ MAIN CONTENT ═══ -->
 			<div class="main-content">
 	`,
-		html.EscapeString(T.DashboardTitle),
+		html.EscapeString(phrases().DashboardTitle),
 		totpPage,
 		userPage,
 		userInfo,
@@ -2385,10 +2464,10 @@ func buildNotifierStatusHTML() string {
 		}
 
 		stateClass := "notifier-icon--active"
-		title := name + " " + T.NotifierActive
+		title := name + " " + phrases().NotifierActive
 		if !connected {
 			stateClass = "notifier-icon--disconnected"
-			title = name + " " + T.NotifierDisconnected
+			title = name + " " + phrases().NotifierDisconnected
 		}
 
 		fmt.Fprintf(&sb,
@@ -2410,22 +2489,22 @@ func writeDashboardTop(w http.ResponseWriter, statusClass, statusText string) {
 			</div>
 			<div class="status-banner-meta">
 				<span class="status-item status-item--clickable"
-					title="`+html.EscapeString(T.TooltipLastCheck)+`"
-					data-tooltip="`+html.EscapeString(T.TooltipLastCheck)+`"
+					phrases()itle="`+html.EscapeString(phrases().TooltipLastCheck)+`"
+					data-tooltip="`+html.EscapeString(phrases().TooltipLastCheck)+`"
 					data-click="showNotifierTooltip()">
 					%s: <span id="lastUpdate">%s</span>
 				</span>
 				<span class="status-sep">|</span>
 				<span class="status-item status-item--clickable"
-					title="`+html.EscapeString(T.TooltipClock)+`"
-					data-tooltip="`+html.EscapeString(T.TooltipClock)+`"
+					phrases()itle="`+html.EscapeString(phrases().TooltipClock)+`"
+					data-tooltip="`+html.EscapeString(phrases().TooltipClock)+`"
 					data-click="showNotifierTooltip()">
 					🕒 <span id="clock">--:--:--</span>
 				</span>
 				<span class="status-sep">|</span>
 				<span class="status-item status-uptime status-item--clickable"
-					title="`+html.EscapeString(T.TooltipUptime)+`"
-					data-tooltip="`+html.EscapeString(T.TooltipUptime)+`"
+					phrases()itle="`+html.EscapeString(phrases().TooltipUptime)+`"
+					data-tooltip="`+html.EscapeString(phrases().TooltipUptime)+`"
 					data-click="showNotifierTooltip()">
 					⏱️ <span id="uptime">--</span>
 				</span>
@@ -2434,21 +2513,21 @@ func writeDashboardTop(w http.ResponseWriter, statusClass, statusText string) {
 		</div>
 
 		<div class="card" id="endpoint-card">
-			<div class="card-header">`+T.IPEndpointStatusTitle+`</div>
+			<div class="card-header">`+phrases().IPEndpointStatusTitle+`</div>
 			<div class="card-content">
 				<div id="endpoint-status" class="endpoint-status">
-					<span class="endpoint-waiting">`+T.IPEndpointStatusWaiting+`</span>
+					<span class="endpoint-waiting">`+phrases().IPEndpointStatusWaiting+`</span>
 				</div>
 			</div>
 		</div>
 		<div class="card">
-			<div class="card-header">⚙️ `+T.ConfigHeading+`</div>
+			<div class="card-header">⚙️ `+phrases().ConfigHeading+`</div>
 			<div class="card-content">
 				<div class="config-overview-grid">
-					<div><strong>`+T.MaxLogLines+`:</strong> %d</div>
-					<div><strong>`+T.MaxAPIRetries+`:</strong> %d</div>
-					<div><strong>`+T.MaxConcurrent+`:</strong> %d</div>
-					<div><strong>`+T.Interval+`:</strong> %ds</div>
+					<div><strong>`+phrases().MaxLogLines+`:</strong> %d</div>
+					<div><strong>`+phrases().MaxAPIRetries+`:</strong> %d</div>
+					<div><strong>`+phrases().MaxConcurrent+`:</strong> %d</div>
+					<div><strong>`+phrases().Interval+`:</strong> %ds</div>
 				</div>
 			</div>
 		</div>
@@ -2456,7 +2535,7 @@ func writeDashboardTop(w http.ResponseWriter, statusClass, statusText string) {
 	`,
 		statusClass,
 		statusText,
-		T.LastUpdate,
+		phrases().LastUpdate,
 		time.Now().Format("15:04:05"),
 		buildNotifierStatusHTML(),
 		cfg.MaxLogLines,
@@ -2468,21 +2547,21 @@ func writeDashboardTop(w http.ResponseWriter, statusClass, statusText string) {
 
 func buildUsersSection() string {
 	return `<div id="users-list" class="users-list-wrap">
-		 <div class="users-list-loading">` + T.UserLoading + `</div>
+		 <div class="users-list-loading">` + phrases().UserLoading + `</div>
 	</div>
 	<div class="add-domain-box">
-		<div class="users-add-title">` + T.UserNewTitle + `</div>
-		<input type="text" id="new-user-name" class="s-input mb-8" placeholder="` + T.UserPlaceholderName + `">
+		<div class="users-add-title">` + phrases().UserNewTitle + `</div>
+		<input type="text" id="new-user-name" class="s-input mb-8" placeholder="` + phrases().UserPlaceholderName + `">
 		<div class="input-with-action mb-8">
-			<input type="password" id="new-user-pass" class="s-input" placeholder="` + T.UserPlaceholderPass + `">
+			<input type="password" id="new-user-pass" class="s-input" placeholder="` + phrases().UserPlaceholderPass + `">
 			<button type="button" class="input-action-btn" data-click="togglePassword('new-user-pass', this)">👁️</button>
 		</div>
 		<select id="new-user-role" class="s-input mb-8">
-			<option value="viewer">` + T.UserRoleViewer + `</option>
-			<option value="editor">` + T.UserRoleEditor + `</option>
-			<option value="admin">` + T.UserRoleAdmin + `</option>
+			<option value="viewer">` + phrases().UserRoleViewer + `</option>
+			<option value="editor">` + phrases().UserRoleEditor + `</option>
+			<option value="admin">` + phrases().UserRoleAdmin + `</option>
 		</select>
-		<button class="s-btn s-btn-success-full" data-click="addUser()">` + T.UserBtnCreate + `</button>
+		<button class="s-btn s-btn-success-full" data-click="addUser()">` + phrases().UserBtnCreate + `</button>
 	</div>`
 }
 
@@ -2492,7 +2571,7 @@ func writeDashboardMetricsCard(
 	nicHTML, chartSVG, latencySVG string,
 	isViewer bool,
 ) {
-	resetBtn := `<button class="action-btn metrics-reset-btn" data-click="event.preventDefault();resetMetrics()">🗑️ ` + T.MetricsResetBtn + `</button>`
+	resetBtn := `<button class="action-btn metrics-reset-btn" data-click="event.preventDefault();resetMetrics()">🗑️ ` + phrases().MetricsResetBtn + `</button>`
 	if isViewer {
 		resetBtn = ""
 	}
@@ -2506,19 +2585,19 @@ func writeDashboardMetricsCard(
 			<!-- TOP STATS -->
 			<div class="metrics-top-grid">
 				<div>
-					<strong>`+T.TotalRequests+`:</strong>
+					<strong>`+phrases().TotalRequests+`:</strong>
 					<span id="mTotal">%v</span>
 				</div>
 				<div>
-					<strong>`+T.SuccessRate+`:</strong>
+					<strong>`+phrases().SuccessRate+`:</strong>
 					<span id="mSuccess" class="metric-success">%v</span>
 				</div>
 				<div>
-					<strong>`+T.AvgLatency+`:</strong>
+					<strong>`+phrases().AvgLatency+`:</strong>
 					<span id="mLatency">%v</span>
 				</div>
-				<div title="`+T.ClientErrors+` / `+T.ServerErrors+`">
-					<strong>`+T.Errors+`:</strong>
+				<div title="`+phrases().ClientErrors+` / `+phrases().ServerErrors+`">
+					<strong>`+phrases().Errors+`:</strong>
 					<span id="mErrors">%v / %v</span>
 				</div>
 			</div>
@@ -2526,7 +2605,7 @@ func writeDashboardMetricsCard(
 			<!-- LATENCY PERCENTILES -->
 			<div class="latency-box">
 				<div class="latency-box-label">
-					`+T.MetricLatencyPercentile+`
+					`+phrases().MetricLatencyPercentile+`
 				</div>
 				<div class="latency-grid">
 					<div class="latency-cell latency-cell--p50">
@@ -2547,16 +2626,16 @@ func writeDashboardMetricsCard(
 			<!-- USAGE -->
 			<div class="usage-section">
 				<div class="usage-header">
-					<span class="usage-limit-label">`+T.HourlyLimitEst+`</span>
+					<span class="usage-limit-label">`+phrases().HourlyLimitEst+`</span>
 					<span id="mUsage" class="usage-count">
-						%v / %v `+T.RequestsLabel+`
+						%v / %v `+phrases().RequestsLabel+`
 					</span>
 				</div>
 				<div class="usage-track">
 					<div id="mUsageBar" class="usage-bar" style="--usage-width:%v%%;--usage-color:%s;"></div>
 				</div>
 				<div class="usage-hint">
-					`+T.UsageLast60Min+`
+					`+phrases().UsageLast60Min+`
 				</div>
 			</div>
 
@@ -2565,7 +2644,7 @@ func writeDashboardMetricsCard(
 				<!-- HTTP METHODS -->
 				<div class="http-methods-box">
 					<div class="http-methods-label">
-						`+T.MetricHTTPMethods+`
+						`+phrases().MetricHTTPMethods+`
 					</div>
 					<div class="http-methods-grid">
 						<div class="http-method-row http-method-row--get">
@@ -2593,19 +2672,19 @@ func writeDashboardMetricsCard(
 				<!-- IP LATENCY -->
 				<div class="ip-latency-box">
 					<div class="ip-latency-label">
-						`+T.MetricIPLatency+`
+						`+phrases().MetricIPLatency+`
 					</div>
 					<div class="ip-latency-center">
 						<div id="mIPLatency" class="ip-latency-value">
 							%v
 						</div>
 						<div class="ip-latency-meta">
-							`+T.MetricAvgFrom+`
+							`+phrases().MetricAvgFrom+`
 							<span id="mIPCount">%v</span>
-							`+T.ChecksLabel+`
+							`+phrases().ChecksLabel+`
 						</div>
 						<div class="ip-latency-meta">
-							`+T.MetricLastCheck+`
+							`+phrases().MetricLastCheck+`
 							<span id="mLastIPCheck">%v</span>
 						</div>
 					</div>
@@ -2619,7 +2698,7 @@ func writeDashboardMetricsCard(
 
 </div> <!-- page-section -->
 `,
-		T.APIPerformance,
+		phrases().APIPerformance,
 
 		stats["total_requests"],
 		stats["success_rate"],
@@ -2659,19 +2738,19 @@ func writeDebugCard(w http.ResponseWriter) {
 	<div class="page-section" data-section="debug">
 		<div class="card">
 			<div class="card-header card-header--flex">
-				🐞 `+T.DebugLogTitle+` <span class="debug-badge">`+T.DebugLogLive+`</span>
+				🐞 `+phrases().DebugLogTitle+` <span class="debug-badge">`+phrases().DebugLogLive+`</span>
 			</div>
 			<div class="card-content">
 				<div class="debug-toolbar">
-					<input type="text" id="debug-filter" placeholder="`+T.DebugFilterPlaceholder+`"
+					<input type="text" id="debug-filter" placeholder="`+phrases().DebugFilterPlaceholder+`"
 						data-input="filterDebugLog(this.value)" class="debug-filter-input">
-					<button data-click="clearDebugLog()" class="action-btn debug-clear-btn">`+T.DebugClearBtn+`</button>
+					<button data-click="clearDebugLog()" class="action-btn debug-clear-btn">`+phrases().DebugClearBtn+`</button>
 					<label class="debug-autoscroll-label">
-						<input type="checkbox" id="debug-autoscroll" checked> `+T.DebugAutoscroll+`
+						<input type="checkbox" id="debug-autoscroll" checked> `+phrases().DebugAutoscroll+`
 					</label>
 				</div>
 				<div id="debug-log-container" class="debug-log-box">
-					<span class="debug-placeholder">`+T.DebugWaitingMsg+`</span>
+					<span class="debug-placeholder">`+phrases().DebugWaitingMsg+`</span>
 				</div>
 			</div>
 		</div>
@@ -2692,28 +2771,28 @@ func writeLogsCard(w io.Writer, logs []LogEntry, logTimeRange string) {
 			<div class="card-header card-header--flex-wrap">
 				🧾 %s
 				<span class="logs-summary-meta">
-					(%d `+T.EntriesLabel+`)
+					(%d `+phrases().EntriesLabel+`)
 					%s
 				</span>
 			</div>
 			<div class="card-content">
 				<div class="log-filters">
-					<button class="filter-btn active" data-filter="all" data-click="filterLogs('all')">`+T.FilterAll+`</button>
-					<button class="filter-btn" data-filter="ERR" data-click="filterLogs('ERR')">`+T.FilterErrors+`</button>
-					<button class="filter-btn" data-filter="WARN" data-click="filterLogs('WARN')">`+T.FilterWarnings+`</button>
-					<button class="filter-btn" data-filter="UPDATE" data-click="filterLogs('UPDATE')">`+T.FilterUpdates+`</button>
-					<button class="filter-btn" data-filter="START" data-click="filterLogs('START')">`+T.FilterStarts+`</button>
-					<button class="filter-btn" data-filter="STOP" data-click="filterLogs('STOP')">`+T.FilterStop+`</button>
-					<button class="filter-btn" data-filter="CREATE" data-click="filterLogs('CREATE')">`+T.FilterCreated+`</button>
-					<button class="filter-btn" data-filter="CLEANUP" data-click="filterLogs('CLEANUP')">`+T.FilterCleanup+`</button>
-					<button class="filter-btn" data-filter="SKIP" data-click="filterLogs('SKIP')">`+T.FilterSkip+`</button>
-					<button class="filter-btn" data-filter="CONFIG" data-click="filterLogs('CONFIG')">`+T.FilterConfig+`</button>
-					<button class="filter-btn" data-filter="INFO" data-click="filterLogs('INFO')">`+T.FilterInfo+`</button>
+					<button class="filter-btn active" data-filter="all" data-click="filterLogs('all')">`+phrases().FilterAll+`</button>
+					<button class="filter-btn" data-filter="ERR" data-click="filterLogs('ERR')">`+phrases().FilterErrors+`</button>
+					<button class="filter-btn" data-filter="WARN" data-click="filterLogs('WARN')">`+phrases().FilterWarnings+`</button>
+					<button class="filter-btn" data-filter="UPDATE" data-click="filterLogs('UPDATE')">`+phrases().FilterUpdates+`</button>
+					<button class="filter-btn" data-filter="START" data-click="filterLogs('START')">`+phrases().FilterStarts+`</button>
+					<button class="filter-btn" data-filter="STOP" data-click="filterLogs('STOP')">`+phrases().FilterStop+`</button>
+					<button class="filter-btn" data-filter="CREATE" data-click="filterLogs('CREATE')">`+phrases().FilterCreated+`</button>
+					<button class="filter-btn" data-filter="CLEANUP" data-click="filterLogs('CLEANUP')">`+phrases().FilterCleanup+`</button>
+					<button class="filter-btn" data-filter="SKIP" data-click="filterLogs('SKIP')">`+phrases().FilterSkip+`</button>
+					<button class="filter-btn" data-filter="CONFIG" data-click="filterLogs('CONFIG')">`+phrases().FilterConfig+`</button>
+					<button class="filter-btn" data-filter="INFO" data-click="filterLogs('INFO')">`+phrases().FilterInfo+`</button>
 					<button class="filter-btn filter-btn--export" data-click="exportLogs('txt')">📄 TXT</button>
 					<button class="filter-btn" data-click="exportLogs('json')">📋 JSON</button>
 				</div>
 				<div id="logContainer" class="log-container">
-	`, T.SystemEvents, entryCount, timeRangeHTML)
+	`, phrases().SystemEvents, entryCount, timeRangeHTML)
 
 	for _, e := range logs {
 		displayTime := e.Timestamp
@@ -2748,7 +2827,7 @@ func writeLogsCard(w io.Writer, logs []LogEntry, logTimeRange string) {
 	}
 
 	if len(logs) == 0 {
-		_, _ = fmt.Fprintf(w, `<div class="log-empty">%s</div>`, T.NoMoreEntries)
+		_, _ = fmt.Fprintf(w, `<div class="log-empty">%s</div>`, phrases().NoMoreEntries)
 	}
 
 	_, _ = fmt.Fprint(w, `
@@ -2777,7 +2856,7 @@ func writeDomainsCard(w io.Writer, data map[string]any) {
 	_, _ = fmt.Fprint(w, `
 	<div class="page-section" data-section="domains">
 		<input type="text" class="search-box" id="domainSearch" inputmode="search" autocomplete="off"
-			placeholder="`+T.DomainSearchPlaceholder+`" data-input="filterDomains(this.value)">
+			placeholder="`+phrases().DomainSearchPlaceholder+`" data-input="filterDomains(this.value)">
 	`)
 
 	if hasIPv64 {
@@ -2786,23 +2865,23 @@ func writeDomainsCard(w io.Writer, data map[string]any) {
 				<div class="card-content">
 					<div class="ipv64-mgmt-row">
 						<div class="ipv64-mgmt-input-wrap">
-							<label class="ipv64-mgmt-label">`+T.IPv64DomainFQDN+`</label>
+							<label class="ipv64-mgmt-label">`+phrases().IPv64DomainFQDN+`</label>
 							<input type="text" id="ipv64-domain-input" class="search-box ipv64-mgmt-input"
-								placeholder="`+T.IPv64DomainPlaceholder+`">
+								placeholder="`+phrases().IPv64DomainPlaceholder+`">
 						</div>
 						<div class="ipv64-mgmt-input-wrap">
-							<label class="ipv64-mgmt-label">`+T.IPv64DomainAPITokenOptional+`</span></label>
+							<label class="ipv64-mgmt-label">`+phrases().IPv64DomainAPITokenOptional+`</span></label>
 							<div class="input-with-action">
 								<input type="password" id="ipv64-api-token-input" class="search-box ipv64-mgmt-input"
-									placeholder="`+T.IPv64DomainPlaceholderToken+`">
+									placeholder="`+phrases().IPv64DomainPlaceholderToken+`">
 								<button type="button" class="input-action-btn" data-click="togglePassword('ipv64-api-token-input', this)">👁️</button>
 							</div>
 						</div>
 						<button class="action-btn btn--add-domain" data-click="ipv64AddDomain()">
-							➕ `+T.IPv64ActionAdd+`
+							➕ `+phrases().IPv64ActionAdd+`
 						</button>
 						<button class="action-btn btn--del-domain" data-click="ipv64DeleteDomain()">
-							🗑️ `+T.IPv64ActionDelete+`
+							🗑️ `+phrases().IPv64ActionDelete+`
 						</button>
 					</div>
 					<div id="ipv64-domain-result" class="ipv64-result"></div>
@@ -2833,12 +2912,12 @@ func writeSettingsSection(w http.ResponseWriter, c Config) {
 	_, _ = fmt.Fprint(w, `
 	<div class="page-section" data-section="settings">
 		<div class="card">
-			<div class="card-header">⚙️ `+T.SettingsTitle+`</div>
+			<div class="card-header">⚙️ `+phrases().SettingsTitle+`</div>
 			<div class="card-content">
-				`+buildSettingsInlineSection(T.SettingsSecurity, securitySection)+`
-				`+buildSettingsInlineSection(T.SettingsSystem, systemSection)+`
-				`+buildSettingsInlineSection(T.SettingsDomains, domainsSection)+`
-				`+buildSettingsInlineSection(T.SettingsNotify, notifySection)+`
+				`+buildSettingsInlineSection(phrases().SettingsSecurity, securitySection)+`
+				`+buildSettingsInlineSection(phrases().SettingsSystem, systemSection)+`
+				`+buildSettingsInlineSection(phrases().SettingsDomains, domainsSection)+`
+				`+buildSettingsInlineSection(phrases().SettingsNotify, notifySection)+`
 			</div>
 		</div>
 	</div>
@@ -2871,7 +2950,7 @@ func writeUsersSection(w http.ResponseWriter, isAdmin bool) {
 	_, _ = fmt.Fprint(w, `
 	<div class="page-section" data-section="users">
 		<div class="card">
-			<div class="card-header">`+T.SettingsUserManagement+`</div>
+			<div class="card-header">`+phrases().SettingsUserManagement+`</div>
 			<div class="card-content">
 				`+buildUsersSection()+`
 			</div>
@@ -2956,7 +3035,7 @@ func writeSingleDomainCard(w io.Writer, domain string, h DomainHistory, configur
 						</div>
 					</div>
 					<div class="domain-card-meta" data-last-changed="%s" data-uptime-id="%s">
-						<small>`+T.LastShort+` %s</small>
+						<small>`+phrases().LastShort+` %s</small>
 						<small class="domain-uptime-small">⏱️ <span id="uptime-%s">—</span></small>
 					</div>
 				</div>
@@ -2965,8 +3044,8 @@ func writeSingleDomainCard(w io.Writer, domain string, h DomainHistory, configur
 				<table class="domain-history-table">
 					<thead class="domain-history-head">
 						<tr>
-							<th class="domain-history-th-time">`+T.TableTime+`</th>
-							<th class="domain-history-th-ip">`+T.TableIPs+`</th>
+							<th class="domain-history-th-time">`+phrases().TableTime+`</th>
+							<th class="domain-history-th-ip">`+phrases().TableIPs+`</th>
 						</tr>
 					</thead>
 					<tbody>`,
@@ -3007,8 +3086,8 @@ func writeSingleDomainCard(w io.Writer, domain string, h DomainHistory, configur
 
 func buildDomainStatusVisuals(h DomainHistory, safeID string, newestChange time.Time) (string, string, string) {
 	dotClass := "domain-status-dot dot-idle"
-	dotTitle := T.DotTitleNoUpdate
-	changedBadge := `<span id="badge-` + safeID + `" class="changed-badge changed-badge--hidden">` + T.BadgeChanged + `</span>`
+	dotTitle := phrases().DotTitleNoUpdate
+	changedBadge := `<span id="badge-` + safeID + `" class="changed-badge changed-badge--hidden">` + phrases().BadgeChanged + `</span>`
 
 	if h.LastChanged == "" {
 		return dotClass, dotTitle, changedBadge
@@ -3022,14 +3101,14 @@ func buildDomainStatusVisuals(h DomainHistory, safeID string, newestChange time.
 	switch {
 	case time.Since(t) < 15*time.Minute:
 		dotClass = "domain-status-dot dot-ok dot-recent"
-		dotTitle = T.DotTitleChanged + h.LastChanged
-		changedBadge = `<span id="badge-` + safeID + `" class="changed-badge" data-changed-at="` + h.LastChanged + `">` + T.BadgeChanged + `</span>`
+		dotTitle = phrases().DotTitleChanged + h.LastChanged
+		changedBadge = `<span id="badge-` + safeID + `" class="changed-badge" data-changed-at="` + h.LastChanged + `">` + phrases().BadgeChanged + `</span>`
 	case !newestChange.IsZero() && t.Before(newestChange.Add(-time.Minute)):
 		dotClass = "domain-status-dot dot-warn"
-		dotTitle = T.DotTitleLast + h.LastChanged + T.DotTitleOther
+		dotTitle = phrases().DotTitleLast + h.LastChanged + phrases().DotTitleOther
 	default:
 		dotClass = "domain-status-dot dot-ok"
-		dotTitle = T.DotTitleActive + h.LastChanged
+		dotTitle = phrases().DotTitleActive + h.LastChanged
 	}
 
 	return dotClass, dotTitle, changedBadge
@@ -3040,12 +3119,12 @@ func buildOrphanDomainVisuals(isOrphan bool, domain string) (string, string, str
 		return "", "", ""
 	}
 	orphanStyle := " domain-item--orphan"
-	orphanLabel := `<span class="orphan-badge">` + esc(T.NotConfiguredLabel) + `</span>`
+	orphanLabel := `<span class="orphan-badge">` + esc(phrases().NotConfiguredLabel) + `</span>`
 
 	deleteBtn := `<button class="action-btn btn-danger-soft" ` +
 		`data-click="event.preventDefault();event.stopPropagation();` +
 		`deleteDomain('` + jsString(domain) + `',this)">` +
-		esc(T.RemoveBtn) + `</button>`
+		esc(phrases().RemoveBtn) + `</button>`
 
 	return orphanStyle, orphanLabel, deleteBtn
 }
@@ -3089,24 +3168,18 @@ func writeDomainHistoryRows(w io.Writer, h DomainHistory) {
 	}
 
 	if len(h.IPs) < 2 {
-		_, _ = fmt.Fprint(w, `<tr class="empty-history-row"><td colspan="2">`+T.NoMoreEntries+`</td></tr>`)
+		_, _ = fmt.Fprint(w, `<tr class="empty-history-row"><td colspan="2">`+phrases().NoMoreEntries+`</td></tr>`)
 	}
 }
 
 func writeDashboardFooter(w http.ResponseWriter) {
-	_, _ = fmt.Fprintf(w, `
-	<footer class="dashboard-footer dashboard-footer--positioned">
-		<div>
-			<span>&copy; %d IONOS-DDNS Made with ❤️ by</span>
-			<span class="dashboard-footer-sep">|</span>
-			<a href="https://github.com/CrazyUs3r/IONOS-DDNS" target="_blank" rel="noopener noreferrer" class="dashboard-footer-link">CrazyUs3r</a>
-		</div>
-	</footer>
+	_, _ = fmt.Fprint(w, appFooterHTML())
 
+	_, _ = fmt.Fprint(w, `
 			</div><!-- end main-content -->
 		</div><!-- end app-right -->
 	</div><!-- end app-layout -->
-	`, time.Now().Year())
+	`)
 
 	_, _ = fmt.Fprint(w, `
 	<script src="/assets/i18n.js" defer></script>
@@ -3114,6 +3187,20 @@ func writeDashboardFooter(w http.ResponseWriter) {
 	</body>
 	</html>
 	`)
+}
+
+func appFooterHTML() string {
+	return fmt.Sprintf(`
+<footer class="dashboard-footer dashboard-footer--positioned">
+	<div>
+		<span>&copy; %d IONOS-DDNS Made with ❤️ by</span>
+		<span class="dashboard-footer-sep">|</span>
+		<a href="https://github.com/CrazyUs3r/IONOS-DDNS"
+		   target="_blank"
+		   rel="noopener noreferrer"
+		   class="dashboard-footer-link">CrazyUs3r</a>
+	</div>
+</footer>`, time.Now().Year())
 }
 
 // ============================================================================
@@ -3125,12 +3212,12 @@ func writeDiagnoseSection(w http.ResponseWriter) {
 	<div class="page-section" data-section="diagnose">
 		<div class="card">
 			<div class="card-header card-header--space-between">
-				<span>🩺 `+t(T.DiagnoseTitle, "Diagnose / Health Center")+`</span>
-				<button class="action-btn topbar-action-btn" data-click="refreshDiagnosis()">`+t(T.DiagnoseRefreshBtn, "🔄 Refresh")+`</button>
+				<span>🩺 `+t(phrases().DiagnoseTitle, "Diagnose / Health Center")+`</span>
+				<button class="action-btn topbar-action-btn" data-click="refreshDiagnosis()">`+t(phrases().DiagnoseRefreshBtn, "🔄 Refresh")+`</button>
 			</div>
 			<div class="card-content">
 				<div id="diagnose-content" class="diag-loading">
-					`+t(T.DiagnoseLoading, "Loading diagnosis...")+`
+					`+t(phrases().DiagnoseLoading, "Loading diagnosis...")+`
 				</div>
 			</div>
 		</div>
@@ -3140,7 +3227,7 @@ func writeDiagnoseSection(w http.ResponseWriter) {
 
 func handleAPIDiagnose(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodGET {
-		http.Error(w, T.APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -3249,7 +3336,7 @@ func diagnoseDomainWarnings(domains []DomainConfig) []string {
 	}
 
 	if len(domains) == 0 {
-		warnings = append(warnings, t(T.DiagnoseNoDomainsConfigured, "No domains configured."))
+		warnings = append(warnings, t(phrases().DiagnoseNoDomainsConfigured, "No domains configured."))
 	}
 
 	return warnings
@@ -3259,12 +3346,12 @@ func diagnoseSingleDomainWarnings(dc DomainConfig) []string {
 	warnings := make([]string, 0)
 
 	if strings.TrimSpace(dc.FQDN) == "" {
-		warnings = append(warnings, t(T.DiagnoseDomainWithoutFQDN, "A domain without FQDN is configured."))
+		warnings = append(warnings, t(phrases().DiagnoseDomainWithoutFQDN, "A domain without FQDN is configured."))
 	}
 
 	if dc.TTL > 0 && dc.TTL < 60 {
 		warnings = append(warnings, fmt.Sprintf(
-			t(T.DiagnoseTTLTooLowFormat, "%s: TTL is very low."),
+			t(phrases().DiagnoseTTLTooLowFormat, "%s: TTL is very low."),
 			diagnosisDomainName(dc),
 		))
 	}
@@ -3279,7 +3366,7 @@ func diagnoseSingleDomainWarnings(dc DomainConfig) []string {
 func diagnosisDomainName(dc DomainConfig) string {
 	fqdn := strings.TrimSpace(dc.FQDN)
 	if fqdn == "" {
-		return t(T.DiagnoseUnknownDomain, "Unknown domain")
+		return t(phrases().DiagnoseUnknownDomain, "Unknown domain")
 	}
 	return fqdn
 }
@@ -3291,7 +3378,7 @@ func providerCredentialWarning(dc DomainConfig) string {
 	case ProviderIONOS:
 		if dc.APIPrefix == "" || dc.APISecret == "" {
 			return fmt.Sprintf(
-				t(T.DiagnoseIonosCredentialsIncompleteFormat, "%s: IONOS credentials incomplete."),
+				t(phrases().DiagnoseIonosCredentialsIncompleteFormat, "%s: IONOS credentials incomplete."),
 				fqdn,
 			)
 		}
@@ -3299,7 +3386,7 @@ func providerCredentialWarning(dc DomainConfig) string {
 	case ProviderCloudflare:
 		if dc.CFToken == "" && (dc.CFEmail == "" || dc.CFSecret == "") {
 			return fmt.Sprintf(
-				t(T.DiagnoseCloudflareCredentialsIncompleteFormat, "%s: Cloudflare credentials incomplete."),
+				t(phrases().DiagnoseCloudflareCredentialsIncompleteFormat, "%s: Cloudflare credentials incomplete."),
 				fqdn,
 			)
 		}
@@ -3307,7 +3394,7 @@ func providerCredentialWarning(dc DomainConfig) string {
 	case ProviderIPv64:
 		if dc.IPv64Token == "" {
 			return fmt.Sprintf(
-				t(T.DiagnoseIpv64TokenMissingFormat, "%s: IPv64 token missing."),
+				t(phrases().DiagnoseIpv64TokenMissingFormat, "%s: IPv64 token missing."),
 				fqdn,
 			)
 		}
@@ -3320,19 +3407,19 @@ func diagnoseGlobalConfigWarnings(cfg Config) []string {
 	warnings := make([]string, 0)
 
 	if cfg.DryRun {
-		warnings = append(warnings, t(T.DiagnoseDryRunActive, "Dry-run is active: DNS changes are not written."))
+		warnings = append(warnings, t(phrases().DiagnoseDryRunActive, "Dry-run is active: DNS changes are not written."))
 	}
 
 	if cfg.DebugEnabled {
-		warnings = append(warnings, t(T.DiagnoseDebugActive, "Debug mode is active."))
+		warnings = append(warnings, t(phrases().DiagnoseDebugActive, "Debug mode is active."))
 	}
 
 	if cfg.DebugHTTPRaw {
-		warnings = append(warnings, t(T.DiagnoseHTTPRawDebugActive, "HTTP raw debug is active. Sensitive data may appear in logs."))
+		warnings = append(warnings, t(phrases().DiagnoseHTTPRawDebugActive, "HTTP raw debug is active. Sensitive data may appear in logs."))
 	}
 
 	if cfg.Interval > 0 && cfg.Interval < 60 {
-		warnings = append(warnings, t(T.DiagnoseIntervalLow, "Update interval is very low."))
+		warnings = append(warnings, t(phrases().DiagnoseIntervalLow, "Update interval is very low."))
 	}
 
 	return warnings
@@ -3363,18 +3450,18 @@ func diagnoseConfigInfo(cfg Config) map[string]any {
 
 func diagnosisMainStatus(warnings []string, logWarnings int) (string, string) {
 	if !schedulerRanOnce.Load() {
-		return "starting", t(T.DiagnoseReasonSchedulerNotRun, "Scheduler has not run yet.")
+		return "starting", t(phrases().DiagnoseReasonSchedulerNotRun, "Scheduler has not run yet.")
 	}
 
 	if !lastOk.Load() {
-		return "unhealthy", t(T.DiagnoseReasonLastSchedulerFailed, "The last scheduler run failed.")
+		return "unhealthy", t(phrases().DiagnoseReasonLastSchedulerFailed, "The last scheduler run failed.")
 	}
 
 	if len(warnings) > 0 || logWarnings > 0 {
-		return "degraded", t(T.DiagnoseReasonWarningsButRunning, "There are warnings, but the service is running.")
+		return "degraded", t(phrases().DiagnoseReasonWarningsButRunning, "There are warnings, but the service is running.")
 	}
 
-	return "healthy", t(T.DiagnoseReasonAllGood, "Everything looks good.")
+	return "healthy", t(phrases().DiagnoseReasonAllGood, "Everything looks good.")
 }
 
 func formatDiagnosisTime(t time.Time) string {
@@ -3401,7 +3488,7 @@ func diagnoseFileInfo(name, path string) map[string]any {
 	}
 
 	if strings.TrimSpace(path) == "" {
-		out["error"] = t(T.DiagnosePathEmpty, "path empty")
+		out["error"] = t(phrases().DiagnosePathEmpty, "path empty")
 		return out
 	}
 
@@ -3437,10 +3524,10 @@ func writeBackupSection(w http.ResponseWriter, isAdmin bool) {
 		_, _ = fmt.Fprint(w, `
 		<div class="page-section" data-section="backup">
 			<div class="card">
-				<div class="card-header">💾 `+t(T.BackupTitle, "Backup & Restore")+`</div>
+				<div class="card-header">💾 `+t(phrases().BackupTitle, "Backup & Restore")+`</div>
 				<div class="card-content">
 					<div class="backup-warning">
-						🔒 `+t(T.BackupAdminOnly, "Backup & Restore is only available for admins.")+`
+						🔒 `+t(phrases().BackupAdminOnly, "Backup & Restore is only available for admins.")+`
 					</div>
 				</div>
 			</div>
@@ -3452,41 +3539,41 @@ func writeBackupSection(w http.ResponseWriter, isAdmin bool) {
 	_, _ = fmt.Fprint(w, `
 	<div class="page-section" data-section="backup">
 		<div class="card">
-			<div class="card-header">💾 `+t(T.BackupTitle, "Backup & Restore")+`</div>
+			<div class="card-header">💾 `+t(phrases().BackupTitle, "Backup & Restore")+`</div>
 			<div class="card-content">
 				<div class="backup-grid">
 					<div class="backup-box">
-						<h3>`+t(T.BackupCreateTitle, "Create backup")+`</h3>
-						<p>`+t(T.BackupCreateDesc, "Exports config, status, users, logs and current metrics as JSON.")+`</p>
-						<button class="action-btn" data-click="downloadFullBackup()">`+t(T.BackupDownloadBtn, "⬇️ Download backup")+`</button>
+						<h3>`+t(phrases().BackupCreateTitle, "Create backup")+`</h3>
+						<p>`+t(phrases().BackupCreateDesc, "Exports config, status, users, logs and current metrics as JSON.")+`</p>
+						<button class="action-btn" data-click="downloadFullBackup()">`+t(phrases().BackupDownloadBtn, "⬇️ Download backup")+`</button>
 						<div class="backup-hint">
-							`+t(T.BackupSecretsHint, "Warning: The backup contains secrets and password hashes. Store it safely.")+`
+							`+t(phrases().BackupSecretsHint, "Warning: The backup contains secrets and password hashes. Store it safely.")+`
 						</div>
 					</div>
 
 					<div class="backup-box">
-						<h3>`+t(T.BackupRestoreTitle, "Restore backup")+`</h3>
-						<p>`+t(T.BackupRestoreDesc, "Select a previously created backup and choose which areas should be restored.")+`</p>
+						<h3>`+t(phrases().BackupRestoreTitle, "Restore backup")+`</h3>
+						<p>`+t(phrases().BackupRestoreDesc, "Select a previously created backup and choose which areas should be restored.")+`</p>
 
 						<input type="file" id="backup-file" class="search-box" accept="application/json,.json">
 
 						<label class="inline-check">
 							<input type="checkbox" id="restore-config" checked>
-							`+t(T.BackupRestoreConfig, "Restore config")+`
+							`+t(phrases().BackupRestoreConfig, "Restore config")+`
 						</label>
 
 						<label class="inline-check">
 							<input type="checkbox" id="restore-status" checked>
-							`+t(T.BackupRestoreStatus, "Restore domain status / history")+`
+							`+t(phrases().BackupRestoreStatus, "Restore domain status / history")+`
 						</label>
 
 						<label class="inline-check">
 							<input type="checkbox" id="restore-users">
-							`+t(T.BackupRestoreUsers, "Restore users")+`
+							`+t(phrases().BackupRestoreUsers, "Restore users")+`
 						</label>
 
 						<button class="action-btn btn-danger-soft backup-restore-btn" data-click="restoreFullBackup()">
-							`+t(T.BackupRestoreStartBtn, "♻️ Start restore")+`
+							`+t(phrases().BackupRestoreStartBtn, "♻️ Start restore")+`
 						</button>
 
 						<div id="backup-result" class="backup-result"></div>
@@ -3506,7 +3593,7 @@ func requireAdminAPI(w http.ResponseWriter, r *http.Request) bool {
 	sess, ok := sessionFromRequest(r)
 	if !ok || sess == nil || sess.Role != RoleAdmin {
 		writeJSON(w, http.StatusForbidden, map[string]string{
-			"error": t(T.BackupAdminRequired, "admin required"),
+			"error": t(phrases().BackupAdminRequired, "admin required"),
 		})
 		return false
 	}
@@ -3545,7 +3632,7 @@ func readStatusBackup() map[string]DomainHistory {
 
 func handleAPIBackupDownload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodGET {
-		http.Error(w, T.APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
 		return
 	}
 	if !requireAdminAPI(w, r) {
@@ -3581,7 +3668,7 @@ func handleAPIBackupDownload(w http.ResponseWriter, r *http.Request) {
 
 func handleAPIBackupRestore(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodPOST {
-		http.Error(w, T.APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -3629,16 +3716,16 @@ func parseBackupRestoreRequest(w http.ResponseWriter, r *http.Request) (backupRe
 
 	selection := backupRestoreSelectionFromForm(r)
 	if !selection.any() {
-		return backupRestoreRequest{}, http.StatusBadRequest, fmt.Errorf("%s", t(T.BackupNothingSelected, "nothing selected"))
+		return backupRestoreRequest{}, http.StatusBadRequest, fmt.Errorf("%s", t(phrases().BackupNothingSelected, "nothing selected"))
 	}
 
 	file, _, err := r.FormFile("backup")
 	if err != nil {
-		return backupRestoreRequest{}, http.StatusBadRequest, fmt.Errorf("%s", t(T.BackupFileMissing, "backup file missing"))
+		return backupRestoreRequest{}, http.StatusBadRequest, fmt.Errorf("%s", t(phrases().BackupFileMissing, "backup file missing"))
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			debugLog("DASHBOARD", "", fmt.Sprintf(T.ErrBodyClose+": %v", err))
+			debugLog("DASHBOARD", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
 		}
 	}()
 
@@ -3671,7 +3758,7 @@ func decodeDashboardBackup(file io.Reader) (dashboardBackup, error) {
 	err := json.NewDecoder(io.LimitReader(file, 16<<20)).Decode(&backup)
 	if err != nil {
 		return dashboardBackup{}, fmt.Errorf(
-			t(T.BackupInvalidJSONFormat, "invalid backup json: %w"),
+			t(phrases().BackupInvalidJSONFormat, "invalid backup json: %w"),
 			err,
 		)
 	}
@@ -3711,7 +3798,7 @@ func restoreSelectedBackup(req backupRestoreRequest) ([]string, int, error) {
 
 func restoreBackupConfig(backup dashboardBackup) (int, error) {
 	if backup.Config == nil {
-		return http.StatusBadRequest, fmt.Errorf("%s", t(T.BackupContainsNoConfig, "backup contains no config"))
+		return http.StatusBadRequest, fmt.Errorf("%s", t(phrases().BackupContainsNoConfig, "backup contains no config"))
 	}
 
 	oldCfg, err := applyBackupConfig(*backup.Config)
@@ -3722,7 +3809,7 @@ func restoreBackupConfig(backup dashboardBackup) (int, error) {
 	if err := saveConfigToFile(); err != nil {
 		restoreConfigInMemory(oldCfg)
 		return http.StatusInternalServerError, fmt.Errorf(
-			t(T.BackupConfigSaveFailedFormat, "config save failed: %w"),
+			t(phrases().BackupConfigSaveFailedFormat, "config save failed: %w"),
 			err,
 		)
 	}
@@ -3764,7 +3851,7 @@ func afterConfigRestore() {
 
 func restoreBackupStatus(backup dashboardBackup) (int, error) {
 	if backup.Status == nil {
-		return http.StatusBadRequest, fmt.Errorf("%s", t(T.BackupContainsNoStatus, "backup contains no status"))
+		return http.StatusBadRequest, fmt.Errorf("%s", t(phrases().BackupContainsNoStatus, "backup contains no status"))
 	}
 
 	b, err := json.MarshalIndent(backup.Status, "", "  ")
@@ -3777,7 +3864,7 @@ func restoreBackupStatus(backup dashboardBackup) (int, error) {
 
 	if err := os.WriteFile(updatePath, b, 0o600); err != nil {
 		return http.StatusInternalServerError, fmt.Errorf(
-			t(T.BackupStatusRestoreFailedFormat, "status restore failed: %w"),
+			t(phrases().BackupStatusRestoreFailedFormat, "status restore failed: %w"),
 			err,
 		)
 	}
@@ -3788,12 +3875,12 @@ func restoreBackupStatus(backup dashboardBackup) (int, error) {
 
 func restoreBackupUsers(backup dashboardBackup) (int, error) {
 	if len(backup.Users) == 0 {
-		return http.StatusBadRequest, fmt.Errorf("%s", t(T.BackupContainsNoUsers, "backup contains no users"))
+		return http.StatusBadRequest, fmt.Errorf("%s", t(phrases().BackupContainsNoUsers, "backup contains no users"))
 	}
 
 	if err := saveUsers(backup.Users); err != nil {
 		return http.StatusInternalServerError, fmt.Errorf(
-			t(T.BackupUsersRestoreFailedFormat, "users restore failed: %w"),
+			t(phrases().BackupUsersRestoreFailedFormat, "users restore failed: %w"),
 			err,
 		)
 	}
@@ -3807,7 +3894,7 @@ func logBackupRestore(restored []string) {
 		Level:  LogWarn,
 		Action: ActionConfig,
 		Message: fmt.Sprintf(
-			t(T.BackupRestoredLogFormat, "Backup restored: %s"),
+			t(phrases().BackupRestoredLogFormat, "Backup restored: %s"),
 			strings.Join(restored, ", "),
 		),
 	})

@@ -290,7 +290,7 @@ func handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		time.Sleep(300 * time.Millisecond)
-		errMsg = fmt.Sprintf("%s (%d attempts remaining)", t(T.TotpLoginInvalidCode, "Invalid code — please try again"), remaining)
+		errMsg = fmt.Sprintf("%s (%d attempts remaining)", t(phrases().TotpLoginInvalidCode, "Invalid code — please try again"), remaining)
 		log(LogContext{
 			Level:   LogWarn,
 			Action:  ActionConfig,
@@ -339,7 +339,7 @@ func handleSettings2FA(w http.ResponseWriter, r *http.Request) {
 	users := loadUsers()
 	currentUser, ok := findDashboardUser(users, sess.UserID)
 	if !ok {
-		http.Error(w, t(T.TotpUserNotFound, "User not found"), http.StatusInternalServerError)
+		http.Error(w, t(phrases().TotpUserNotFound, "User not found"), http.StatusInternalServerError)
 		return
 	}
 
@@ -355,7 +355,7 @@ func handleSettings2FA(w http.ResponseWriter, r *http.Request) {
 		users = loadUsers()
 		currentUser, ok = findDashboardUser(users, sess.UserID)
 		if !ok {
-			http.Error(w, t(T.TotpUserNotFound, "User not found"), http.StatusInternalServerError)
+			http.Error(w, t(phrases().TotpUserNotFound, "User not found"), http.StatusInternalServerError)
 			return
 		}
 	}
@@ -399,13 +399,13 @@ func handle2FAGenerate(currentUser *DashboardUser) totpFlash {
 	secret, err := generateTOTPSecret()
 	if err != nil {
 		return totpFlash{Message: fmt.Sprintf(
-			t(T.TotpFlashGenerateSecretFailed, "Failed to generate secret: %s"),
+			t(phrases().TotpFlashGenerateSecretFailed, "Failed to generate secret: %s"),
 			err.Error(),
 		), Type: flashTypeError}
 	}
 	storeTOTPPending(currentUser.ID, secret)
 	return totpFlash{Message: t(
-		T.TotpFlashScanConfirm,
+		phrases().TotpFlashScanConfirm,
 		"Scan the QR code and confirm with your current code",
 	), Type: flashTypeInfo}
 }
@@ -414,7 +414,7 @@ func handle2FAConfirm(r *http.Request, currentUser *DashboardUser, users []Dashb
 	pendingSecret, hasPending := loadTOTPPending(currentUser.ID)
 	if !hasPending {
 		return totpFlash{Message: t(
-			T.TotpFlashSetupExpired,
+			phrases().TotpFlashSetupExpired,
 			"Setup expired — please start again",
 		), Type: flashTypeError}
 	}
@@ -422,7 +422,7 @@ func handle2FAConfirm(r *http.Request, currentUser *DashboardUser, users []Dashb
 	code := strings.TrimSpace(r.FormValue("totp_code"))
 	if !validateTOTPCode(pendingSecret, code) {
 		return totpFlash{Message: t(
-			T.TotpFlashCodeInvalid,
+			phrases().TotpFlashCodeInvalid,
 			"Code invalid — please try again",
 		), Type: flashTypeError}
 	}
@@ -438,12 +438,12 @@ func handle2FAConfirm(r *http.Request, currentUser *DashboardUser, users []Dashb
 
 	if err := saveUsers(users); err != nil {
 		return totpFlash{Message: fmt.Sprintf(
-			t(T.TotpFlashSaveFailed, "Could not save: %s"),
+			t(phrases().TotpFlashSaveFailed, "Could not save: %s"),
 			err.Error(),
 		), Type: flashTypeError}
 	}
 	return totpFlash{Message: t(
-		T.TotpFlashEnabled,
+		phrases().TotpFlashEnabled,
 		"✅ Two-factor authentication is now active",
 	), Type: flashTypeSuccess}
 }
@@ -452,7 +452,7 @@ func handle2FADisable(r *http.Request, currentUser *DashboardUser, users []Dashb
 	code := strings.TrimSpace(r.FormValue("totp_code"))
 	if !totpEnabledForUser(currentUser) || !validateTOTPCode(currentUser.TOTPSecret, code) {
 		return totpFlash{Message: t(
-			T.TotpFlashDisableInvalid,
+			phrases().TotpFlashDisableInvalid,
 			"Invalid code — cannot disable 2FA",
 		), Type: flashTypeError}
 	}
@@ -467,13 +467,13 @@ func handle2FADisable(r *http.Request, currentUser *DashboardUser, users []Dashb
 
 	if err := saveUsers(users); err != nil {
 		return totpFlash{Message: fmt.Sprintf(
-			t(T.TotpFlashSaveFailed, "Could not save: %s"),
+			t(phrases().TotpFlashSaveFailed, "Could not save: %s"),
 			err.Error(),
 		), Type: flashTypeError}
 	}
 	deleteTOTPPending(currentUser.ID)
 	return totpFlash{Message: t(
-		T.TotpFlashDisabled,
+		phrases().TotpFlashDisabled,
 		"🔓 Two-factor authentication has been disabled",
 	), Type: flashTypeSuccess}
 }
@@ -613,7 +613,7 @@ func handleLoginPost2FA(w http.ResponseWriter, r *http.Request, user *DashboardU
 	log(LogContext{
 		Level:   LogInfo,
 		Action:  ActionConfig,
-		Message: fmt.Sprintf(T.LoginSuccessLog, user.Username, user.Role, getClientIP(r)),
+		Message: fmt.Sprintf(phrases().LoginSuccessLog, user.Username, user.Role, getClientIP(r)),
 	})
 
 	http.Redirect(w, r, safeLocalRedirect(redirect), http.StatusSeeOther)
@@ -626,7 +626,7 @@ func handleLoginPost2FA(w http.ResponseWriter, r *http.Request, user *DashboardU
 func qrCodeImgTag(uri string) string {
 	_ = uri
 	return `<img src="/settings/2fa/qr"
-		alt="` + esc(t(T.TotpQRAlt, "QR Code")) + `" width="220" height="220"
+		alt="` + esc(t(phrases().TotpQRAlt, "QR Code")) + `" width="220" height="220"
 		class="totp-qr-img">`
 }
 
@@ -636,7 +636,7 @@ func qrCodeImgTag(uri string) string {
 
 func build2FASettingsFragmentForSession(sess *Session, flash, flashType string) string {
 	if sess == nil {
-		return `<div class="auth-error">⚠️ ` + esc(t(T.ErrAuthFailed, "Session expired. Please log in again.")) + `</div>`
+		return `<div class="auth-error">⚠️ ` + esc(t(phrases().ErrAuthFailed, "Session expired. Please log in again.")) + `</div>`
 	}
 
 	users := loadUsers()
@@ -648,7 +648,7 @@ func build2FASettingsFragmentForSession(sess *Session, flash, flashType string) 
 		}
 	}
 	if currentUser == nil {
-		return `<div class="auth-error">⚠️ ` + esc(t(T.TotpUserNotFound, "User not found")) + `</div>`
+		return `<div class="auth-error">⚠️ ` + esc(t(phrases().TotpUserNotFound, "User not found")) + `</div>`
 	}
 
 	pendingSecret, hasPending := loadTOTPPending(currentUser.ID)
@@ -688,69 +688,69 @@ func build2FASettingsFragment(user *DashboardUser, pendingSecret string, hasPend
 		mainContent = `
 <p class="totp-help">
 	` + esc(t(
-			T.TotpScanQrInstruction,
+			phrases().TotpScanQrInstruction,
 			"Scan this QR code with Google Authenticator, Authy, Microsoft Authenticator or any TOTP app, then enter the 6-digit code below to confirm.",
 		)) + `
 </p>
 ` + qrCodeImgTag(uri) + `
 <details class="totp-uri-details">
-	<summary>` + esc(t(T.TotpShowURIManually, "Show URI manually")) + `</summary>
+	<summary>` + esc(t(phrases().TotpShowURIManually, "Show URI manually")) + `</summary>
 	<div class="totp-uri-box">` + esc(uri) + `</div>
 </details>
 <form method="POST" action="` + formAction + `" data-totp-form>
 	<input type="hidden" name="action" value="confirm">
 	<div class="auth-field">
-		<label class="auth-label">` + esc(t(T.TotpCodeFromAppLabel, "6-digit code from your app")) + `</label>
+		<label class="auth-label">` + esc(t(phrases().TotpCodeFromAppLabel, "6-digit code from your app")) + `</label>
 		<input class="auth-input totp-code-input" type="text" name="totp_code" inputmode="numeric"
 			pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code"
 			placeholder="123456" autofocus required>
 	</div>
 	<button class="auth-btn totp-btn-success" type="submit">
-		` + esc(t(T.TotpConfirmActivateButton, "✅ Confirm & Activate 2FA")) + `
+		` + esc(t(phrases().TotpConfirmActivateButton, "✅ Confirm & Activate 2FA")) + `
 	</button>
 </form>
 <form method="POST" action="` + formAction + `" data-totp-form class="totp-secondary-form">
 	<input type="hidden" name="action" value="generate">
 	<button class="auth-btn totp-btn-muted" type="submit">
-		` + esc(t(T.TotpGenerateNewSecretButton, "🔄 Generate new secret")) + `
+		` + esc(t(phrases().TotpGenerateNewSecretButton, "🔄 Generate new secret")) + `
 	</button>
 </form>`
 
 	case totpEnabledForUser(user):
 		activeSubtitle := fmt.Sprintf(
-			t(T.TotpActiveSubtitle, "Your account is protected with TOTP (%s)"),
+			t(phrases().TotpActiveSubtitle, "Your account is protected with TOTP (%s)"),
 			issuer,
 		)
 
 		mainContent = `
 <div class="totp-status-box">
 	<span class="totp-status-icon">🔒</span>
-	<div class="totp-status-title totp-status-title--enabled">` + esc(t(T.TotpActiveTitle, "Two-factor authentication is active")) + `</div>
+	<div class="totp-status-title totp-status-title--enabled">` + esc(t(phrases().TotpActiveTitle, "Two-factor authentication is active")) + `</div>
 	<div class="totp-status-sub">` + esc(activeSubtitle) + `</div>
 </div>
 
 <hr class="totp-separator">
 
 <p class="totp-help">
-	` + esc(t(T.TotpDisableInstruction, "To disable 2FA, enter a valid code from your authenticator app.")) + `
+	` + esc(t(phrases().TotpDisableInstruction, "To disable 2FA, enter a valid code from your authenticator app.")) + `
 </p>
 <form method="POST" action="` + formAction + `" data-totp-form>
 	<input type="hidden" name="action" value="disable">
 	<div class="auth-field">
-		<label class="auth-label">` + esc(t(T.TotpCurrentCodeLabel, "Current 6-digit code")) + `</label>
+		<label class="auth-label">` + esc(t(phrases().TotpCurrentCodeLabel, "Current 6-digit code")) + `</label>
 		<input class="auth-input totp-code-input" type="text" name="totp_code" inputmode="numeric"
 			pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code"
 			placeholder="123456" required>
 	</div>
 	<button class="auth-btn totp-btn-danger" type="submit">
-		` + esc(t(T.TotpDisableButton, "🔓 Disable 2FA")) + `
+		` + esc(t(phrases().TotpDisableButton, "🔓 Disable 2FA")) + `
 	</button>
 </form>
 <hr class="totp-separator">
 <form method="POST" action="` + formAction + `" data-totp-form>
 	<input type="hidden" name="action" value="generate">
 	<button class="auth-btn totp-btn-muted" type="submit">
-		` + esc(t(T.TotpReplaceSecretButton, "🔄 Replace with new secret")) + `
+		` + esc(t(phrases().TotpReplaceSecretButton, "🔄 Replace with new secret")) + `
 	</button>
 </form>`
 
@@ -758,19 +758,19 @@ func build2FASettingsFragment(user *DashboardUser, pendingSecret string, hasPend
 		mainContent = `
 <div class="totp-status-box">
 	<span class="totp-status-icon">🔓</span>
-	<div class="totp-status-title">` + esc(t(T.TotpInactiveTitle, "Two-factor authentication is not active")) + `</div>
-	<div class="totp-status-sub">` + esc(t(T.TotpInactiveSubtitle, "Add an extra layer of security to your account")) + `</div>
+	<div class="totp-status-title">` + esc(t(phrases().TotpInactiveTitle, "Two-factor authentication is not active")) + `</div>
+	<div class="totp-status-sub">` + esc(t(phrases().TotpInactiveSubtitle, "Add an extra layer of security to your account")) + `</div>
 </div>
 <form method="POST" action="` + formAction + `" data-totp-form class="totp-primary-form">
 	<input type="hidden" name="action" value="generate">
 	<button class="auth-btn totp-btn-primary" type="submit">
-		` + esc(t(T.TotpSetupButton, "🛡️ Set up 2FA")) + `
+		` + esc(t(phrases().TotpSetupButton, "🛡️ Set up 2FA")) + `
 	</button>
 </form>`
 	}
 
 	accountMeta := fmt.Sprintf(
-		t(T.TotpAccountMeta, "Account: %s · Role: %s"),
+		t(phrases().TotpAccountMeta, "Account: %s · Role: %s"),
 		user.Username,
 		string(user.Role),
 	)
@@ -778,7 +778,7 @@ func build2FASettingsFragment(user *DashboardUser, pendingSecret string, hasPend
 	return `
 <div class="totp-settings-inline">
 <div class="auth-logo">🛡️</div>
-<div class="auth-title">` + esc(t(T.TotpTitle, "Two-Factor Authentication")) + `</div>
+<div class="auth-title">` + esc(t(phrases().TotpTitle, "Two-Factor Authentication")) + `</div>
 <div class="auth-sub">` + esc(accountMeta) + `</div>
 	` + flashHTML + mainContent + `
 </div>`
@@ -791,9 +791,9 @@ func build2FAPage(user *DashboardUser, pendingSecret string, hasPending bool, fl
 	}
 	body += `
 <div class="totp-page-link-row">
-	<a href="/" class="totp-page-link">` + esc(t(T.TotpBackToDashboard, "← Back to Dashboard")) + `</a>
+	<a href="/" class="totp-page-link">` + esc(t(phrases().TotpBackToDashboard, "← Back to Dashboard")) + `</a>
 </div>`
-	return authPageShell(t(T.TotpSettingsPageTitle, "2FA Settings"), body)
+	return authPageShell(t(phrases().TotpSettingsPageTitle, "2FA Settings"), body)
 }
 
 func buildTOTPLoginPage(errMsg string) string {
@@ -804,25 +804,25 @@ func buildTOTPLoginPage(errMsg string) string {
 
 	body := `
 <div class="auth-logo">🔑</div>
-<div class="auth-title">` + esc(t(T.TotpTitle, "Two-Factor Authentication")) + `</div>
-<div class="auth-sub">` + esc(t(T.TotpLoginSubtitle, "Enter the 6-digit code from your authenticator app")) + `</div>
+<div class="auth-title">` + esc(t(phrases().TotpTitle, "Two-Factor Authentication")) + `</div>
+<div class="auth-sub">` + esc(t(phrases().TotpLoginSubtitle, "Enter the 6-digit code from your authenticator app")) + `</div>
 ` + errHTML + `
 <form method="POST" action="/login/totp">
 	<div class="auth-field">
-		<label class="auth-label">` + esc(t(T.TotpLoginCodeLabel, "Authentication Code")) + `</label>
+		<label class="auth-label">` + esc(t(phrases().TotpLoginCodeLabel, "Authentication Code")) + `</label>
 		<input class="auth-input totp-login-code-input" type="text" name="totp_code" inputmode="numeric"
 			pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code"
 			placeholder="000000" autofocus required>
 	</div>
-	<button class="auth-btn" type="submit">` + esc(t(T.TotpVerifyButton, "🔓 Verify")) + `</button>
+	<button class="auth-btn" type="submit">` + esc(t(phrases().TotpVerifyButton, "🔓 Verify")) + `</button>
 </form>
 <div class="totp-page-link-row totp-page-link-row--compact">
 	<a href="/login" class="totp-page-link">
-		` + esc(t(T.TotpBackToLogin, "← Back to login")) + `
+		` + esc(t(phrases().TotpBackToLogin, "← Back to login")) + `
 	</a>
 </div>`
 
-	return authPageShell(t(T.TotpVerificationPageTitle, "2FA Verification"), body)
+	return authPageShell(t(phrases().TotpVerificationPageTitle, "2FA Verification"), body)
 }
 
 // ============================================================================

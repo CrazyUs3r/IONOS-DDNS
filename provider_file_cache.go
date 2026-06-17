@@ -21,11 +21,11 @@ type dnsProviderFileCache struct {
 // ============================================================================
 func saveDNSProviderCacheToFile(providerName, cachePath string, zones []Zone, recordCache *ZoneRecordCache) error {
 	if recordCache == nil {
-		return fmt.Errorf("%s", T.ErrRecordCacheNil)
+		return fmt.Errorf("%s", phrases().ErrRecordCacheNil)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
-		return fmt.Errorf("%s: %w", T.ErrCacheDirCreate, err)
+		return fmt.Errorf("%s: %w", phrases().ErrCacheDirCreate, err)
 	}
 
 	cache := dnsProviderFileCache{
@@ -45,20 +45,20 @@ func saveDNSProviderCacheToFile(providerName, cachePath string, zones []Zone, re
 
 	jsonData, err := json.MarshalIndent(cache, "", " ")
 	if err != nil {
-		return fmt.Errorf("%s: %w", T.ErrCacheMarshal, err)
+		return fmt.Errorf("%s: %w", phrases().ErrCacheMarshal, err)
 	}
 
 	tmpPath := cachePath + ".tmp"
 	if err := os.WriteFile(tmpPath, jsonData, 0o600); err != nil {
-		return fmt.Errorf("%s: %w", T.ErrCacheWrite, err)
+		return fmt.Errorf("%s: %w", phrases().ErrCacheWrite, err)
 	}
 
 	if err := os.Rename(tmpPath, cachePath); err != nil {
 		_ = os.Remove(tmpPath)
-		return fmt.Errorf("%s: %w", T.ErrCacheRename, err)
+		return fmt.Errorf("%s: %w", phrases().ErrCacheRename, err)
 	}
 
-	debugLog("CACHE", "", fmt.Sprintf(T.CacheSavedZones, providerName, len(zones), totalRecords))
+	debugLog("CACHE", "", fmt.Sprintf(phrases().CacheSavedZones, providerName, len(zones), totalRecords))
 	return nil
 }
 
@@ -66,15 +66,15 @@ func loadDNSProviderCacheFromFile(providerName, cachePath string) ([]Zone, *Zone
 	data, err := os.ReadFile(cachePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			debugLog("CACHE", "", fmt.Sprintf(T.CacheFileNotFound, providerName))
+			debugLog("CACHE", "", fmt.Sprintf(phrases().CacheFileNotFound, providerName))
 			return nil, nil, nil
 		}
-		return nil, nil, fmt.Errorf("%s: %w", T.ErrBodyRead, err)
+		return nil, nil, fmt.Errorf("%s: %w", phrases().ErrBodyRead, err)
 	}
 
 	var cache dnsProviderFileCache
 	if err := json.Unmarshal(data, &cache); err != nil {
-		return nil, nil, fmt.Errorf("%s: %w", T.ErrCacheMarshal, err)
+		return nil, nil, fmt.Errorf("%s: %w", phrases().ErrCacheMarshal, err)
 	}
 
 	if cache.Version == 0 {
@@ -82,7 +82,7 @@ func loadDNSProviderCacheFromFile(providerName, cachePath string) ([]Zone, *Zone
 	}
 
 	if cache.Version != 1 {
-		return nil, nil, fmt.Errorf(T.ErrAPIGeneric+": unsupported version %d", cache.Version)
+		return nil, nil, fmt.Errorf(phrases().ErrAPIGeneric+": unsupported version %d", cache.Version)
 	}
 
 	recordCache := NewZoneRecordCache()
@@ -91,7 +91,7 @@ func loadDNSProviderCacheFromFile(providerName, cachePath string) ([]Zone, *Zone
 	}
 
 	age := time.Since(cache.LastUpdate)
-	debugLog("CACHE", "", fmt.Sprintf(T.CacheLoadedZones, providerName, len(cache.Zones), age.Round(time.Second)))
+	debugLog("CACHE", "", fmt.Sprintf(phrases().CacheLoadedZones, providerName, len(cache.Zones), age.Round(time.Second)))
 
 	return cache.Zones, recordCache, nil
 }

@@ -68,7 +68,7 @@ func dashboardCertificateNames() ([]string, []net.IP) {
 	}
 
 	addCertificateHost(getLocalIP(), dnsSet, ipSet)
-	for _, host := range strings.Split(os.Getenv("DASHBOARD_TLS_HOSTS"), ",") {
+	for host := range strings.SplitSeq(os.Getenv("DASHBOARD_TLS_HOSTS"), ",") {
 		addCertificateHost(host, dnsSet, ipSet)
 	}
 

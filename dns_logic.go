@@ -80,7 +80,7 @@ func snapshotProcessDomainsConfig() ([]DomainConfig, bool) {
 func shouldStopDomainLoop(ctx context.Context) bool {
 	select {
 	case <-ctx.Done():
-		debugLog("SCHEDULER", "", t(T.DomainLoopCancelled, "Domain loop aborted: context cancelled"))
+		debugLog("SCHEDULER", "", t(phrases().DomainLoopCancelled, "Domain loop aborted: context cancelled"))
 		return true
 	default:
 		return false
@@ -106,7 +106,7 @@ func startDomainWorker(
 					Level:   LogError,
 					Action:  ActionError,
 					Domain:  domainConfig.FQDN,
-					Message: fmt.Sprintf(t(T.PanicOccurred, "Panic: %v"), r),
+					Message: fmt.Sprintf(t(phrases().PanicOccurred, "Panic: %v"), r),
 				})
 
 				results <- domainUpdateResult{
@@ -140,16 +140,16 @@ func startDomainWorker(
 
 func acquireWorkerSlot(ctx context.Context, fqdn string) bool {
 	if workerLimiter.Acquire(ctx) {
-		debugLog("WORKER", fqdn, t(T.WorkerSlotAcquired, "Worker slot acquired"))
+		debugLog("WORKER", fqdn, t(phrases().WorkerSlotAcquired, "Worker slot acquired"))
 		return true
 	}
 
-	debugLog("WORKER", fqdn, t(T.WorkerCancelledContext, "Cancelled: context cancelled"))
+	debugLog("WORKER", fqdn, t(phrases().WorkerCancelledContext, "Cancelled: context cancelled"))
 	return false
 }
 
 func releaseWorkerSlot(fqdn string) {
-	debugLog("WORKER", fqdn, t(T.WorkerSlotReleased, "Worker slot released"))
+	debugLog("WORKER", fqdn, t(phrases().WorkerSlotReleased, "Worker slot released"))
 	workerLimiter.Release()
 }
 
@@ -161,27 +161,27 @@ func buildDomainUpdateJob(
 ) (domainUpdateJob, error) {
 	zones, exists := zonesByProvider[string(dc.Provider)]
 	if !exists || len(zones) == 0 {
-		debugLog("DNS-LOGIC", dc.FQDN, T.NoZoneFoundForDomain)
+		debugLog("DNS-LOGIC", dc.FQDN, phrases().NoZoneFoundForDomain)
 		return domainUpdateJob{}, fmt.Errorf(
-			t(T.NoZonesFoundForProvider, "No zones found for provider %s"),
+			t(phrases().NoZonesFoundForProvider, "No zones found for provider %s"),
 			dc.Provider,
 		)
 	}
 
 	matchedZone := findMatchedZoneForDomain(dc.FQDN, zones)
 	if matchedZone == nil {
-		debugLog("DNS-LOGIC", dc.FQDN, T.NoZoneFoundForDomain)
-		return domainUpdateJob{}, fmt.Errorf("%s", t(T.NoZoneFound, "No zone found"))
+		debugLog("DNS-LOGIC", dc.FQDN, phrases().NoZoneFoundForDomain)
+		return domainUpdateJob{}, fmt.Errorf("%s", t(phrases().NoZoneFound, "No zone found"))
 	}
 
 	if matchedZone.ID == "" {
-		return domainUpdateJob{}, fmt.Errorf("%s", t(T.MatchedZoneEmptyID, "Matched zone has empty ID"))
+		return domainUpdateJob{}, fmt.Errorf("%s", t(phrases().MatchedZoneEmptyID, "Matched zone has empty ID"))
 	}
 
 	records, exists := cache.Get(matchedZone.ID)
 	if !exists && dc.Provider != ProviderIPv64 {
-		debugLog("DNS-LOGIC", dc.FQDN, T.NoRecordsInCache)
-		return domainUpdateJob{}, fmt.Errorf("%s", t(T.NoRecordsInCache, "no records in cache"))
+		debugLog("DNS-LOGIC", dc.FQDN, phrases().NoRecordsInCache)
+		return domainUpdateJob{}, fmt.Errorf("%s", t(phrases().NoRecordsInCache, "no records in cache"))
 	}
 
 	return domainUpdateJob{
@@ -220,7 +220,7 @@ func handleDomainResultStatus(
 	providerName := string(dc.Provider)
 
 	if result.Error == nil && result.Changed && !dryRun {
-		debugLog("STATUS", dc.FQDN, T.ChangesDetected)
+		debugLog("STATUS", dc.FQDN, phrases().ChangesDetected)
 
 		v4 := result.IPv4
 		v6 := result.IPv6
@@ -239,7 +239,7 @@ func handleDomainResultStatus(
 	}
 
 	if result.Error == nil {
-		debugLog("STATUS", dc.FQDN, T.NoChangesNeeded)
+		debugLog("STATUS", dc.FQDN, phrases().NoChangesNeeded)
 	}
 
 	return result
@@ -256,7 +256,7 @@ func finalizeDomainResults(results <-chan domainUpdateResult, totalDomains int) 
 				Level:   LogError,
 				Action:  ActionError,
 				Domain:  result.Domain,
-				Message: fmt.Sprintf("%s: %v", T.UpdateFailed, result.Error),
+				Message: fmt.Sprintf("%s: %v", phrases().UpdateFailed, result.Error),
 			})
 			continue
 		}
@@ -303,10 +303,10 @@ func processIPv64DomainUpdate(
 	changed, err := updateIPv64DNS(ctx, dc, job.Domain, ipv4, ipv6)
 	if err != nil {
 		if isNonRecoverableError(err) {
-			result.Error = fmt.Errorf(t(T.NonRecoverableIPv64Error, "Non-recoverable IPv64 error: %w"), err)
+			result.Error = fmt.Errorf(t(phrases().NonRecoverableIPv64Error, "Non-recoverable IPv64 error: %w"), err)
 			return result
 		}
-		debugLog("DNS-LOGIC", job.Domain, fmt.Sprintf("%s IPv64: %v", T.UpdateFailed, err))
+		debugLog("DNS-LOGIC", job.Domain, fmt.Sprintf("%s IPv64: %v", phrases().UpdateFailed, err))
 	}
 
 	result.Changed = changed
@@ -324,14 +324,14 @@ func processDomainIPv4Update(
 		return false, nil
 	}
 
-	debugLog("DNS-LOGIC", job.Domain, T.CheckingIPv4)
+	debugLog("DNS-LOGIC", job.Domain, phrases().CheckingIPv4)
 
 	changed, err := updateDomainRecord(ctx, dc, job, cache, RecordTypeA, job.IPv4)
 	if err != nil {
 		if isNonRecoverableError(err) {
-			return false, fmt.Errorf(t(T.NonRecoverableIPv4Error, "Non-recoverable IPv4 error: %w"), err)
+			return false, fmt.Errorf(t(phrases().NonRecoverableIPv4Error, "Non-recoverable IPv4 error: %w"), err)
 		}
-		debugLog("DNS-LOGIC", job.Domain, fmt.Sprintf("%s IPv4: %v", T.UpdateFailed, err))
+		debugLog("DNS-LOGIC", job.Domain, fmt.Sprintf("%s IPv4: %v", phrases().UpdateFailed, err))
 	}
 
 	return changed, nil
@@ -348,14 +348,14 @@ func processDomainIPv6Update(
 		return false, nil
 	}
 
-	debugLog("DNS-LOGIC", job.Domain, T.CheckingIPv6)
+	debugLog("DNS-LOGIC", job.Domain, phrases().CheckingIPv6)
 
 	changed, err := updateDomainRecord(ctx, dc, job, cache, RecordTypeAAAA, job.IPv6)
 	if err != nil {
 		if isNonRecoverableError(err) {
-			return false, fmt.Errorf(t(T.NonRecoverableIPv6Error, "Non-recoverable IPv6 error: %w"), err)
+			return false, fmt.Errorf(t(phrases().NonRecoverableIPv6Error, "Non-recoverable IPv6 error: %w"), err)
 		}
-		debugLog("DNS-LOGIC", job.Domain, fmt.Sprintf("%s IPv6: %v", T.UpdateFailed, err))
+		debugLog("DNS-LOGIC", job.Domain, fmt.Sprintf("%s IPv6: %v", phrases().UpdateFailed, err))
 	}
 
 	return changed, nil

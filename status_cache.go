@@ -20,7 +20,7 @@ func updateStatusFile(fqdn, ipv4, ipv6, provider string) error {
 	}
 
 	if err := updateDomainsCache(); err != nil {
-		debugLog("CACHE", "", fmt.Sprintf(t(T.ErrUpdateDomainsCache, "updateDomainsCache failed: %v"), err))
+		debugLog("CACHE", "", fmt.Sprintf(t(phrases().ErrUpdateDomainsCache, "updateDomainsCache failed: %v"), err))
 	}
 
 	broadcastUpdate("domain_update", map[string]any{
@@ -134,7 +134,7 @@ func writeStatusFileLocked(fqdn, ipv4, ipv6, provider string) (IPEntry, error) {
 			Level:  LogError,
 			Action: ActionError,
 			Message: fmt.Sprintf(
-				t(T.ErrMarshalStatusFile,
+				t(phrases().ErrMarshalStatusFile,
 					"Failed to marshal status file: %v"),
 				err,
 			),
@@ -150,7 +150,7 @@ func writeStatusFileLocked(fqdn, ipv4, ipv6, provider string) (IPEntry, error) {
 			Level:  LogError,
 			Action: ActionError,
 			Message: fmt.Sprintf(
-				t(T.ErrWriteTempStatusFile,
+				t(phrases().ErrWriteTempStatusFile,
 					"Failed to write temp status file: %v"),
 				err,
 			),
@@ -164,7 +164,7 @@ func writeStatusFileLocked(fqdn, ipv4, ipv6, provider string) (IPEntry, error) {
 			Level:  LogError,
 			Action: ActionError,
 			Message: fmt.Sprintf(
-				t(T.ErrReplaceStatusFile,
+				t(phrases().ErrReplaceStatusFile,
 					"Failed to replace status file: %v"),
 				err,
 			),
@@ -213,7 +213,7 @@ func updateMetricsCache() error {
 
 	data, err := json.MarshalIndent(stats, "", " ")
 	if err != nil {
-		debugLog("CACHE", "", fmt.Sprintf(t(T.ErrMetricsCacheMarshal, "Metrics cache marshal error: %v"), err))
+		debugLog("CACHE", "", fmt.Sprintf(t(phrases().ErrMetricsCacheMarshal, "Metrics cache marshal error: %v"), err))
 		return err
 	}
 
@@ -266,7 +266,7 @@ func serveCachedJSON(w http.ResponseWriter, r *http.Request, cache *CachedRespon
 	w.Header().Set("Cache-Control", "public, max-age=5")
 
 	if _, err := w.Write(data); err != nil {
-		debugLog("HTTP", "", fmt.Sprintf(t(T.ErrResponseWrite, "Response write failed: %v"), err))
+		debugLog("HTTP", "", fmt.Sprintf(t(phrases().ErrResponseWrite, "Response write failed: %v"), err))
 	}
 }
 
@@ -276,7 +276,7 @@ func startCacheRefresher() {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				debugLog("CACHE", "", fmt.Sprintf(t(T.ErrPanicRecovered, "🚨 Panic recovered: %v"), r))
+				debugLog("CACHE", "", fmt.Sprintf(t(phrases().ErrPanicRecovered, "🚨 Panic recovered: %v"), r))
 			}
 			ticker.Stop()
 		}()
@@ -284,23 +284,23 @@ func startCacheRefresher() {
 		for {
 			select {
 			case <-shutdownCtx.Done():
-				debugLog("CACHE", "", t(T.CacheRefresherStopped, "Cache refresher stopped (shutdown)"))
+				debugLog("CACHE", "", t(phrases().CacheRefresherStopped, "Cache refresher stopped (shutdown)"))
 				return
 
 			case <-ticker.C:
 				func() {
 					defer func() {
 						if r := recover(); r != nil {
-							debugLog("CACHE", "", fmt.Sprintf(t(T.ErrPanicRefreshCycle, "Panic in refresh cycle: %v"), r))
+							debugLog("CACHE", "", fmt.Sprintf(t(phrases().ErrPanicRefreshCycle, "Panic in refresh cycle: %v"), r))
 						}
 					}()
 
 					if err := updateDomainsCache(); err != nil {
-						debugLog("CACHE", "", fmt.Sprintf(t(T.ErrDomainCacheRefresh, "Domain cache refresh failed: %v"), err))
+						debugLog("CACHE", "", fmt.Sprintf(t(phrases().ErrDomainCacheRefresh, "Domain cache refresh failed: %v"), err))
 					}
 
 					if err := updateMetricsCache(); err != nil {
-						debugLog("CACHE", "", fmt.Sprintf(t(T.ErrMetricsCacheRefresh, "Metrics cache refresh failed: %v"), err))
+						debugLog("CACHE", "", fmt.Sprintf(t(phrases().ErrMetricsCacheRefresh, "Metrics cache refresh failed: %v"), err))
 					}
 				}()
 			}

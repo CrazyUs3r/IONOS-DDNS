@@ -28,7 +28,7 @@ func loadCloudflareCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
 func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint string, body any) ([]byte, error) {
 	fullURL := cloudflareAPIBase + endpoint
 
-	return apiWithRetry(ctx, "Cloudflare", T.CFAPIFailed, func(attempt, maxRetries int) ([]byte, bool, error) {
+	return apiWithRetry(ctx, "Cloudflare", phrases().CFAPIFailed, func(attempt, maxRetries int) ([]byte, bool, error) {
 		return cloudflareAPIAttempt(ctx, dc, method, fullURL, body, attempt, maxRetries)
 	})
 }
@@ -40,8 +40,8 @@ func cloudflareAPIAttempt(
 	body any,
 	attempt, maxRetries int,
 ) ([]byte, bool, error) {
-	debugLog("HTTP", "", fmt.Sprintf(T.CFAttempt,
-		T.Attempt, attempt+1, maxRetries, method, fullURL))
+	debugLog("HTTP", "", fmt.Sprintf(phrases().CFAttempt,
+		phrases().Attempt, attempt+1, maxRetries, method, fullURL))
 
 	req, err := buildCloudflareRequest(ctx, dc, method, fullURL, body)
 	if err != nil {
@@ -59,7 +59,7 @@ func cloudflareAPIAttempt(
 
 	defer func() {
 		if err := res.Body.Close(); err != nil {
-			debugLog("HTTP", "", fmt.Sprintf(T.ErrBodyClose+": %v", err))
+			debugLog("HTTP", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
 		}
 	}()
 
@@ -79,7 +79,7 @@ func buildCloudflareRequest(
 
 	req, err := http.NewRequestWithContext(ctx, method, fullURL, bodyReader)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", T.ErrRequestCreate, err)
+		return nil, fmt.Errorf("%s: %w", phrases().ErrRequestCreate, err)
 	}
 
 	req.Header.Set("User-Agent", ManagedComment)
@@ -102,7 +102,7 @@ func cloudflareRequestBodyReader(body any) (io.Reader, error) {
 
 	bodyBytes, err := json.Marshal(body)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", T.ErrJSONMarshal, err)
+		return nil, fmt.Errorf("%s: %w", phrases().ErrJSONMarshal, err)
 	}
 
 	return bytes.NewReader(bodyBytes), nil
@@ -113,7 +113,7 @@ func applyCloudflareAuthHeaders(req *http.Request, dc *DomainConfig) error {
 	case dc.CFToken != "":
 		token := normalizeCloudflareToken(dc.CFToken)
 		if token == "" {
-			return fmt.Errorf("%s", T.CFTokenEmpty)
+			return fmt.Errorf("%s", phrases().CFTokenEmpty)
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
 		return nil
@@ -124,7 +124,7 @@ func applyCloudflareAuthHeaders(req *http.Request, dc *DomainConfig) error {
 		return nil
 
 	default:
-		return fmt.Errorf("%s", T.CFNoCredentials)
+		return fmt.Errorf("%s", phrases().CFNoCredentials)
 	}
 }
 
@@ -188,11 +188,11 @@ func handleCloudflareReadError(
 ) (bool, error) {
 	apiMetrics.RecordError(method, res.StatusCode, readErr, duration)
 
-	lastErr := fmt.Errorf("%s: %w", T.ErrBodyRead, readErr)
+	lastErr := fmt.Errorf("%s: %w", phrases().ErrBodyRead, readErr)
 	serverBusy := res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= 500
 
 	if !sleepOrCancel(ctx, calculateRetryDelay(attempt, serverBusy)) {
-		return false, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
+		return false, fmt.Errorf("%s: %w", phrases().ErrContextCancelled, ctx.Err())
 	}
 
 	return true, lastErr
@@ -215,7 +215,7 @@ func handleCloudflareRateLimit(
 	}
 
 	if !sleepOrCancel(ctx, wait) {
-		return false, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
+		return false, fmt.Errorf("%s: %w", phrases().ErrContextCancelled, ctx.Err())
 	}
 
 	return true, apiErr
@@ -234,7 +234,7 @@ func handleCloudflareInvalidJSON(
 		if len(preview) > 200 {
 			preview = preview[:200] + "..."
 		}
-		debugLog("HTTP", "", fmt.Sprintf(T.CFHTMLResponse, res.StatusCode, preview))
+		debugLog("HTTP", "", fmt.Sprintf(phrases().CFHTMLResponse, res.StatusCode, preview))
 	}
 
 	apiErr := classifyAPIErrorWithHeaders(res.StatusCode, method, fullURL, string(respBody), res.Header)
@@ -243,7 +243,7 @@ func handleCloudflareInvalidJSON(
 			StatusCode: res.StatusCode,
 			Method:     method,
 			URL:        fullURL,
-			Message:    T.CFInvalidJSON,
+			Message:    phrases().CFInvalidJSON,
 			Retryable:  res.StatusCode >= 500,
 		}
 	}
@@ -265,7 +265,7 @@ func handleCloudflareInvalidJSON(
 	}
 
 	if !sleepOrCancel(ctx, wait) {
-		return false, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
+		return false, fmt.Errorf("%s: %w", phrases().ErrContextCancelled, ctx.Err())
 	}
 
 	return true, apiErr
@@ -294,7 +294,7 @@ func handleCloudflareAPIFailure(
 	}
 
 	if !sleepOrCancel(ctx, wait) {
-		return false, fmt.Errorf("%s: %w", T.ErrContextCancelled, ctx.Err())
+		return false, fmt.Errorf("%s: %w", phrases().ErrContextCancelled, ctx.Err())
 	}
 
 	return true, apiErr
@@ -309,8 +309,8 @@ func loadCloudflareZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) 
 		endpoint := fmt.Sprintf("/zones?page=%d&per_page=%d", page, perPage)
 		data, err := cloudflareAPI(ctx, dc, MethodGET, endpoint, nil)
 		if err != nil {
-			debugLog("CACHE", "", fmt.Sprintf(T.CFZoneLoadError+": %v", err))
-			return nil, fmt.Errorf("%s: %w", T.CFZoneLoadError, err)
+			debugLog("CACHE", "", fmt.Sprintf(phrases().CFZoneLoadError+": %v", err))
+			return nil, fmt.Errorf("%s: %w", phrases().CFZoneLoadError, err)
 		}
 
 		var resp struct {
@@ -322,8 +322,8 @@ func loadCloudflareZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) 
 			} `json:"result_info"`
 		}
 		if err := json.Unmarshal(data, &resp); err != nil {
-			debugLog("CACHE", "", fmt.Sprintf(T.CFZoneParseError+": %v", err))
-			return nil, fmt.Errorf("%s: %w", T.CFZoneParseError, err)
+			debugLog("CACHE", "", fmt.Sprintf(phrases().CFZoneParseError+": %v", err))
+			return nil, fmt.Errorf("%s: %w", phrases().CFZoneParseError, err)
 		}
 
 		for _, z := range resp.Result {
@@ -348,7 +348,7 @@ func loadCloudflareRecords(ctx context.Context, dc *DomainConfig, zoneID string)
 		endpoint := fmt.Sprintf("/zones/%s/dns_records?page=%d&per_page=%d", zoneID, page, perPage)
 		data, err := cloudflareAPI(ctx, dc, MethodGET, endpoint, nil)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", T.ErrBodyRead, err)
+			return nil, fmt.Errorf("%s: %w", phrases().ErrBodyRead, err)
 		}
 
 		var resp struct {
@@ -360,7 +360,7 @@ func loadCloudflareRecords(ctx context.Context, dc *DomainConfig, zoneID string)
 			} `json:"result_info"`
 		}
 		if err := json.Unmarshal(data, &resp); err != nil {
-			return nil, fmt.Errorf("%s: %w", T.ErrBodyRead, err)
+			return nil, fmt.Errorf("%s: %w", phrases().ErrBodyRead, err)
 		}
 
 		for _, r := range resp.Result {
@@ -399,7 +399,7 @@ func updateCloudflareDNS(
 			Level:   LogWarn,
 			Action:  ActionDryRun,
 			Domain:  fqdn,
-			Message: fmt.Sprintf("⚠️ %s %s %s", T.WouldSet, recordType, newIP),
+			Message: fmt.Sprintf("⚠️ %s %s %s", phrases().WouldSet, recordType, newIP),
 		})
 		return true, nil
 	}
@@ -415,7 +415,7 @@ func updateCloudflareDNS(
 		Level:   LogInfo,
 		Action:  actionType,
 		Domain:  fqdn,
-		Message: fmt.Sprintf("🔄 %s -> %s %s", recordType, newIP, T.Update),
+		Message: fmt.Sprintf("🔄 %s -> %s %s", recordType, newIP, phrases().Update),
 	})
 
 	return true, nil
@@ -457,18 +457,18 @@ func shouldSkipCloudflareUpdate(fqdn, recordType, newIP string, existing *Record
 	}
 
 	if existing.Content == newIP {
-		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("✅ %s: %s = %s", T.RecordCurrent, recordType, newIP))
+		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("✅ %s: %s = %s", phrases().RecordCurrent, recordType, newIP))
 		log(LogContext{
 			Level:   LogInfo,
 			Action:  ActionCurrent,
 			Domain:  fqdn,
-			Message: fmt.Sprintf("%-4s  %s %s", recordType, newIP, T.Current),
+			Message: fmt.Sprintf("%-4s  %s %s", recordType, newIP, phrases().Current),
 		})
 		return true
 	}
 
 	if strings.TrimSpace(existing.Comment) != ManagedComment {
-		msg := fmt.Sprintf(T.CFUnmanagedRecord, recordType, strings.TrimSpace(existing.Comment))
+		msg := fmt.Sprintf(phrases().CFUnmanagedRecord, recordType, strings.TrimSpace(existing.Comment))
 
 		debugLog("DNS-LOGIC", fqdn, msg)
 		log(LogContext{
@@ -594,7 +594,7 @@ func cloudflareDCForZone(zoneName string) *DomainConfig {
 }
 
 func cleanupCloudflareRecords(ctx context.Context, zones []Zone, recordCache *ZoneRecordCache) {
-	debugLog("MAINTENANCE", "", T.CleanupStartCF)
+	debugLog("MAINTENANCE", "", phrases().CleanupStartCF)
 
 	configDomains := buildCloudflareConfigDomains()
 
@@ -646,7 +646,7 @@ func cleanupSingleCloudflareRecord(
 	debugLog(
 		"MAINTENANCE",
 		fqdn,
-		fmt.Sprintf(T.CleanupOrphanedCF, rec.Type, rec.ID, zone.Name),
+		fmt.Sprintf(phrases().CleanupOrphanedCF, rec.Type, rec.ID, zone.Name),
 	)
 
 	if cfg.DryRun {
@@ -654,7 +654,7 @@ func cleanupSingleCloudflareRecord(
 			Level:   LogInfo,
 			Action:  ActionCleanup,
 			Domain:  fqdn,
-			Message: T.CleanupDryRun,
+			Message: phrases().CleanupDryRun,
 		})
 		return
 	}
@@ -700,7 +700,7 @@ func deleteCloudflareRecord(
 	endpoint := fmt.Sprintf("/zones/%s/dns_records/%s", zoneID, rec.ID)
 
 	if _, err := cloudflareAPI(ctx, cfDC, MethodDELETE, endpoint, nil); err != nil {
-		debugLog("MAINTENANCE", fqdn, fmt.Sprintf(T.CleanupDeleteError, err))
+		debugLog("MAINTENANCE", fqdn, fmt.Sprintf(phrases().CleanupDeleteError, err))
 		return
 	}
 
@@ -708,7 +708,7 @@ func deleteCloudflareRecord(
 		Level:   LogInfo,
 		Action:  ActionCleanup,
 		Domain:  fqdn,
-		Message: fmt.Sprintf(T.CleanupRecordRemoved, rec.Type),
+		Message: fmt.Sprintf(phrases().CleanupRecordRemoved, rec.Type),
 	})
 }
 
@@ -794,7 +794,7 @@ func findCloudflareRecord(ctx context.Context, dc *DomainConfig, zoneID, fqdn, r
 
 		data, err := cloudflareAPI(ctx, dc, MethodGET, endpoint, nil)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", T.ErrBodyRead, err)
+			return nil, fmt.Errorf("%s: %w", phrases().ErrBodyRead, err)
 		}
 
 		var resp struct {
@@ -806,7 +806,7 @@ func findCloudflareRecord(ctx context.Context, dc *DomainConfig, zoneID, fqdn, r
 			} `json:"result_info"`
 		}
 		if err := json.Unmarshal(data, &resp); err != nil {
-			return nil, fmt.Errorf("%s: %w", T.CFRecordsParseError, err)
+			return nil, fmt.Errorf("%s: %w", phrases().CFRecordsParseError, err)
 		}
 
 		for _, r := range resp.Result {
@@ -830,5 +830,5 @@ func findCloudflareRecord(ctx context.Context, dc *DomainConfig, zoneID, fqdn, r
 		page++
 	}
 
-	return nil, fmt.Errorf("%s", T.ErrRecordNotFound)
+	return nil, fmt.Errorf("%s", phrases().ErrRecordNotFound)
 }

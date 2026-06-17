@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -27,158 +28,271 @@ func t(val, fallback string) string {
 }
 
 func loadLanguage(lang string) (err error) {
+	requested := normalizeLang(lang)
+
 	defer func() {
-		if r := recover(); r != nil {
+		if recovered := recover(); recovered != nil {
+			p := phrases()
+
 			log(LogContext{
 				Level:    LogError,
 				Category: "CONFIG",
 				Action:   ActionConfig,
-				Message:  fmt.Sprintf("%s: %v", t(T.PanicLoadingLanguage, "Panic loading language"), r),
+				Message: fmt.Sprintf(
+					"%s: %v",
+					t(
+						p.PanicLoadingLanguage,
+						"Panic loading language",
+					),
+					recovered,
+				),
 			})
-			err = fmt.Errorf("panic loading language: %v", r)
+
+			err = fmt.Errorf(
+				"panic loading language: %v",
+				recovered,
+			)
 		}
 	}()
 
-	data, resolvedLang, err := loadLanguageDataWithFallback(lang)
-	if err != nil {
-		return err
+	if requested == "" {
+		return fmt.Errorf("invalid language code %q", lang)
 	}
 
-	translations, err := parseTranslationsWithFallback(data, resolvedLang)
+	available, err := getAvailableLanguages(langDir)
 	if err != nil {
-		return err
+		return fmt.Errorf(
+			"read available languages: %w",
+			err,
+		)
 	}
 
+	resolved, ok := resolveAvailableLanguage(
+		requested,
+		available,
+	)
+	if !ok {
+		return fmt.Errorf(
+			"language %q is not available",
+			requested,
+		)
+	}
+
+	layers := translationLayers(resolved, available)
+	translations := make(map[string]string)
+
+	for _, layerCode := range layers {
+		data, err := loadLanguageData(layerCode)
+		if err != nil {
+			return fmt.Errorf(
+				"load language layer %s: %w",
+				layerCode,
+				err,
+			)
+		}
+
+		layer, err := parseTranslationData(
+			data,
+			layerCode,
+		)
+		if err != nil {
+			return err
+		}
+
+		translations = mergeTranslations(
+			translations,
+			layer,
+		)
+	}
+
+	// Erst nach erfolgreichem Laden aller Ebenen austauschen.
 	applyTranslations(translations)
-	logLanguageLoaded(resolvedLang, len(translations))
+
+	logLanguageLoaded(resolved, len(translations))
 	validateTranslationKeys(translations)
 
 	return nil
 }
 
-func loadLanguageDataWithFallback(lang string) ([]byte, string, error) {
-	data, err := loadLanguageData(lang)
-	if err == nil && len(data) > 0 {
-		return data, lang, nil
+func translationLayers(
+	lang string,
+	available map[string]bool,
+) []string {
+	lang = normalizeLang(lang)
+	base := languageBase(lang)
+
+	layers := make([]string, 0, 4)
+	seen := make(map[string]struct{})
+
+	add := func(code string) {
+		code = normalizeLang(code)
+
+		if code == "" || !available[code] {
+			return
+		}
+
+		if _, exists := seen[code]; exists {
+			return
+		}
+
+		seen[code] = struct{}{}
+		layers = append(layers, code)
 	}
 
-	if err != nil {
-		log(LogContext{
-			Level:    LogWarn,
-			Category: "CONFIG",
-			Action:   ActionConfig,
-			Message:  fmt.Sprintf("%s %v", t(T.LanguageFileNotFound, "Language file not found:"), err),
-		})
+	// Nicht-englische Sprachen beginnen mit Englisch.
+	if base != "en" {
+		if english, ok := resolveAvailableLanguage(
+			"en",
+			available,
+		); ok {
+			add(english)
+		}
 	}
 
-	if len(data) == 0 {
-		log(LogContext{
-			Level:    LogError,
-			Category: "CONFIG",
-			Action:   ActionConfig,
-			Message:  fmt.Sprintf(t(T.NoLanguageDataLoaded, "No language data loaded for: %s"), lang),
-		})
+	// Optionale allgemeine Datei, beispielsweise de.json.
+	add(base)
+
+	// Standardregion, beispielsweise de-DE.
+	if defaultLocale := defaultLocaleByBase[base]; defaultLocale != "" && defaultLocale != lang {
+		add(defaultLocale)
 	}
 
-	if lang != "en" {
-		log(LogContext{
-			Level:    LogInfo,
-			Category: "CONFIG",
-			Action:   ActionConfig,
-			Message:  t(T.TryingFallbackEn, "Trying fallback to English..."),
-		})
-		return loadLanguageDataWithFallback("en")
-	}
+	// Gewählte Region zuletzt, damit sie alles überschreibt.
+	add(lang)
 
-	return nil, "", fmt.Errorf("no language data available")
+	return layers
 }
 
 func loadLanguageData(lang string) ([]byte, error) {
-	langFile := filepath.Join(langDir, lang+".json")
+	lang = normalizeLang(lang)
+	if lang == "" {
+		return nil, fmt.Errorf("invalid language code")
+	}
+
+	filename := lang + ".json"
+	diskPath := filepath.Join(langDir, filename)
+
+	p := phrases()
 
 	log(LogContext{
 		Level:    LogInfo,
 		Category: "CONFIG",
 		Action:   ActionConfig,
-		Message:  fmt.Sprintf(t(T.TryingLoadLanguage, "Trying to load language file: %s"), langFile),
+		Message: fmt.Sprintf(
+			t(
+				p.TryingLoadLanguage,
+				"Trying to load language file: %s",
+			),
+			diskPath,
+		),
 	})
 
-	data, err := os.ReadFile(langFile)
-	if err == nil {
+	if data, err := os.ReadFile(diskPath); err == nil {
 		return data, nil
 	}
 
-	embedName := "lang/" + lang + ".json"
-	embedded, embedErr := embeddedLang.ReadFile(embedName)
-	if embedErr == nil {
-		log(LogContext{
-			Level:    LogInfo,
-			Category: "CONFIG",
-			Action:   ActionConfig,
-			Message:  fmt.Sprintf(t(T.TryingLoadLanguage, "Trying to load language file: %s"), embedName),
-		})
-		return embedded, nil
-	}
-
-	return nil, err
-}
-
-func parseTranslationsWithFallback(data []byte, lang string) (map[string]string, error) {
-	var translations map[string]string
-
-	err := json.Unmarshal(data, &translations)
-	if err == nil {
-		return translations, nil
-	}
+	embeddedPath := "lang/" + filename
 
 	log(LogContext{
-		Level:    LogError,
+		Level:    LogInfo,
 		Category: "CONFIG",
 		Action:   ActionConfig,
-		Message:  fmt.Sprintf("%s: %v", t(T.JSONParseError, "JSON parse error"), err),
+		Message: fmt.Sprintf(
+			t(
+				p.TryingLoadLanguage,
+				"Trying to load language file: %s",
+			),
+			embeddedPath,
+		),
 	})
 
-	if lang != "en" {
-		log(LogContext{
-			Level:    LogInfo,
-			Category: "CONFIG",
-			Action:   ActionConfig,
-			Message:  t(T.TryingFallbackEn, "Trying fallback to English..."),
-		})
-		return loadEnglishTranslations()
+	data, err := embeddedLang.ReadFile(embeddedPath)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"language file %s not found: %w",
+			filename,
+			err,
+		)
 	}
 
-	return nil, fmt.Errorf("json parse error: %w", err)
+	return data, nil
 }
 
-func loadEnglishTranslations() (map[string]string, error) {
-	data, _, err := loadLanguageDataWithFallback("en")
-	if err != nil {
-		return nil, err
+func parseTranslationData(
+	data []byte,
+	lang string,
+) (map[string]string, error) {
+	var translations map[string]string
+
+	if err := json.Unmarshal(data, &translations); err != nil {
+		p := phrases()
+
+		log(LogContext{
+			Level:    LogError,
+			Category: "CONFIG",
+			Action:   ActionConfig,
+			Message: fmt.Sprintf(
+				"%s (%s): %v",
+				t(
+					p.JSONParseError,
+					"JSON parse error",
+				),
+				lang,
+				err,
+			),
+		})
+
+		return nil, fmt.Errorf(
+			"parse %s.json: %w",
+			lang,
+			err,
+		)
 	}
 
-	var translations map[string]string
-	if err := json.Unmarshal(data, &translations); err != nil {
-		return nil, fmt.Errorf("json parse error: %w", err)
+	if translations == nil {
+		translations = make(map[string]string)
 	}
+
 	return translations, nil
 }
 
+func mergeTranslations(
+	base map[string]string,
+	overlay map[string]string,
+) map[string]string {
+	result := make(
+		map[string]string,
+		len(base)+len(overlay),
+	)
+
+	maps.Copy(result, base)
+
+	for key, value := range overlay {
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+
+		result[key] = value
+	}
+
+	return result
+}
+
 func applyTranslations(translations map[string]string) {
-	var newT Phrases
-	v := reflect.ValueOf(&newT).Elem()
+	newT := &Phrases{}
+
+	v := reflect.ValueOf(newT).Elem()
 	typ := v.Type()
 
 	for i := 0; i < v.NumField(); i++ {
 		field := typ.Field(i)
 		jsonKey := toSnakeCase(field.Name)
+
 		if val, ok := translations[jsonKey]; ok {
 			v.Field(i).SetString(val)
 		}
 	}
-	phraseMu.Lock()
-	T = newT
-	phraseMu.Unlock()
+	phraseStore.Store(newT)
 }
 
 func logLanguageLoaded(lang string, count int) {
@@ -186,7 +300,7 @@ func logLanguageLoaded(lang string, count int) {
 		Level:    LogInfo,
 		Category: "CONFIG",
 		Action:   ActionConfig,
-		Message:  fmt.Sprintf(T.LanguageLoaded, lang, count),
+		Message:  fmt.Sprintf(phrases().LanguageLoaded, lang, count),
 	})
 }
 
@@ -201,7 +315,7 @@ func validateTranslationKeys(translations map[string]string) {
 				Level:    LogWarn,
 				Category: "CONFIG",
 				Action:   ActionConfig,
-				Message:  fmt.Sprintf("%s: %s", T.MissingTranslationKey, key),
+				Message:  fmt.Sprintf("%s: %s", phrases().MissingTranslationKey, key),
 			})
 			continue
 		}
@@ -210,7 +324,7 @@ func validateTranslationKeys(translations map[string]string) {
 				Level:    LogWarn,
 				Category: "CONFIG",
 				Action:   ActionConfig,
-				Message:  fmt.Sprintf(t(T.EmptyTranslationValue, "Empty translation value: %s"), key),
+				Message:  fmt.Sprintf(t(phrases().EmptyTranslationValue, "Empty translation value: %s"), key),
 			})
 		}
 	}
@@ -221,7 +335,7 @@ func validateTranslationKeys(translations map[string]string) {
 				Level:    LogWarn,
 				Category: "CONFIG",
 				Action:   ActionConfig,
-				Message:  fmt.Sprintf(t(T.RemovedUnusedKey, "Removed unused translation key: %s"), key),
+				Message:  fmt.Sprintf(t(phrases().RemovedUnusedKey, "Removed unused translation key: %s"), key),
 			})
 			delete(translations, key)
 		}
@@ -252,6 +366,14 @@ func toSnakeCase(s string) string {
 	return result
 }
 
+func phrases() *Phrases {
+	if p := phraseStore.Load(); p != nil {
+		return p
+	}
+
+	return &emptyPhrases
+}
+
 func buildSnakeCase(s string) string {
 	for _, acr := range knownAcronyms {
 		if !strings.Contains(s, acr) {
@@ -279,7 +401,7 @@ func copyEmbeddedLangFiles(dir string) error {
 			Level:    LogError,
 			Category: "SYSTEM",
 			Action:   ActionConfig,
-			Message:  fmt.Sprintf("%s: %v", t(T.CannotReadEmbeddedDir, "cannot read embedded lang dir"), err),
+			Message:  fmt.Sprintf("%s: %v", t(phrases().CannotReadEmbeddedDir, "cannot read embedded lang dir"), err),
 		})
 		return err
 	}
@@ -294,7 +416,7 @@ func copyEmbeddedLangFiles(dir string) error {
 				Level:    LogWarn,
 				Category: "SYSTEM",
 				Action:   ActionConfig,
-				Message:  fmt.Sprintf("%s: %s: %v", t(T.EmbeddedFileUnreadable, "Embedded file unreadable"), name, err),
+				Message:  fmt.Sprintf("%s: %s: %v", t(phrases().EmbeddedFileUnreadable, "Embedded file unreadable"), name, err),
 			})
 			continue
 		}
@@ -307,14 +429,14 @@ func copyEmbeddedLangFiles(dir string) error {
 				Level:    LogInfo,
 				Category: "CONFIG",
 				Action:   ActionConfig,
-				Message:  fmt.Sprintf("%s: %s", t(T.UpdateDetected, "Update detected"), name),
+				Message:  fmt.Sprintf("%s: %s", t(phrases().UpdateDetected, "Update detected"), name),
 			})
 		} else {
 			log(LogContext{
 				Level:    LogInfo,
 				Category: "CONFIG",
 				Action:   ActionConfig,
-				Message:  fmt.Sprintf("%s: %s", t(T.NewFileDetected, "New file"), name),
+				Message:  fmt.Sprintf("%s: %s", t(phrases().NewFileDetected, "New file"), name),
 			})
 		}
 
@@ -323,7 +445,7 @@ func copyEmbeddedLangFiles(dir string) error {
 				Level:    LogWarn,
 				Category: "CONFIG",
 				Action:   ActionConfig,
-				Message:  fmt.Sprintf("%s: %s: %v", t(T.WriteFailed, "write failed"), dst, err),
+				Message:  fmt.Sprintf("%s: %s: %v", t(phrases().WriteFailed, "write failed"), dst, err),
 			})
 			continue
 		}
@@ -332,7 +454,7 @@ func copyEmbeddedLangFiles(dir string) error {
 			Level:    LogInfo,
 			Category: "CONFIG",
 			Action:   ActionConfig,
-			Message:  fmt.Sprintf("%s: %s", t(T.FileSaved, "saved"), dst),
+			Message:  fmt.Sprintf("%s: %s", t(phrases().FileSaved, "saved"), dst),
 		})
 	}
 
