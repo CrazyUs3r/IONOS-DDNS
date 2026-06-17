@@ -2796,4 +2796,4 @@ function restoreFullBackup() {
 			}
 			showToast(tr('backup_restore_failed', '❌ Restore failed'), 'error');
 		});
-}
+			}
