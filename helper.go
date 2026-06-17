@@ -339,55 +339,63 @@ func detectLanguage(langDir, preferred string) string {
 }
 
 var defaultLocaleByBase = map[string]string{
-	"de": "de-DE",
-	"en": "en-GB",
-	"fr": "fr-FR",
-	"es": "es-ES",
-	"it": "it-IT",
-	"nl": "nl-NL",
-	"pt": "pt-PT",
+	"bg": "bg-BG", // Bulgarisch
+	"cs": "cs-CZ", // Tschechisch
+	"da": "da-DK", // Dänisch
+	"de": "de-DE", // Deutsch
+	"el": "el-GR", // Griechisch
+	"en": "en-GB", // Englisch
+	"es": "es-ES", // Spanisch
+	"et": "et-EE", // Estnisch
+	"fi": "fi-FI", // Finnisch
+	"fr": "fr-FR", // Französisch
+	"hr": "hr-HR", // Kroatisch
+	"hu": "hu-HU", // Ungarisch
+	"is": "is-IS", // Isländisch
+	"it": "it-IT", // Italienisch
+	"lt": "lt-LT", // Litauisch
+	"lv": "lv-LV", // Lettisch
+	"nb": "nb-NO", // Norwegisch
+	"nl": "nl-NL", // Niederländisch
+	"pl": "pl-PL", // Polnisch
+	"pt": "pt-PT", // Portugiesisch
+	"ro": "ro-RO", // Rumänisch
+	"ru": "ru-RU", // Russisch
+	"sk": "sk-SK", // Slowakisch
+	"sl": "sl-SI", // Slowenisch
+	"sv": "sv-SE", // Schwedisch
+	"tr": "tr-TR", // Türkisch
+	"uk": "uk-UA", // Ukrainisch
 }
 
 var knownLangLabels = map[string]string{
-	"de":    "🇩🇪 Deutsch",
-	"de-DE": "🇩🇪 Deutsch (Deutschland)",
-	"de-AT": "🇦🇹 Deutsch (Österreich)",
-	"de-CH": "🇨🇭 Deutsch (Schweiz)",
-	"en":    "🇬🇧 English",
-	"en-GB": "🇬🇧 English (United Kingdom)",
-	"en-US": "🇺🇸 English (United States)",
-	"fr":    "🇫🇷 Français",
-	"fr-FR": "🇫🇷 Français (France)",
-	"fr-CA": "🇨🇦 Français (Canada)",
-	"fr-CH": "🇨🇭 Français (Suisse)",
-	"es":    "🇪🇸 Español",
-	"es-ES": "🇪🇸 Español (España)",
-	"es-MX": "🇲🇽 Español (México)",
-	"it":    "🇮🇹 Italiano",
-	"it-IT": "🇮🇹 Italiano (Italia)",
-	"nl":    "🇳🇱 Nederlands",
-	"nl-NL": "🇳🇱 Nederlands",
-	"nl-BE": "🇧🇪 Nederlands (België)",
-	"pt":    "🇵🇹 Português",
-	"pt-PT": "🇵🇹 Português (Portugal)",
-	"pt-BR": "🇧🇷 Português (Brasil)",
-	"pl":    "🇵🇱 Polski",
-	"pl-PL": "🇵🇱 Polski",
-	"sv":    "🇸🇪 Svenska",
-	"sv-SE": "🇸🇪 Svenska",
-	"da":    "🇩🇰 Dansk",
-	"da-DK": "🇩🇰 Dansk",
-	"cs":    "🇨🇿 Čeština",
-	"cs-CZ": "🇨🇿 Čeština",
-	"hu":    "🇭🇺 Magyar",
-	"ro":    "🇷🇴 Română",
-	"tr":    "🇹🇷 Türkçe",
-	"ja":    "🇯🇵 日本語",
-	"zh":    "🇨🇳 中文",
-	"ru":    "🇷🇺 Русский",
-	"uk":    "🇺🇦 Українська",
-	"fi":    "🇫🇮 Suomi",
-	"nb":    "🇳🇴 Norsk",
+	"bg": "🇧🇬 Български", "bg-BG": "🇧🇬 Български (България)",
+	"cs": "🇨🇿 Čeština", "cs-CZ": "🇨🇿 Čeština (Česko)",
+	"da": "🇩🇰 Dansk", "da-DK": "🇩🇰 Dansk (Danmark)",
+	"de": "🇩🇪 Deutsch", "de-DE": "🇩🇪 Deutsch (Deutschland)", "de-AT": "🇦🇹 Deutsch (Österreich)", "de-CH": "🇨🇭 Deutsch (Schweiz)",
+	"el": "🇬🇷 Ελληνικά", "el-GR": "🇬🇷 Ελληνικά (Ελλάδα)",
+	"en": "🇬🇧 English", "en-GB": "🇬🇧 English (United Kingdom)", "en-US": "🇺🇸 English (United States)",
+	"es": "🇪🇸 Español", "es-ES": "🇪🇸 Español (España)", "es-MX": "🇲🇽 Español (México)",
+	"et": "🇪🇪 Eesti", "et-EE": "🇪🇪 Eesti (Eesti)",
+	"fi": "🇫🇮 Suomi", "fi-FI": "🇫🇮 Suomi (Suomi)",
+	"fr": "🇫🇷 Français", "fr-FR": "🇫🇷 Français (France)", "fr-CA": "🇨🇦 Français (Canada)", "fr-CH": "🇨🇭 Français (Suisse)",
+	"hr": "🇭🇷 Hrvatski", "hr-HR": "🇭🇷 Hrvatski (Hrvatska)",
+	"hu": "🇭🇺 Magyar", "hu-HU": "🇭🇺 Magyar (Magyarország)",
+	"is": "🇮🇸 Íslenska", "is-IS": "🇮🇸 Íslenska (Ísland)",
+	"it": "🇮🇹 Italiano", "it-IT": "🇮🇹 Italiano (Italia)",
+	"lt": "🇱🇹 Lietuvių", "lt-LT": "🇱🇹 Lietuvių (Lietuva)",
+	"lv": "🇱🇻 Latviešu", "lv-LV": "🇱🇻 Latviešu (Latvija)",
+	"nb": "🇳🇴 Norsk", "nb-NO": "🇳🇴 Norsk (Norge)",
+	"nl": "🇳🇱 Nederlands", "nl-NL": "🇳🇱 Nederlands (Nederland)", "nl-BE": "🇧🇪 Nederlands (België)",
+	"pl": "🇵🇱 Polski", "pl-PL": "🇵🇱 Polski (Polska)",
+	"pt": "🇵🇹 Português", "pt-PT": "🇵🇹 Português (Portugal)", "pt-BR": "🇧🇷 Português (Brasil)",
+	"ro": "🇷🇴 Română", "ro-RO": "🇷🇴 Română (România)",
+	"ru": "🇷🇺 Русский", "ru-RU": "🇷🇺 Русский (Россия)",
+	"sk": "🇸🇰 Slovenčina", "sk-SK": "🇸🇰 Slovenčina (Slovensko)",
+	"sl": "🇸🇮 Slovenščina", "sl-SI": "🇸🇮 Slovenščina (Slovenija)",
+	"sv": "🇸🇪 Svenska", "sv-SE": "🇸🇪 Svenska (Sverige)",
+	"tr": "🇹🇷 Türkçe", "tr-TR": "🇹🇷 Türkçe (Türkiye)",
+	"uk": "🇺🇦 Українська", "uk-UA": "🇺🇦 Українська (Україна)",
 }
 
 func getLangLabel(code string) string {
