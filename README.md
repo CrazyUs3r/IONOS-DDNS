@@ -85,6 +85,7 @@ Für den ersten Start oder automatisierte Deployments können Domains auch per E
 | `INTERFACE` | Netzwerk-Interface für IPv6 (z. B. `eth0`) | — |
 | `DNS_SERVERS` | Kommagetrennte DNS-Server | `1.1.1.1:53,8.8.8.8:53` |
 | `HEALTH_PORT` | Port für Dashboard und Healthcheck | `8080` |
+| `DASHBOARD_HTTPS_PORT` | Port für https Dashboard | `8443` |
 | `LANG` | Sprache der UI (`de` oder `en`) | `de` |
 | `LOG_MAX_LINES` | Maximale Log-Zeilen | `500` |
 | `MAX_CONCURRENT` | Parallele API-Updates | `5` |
