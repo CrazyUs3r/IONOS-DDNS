@@ -240,14 +240,17 @@ Die `/health`-Route liefert `200 OK`, `degraded` oder `503 Unhealthy`. Docker-HE
 │   ├── de.json
 │   └── en.json
 └── logs/
-    ├── dyndns.json         # Ereignis-Log (JSON Lines)
-    ├── update.json         # IP-Historie pro Domain
-    ├── metrics.json        # Persistierte Metriken
-    ├── ionos_cache.json    # Zonen-/Record-Cache IONOS
-    ├── cloudflare_cache.json
-    ├── ipv64_cache.json
-    ├── hetzner_dns_cache.json
-    └── hetzner_cloud_cache.json
+│   ├── dyndns.json         # Ereignis-Log (JSON Lines)
+│   ├── update.json         # IP-Historie pro Domain
+│   ├── metrics.json        # Persistierte Metriken
+│   ├── ionos_cache.json    # Zonen-/Record-Cache IONOS
+│   ├── cloudflare_cache.json
+│   ├── ipv64_cache.json
+│   ├── hetzner_dns_cache.json
+│   └── hetzner_cloud_cache.json
+└── tls/
+    ├── dashboard.crt
+    └── dashboard.key
 ```
 
 Beispiel `update.json`:
