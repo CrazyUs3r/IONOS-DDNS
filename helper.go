@@ -255,7 +255,6 @@ func resolveAvailableLanguage(
 		return "", false
 	}
 
-	// 1. Exakte Sprache, beispielsweise de-AT.
 	if available[preferred] {
 		return preferred, true
 	}
@@ -263,24 +262,20 @@ func resolveAvailableLanguage(
 	base := languageBase(preferred)
 	defaultLocale := defaultLocaleByBase[base]
 
-	// Ein alter Konfigurationswert "de" wird zu "de-DE".
 	if preferred == base &&
 		defaultLocale != "" &&
 		available[defaultLocale] {
 		return defaultLocale, true
 	}
 
-	// Region fehlt: de-CH -> de.json, falls vorhanden.
 	if preferred != base && available[base] {
 		return base, true
 	}
 
-	// Danach Standardregion: de-CH -> de-DE.
 	if defaultLocale != "" && available[defaultLocale] {
 		return defaultLocale, true
 	}
 
-	// Letzter Fallback innerhalb derselben Sprachfamilie.
 	var family []string
 
 	for code := range available {
@@ -339,33 +334,33 @@ func detectLanguage(langDir, preferred string) string {
 }
 
 var defaultLocaleByBase = map[string]string{
-	"bg": "bg-BG", // Bulgarisch
-	"cs": "cs-CZ", // Tschechisch
-	"da": "da-DK", // Dänisch
-	"de": "de-DE", // Deutsch
-	"el": "el-GR", // Griechisch
-	"en": "en-GB", // Englisch
-	"es": "es-ES", // Spanisch
-	"et": "et-EE", // Estnisch
-	"fi": "fi-FI", // Finnisch
-	"fr": "fr-FR", // Französisch
-	"hr": "hr-HR", // Kroatisch
-	"hu": "hu-HU", // Ungarisch
-	"is": "is-IS", // Isländisch
-	"it": "it-IT", // Italienisch
-	"lt": "lt-LT", // Litauisch
-	"lv": "lv-LV", // Lettisch
-	"nb": "nb-NO", // Norwegisch
-	"nl": "nl-NL", // Niederländisch
-	"pl": "pl-PL", // Polnisch
-	"pt": "pt-PT", // Portugiesisch
-	"ro": "ro-RO", // Rumänisch
-	"ru": "ru-RU", // Russisch
-	"sk": "sk-SK", // Slowakisch
-	"sl": "sl-SI", // Slowenisch
-	"sv": "sv-SE", // Schwedisch
-	"tr": "tr-TR", // Türkisch
-	"uk": "uk-UA", // Ukrainisch
+	"bg": "bg-BG",
+	"cs": "cs-CZ",
+	"da": "da-DK",
+	"de": "de-DE",
+	"el": "el-GR",
+	"en": "en-GB",
+	"es": "es-ES",
+	"et": "et-EE",
+	"fi": "fi-FI",
+	"fr": "fr-FR",
+	"hr": "hr-HR",
+	"hu": "hu-HU",
+	"is": "is-IS",
+	"it": "it-IT",
+	"lt": "lt-LT",
+	"lv": "lv-LV",
+	"nb": "nb-NO",
+	"nl": "nl-NL",
+	"pl": "pl-PL",
+	"pt": "pt-PT",
+	"ro": "ro-RO",
+	"ru": "ru-RU",
+	"sk": "sk-SK",
+	"sl": "sl-SI",
+	"sv": "sv-SE",
+	"tr": "tr-TR",
+	"uk": "uk-UA",
 }
 
 var knownLangLabels = map[string]string{
