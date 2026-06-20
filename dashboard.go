@@ -2489,21 +2489,21 @@ func writeDashboardTop(w http.ResponseWriter, statusClass, statusText string) {
 			</div>
 			<div class="status-banner-meta">
 				<span class="status-item status-item--clickable"
-					phrases()itle="`+html.EscapeString(phrases().TooltipLastCheck)+`"
+					title="`+html.EscapeString(phrases().TooltipLastCheck)+`"
 					data-tooltip="`+html.EscapeString(phrases().TooltipLastCheck)+`"
 					data-click="showNotifierTooltip()">
 					%s: <span id="lastUpdate">%s</span>
 				</span>
 				<span class="status-sep">|</span>
 				<span class="status-item status-item--clickable"
-					phrases()itle="`+html.EscapeString(phrases().TooltipClock)+`"
+					title="`+html.EscapeString(phrases().TooltipClock)+`"
 					data-tooltip="`+html.EscapeString(phrases().TooltipClock)+`"
 					data-click="showNotifierTooltip()">
 					🕒 <span id="clock">--:--:--</span>
 				</span>
 				<span class="status-sep">|</span>
 				<span class="status-item status-uptime status-item--clickable"
-					phrases()itle="`+html.EscapeString(phrases().TooltipUptime)+`"
+					title="`+html.EscapeString(phrases().TooltipUptime)+`"
 					data-tooltip="`+html.EscapeString(phrases().TooltipUptime)+`"
 					data-click="showNotifierTooltip()">
 					⏱️ <span id="uptime">--</span>
