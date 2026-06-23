@@ -149,24 +149,41 @@ func printZoneInfrastructure(
 func loadInfrastructureRecords(ctx context.Context, provider ProviderType, z Zone, dc *DomainConfig) []Record {
 	switch provider {
 	case ProviderIPv64:
-		return loadIPv64InfrastructureRecords(z)
+		records, err := loadIPv64InfrastructureRecords(z)
+		if err != nil {
+			debugLog("DEBUG", z.Name, fmt.Sprintf("IPv64 load failed: %v", err))
+			return nil
+		}
+		return records
 	case ProviderCloudflare:
 		if dc == nil {
 			return nil
 		}
-		records, _ := loadCloudflareRecords(ctx, dc, z.ID)
+		records, err := loadCloudflareRecords(ctx, dc, z.ID)
+		if err != nil {
+			debugLog("DEBUG", z.Name, fmt.Sprintf("Cloudflare load failed: %v", err))
+			return nil
+		}
 		return records
 	case ProviderHetzner:
 		if dc == nil {
 			return nil
 		}
-		records, _ := loadHetznerDNSZoneRecords(ctx, dc, z.ID)
+		records, err := loadHetznerDNSZoneRecords(ctx, dc, z.ID)
+		if err != nil {
+			debugLog("DEBUG", z.Name, fmt.Sprintf("Hetzner DNS load failed: %v", err))
+			return nil
+		}
 		return records
 	case ProviderHetznerCloud:
 		if dc == nil {
 			return nil
 		}
-		records, _ := loadHetznerCloudZoneRecords(ctx, dc, z.ID)
+		records, err := loadHetznerCloudZoneRecords(ctx, dc, z.ID)
+		if err != nil {
+			debugLog("DEBUG", z.Name, fmt.Sprintf("Hetzner Cloud load failed: %v", err))
+			return nil
+		}
 		return records
 	default: // IONOS
 		if dc == nil {
@@ -174,7 +191,7 @@ func loadInfrastructureRecords(ctx context.Context, provider ProviderType, z Zon
 		}
 		records, err := loadIonosInfrastructureRecords(ctx, dc, z.ID)
 		if err != nil {
-			debugLog("PRINTING", z.Name, fmt.Sprintf(phrases().IonosInfrastructureLoadFailed, err))
+			debugLog("DEBUG", z.Name, fmt.Sprintf(phrases().IonosInfrastructureLoadFailed, err))
 			return nil
 		}
 		return records
