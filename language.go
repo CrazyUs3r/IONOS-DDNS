@@ -105,7 +105,6 @@ func loadLanguage(lang string) (err error) {
 		)
 	}
 
-	// Erst nach erfolgreichem Laden aller Ebenen austauschen.
 	applyTranslations(translations)
 
 	logLanguageLoaded(resolved, len(translations))
@@ -139,7 +138,6 @@ func translationLayers(
 		layers = append(layers, code)
 	}
 
-	// Nicht-englische Sprachen beginnen mit Englisch.
 	if base != "en" {
 		if english, ok := resolveAvailableLanguage(
 			"en",
@@ -149,15 +147,12 @@ func translationLayers(
 		}
 	}
 
-	// Optionale allgemeine Datei, beispielsweise de.json.
 	add(base)
 
-	// Standardregion, beispielsweise de-DE.
 	if defaultLocale := defaultLocaleByBase[base]; defaultLocale != "" && defaultLocale != lang {
 		add(defaultLocale)
 	}
 
-	// Gewählte Region zuletzt, damit sie alles überschreibt.
 	add(lang)
 
 	return layers

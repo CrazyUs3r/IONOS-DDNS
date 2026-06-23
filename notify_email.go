@@ -299,7 +299,7 @@ func formatEmailMessage(msg NotifyMessage, prefix string) (subject, body string)
 		fmt.Fprintf(&sb, "Domain:  %s\n", msg.Domain)
 	}
 	fmt.Fprintf(&sb, "Message: %s\n", msg.Message)
-	fmt.Fprintf(&sb, "Time:    %s\n", time.Now().Format("02.01.2006 15:04:05"))
+	fmt.Fprintf(&sb, "Time:    %s\n", time.Now().Format(statusTimestampLayout))
 	fmt.Fprintf(&sb, "\n--\nSent by Go-DynDNS\n")
 
 	return subject, sb.String()

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 )
 
 // ============================================================================
@@ -14,21 +15,34 @@ import (
 // ============================================================================
 func NewZoneRecordCache() *ZoneRecordCache {
 	return &ZoneRecordCache{
-		data: make(map[string][]Record),
+		data: make(map[string]cacheEntry),
 	}
 }
 
 func (c *ZoneRecordCache) Set(zoneID string, records []Record) {
 	c.Lock()
 	defer c.Unlock()
-	c.data[zoneID] = records
+	c.data[zoneID] = cacheEntry{
+		records:  records,
+		storedAt: time.Now(),
+	}
 }
 
 func (c *ZoneRecordCache) Get(zoneID string) ([]Record, bool) {
 	c.RLock()
 	defer c.RUnlock()
-	records, exists := c.data[zoneID]
-	return records, exists
+	entry, exists := c.data[zoneID]
+	return entry.records, exists
+}
+
+func (c *ZoneRecordCache) Age(zoneID string) time.Duration {
+	c.RLock()
+	defer c.RUnlock()
+	entry, exists := c.data[zoneID]
+	if !exists {
+		return -1
+	}
+	return time.Since(entry.storedAt)
 }
 
 func loadZoneCache(ctx context.Context, zonesByProvider map[string][]Zone) (*ZoneRecordCache, error) {

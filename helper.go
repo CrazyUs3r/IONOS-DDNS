@@ -541,52 +541,6 @@ func loadZonesForDomainConfig(ctx context.Context, dc *DomainConfig) ([]Zone, er
 	}
 }
 
-func loadIONOSZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
-	cfgMu.RLock()
-	domainConfigs := make([]DomainConfig, len(cfg.DomainConfigs))
-	copy(domainConfigs, cfg.DomainConfigs)
-	cfgMu.RUnlock()
-
-	data, err := ionosAPI(ctx, dc, MethodGET, ionosBaseURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load ionos zones: %w", err)
-	}
-	if len(data) == 0 {
-		return nil, fmt.Errorf("empty response from IONOS API")
-	}
-
-	var zones []Zone
-	if err := json.Unmarshal(data, &zones); err != nil {
-		return nil, fmt.Errorf("failed to parse ionos zones: %w", err)
-	}
-
-	needed := make(map[string]struct{})
-	for _, dc := range domainConfigs {
-		if dc.Provider != ProviderIONOS {
-			continue
-		}
-		dn := strings.TrimSuffix(strings.ToLower(dc.FQDN), ".")
-		needed[dn] = struct{}{}
-	}
-
-	filtered := zones[:0]
-	for _, z := range zones {
-		zn := strings.TrimSuffix(strings.ToLower(z.Name), ".")
-		for dn := range needed {
-			if dn == zn || strings.HasSuffix(dn, "."+zn) {
-				filtered = append(filtered, z)
-				break
-			}
-		}
-	}
-
-	if len(filtered) < len(zones) {
-		debugLog("ZONE", "", fmt.Sprintf("IONOS: %d von %d Zones relevant (Rest gefiltert)", len(filtered), len(zones)))
-	}
-
-	return filtered, nil
-}
-
 func loadAllProviderZones(ctx context.Context) (map[string][]Zone, error) {
 	zonesByProvider := make(map[string][]Zone)
 	providerConfigs := make(map[ProviderType]*DomainConfig)

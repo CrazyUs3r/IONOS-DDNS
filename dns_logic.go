@@ -260,14 +260,14 @@ func finalizeDomainResults(results <-chan domainUpdateResult, totalDomains int) 
 			})
 			continue
 		}
-
 		if result.Changed {
 			successCount++
 		}
 	}
 
-	allOk := errorCount == 0 && totalDomains > 0
-	lastOk.Store(allOk)
+	if totalDomains > 0 {
+		lastOk.Store(errorCount == 0)
+	}
 	schedulerRanOnce.Store(true)
 
 	if errorCount > 0 {

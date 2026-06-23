@@ -192,7 +192,7 @@ func formatGotifyMessage(msg NotifyMessage) (title, body string) {
 		fmt.Fprintf(&sb, "Domain: %s\n", msg.Domain)
 	}
 	sb.WriteString(msg.Message)
-	fmt.Fprintf(&sb, "\n%s", time.Now().Format("02.01.2006 15:04:05"))
+	fmt.Fprintf(&sb, "\n%s", time.Now().Format(statusTimestampLayout))
 
 	return title, sb.String()
 }

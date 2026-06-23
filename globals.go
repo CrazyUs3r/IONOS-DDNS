@@ -43,6 +43,10 @@ var (
 	statusMutex        sync.Mutex
 	lastErrorMsg       = &SafeErrorMsg{}
 
+	Version   = "dev"
+	BuildDate = "unknown"
+	VCSRef    = "unknown"
+
 	httpClient   *http.Client
 	clientMu     sync.RWMutex
 	clientDNSKey string
@@ -95,7 +99,7 @@ var (
 	metricsPersistPath = ""
 
 	rotationQueue   = make(chan rotationJob, 4)
-	logWriteQueue   = make(chan LogEntry, 500)
+	logWriteQueue   = make(chan LogEntry, 2000)
 	logFlushTimeout = 2 * time.Second
 
 	activeUpdates atomic.Int32
@@ -368,8 +372,20 @@ const (
 )
 
 const (
+	ntfyQueueSize   = 64
+	ntfyQueueMaxAge = 5 * time.Minute
+	ntfySendDelay   = 200 * time.Millisecond
+)
+
+const (
 	constTrue  string = "true"
 	constFalse string = "false"
+)
+
+const (
+	statusTimestampLayout   = "02.01.2006 15:04:05"
+	statusTimestampLayoutwS = "02.01.2006 15:04"
+	statusTimestampLayoutT  = "2006-01-02T15:04:05"
 )
 
 // ============================================================================
@@ -513,6 +529,11 @@ type Config struct {
 			URL   string `json:"url"`
 			Token string `json:"token"`
 		} `json:"gotify"`
+		Ntfy struct {
+			URL   string `json:"url"`
+			Topic string `json:"topic"`
+			Token string `json:"token"`
+		} `json:"ntfy"`
 		Webhook struct {
 			URL    string `json:"url"`
 			Secret string `json:"secret"`
@@ -647,9 +668,14 @@ type IONOSCache struct {
 
 type IPVersion int
 
+type cacheEntry struct {
+	records  []Record
+	storedAt time.Time
+}
+
 type ZoneRecordCache struct {
 	sync.RWMutex
-	data map[string][]Record
+	data map[string]cacheEntry
 }
 
 type APIError struct {

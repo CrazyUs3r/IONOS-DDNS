@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -37,82 +39,27 @@ func writeStatusFileLocked(fqdn, ipv4, ipv6, provider string) (IPEntry, error) {
 	statusMutex.Lock()
 	defer statusMutex.Unlock()
 
-	if statusDomains == nil {
-		statusDomains = make(map[string]DomainHistory)
-
-		if b, err := os.ReadFile(updatePath); err == nil {
-			loaded := make(map[string]DomainHistory)
-
-			if err := json.Unmarshal(b, &loaded); err != nil {
-				brokenFile := fmt.Sprintf(
-					"%s.broken.%s",
-					updatePath,
-					time.Now().Format("20060102_150405.000000000"),
-				)
-
-				if renameErr := os.Rename(updatePath, brokenFile); renameErr != nil {
-					log(LogContext{
-						Level:  LogError,
-						Action: ActionError,
-						Message: fmt.Sprintf(
-							"Failed to backup broken status file: %v",
-							renameErr,
-						),
-					})
-
-					return IPEntry{}, renameErr
-				}
-
-				log(LogContext{
-					Level:  LogWarn,
-					Action: ActionServer,
-					Message: fmt.Sprintf(
-						"Broken status file moved to %s",
-						brokenFile,
-					),
-				})
-
-				statusDomains = make(map[string]DomainHistory)
-			} else if loaded == nil {
-				brokenFile := fmt.Sprintf(
-					"%s.broken.%s",
-					updatePath,
-					time.Now().Format("20060102_150405.000000000"),
-				)
-
-				if renameErr := os.Rename(updatePath, brokenFile); renameErr != nil {
-					return IPEntry{}, renameErr
-				}
-
-				log(LogContext{
-					Level:  LogWarn,
-					Action: ActionServer,
-					Message: fmt.Sprintf(
-						"Invalid/null status file moved to %s",
-						brokenFile,
-					),
-				})
-
-				statusDomains = make(map[string]DomainHistory)
-			} else {
-				statusDomains = loaded
-			}
-		} else if !os.IsNotExist(err) {
-			log(LogContext{
-				Level:   LogError,
-				Action:  ActionError,
-				Message: fmt.Sprintf("Failed to read status file: %v", err),
-			})
-
-			return IPEntry{}, err
-		}
+	if strings.TrimSpace(fqdn) == "" {
+		return IPEntry{}, fmt.Errorf("fqdn must not be empty")
 	}
 
-	h := statusDomains[fqdn]
-	h.Provider = provider
+	current, err := currentStatusDomainsLocked()
+	if err != nil {
+		return IPEntry{}, err
+	}
 
-	now := time.Now().Format("02.01.2006 15:04:05")
-	h.LastChanged = now
+	next := cloneStatusDomains(current)
+
+	key := existingStatusDomainKey(next, fqdn)
+	if key == "" {
+		key = fqdn
+	}
+
+	history := next[key]
+	history.Provider = provider
+
+	now := time.Now().Format(statusTimestampLayout)
+	history.LastChanged = now
 
 	newEntry := IPEntry{
 		Time: now,
@@ -120,92 +67,337 @@ func writeStatusFileLocked(fqdn, ipv4, ipv6, provider string) (IPEntry, error) {
 		IPv6: ipv6,
 	}
 
-	h.IPs = append(h.IPs, newEntry)
+	history.IPs = append(history.IPs, newEntry)
+	if len(history.IPs) > MaxStatusHistoryItems {
+		history.IPs = append([]IPEntry(nil), history.IPs[len(history.IPs)-MaxStatusHistoryItems:]...)
+	}
+	next[key] = history
 
-	if len(h.IPs) > MaxStatusHistoryItems {
-		h.IPs = h.IPs[len(h.IPs)-MaxStatusHistoryItems:]
+	pruned := pruneOrphanStatusDomainsMap(next)
+
+	if err := replaceStatusDomainsLocked(next); err != nil {
+		return IPEntry{}, err
 	}
 
-	statusDomains[fqdn] = h
+	for _, domain := range pruned {
+		debugLog("STATUS", domain, "Orphaned domain pruned from status")
+	}
 
-	js, err := json.MarshalIndent(statusDomains, "", " ")
+	return newEntry, nil
+}
+
+func currentStatusDomainsLocked() (map[string]DomainHistory, error) {
+	if statusDomains != nil {
+		return statusDomains, nil
+	}
+
+	loaded, err := loadStatusDomainsFromDiskLocked()
+	if err != nil {
+		return nil, err
+	}
+
+	statusDomains = loaded
+	return statusDomains, nil
+}
+
+func loadStatusDomainsFromDiskLocked() (map[string]DomainHistory, error) {
+	path, err := checkedUpdatePath()
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return make(map[string]DomainHistory), nil
+		}
+
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: fmt.Sprintf("Failed to read status file %s: %v", path, err),
+		})
+		return nil, err
+	}
+
+	loaded := make(map[string]DomainHistory)
+	if err := json.Unmarshal(data, &loaded); err != nil {
+		if moveErr := moveBrokenStatusFile(path, "Broken status file", err); moveErr != nil {
+			return nil, moveErr
+		}
+		return make(map[string]DomainHistory), nil
+	}
+
+	if loaded == nil {
+		if moveErr := moveBrokenStatusFile(path, "Invalid/null status file", nil); moveErr != nil {
+			return nil, moveErr
+		}
+		return make(map[string]DomainHistory), nil
+	}
+
+	return loaded, nil
+}
+
+func moveBrokenStatusFile(path, description string, parseErr error) error {
+	brokenFile := fmt.Sprintf(
+		"%s.broken.%s",
+		path,
+		time.Now().Format("20060102_150405.000000000"),
+	)
+
+	if err := os.Rename(path, brokenFile); err != nil {
+		log(LogContext{
+			Level:  LogError,
+			Action: ActionError,
+			Message: fmt.Sprintf(
+				"Failed to backup invalid status file %s: %v",
+				path,
+				err,
+			),
+		})
+		return fmt.Errorf("backup invalid status file %s: %w", path, err)
+	}
+
+	message := fmt.Sprintf("%s moved to %s", description, brokenFile)
+	if parseErr != nil {
+		message += fmt.Sprintf(" (%v)", parseErr)
+	}
+
+	log(LogContext{
+		Level:   LogWarn,
+		Action:  ActionServer,
+		Message: message,
+	})
+
+	return nil
+}
+
+func checkedUpdatePath() (string, error) {
+	path := strings.TrimSpace(updatePath)
+	if path == "" {
+		return "", fmt.Errorf("updatePath is empty")
+	}
+
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("create status directory %s: %w", dir, err)
+	}
+
+	return path, nil
+}
+
+func replaceStatusDomainsLocked(next map[string]DomainHistory) error {
+	path, err := checkedUpdatePath()
+	if err != nil {
+		return err
+	}
+
+	persisted := cloneStatusDomains(next)
+	if persisted == nil {
+		persisted = make(map[string]DomainHistory)
+	}
+
+	if err := writeStatusDomainsAtomic(path, persisted); err != nil {
+		return err
+	}
+
+	statusDomains = persisted
+	return nil
+}
+
+func writeStatusDomainsAtomic(path string, domains map[string]DomainHistory) error {
+	data, err := json.MarshalIndent(domains, "", " ")
 	if err != nil {
 		log(LogContext{
 			Level:  LogError,
 			Action: ActionError,
 			Message: fmt.Sprintf(
-				t(phrases().ErrMarshalStatusFile,
-					"Failed to marshal status file: %v"),
+				t(phrases().ErrMarshalStatusFile, "Failed to marshal status file: %v"),
 				err,
 			),
 		})
-
-		return IPEntry{}, err
+		return err
 	}
 
-	tmp := updatePath + ".tmp"
+	dir := filepath.Dir(path)
+	base := filepath.Base(path)
 
-	if err := os.WriteFile(tmp, js, 0o600); err != nil {
+	tmpFile, err := os.CreateTemp(dir, "."+base+".tmp-*")
+	if err != nil {
 		log(LogContext{
 			Level:  LogError,
 			Action: ActionError,
 			Message: fmt.Sprintf(
-				t(phrases().ErrWriteTempStatusFile,
-					"Failed to write temp status file: %v"),
+				t(phrases().ErrWriteTempStatusFile, "Failed to create temp status file: %v"),
 				err,
 			),
 		})
-
-		return IPEntry{}, err
+		return err
 	}
 
-	if err := os.Rename(tmp, updatePath); err != nil {
+	tmpPath := tmpFile.Name()
+	removeTemp := true
+	defer func() {
+		if removeTemp {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	fail := func(err error) error {
+		_ = tmpFile.Close()
+		return err
+	}
+
+	if err := tmpFile.Chmod(0o600); err != nil {
+		return fail(fmt.Errorf("chmod temp status file %s: %w", tmpPath, err))
+	}
+
+	if _, err := tmpFile.Write(data); err != nil {
 		log(LogContext{
 			Level:  LogError,
 			Action: ActionError,
 			Message: fmt.Sprintf(
-				t(phrases().ErrReplaceStatusFile,
-					"Failed to replace status file: %v"),
+				t(phrases().ErrWriteTempStatusFile, "Failed to write temp status file: %v"),
 				err,
 			),
 		})
-
-		return IPEntry{}, err
+		return fail(err)
 	}
 
-	return newEntry, nil
+	if err := tmpFile.Sync(); err != nil {
+		return fail(fmt.Errorf("sync temp status file %s: %w", tmpPath, err))
+	}
+
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("close temp status file %s: %w", tmpPath, err)
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		log(LogContext{
+			Level:  LogError,
+			Action: ActionError,
+			Message: fmt.Sprintf(
+				t(phrases().ErrReplaceStatusFile, "Failed to replace status file: %v"),
+				err,
+			),
+		})
+		return err
+	}
+	removeTemp = false
+
+	if dirHandle, err := os.Open(dir); err == nil {
+		if err := dirHandle.Sync(); err != nil {
+			debugLog("STATUS", "", fmt.Sprintf("Status directory sync failed: %v", err))
+		}
+		_ = dirHandle.Close()
+	}
+
+	return nil
+}
+
+func cloneStatusDomains(src map[string]DomainHistory) map[string]DomainHistory {
+	if src == nil {
+		return make(map[string]DomainHistory)
+	}
+
+	dst := make(map[string]DomainHistory, len(src))
+	for domain, history := range src {
+		history.IPs = append([]IPEntry(nil), history.IPs...)
+		dst[domain] = history
+	}
+	return dst
+}
+
+func existingStatusDomainKey(domains map[string]DomainHistory, fqdn string) string {
+	if _, ok := domains[fqdn]; ok {
+		return fqdn
+	}
+
+	for key := range domains {
+		if strings.EqualFold(key, fqdn) {
+			return key
+		}
+	}
+
+	return ""
+}
+
+func pruneOrphanStatusDomainsMap(domains map[string]DomainHistory) []string {
+	if domains == nil {
+		return nil
+	}
+
+	cfgMu.RLock()
+	configured := make(map[string]struct{}, len(cfg.DomainConfigs))
+	for _, domainConfig := range cfg.DomainConfigs {
+		configured[strings.ToLower(strings.TrimSpace(domainConfig.FQDN))] = struct{}{}
+	}
+	cfgMu.RUnlock()
+
+	cutoff := time.Now().Add(-7 * 24 * time.Hour)
+	pruned := make([]string, 0)
+
+	for fqdn, history := range domains {
+		if _, ok := configured[strings.ToLower(strings.TrimSpace(fqdn))]; ok {
+			continue
+		}
+		if history.LastChanged == "" {
+			continue
+		}
+
+		lastChanged, err := time.ParseInLocation(statusTimestampLayout, history.LastChanged, time.Local)
+		if err != nil || !lastChanged.Before(cutoff) {
+			continue
+		}
+
+		delete(domains, fqdn)
+		pruned = append(pruned, fqdn)
+	}
+
+	return pruned
 }
 
 // ============================================================================
 // CACHING
 // ============================================================================
 func updateDomainsCache() error {
-	statusMutex.Lock()
-	defer statusMutex.Unlock()
-
-	src := statusDomains
-	if src == nil {
-		src = make(map[string]DomainHistory)
-		if b, err := os.ReadFile(updatePath); err == nil {
-			_ = json.Unmarshal(b, &src)
-		}
+	snapshot, err := snapshotStatusDomains()
+	if err != nil {
+		return err
 	}
 
-	data, err := json.MarshalIndent(src, "", " ")
+	data, err := json.MarshalIndent(snapshot, "", " ")
 	if err != nil {
 		return err
 	}
 
 	sum := sha256.Sum256(data)
 	etag := fmt.Sprintf(`"%x"`, sum)
+	now := time.Now().UTC().Truncate(time.Second)
 
 	domainsCache.mu.Lock()
-	domainsCache.Data = data
-	domainsCache.ETag = etag
-	domainsCache.LastModified = time.Now()
+	if domainsCache.ETag != etag || len(domainsCache.Data) == 0 {
+		domainsCache.Data = data
+		domainsCache.ETag = etag
+		domainsCache.LastModified = now
+	} else if domainsCache.LastModified.IsZero() {
+		domainsCache.LastModified = now
+	}
 	domainsCache.mu.Unlock()
 
 	return nil
+}
+
+func snapshotStatusDomains() (map[string]DomainHistory, error) {
+	statusMutex.Lock()
+	defer statusMutex.Unlock()
+
+	current, err := currentStatusDomainsLocked()
+	if err != nil {
+		return nil, err
+	}
+
+	return cloneStatusDomains(current), nil
 }
 
 func updateMetricsCache() error {
@@ -219,11 +411,16 @@ func updateMetricsCache() error {
 
 	sum := sha256.Sum256(data)
 	etag := fmt.Sprintf(`"%x"`, sum)
+	now := time.Now().UTC().Truncate(time.Second)
 
 	metricsCache.mu.Lock()
-	metricsCache.Data = data
-	metricsCache.ETag = etag
-	metricsCache.LastModified = time.Now()
+	if metricsCache.ETag != etag || len(metricsCache.Data) == 0 {
+		metricsCache.Data = data
+		metricsCache.ETag = etag
+		metricsCache.LastModified = now
+	} else if metricsCache.LastModified.IsZero() {
+		metricsCache.LastModified = now
+	}
 	metricsCache.mu.Unlock()
 
 	return nil
@@ -231,7 +428,7 @@ func updateMetricsCache() error {
 
 func serveCachedJSON(w http.ResponseWriter, r *http.Request, cache *CachedResponse) {
 	cache.mu.RLock()
-	data := cache.Data
+	data := append([]byte(nil), cache.Data...)
 	etag := cache.ETag
 	lastMod := cache.LastModified
 	cache.mu.RUnlock()
@@ -242,21 +439,7 @@ func serveCachedJSON(w http.ResponseWriter, r *http.Request, cache *CachedRespon
 			etag = `"0"`
 		}
 		if lastMod.IsZero() {
-			lastMod = time.Now()
-		}
-	}
-
-	if r.Header.Get("If-None-Match") == etag {
-		w.WriteHeader(http.StatusNotModified)
-		return
-	}
-
-	if ifModSince := r.Header.Get("If-Modified-Since"); ifModSince != "" {
-		if t, err := http.ParseTime(ifModSince); err == nil {
-			if !lastMod.After(t) {
-				w.WriteHeader(http.StatusNotModified)
-				return
-			}
+			lastMod = time.Now().UTC().Truncate(time.Second)
 		}
 	}
 
@@ -265,18 +448,52 @@ func serveCachedJSON(w http.ResponseWriter, r *http.Request, cache *CachedRespon
 	w.Header().Set("Last-Modified", lastMod.UTC().Format(http.TimeFormat))
 	w.Header().Set("Cache-Control", "public, max-age=5")
 
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+
+	if ifModSince := r.Header.Get("If-Modified-Since"); ifModSince != "" {
+		if parsed, err := http.ParseTime(ifModSince); err == nil {
+			if !lastMod.After(parsed) {
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+		}
+	}
+
+	if r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	if _, err := w.Write(data); err != nil {
 		debugLog("HTTP", "", fmt.Sprintf(t(phrases().ErrResponseWrite, "Response write failed: %v"), err))
 	}
 }
 
+func cacheRefreshInterval() time.Duration {
+	cfgMu.RLock()
+	interval := cfg.Interval
+	cfgMu.RUnlock()
+
+	switch {
+	case interval <= 60:
+		return 5 * time.Second
+	case interval <= 300:
+		return 15 * time.Second
+	default:
+		return 30 * time.Second
+	}
+}
+
 func startCacheRefresher() {
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(cacheRefreshInterval())
 
 	go func() {
 		defer func() {
-			if r := recover(); r != nil {
-				debugLog("CACHE", "", fmt.Sprintf(t(phrases().ErrPanicRecovered, "🚨 Panic recovered: %v"), r))
+			if recovered := recover(); recovered != nil {
+				debugLog("CACHE", "", fmt.Sprintf(t(phrases().ErrPanicRecovered, "🚨 Panic recovered: %v"), recovered))
 			}
 			ticker.Stop()
 		}()
@@ -290,8 +507,8 @@ func startCacheRefresher() {
 			case <-ticker.C:
 				func() {
 					defer func() {
-						if r := recover(); r != nil {
-							debugLog("CACHE", "", fmt.Sprintf(t(phrases().ErrPanicRefreshCycle, "Panic in refresh cycle: %v"), r))
+						if recovered := recover(); recovered != nil {
+							debugLog("CACHE", "", fmt.Sprintf(t(phrases().ErrPanicRefreshCycle, "Panic in refresh cycle: %v"), recovered))
 						}
 					}()
 

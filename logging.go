@@ -28,7 +28,7 @@ func log(ctx LogContext) {
 	}
 
 	levelStr, icon := logLevelPresentation(ctx)
-	ts := time.Now().Format("02.01.2006 15:04:05")
+	ts := time.Now().Format(statusTimestampLayout)
 	msg := buildLogMessage(ctx)
 	icon = overrideLogIcon(icon, ctx)
 
@@ -115,9 +115,9 @@ type debugLogPayload struct {
 
 func broadcastDebugLogIfNeeded(ctx LogContext, msg, icon string) {
 	switch ctx.Level {
-	case LogDebug, LogWarn, LogError:
+	case LogDebug, LogInfo, LogWarn, LogError:
 		broadcastUpdate("debug_log", debugLogPayload{
-			Timestamp: time.Now().Format("02.01.2006 15:04:05"),
+			Timestamp: time.Now().Format(statusTimestampLayout),
 			Category:  ctx.Category,
 			Domain:    ctx.Domain,
 			Message:   msg,
@@ -161,7 +161,7 @@ func persistLog(ctx LogContext) {
 	}
 
 	entry := LogEntry{
-		Timestamp: time.Now().Format("2006-01-02T15:04:05"),
+		Timestamp: time.Now().Format(statusTimestampLayoutT),
 		Level:     levelToString(ctx.Level),
 		Action:    ctx.Action,
 		Domain:    ctx.Domain,

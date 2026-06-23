@@ -4,6 +4,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -32,6 +35,12 @@ func (w *webhookNotifier) SendSync(msg NotifyMessage) error {
 	return w.doSend(msg)
 }
 
+func webhookSignature(secret string, body []byte) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
+}
+
 func (w *webhookNotifier) doSend(msg NotifyMessage) error {
 	payload := map[string]any{
 		"action":    msg.Action,
@@ -46,6 +55,31 @@ func (w *webhookNotifier) doSend(msg NotifyMessage) error {
 		return fmt.Errorf("webhook marshal: %w", err)
 	}
 
+	const maxAttempts = 3
+	wait := 5 * time.Second
+
+	for attempt := range maxAttempts {
+		err := w.trySend(data)
+		if err == nil {
+			return nil
+		}
+
+		if attempt == maxAttempts-1 {
+			return err
+		}
+
+		debugLog("NOTIFY", "", fmt.Sprintf("⌛ Webhook retry %d/%d: %v", attempt+1, maxAttempts, err))
+		select {
+		case <-shutdownCtx.Done():
+			return err
+		case <-time.After(wait):
+		}
+		wait *= 2
+	}
+	return nil
+}
+
+func (w *webhookNotifier) trySend(data []byte) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -56,17 +90,17 @@ func (w *webhookNotifier) doSend(msg NotifyMessage) error {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", ManagedComment)
 	if w.secret != "" {
-		req.Header.Set("X-Webhook-Secret", w.secret)
+		req.Header.Set("X-Hub-Signature-256", webhookSignature(w.secret, data))
 	}
 
 	resp, err := getHTTPClient().Do(req)
 	if err != nil {
-		return fmt.Errorf("webhook send: %w", err)
+		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("webhook HTTP %d", resp.StatusCode)
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 	return nil
 }

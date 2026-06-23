@@ -349,6 +349,15 @@ func handleSettings2FA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.Method == MethodPOST {
+		if !validCSRFRequest(r, sess) {
+			writeJSON(w, http.StatusForbidden, map[string]string{
+				"error": "invalid csrf token",
+			})
+			return
+		}
+	}
+
 	flash := totpFlash{}
 	if r.Method == MethodPOST {
 		flash = handleSettings2FAPost(r, currentUser, users)

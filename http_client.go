@@ -18,6 +18,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -929,7 +930,12 @@ func sanitizeID(s string) string {
 	return out
 }
 
-var sanitizeIDCache sync.Map
+const sanitizeIDCacheMaxSize = 512
+
+var (
+	sanitizeIDCache    sync.Map
+	sanitizeIDCacheLen atomic.Int32
+)
 
 func sanitizeIDWithHash(s string) string {
 	if cached, ok := sanitizeIDCache.Load(s); ok {
@@ -944,7 +950,10 @@ func sanitizeIDWithHash(s string) string {
 	} else {
 		result = base + "-" + sfx
 	}
-	sanitizeIDCache.Store(s, result)
+	if sanitizeIDCacheLen.Load() < sanitizeIDCacheMaxSize {
+		sanitizeIDCache.Store(s, result)
+		sanitizeIDCacheLen.Add(1)
+	}
 	return result
 }
 

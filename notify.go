@@ -92,13 +92,22 @@ func initNotifiers() {
 	}
 
 	if cfg.Notifications.Webhook.URL != "" {
-		newCfg.notifiers = append(newCfg.notifiers,
-			newWebhookNotifier(cfg.Notifications.Webhook.URL, cfg.Notifications.Webhook.Secret))
+		newCfg.notifiers = append(newCfg.notifiers, newWebhookNotifier(cfg.Notifications.Webhook.URL, cfg.Notifications.Webhook.Secret))
 		debugLog("NOTIFY", "", fmt.Sprintf("%s %s", phrases().NotifyWebhookActive, cfg.Notifications.Webhook.URL))
 		log(LogContext{
 			Level:   LogInfo,
 			Action:  ActionConfig,
 			Message: t(phrases().NotifyWebhookActive, "✅ Webhook active"),
+		})
+	}
+
+	if cfg.Notifications.Ntfy.URL != "" && cfg.Notifications.Ntfy.Topic != "" {
+		newCfg.notifiers = append(newCfg.notifiers, newNtfyNotifier(cfg.Notifications.Ntfy.URL, cfg.Notifications.Ntfy.Topic, cfg.Notifications.Ntfy.Token))
+		debugLog("NOTIFY", "", fmt.Sprintf("%s %s", phrases().NotifyNtfyActive, cfg.Notifications.Ntfy.URL))
+		log(LogContext{
+			Level:   LogInfo,
+			Action:  ActionConfig,
+			Message: t(phrases().NotifyNtfyActive, "✅ Ntfy active"),
 		})
 	}
 

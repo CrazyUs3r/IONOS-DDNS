@@ -22,14 +22,16 @@ func apiWithRetry(
 	}
 
 	maxRetries := cfg.MaxAPIRetries
-	var lastErr error
+	if maxRetries <= 0 {
+		maxRetries = 1
+	}
 
+	var lastErr error
 	for attempt := range maxRetries {
 		respBody, retry, err := attemptFn(attempt, maxRetries)
 		if err == nil {
 			return respBody, nil
 		}
-
 		lastErr = err
 		if !retry {
 			return nil, err

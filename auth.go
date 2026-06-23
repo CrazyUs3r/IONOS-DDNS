@@ -33,7 +33,7 @@ const (
 	DefaultSessionMaxAge    = 7 * 24 * time.Hour
 	sessionCleanupEvery     = 1 * time.Hour
 	pbkdf2Iter              = 600_000
-	pbkdf2SaltLen           = 16
+	pbkdf2SaltLen           = 32
 	pbkdf2KeyLen            = 32
 	setupTokenLength        = 32
 )
@@ -266,13 +266,14 @@ var (
 
 func loadUsers() []DashboardUser {
 	usersCacheMu.RLock()
-	if usersCache != nil {
-		out := make([]DashboardUser, len(usersCache))
-		copy(out, usersCache)
-		usersCacheMu.RUnlock()
+	cached := usersCache
+	usersCacheMu.RUnlock()
+
+	if cached != nil {
+		out := make([]DashboardUser, len(cached))
+		copy(out, cached)
 		return out
 	}
-	usersCacheMu.RUnlock()
 
 	usersCacheMu.Lock()
 	defer usersCacheMu.Unlock()

@@ -162,7 +162,7 @@ type Phrases struct {
 	ResetMetricsConfirmJS, MetricsResetOKJS, MetricsResetFailedJS         string
 	DeleteDomainConfirmJS, DomainRemovedJS, DeleteFailedJS                string
 	TokenSavedJS, TokenDeletedJS, TokenSavedMaskedJS, TokenEnterJS        string
-	DomainUpdatedJS, ClearedJS                                            string
+	DomainUpdatedJS, ClearedJS, DomainHistorySummary                      string
 
 	// Provider-Hinweise / Config
 	IonosAPIRequired, Ipv64TokenRequired, CloudflareAuthRequired, UnknownProvider  string
@@ -187,46 +187,48 @@ type Phrases struct {
 	RateLimitGlobal                                                           string
 
 	// Notify event labels & descriptions
-	NotifyEventUpdateLabel, NotifyEventUpdateDesc                              string
-	NotifyEventCreateLabel, NotifyEventCreateDesc                              string
-	NotifyEventErrorLabel, NotifyEventErrorDesc                                string
-	NotifyEventStartLabel, NotifyEventStartDesc                                string
-	NotifyEventStopLabel, NotifyEventStopDesc                                  string
-	NotifyEventCleanupLabel, NotifyEventCleanupDesc                            string
-	NotifyEventCurrentLabel, NotifyEventCurrentDesc                            string
-	NotifyEventInfoLabel, NotifyEventInfoDesc                                  string
-	NotifyEventRetryLabel, NotifyEventRetryDesc                                string
-	NotifyEventConfigLabel, NotifyEventConfigDesc                              string
-	NotifyEventZoneLabel, NotifyEventZoneDesc                                  string
-	NotifyEventDryRunLabel, NotifyEventDryRunDesc                              string
-	NotifyEventSkipLabel, NotifyEventSkipDesc                                  string
-	NotifyEventAPILabel, NotifyEventAPIDesc                                    string
-	NotifyEventServerLabel, NotifyEventServerDesc                              string
-	NotifyTelegramActive, NotifyGotifyActive, NotifyWebhookActive              string
-	NotifyTestSuccess, NotifyTestUnauthorized, NotifyTestError                 string
-	NotifyTestConnError, NotifyTestBody, NotifyBtnSending                      string
-	NotifyBtnTest, NotifyNoNotifier, NotifyStatSuccess                         string
-	TgCmdStart, TgCmdStatus, TgCmdMetrics, TgCmdDomains                        string
-	TgCmdUpdate, TgCmdHealth, TgCmdHelp, TgMenuPrompt                          string
-	TgUpdateAlreadyRunning, TgUpdateStarting, TgUpdateDone                     string
-	TgUnknownCommand, NotifyTelegramManualUpdate, NotifyFailed                 string
-	TgStatusOnline, TgStatusError, TgStatusStarting, TgStatusHeading           string
-	TgStatusLabelStatus, TgStatusLabelIPMode, TgStatusLabelDomains             string
-	TgStatusLabelInterval, TgStatusLabelDryRun, TgStatusLabelRequests          string
-	TgStatusLabelSuccessRate, TgStatusLabelLatency, TgStatusLabelLastOk        string
-	TgMetricsHeading, TgMetricsRequests, TgMetricsTotal, TgMetricsSuccessRate  string
-	TgMetricsClientErr, TgMetricsServerErr, TgMetricsLatency, TgMetricsIPCheck string
-	TgMetricsChecks, TgMetricsLast, TgMetricsHourlyLimit, TgMetricsUsed        string
-	TgMetricsLoad, TgMetricsTodayHTTP, TgDomainsHeading, TgDomainsCurrentIPs   string
-	TgHealthHeading, TgHealthStarting, TgHealthWaitingDetail                   string
-	TgHealthHealthy, TgHealthUnhealthy, TgHealthErrorLabel                     string
-	TgBtnMenu, TgBtnClose, TgBtnStatus, TgBtnMetrics, TgBtnDomains             string
-	TgBtnHealth, TgBtnUpdate, TgUnauthAccess, TgBotCmdsReg                     string
-	TgSetCmdsFailed, TgGetUpdatesFailed, TgPollingStopped, TgPollingStarted    string
-	TgMaxRetries, TgGetUpdatesNotOk, TgSendError, TgHTTPError                  string
-	TgRateLimit, TgSendFailed, TgMsgDiscarded, TgQueueFull, TgQueuePushFailed  string
-	TgWebhookDeleteRequestError, TgWebhookDeleteFailed, TgWebhookUnregistered  string
-	GotifyQueueFull, GotifyMsgDiscarded, GotifySendFailed, GotifyRetry         string
+	NotifyEventUpdateLabel, NotifyEventUpdateDesc                                      string
+	NotifyEventCreateLabel, NotifyEventCreateDesc                                      string
+	NotifyEventErrorLabel, NotifyEventErrorDesc                                        string
+	NotifyEventStartLabel, NotifyEventStartDesc                                        string
+	NotifyEventStopLabel, NotifyEventStopDesc                                          string
+	NotifyEventCleanupLabel, NotifyEventCleanupDesc                                    string
+	NotifyEventCurrentLabel, NotifyEventCurrentDesc                                    string
+	NotifyEventInfoLabel, NotifyEventInfoDesc                                          string
+	NotifyEventRetryLabel, NotifyEventRetryDesc                                        string
+	NotifyEventConfigLabel, NotifyEventConfigDesc                                      string
+	NotifyEventZoneLabel, NotifyEventZoneDesc                                          string
+	NotifyEventDryRunLabel, NotifyEventDryRunDesc                                      string
+	NotifyEventSkipLabel, NotifyEventSkipDesc                                          string
+	NotifyEventAPILabel, NotifyEventAPIDesc                                            string
+	NotifyEventServerLabel, NotifyEventServerDesc                                      string
+	NotifyTelegramActive, NotifyGotifyActive, NotifyWebhookActive                      string
+	NotifyNtfyActive                                                                   string
+	NotifyTestSuccess, NotifyTestUnauthorized, NotifyTestError                         string
+	NotifyTestConnError, NotifyTestBody, NotifyBtnSending                              string
+	NotifyBtnTest, NotifyNoNotifier, NotifyStatSuccess                                 string
+	TgCmdStart, TgCmdStatus, TgCmdMetrics, TgCmdDomains                                string
+	TgCmdUpdate, TgCmdHealth, TgCmdHelp, TgMenuPrompt                                  string
+	TgUpdateAlreadyRunning, TgUpdateStarting, TgUpdateDone                             string
+	TgUnknownCommand, NotifyTelegramManualUpdate, NotifyFailed                         string
+	TgStatusOnline, TgStatusError, TgStatusStarting, TgStatusHeading                   string
+	TgStatusLabelStatus, TgStatusLabelIPMode, TgStatusLabelDomains                     string
+	TgStatusLabelInterval, TgStatusLabelDryRun, TgStatusLabelRequests                  string
+	TgStatusLabelSuccessRate, TgStatusLabelLatency, TgStatusLabelLastOk                string
+	TgMetricsHeading, TgMetricsRequests, TgMetricsTotal, TgMetricsSuccessRate          string
+	TgMetricsClientErr, TgMetricsServerErr, TgMetricsLatency, TgMetricsIPCheck         string
+	TgMetricsChecks, TgMetricsLast, TgMetricsHourlyLimit, TgMetricsUsed                string
+	TgMetricsLoad, TgMetricsTodayHTTP, TgDomainsHeading, TgDomainsCurrentIPs           string
+	TgHealthHeading, TgHealthStarting, TgHealthWaitingDetail                           string
+	TgHealthHealthy, TgHealthUnhealthy, TgHealthErrorLabel                             string
+	TgBtnMenu, TgBtnClose, TgBtnStatus, TgBtnMetrics, TgBtnDomains                     string
+	TgBtnHealth, TgBtnUpdate, TgUnauthAccess, TgBotCmdsReg                             string
+	TgSetCmdsFailed, TgGetUpdatesFailed, TgPollingStopped, TgPollingStarted            string
+	TgMaxRetries, TgGetUpdatesNotOk, TgSendError, TgHTTPError                          string
+	TgRateLimit, TgSendFailed, TgMsgDiscarded, TgQueueFull, TgQueuePushFailed          string
+	TgWebhookDeleteRequestError, TgWebhookDeleteFailed, TgWebhookUnregistered          string
+	GotifyQueueFull, GotifyMsgDiscarded, GotifySendFailed, GotifyRetry                 string
+	NtfyRetry, NtfyMsgDiscarded, NtfyQueueFull, NtfySendFailed, NtfyMaxAttemptsReached string
 
 	// Cache & persistence
 	ErrRecordCacheNil, ErrCacheDirCreate, ErrCacheMarshal               string
@@ -282,31 +284,32 @@ type Phrases struct {
 	CFAttempt, IPv64Attempt, IonosAttempt string
 
 	// Settings Modal
-	SettingsTitle, SettingsSecurity, SettingsTriggerToken                    string
-	SettingsTokenPlaceholder, SettingsTokenSave                              string
-	SettingsSystem, SettingsIPMode, SettingsInterval                         string
-	SettingsHealthPort, SettingsIface, SettingsIfaceHint                     string
-	SettingsDNS, SettingsMaxLog, SettingsMaxRetries                          string
-	SettingsMaxConcurrent, SettingsHourlyLimit                               string
-	SettingsLanguage, SettingsDryRun, SettingsDryRunHint                     string
-	SettingsCheckboxActive, SettingsCheckboxDeactive, SettingsAddDomain      string
-	SettingsDomains, SettingsAddBtn, SettingsCancelBtn, SettingsCFOr         string
-	SettingsNotify, SettingsNotifyEnabled, SettingsNotifyOn                  string
-	SettingsNotifyEvents, SettingsTGToken, SettingsTGChatID                  string
-	SettingsTokenUnchanged, SettingsDNSHint                                  string
-	SettingsSaveBtn, SettingsSaveHint, SettingsRestartHint                   string
-	SettingsThemeHint, SettingsNotifierHint, SettingsUpdateHint              string
-	SettingsExportHint, SettingsNotifyHint                                   string
-	SettingsDebugVerboseHint, SettingsDebugHTTPHint                          string
-	SettingsIfacePlaceholder, SettingsAPIPrefix, SettingsAPISecret           string
-	SettingsCFEmail, SettingsCFGlobalKey, NotifyMqttActive                   string
-	SettingsIPv64Token, SettingsTelegramHeading, SettingsMqttHeading         string
-	SettingsGotifyHeading, SettingsDomainPlaceholder, SettingsWebhookHeading string
-	SettingsCFTokenHint, SettingsGotifyURL, SettingsGotifyToken              string
-	SettingsIPv4Endpoints, SettingsIPv6Endpoints                             string
-	SettingsAddBtnJS, NotifyEmailActive, SettingsEmailHeading                string
-	EditDomainTitleJS, EditDomainSavedJS, EditDomainCancelledJS              string
-	SettingsUserManagement                                                   string
+	SettingsTitle, SettingsSecurity, SettingsTriggerToken                      string
+	SettingsTokenPlaceholder, SettingsTokenSave                                string
+	SettingsSystem, SettingsIPMode, SettingsInterval                           string
+	SettingsHealthPort, SettingsIface, SettingsIfaceHint                       string
+	SettingsDNS, SettingsMaxLog, SettingsMaxRetries                            string
+	SettingsMaxConcurrent, SettingsHourlyLimit                                 string
+	SettingsLanguage, SettingsDryRun, SettingsDryRunHint                       string
+	SettingsCheckboxActive, SettingsCheckboxDeactive, SettingsAddDomain        string
+	SettingsDomains, SettingsAddBtn, SettingsCancelBtn, SettingsCFOr           string
+	SettingsNotify, SettingsNotifyEnabled, SettingsNotifyOn                    string
+	SettingsNotifyEvents, SettingsTGToken, SettingsTGChatID                    string
+	SettingsTokenUnchanged, SettingsDNSHint                                    string
+	SettingsSaveBtn, SettingsSaveHint, SettingsRestartHint                     string
+	SettingsThemeHint, SettingsNotifierHint, SettingsUpdateHint                string
+	SettingsExportHint, SettingsNotifyHint                                     string
+	SettingsDebugVerboseHint, SettingsDebugHTTPHint                            string
+	SettingsIfacePlaceholder, SettingsAPIPrefix, SettingsAPISecret             string
+	SettingsCFEmail, SettingsCFGlobalKey, NotifyMqttActive                     string
+	SettingsIPv64Token, SettingsTelegramHeading, SettingsMqttHeading           string
+	SettingsGotifyHeading, SettingsDomainPlaceholder, SettingsWebhookHeading   string
+	SettingsCFTokenHint, SettingsGotifyURL, SettingsGotifyToken                string
+	SettingsNtfyURL, SettingsNtfyToken, SettingsNtfyTopic, SettingsNtfyHeading string
+	SettingsIPv4Endpoints, SettingsIPv6Endpoints                               string
+	SettingsAddBtnJS, NotifyEmailActive, SettingsEmailHeading                  string
+	EditDomainTitleJS, EditDomainSavedJS, EditDomainCancelledJS                string
+	SettingsUserManagement                                                     string
 
 	// Domain display
 	DotTitleNoUpdate, DotTitleChanged, DotTitleLast string

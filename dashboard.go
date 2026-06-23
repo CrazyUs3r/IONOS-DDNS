@@ -516,6 +516,15 @@ func buildSettingsNotifySection(c Config) string {
 			html.EscapeString(c.Notifications.Gotify.Token)) +
 		`</div>`
 
+	ntfySection := `<div class="notify-box notify-ntfy">` +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsNtfyURL+`</span><input type="text" id="cfg-ntfy-url" class="s-input s-input-lg" placeholder="https://ntfy.sh" value="%s"></div>`,
+			html.EscapeString(c.Notifications.Ntfy.URL)) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsNtfyTopic+`</span><input type="text" id="cfg-ntfy-topic" class="s-input s-input-lg" placeholder="ddns" value="%s"></div>`,
+			html.EscapeString(c.Notifications.Ntfy.Topic)) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsNtfyToken+`</span><div class="input-with-action"><input type="password" id="cfg-ntfy-token" class="s-input s-input-lg" placeholder="`+phrases().SettingsTokenUnchanged+`" value="%s"><button type="button" class="input-action-btn" data-click="togglePassword('cfg-ntfy-token', this)">👁️</button></div></div>`,
+			html.EscapeString(c.Notifications.Ntfy.Token)) +
+		`</div>`
+
 	webhookSection := `<div class="notify-box notify-webhook">` +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">URL</span><input type="text" id="cfg-webhook-url" class="s-input s-input-lg" placeholder="https://your-endpoint.com/api" value="%s"></div>`,
 			html.EscapeString(c.Notifications.Webhook.URL)) +
@@ -588,6 +597,7 @@ func buildSettingsNotifySection(c Config) string {
 		buildSettingsSubSection("", phrases().SettingsNotifyEvents, notifyEventsSection) +
 		buildSettingsSubSection("", phrases().SettingsTelegramHeading, telegramSection) +
 		buildSettingsSubSection("", phrases().SettingsGotifyHeading, gotifySection) +
+		buildSettingsSubSection("", phrases().SettingsNtfyHeading, ntfySection) +
 		buildSettingsSubSection("", phrases().SettingsWebhookHeading, webhookSection) +
 		buildSettingsSubSection("", phrases().SettingsMqttHeading, mqttSection) +
 		buildSettingsSubSection("", phrases().SettingsEmailHeading, emailSection) +
@@ -651,6 +661,9 @@ type safeSystemConfig struct {
 	TelegramChatID  string         `json:"telegram_chat_id"`
 	GotifyURL       string         `json:"gotify_url"`
 	GotifyToken     string         `json:"gotify_token"`
+	NtfyURL         string         `json:"ntfy_url"`
+	NtfyTopic       string         `json:"ntfy_topic"`
+	NtfyToken       string         `json:"ntfy_token"`
 	WebhookURL      string         `json:"webhook_url"`
 	WebhookSecret   string         `json:"webhook_secret"`
 	MQTT            safeMQTTConfig `json:"mqtt"`
@@ -705,6 +718,9 @@ func currentSystemConfig() safeSystemConfig {
 		TelegramChatID:  cfg.Notifications.Telegram.ChatID,
 		GotifyURL:       cfg.Notifications.Gotify.URL,
 		GotifyToken:     cfg.Notifications.Gotify.Token,
+		NtfyURL:         cfg.Notifications.Ntfy.URL,
+		NtfyTopic:       cfg.Notifications.Ntfy.Topic,
+		NtfyToken:       cfg.Notifications.Ntfy.Token,
 		WebhookURL:      cfg.Notifications.Webhook.URL,
 		WebhookSecret:   cfg.Notifications.Webhook.Secret,
 		MQTT: safeMQTTConfig{
@@ -882,6 +898,8 @@ func registerStaticRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/metrics", handleMetrics)
 	mux.HandleFunc("/metrics/prometheus", handlePrometheusMetrics)
 	mux.HandleFunc("/health", handleHealth)
+	mux.HandleFunc("/health/live", handleLiveness)
+	mux.HandleFunc("/health/ready", handleReadiness)
 }
 
 func registerAPIroutes(mux *http.ServeMux) {
@@ -1111,6 +1129,7 @@ func handleAPIConfig(w http.ResponseWriter, r *http.Request) {
 	if !isAdmin {
 		sys.TelegramToken = maskSecret(sys.TelegramToken)
 		sys.GotifyToken = maskSecret(sys.GotifyToken)
+		sys.NtfyToken = maskSecret(sys.NtfyToken)
 		sys.WebhookSecret = maskSecret(sys.WebhookSecret)
 		sys.MQTT.Password = maskSecret(sys.MQTT.Password)
 		sys.Email.Password = maskSecret(sys.Email.Password)
@@ -1289,6 +1308,10 @@ func applyNotificationConfig(sys safeSystemConfig) {
 	cfg.Notifications.Gotify.URL = sys.GotifyURL
 	cfg.Notifications.Gotify.Token = sys.GotifyToken
 
+	cfg.Notifications.Ntfy.URL = sys.NtfyURL
+	cfg.Notifications.Ntfy.Topic = sys.NtfyTopic
+	cfg.Notifications.Ntfy.Token = sys.NtfyToken
+
 	cfg.Notifications.Webhook.URL = sys.WebhookURL
 	cfg.Notifications.Webhook.Secret = sys.WebhookSecret
 
@@ -1326,6 +1349,7 @@ func ensureNotificationsEnabled() {
 
 	cfg.Notifications.Enabled = (cfg.Notifications.Telegram.Token != "" && cfg.Notifications.Telegram.ChatID != "") ||
 		(cfg.Notifications.Gotify.URL != "" && cfg.Notifications.Gotify.Token != "") ||
+		(cfg.Notifications.Ntfy.URL != "" && cfg.Notifications.Ntfy.Topic != "") ||
 		(cfg.Notifications.Webhook.URL != "") ||
 		(cfg.Notifications.MQTTConfig.Broker != "" && cfg.Notifications.MQTTConfig.Topic != "") ||
 		(cfg.Notifications.Email.Host != "" && cfg.Notifications.Email.To != "")
@@ -1573,6 +1597,10 @@ func handleAPIDomainDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := updateDomainsCache(); err != nil {
+		debugLog("CACHE", "", fmt.Sprintf(t(phrases().ErrUpdateDomainsCache, "updateDomainsCache failed: %v"), err))
+	}
+
 	debugLog("API", getClientIP(r), fmt.Sprintf(phrases().DomainDeletedFromStatusLog, deleteKey))
 	broadcastNotification(fmt.Sprintf(phrases().DomainRemovedFromStatus, deleteKey), "info")
 
@@ -1593,89 +1621,32 @@ func isDomainActiveInConfig(domain string) bool {
 }
 
 func deleteDomainFromStatus(domain string) (string, int, string) {
-	fileData, statusCode, errMsg := readStatusFileForDelete()
-	if statusCode != http.StatusOK {
-		return "", statusCode, errMsg
+	current, err := currentStatusDomainsLocked()
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", http.StatusNotFound, phrases().NoStatusFileFound
+		}
+		return "", http.StatusInternalServerError, err.Error()
 	}
 
-	deleteKey, found := findStatusDomainKey(fileData, domain)
-	if !found {
+	next := cloneStatusDomains(current)
+	deleteKey := existingStatusDomainKey(next, domain)
+	if deleteKey == "" {
 		return "", http.StatusNotFound, phrases().DomainNotFoundInStatus
 	}
 
-	delete(fileData, deleteKey)
-	deleteDomainFromStatusCache(domain, deleteKey)
+	delete(next, deleteKey)
+	for key := range next {
+		if strings.EqualFold(key, domain) {
+			delete(next, key)
+		}
+	}
 
-	if err := writeStatusFileData(fileData); err != nil {
+	if err := replaceStatusDomainsLocked(next); err != nil {
 		return "", http.StatusInternalServerError, err.Error()
 	}
 
 	return deleteKey, http.StatusOK, ""
-}
-
-func readStatusFileForDelete() (map[string]any, int, string) {
-	b, err := os.ReadFile(updatePath)
-	if err != nil {
-		return nil, http.StatusNotFound, phrases().NoStatusFileFound
-	}
-
-	var fileData map[string]any
-	if err := json.Unmarshal(b, &fileData); err != nil {
-		return nil, http.StatusInternalServerError, err.Error()
-	}
-
-	if fileData == nil {
-		return nil, http.StatusNotFound, phrases().NoStatusFileFound
-	}
-
-	return fileData, http.StatusOK, ""
-}
-
-func findStatusDomainKey(fileData map[string]any, domain string) (string, bool) {
-	if _, exists := fileData[domain]; exists {
-		return domain, true
-	}
-
-	for k := range fileData {
-		if strings.EqualFold(k, domain) {
-			return k, true
-		}
-	}
-
-	return "", false
-}
-
-func deleteDomainFromStatusCache(domain, deleteKey string) {
-	if statusDomains == nil {
-		return
-	}
-
-	delete(statusDomains, deleteKey)
-
-	for k := range statusDomains {
-		if strings.EqualFold(k, domain) {
-			delete(statusDomains, k)
-		}
-	}
-}
-
-func writeStatusFileData(fileData map[string]any) error {
-	b, err := json.MarshalIndent(fileData, "", " ")
-	if err != nil {
-		return err
-	}
-
-	tmp := updatePath + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-
-	if err := os.Rename(tmp, updatePath); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-
-	return nil
 }
 
 func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
@@ -1742,6 +1713,10 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 
 	go func() {
 		defer updateInProgress.Store(false)
+		if !hasDomainConfig() {
+			debugLog("API", clientIP, "Update aborted: no domains configured")
+			return
+		}
 		debugLog("API", clientIP, phrases().ManualUpdateTriggeredLog)
 		broadcastNotification(phrases().ManualUpdateStartedNotification, "info")
 		forceNextUpdate.Store(true)
@@ -1965,6 +1940,21 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("OK"))
 }
 
+func handleLiveness(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("OK"))
+}
+
+func handleReadiness(w http.ResponseWriter, _ *http.Request) {
+	if !schedulerRanOnce.Load() {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte("not ready"))
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("OK"))
+}
+
 func getTotalRequests(stats map[string]any) int64 {
 	switch v := stats["total_requests"].(type) {
 	case int64:
@@ -1987,6 +1977,8 @@ func handleDetailedHealth(w http.ResponseWriter, stats map[string]any) {
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":           "healthy",
+		"version":          Version,
+		"built":            BuildDate,
 		"api_metrics":      stats,
 		"last_known_ipv4":  lastV4,
 		"last_known_ipv6":  lastV6,
@@ -1995,17 +1987,27 @@ func handleDetailedHealth(w http.ResponseWriter, stats map[string]any) {
 }
 
 func readLastUpdateTimeFromStatusFile() string {
-	if b, err := os.ReadFile(updatePath); err == nil {
-		var domains map[string]DomainHistory
-		if json.Unmarshal(b, &domains) == nil {
-			for _, h := range domains {
-				if h.LastChanged != "" {
-					return h.LastChanged
-				}
-			}
+	domains, err := snapshotStatusDomains()
+	if err != nil {
+		return ""
+	}
+
+	var newest time.Time
+	for _, history := range domains {
+		if history.LastChanged == "" {
+			continue
+		}
+
+		changedAt, err := time.ParseInLocation(statusTimestampLayout, history.LastChanged, time.Local)
+		if err == nil && changedAt.After(newest) {
+			newest = changedAt
 		}
 	}
-	return ""
+
+	if newest.IsZero() {
+		return ""
+	}
+	return newest.Format(statusTimestampLayout)
 }
 
 func handleDashboard(w http.ResponseWriter, r *http.Request) {
@@ -2261,11 +2263,11 @@ func loadLogsFromMainFile() ([]LogEntry, string) {
 }
 
 func formatDashboardLogTimestamp(ts string) string {
-	t, err := time.Parse("2006-01-02T15:04:05", ts)
+	t, err := time.Parse(statusTimestampLayoutT, ts)
 	if err != nil {
 		return ts
 	}
-	return t.Format("02.01.2006 15:04:05")
+	return t.Format(statusTimestampLayout)
 }
 
 func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
@@ -2382,6 +2384,7 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 						data-click="saveFullConfig()">`+phrases().SettingsSaveBtn+`</button>
 
 					<button class="action-btn topbar-action-btn"
+						id="update-button"
 						data-tooltip="`+html.EscapeString(phrases().SettingsUpdateHint)+`"
 						data-mouseenter="showNotifierTooltip()"
 						data-focus="showNotifierTooltip()"
@@ -2443,6 +2446,7 @@ func buildNotifierStatusHTML() string {
 	icons := map[string]string{
 		"Telegram": "✈️",
 		"Gotify":   "📬",
+		"Ntfy":     "📝",
 		"Webhook":  "🔗",
 		"mqtt":     "📡",
 		"Email":    "✉️",
@@ -2797,7 +2801,7 @@ func writeLogsCard(w io.Writer, logs []LogEntry, logTimeRange string) {
 	for _, e := range logs {
 		displayTime := e.Timestamp
 		if t, err := time.Parse(time.RFC3339, e.Timestamp); err == nil {
-			displayTime = t.Local().Format("02.01.2006 15:04")
+			displayTime = t.Local().Format(statusTimestampLayoutwS)
 		}
 		actionUpper := strings.ToUpper(e.Action)
 		icon := IconDefault
@@ -2985,7 +2989,7 @@ func newestDomainChange(data map[string]any, keys []string) time.Time {
 		if dh.LastChanged == "" {
 			continue
 		}
-		if t, err := time.Parse("02.01.2006 15:04:05", dh.LastChanged); err == nil && t.After(newestChange) {
+		if t, err := time.Parse(statusTimestampLayout, dh.LastChanged); err == nil && t.After(newestChange) {
 			newestChange = t
 		}
 	}
@@ -3005,6 +3009,11 @@ func writeSingleDomainCard(w io.Writer, domain string, h DomainHistory, configur
 		latest = h.IPs[len(h.IPs)-1]
 	}
 
+	historyCount := 0
+	if len(h.IPs) > 1 {
+		historyCount = len(h.IPs) - 1
+	}
+
 	safeID := sanitizeIDWithHash(domain)
 	_, isActive := configuredDomains[strings.ToLower(strings.TrimSuffix(domain, "."))]
 	isOrphan := !isActive
@@ -3012,13 +3021,23 @@ func writeSingleDomainCard(w io.Writer, domain string, h DomainHistory, configur
 	dotClass, dotTitle, changedBadge := buildDomainStatusVisuals(h, safeID, newestChange)
 	orphanStyle, orphanLabel, deleteBtn := buildOrphanDomainVisuals(isOrphan, domain)
 
+	ipModeLabel := ""
+	cfgMu.RLock()
+	for _, dc := range cfg.DomainConfigs {
+		if strings.EqualFold(dc.FQDN, domain) && dc.IPMode != "" {
+			ipModeLabel = " · " + dc.IPMode
+			break
+		}
+	}
+	cfgMu.RUnlock()
+
 	_, _ = fmt.Fprintf(w, `
 	<details class="card domain-item%s" data-domain="%s" data-ip-history="%s">
 		<summary class="domain-summary">
 			<span id="dot-%s" class="%s" title="%s"></span>
 			🌐 %s <span class="logs-summary-meta">(%s) <span class="provider-status-dot" id="pstatus-%s"></span></span>%s%s%s
 		</summary>
-		
+
 		<div class="card-content">
 			<div class="domain-card domain-card-head">
 				<div class="domain-card-top">
@@ -3041,6 +3060,7 @@ func writeSingleDomainCard(w io.Writer, domain string, h DomainHistory, configur
 				</div>
 			</div>
 			<div class="domain-history-box">
+				<summary>`+phrases().DomainHistorySummary+`</summary>
 				<table class="domain-history-table">
 					<thead class="domain-history-head">
 						<tr>
@@ -3056,7 +3076,7 @@ func writeSingleDomainCard(w io.Writer, domain string, h DomainHistory, configur
 		dotClass,
 		dotTitle,
 		esc(domain),
-		esc(h.Provider),
+		esc(h.Provider+ipModeLabel),
 		safeID,
 		changedBadge,
 		orphanLabel,
@@ -3071,6 +3091,7 @@ func writeSingleDomainCard(w io.Writer, domain string, h DomainHistory, configur
 		safeID,
 		esc(latest.Time),
 		safeID,
+		historyCount,
 	)
 
 	writeDomainHistoryRows(w, h)
@@ -3093,7 +3114,7 @@ func buildDomainStatusVisuals(h DomainHistory, safeID string, newestChange time.
 		return dotClass, dotTitle, changedBadge
 	}
 
-	t, err := time.Parse("02.01.2006 15:04:05", h.LastChanged)
+	t, err := time.Parse(statusTimestampLayout, h.LastChanged)
 	if err != nil {
 		return dotClass, dotTitle, changedBadge
 	}
@@ -3130,7 +3151,12 @@ func buildOrphanDomainVisuals(isOrphan bool, domain string) (string, string, str
 }
 
 func writeDomainHistoryRows(w io.Writer, h DomainHistory) {
-	for i := len(h.IPs) - 2; i >= 0; i-- {
+	const visibleHistoryItems = 10
+
+	start := len(h.IPs) - 2
+	end := max(start-visibleHistoryItems+1, 0)
+
+	for i := start; i >= end; i-- {
 		e := h.IPs[i]
 
 		v4 := "—"
@@ -3164,6 +3190,16 @@ func writeDomainHistoryRows(w io.Writer, h DomainHistory) {
 			html.EscapeString(e.Time),
 			v4,
 			v6,
+		)
+	}
+	if end > 0 {
+		_, _ = fmt.Fprintf(w,
+			`<tr class="domain-history-more">
+				<td colspan="2">
+					%d weitere Einträge ausgeblendet
+				</td>
+			</tr>`,
+			end,
 		)
 	}
 
@@ -3429,6 +3465,7 @@ func diagnoseNotifiers(cfg Config) map[string]bool {
 	return map[string]bool{
 		"telegram": cfg.Notifications.Telegram.Token != "" && cfg.Notifications.Telegram.ChatID != "",
 		"gotify":   cfg.Notifications.Gotify.URL != "" && cfg.Notifications.Gotify.Token != "",
+		"ntfy":     cfg.Notifications.Ntfy.URL != "" && cfg.Notifications.Ntfy.Topic != "",
 		"webhook":  cfg.Notifications.Webhook.URL != "",
 		"mqtt":     cfg.Notifications.MQTTConfig.Broker != "" && cfg.Notifications.MQTTConfig.Topic != "",
 		"email":    cfg.Notifications.Email.Host != "" && cfg.Notifications.Email.To != "",
@@ -3469,7 +3506,7 @@ func formatDiagnosisTime(t time.Time) string {
 		return ""
 	}
 
-	return t.Format("02.01.2006 15:04:05")
+	return t.Format(statusTimestampLayout)
 }
 
 func diagnosisFileInfos() []map[string]any {
@@ -3500,7 +3537,7 @@ func diagnoseFileInfo(name, path string) map[string]any {
 
 	out["exists"] = true
 	out["size"] = st.Size()
-	out["modified"] = st.ModTime().Format("02.01.2006 15:04:05")
+	out["modified"] = st.ModTime().Format(statusTimestampLayout)
 	return out
 }
 
@@ -3854,22 +3891,20 @@ func restoreBackupStatus(backup dashboardBackup) (int, error) {
 		return http.StatusBadRequest, fmt.Errorf("%s", t(phrases().BackupContainsNoStatus, "backup contains no status"))
 	}
 
-	b, err := json.MarshalIndent(backup.Status, "", "  ")
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-
 	statusMutex.Lock()
-	defer statusMutex.Unlock()
-
-	if err := os.WriteFile(updatePath, b, 0o600); err != nil {
+	err := replaceStatusDomainsLocked(backup.Status)
+	statusMutex.Unlock()
+	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf(
 			t(phrases().BackupStatusRestoreFailedFormat, "status restore failed: %w"),
 			err,
 		)
 	}
 
-	statusDomains = backup.Status
+	if err := updateDomainsCache(); err != nil {
+		debugLog("CACHE", "", fmt.Sprintf(t(phrases().ErrUpdateDomainsCache, "updateDomainsCache failed: %v"), err))
+	}
+
 	return http.StatusOK, nil
 }
 

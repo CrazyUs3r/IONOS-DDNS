@@ -47,6 +47,8 @@ func run() int {
 		return 1
 	}
 
+	fmt.Printf("\n🌐 Go-DynDNS v%s (built: %s, ref: %s)\n\n", Version, BuildDate, VCSRef)
+
 	logRuntimePaths(paths)
 
 	loadPersistedMetrics(paths.metricsPersistPath)

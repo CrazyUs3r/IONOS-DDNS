@@ -196,6 +196,13 @@ func printRelevantInfrastructureRecords(records []Record) {
 func logHTTPClientStats() {
 	cfgMu.RLock()
 	debugEnabled := cfg.DebugEnabled
+	cfgMu.RUnlock()
+
+	if !debugEnabled {
+		return
+	}
+
+	cfgMu.RLock()
 	domainConfigs := make([]DomainConfig, len(cfg.DomainConfigs))
 	copy(domainConfigs, cfg.DomainConfigs)
 	interval := cfg.Interval
@@ -206,10 +213,6 @@ func logHTTPClientStats() {
 	logDir := cfg.LogDir
 	lang := cfg.Lang
 	cfgMu.RUnlock()
-
-	if !debugEnabled {
-		return
-	}
 
 	debugLog("CONFIG", "", "========== "+phrases().ConfigHeading+" ==========")
 
