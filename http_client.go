@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"net/http/httputil"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -26,11 +27,12 @@ import (
 // DNS CACHE
 // ============================================================================
 type dnsCache struct {
-	ttl      time.Duration
-	mu       sync.Mutex
-	entries  map[string]dnsCacheEntry
-	inflight map[string]*dnsInFlight
-	resolver *net.Resolver
+	ttl        time.Duration
+	mu         sync.Mutex
+	entries    map[string]dnsCacheEntry
+	inflight   map[string]*dnsInFlight
+	resolvers  []*net.Resolver
+	dnsServers []string
 }
 
 type dnsCacheEntry struct {
@@ -53,6 +55,7 @@ type bodyReadCloser struct {
 // HTTP TRACE / TIMINGS (DNS, CONNECT, TLS, TTFB, REUSE)
 // ============================================================================
 type httpTimings struct {
+	mu           sync.Mutex
 	start        time.Time
 	end          time.Time
 	gotConn      time.Time
@@ -81,45 +84,66 @@ type httpTimings struct {
 func (t *httpTimings) trace() *httptrace.ClientTrace {
 	return &httptrace.ClientTrace{
 		GotConn: func(info httptrace.GotConnInfo) {
+			t.mu.Lock()
 			t.gotConn = time.Now()
 			t.connReused = info.Reused
 			t.connWasIdle = info.WasIdle
 			t.connIdleTime = info.IdleTime
+			t.mu.Unlock()
 		},
 		DNSStart: func(httptrace.DNSStartInfo) {
-			t.dnsStart = time.Now()
+			t.mu.Lock()
+			if t.dnsStart.IsZero() {
+				t.dnsStart = time.Now()
+			}
+			t.mu.Unlock()
 		},
 		DNSDone: func(info httptrace.DNSDoneInfo) {
+			t.mu.Lock()
 			t.dnsDone = time.Now()
 			t.dnsErr = info.Err
+			t.mu.Unlock()
 		},
 		ConnectStart: func(network, addr string) {
+			t.mu.Lock()
 			if t.connectStart.IsZero() {
 				t.connectStart = time.Now()
 				t.connectNet = network
 				t.connectAddr = addr
 			}
+			t.mu.Unlock()
 		},
 		ConnectDone: func(_, _ string, err error) {
+			t.mu.Lock()
 			if t.connectDone.IsZero() {
 				t.connectDone = time.Now()
 				t.connectErr = err
 			}
+			t.mu.Unlock()
 		},
 		TLSHandshakeStart: func() {
-			t.tlsStart = time.Now()
+			t.mu.Lock()
+			if t.tlsStart.IsZero() {
+				t.tlsStart = time.Now()
+			}
+			t.mu.Unlock()
 		},
 		TLSHandshakeDone: func(cs tls.ConnectionState, err error) {
+			t.mu.Lock()
 			t.tlsDone = time.Now()
 			t.tlsState = &cs
 			t.tlsErr = err
+			t.mu.Unlock()
 		},
 		WroteRequest: func(httptrace.WroteRequestInfo) {
+			t.mu.Lock()
 			t.wroteRequest = time.Now()
+			t.mu.Unlock()
 		},
-
 		GotFirstResponseByte: func() {
+			t.mu.Lock()
 			t.firstByte = time.Now()
+			t.mu.Unlock()
 		},
 	}
 }
@@ -131,42 +155,59 @@ func fmtDur(a, b time.Time) string {
 	return b.Sub(a).String()
 }
 
+func (t *httpTimings) finish() {
+	if t == nil {
+		return
+	}
+
+	t.mu.Lock()
+	t.end = time.Now()
+	t.mu.Unlock()
+}
+
 func (t *httpTimings) String() string {
+	if t == nil {
+		return ""
+	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	total := "-"
 	if !t.start.IsZero() && !t.end.IsZero() && !t.end.Before(t.start) {
 		total = t.end.Sub(t.start).String()
 	}
 
 	parts := []string{
-		"total=" + total,
-		"dns=" + fmtDur(t.dnsStart, t.dnsDone),
-		"connect=" + fmtDur(t.connectStart, t.connectDone),
-		"tls=" + fmtDur(t.tlsStart, t.tlsDone),
-		"ttfb=" + fmtDur(t.wroteRequest, t.firstByte),
+		fmt.Sprintf(phrases().HTTPTimingRoundTrip, total),
+		fmt.Sprintf(phrases().HTTPTimingDNS, fmtDur(t.dnsStart, t.dnsDone)),
+		fmt.Sprintf(phrases().HTTPTimingConnect, fmtDur(t.connectStart, t.connectDone)),
+		fmt.Sprintf(phrases().HTTPTimingTLS, fmtDur(t.tlsStart, t.tlsDone)),
+		fmt.Sprintf(phrases().HTTPTimingTTFB, fmtDur(t.wroteRequest, t.firstByte)),
 	}
 
 	if !t.gotConn.IsZero() {
 		parts = append(parts,
-			fmt.Sprintf("reused=%t", t.connReused),
-			fmt.Sprintf("idle=%t", t.connWasIdle),
+			fmt.Sprintf(phrases().HTTPTimingReused, t.connReused),
+			fmt.Sprintf(phrases().HTTPTimingIdle, t.connWasIdle),
 		)
 		if t.connWasIdle {
-			parts = append(parts, "idleTime="+t.connIdleTime.String())
+			parts = append(parts, fmt.Sprintf(phrases().HTTPTimingIdleTime, t.connIdleTime))
 		}
 	}
 
 	if t.connectAddr != "" {
-		parts = append(parts, "dial="+t.connectNet+":"+t.connectAddr)
+		parts = append(parts, fmt.Sprintf(phrases().HTTPTimingDial, t.connectNet, t.connectAddr))
 	}
 
 	if t.dnsErr != nil {
-		parts = append(parts, "dnsErr="+t.dnsErr.Error())
+		parts = append(parts, fmt.Sprintf(phrases().HTTPTimingDNSError, t.dnsErr))
 	}
 	if t.connectErr != nil {
-		parts = append(parts, "connectErr="+t.connectErr.Error())
+		parts = append(parts, fmt.Sprintf(phrases().HTTPTimingConnectError, t.connectErr))
 	}
 	if t.tlsErr != nil {
-		parts = append(parts, "tlsErr="+t.tlsErr.Error())
+		parts = append(parts, fmt.Sprintf(phrases().HTTPTimingTLSError, t.tlsErr))
 	}
 
 	return strings.Join(parts, " | ")
@@ -175,10 +216,24 @@ func (t *httpTimings) String() string {
 // ============================================================================
 // HTTP CLIENT & TRANSPORT
 // ============================================================================
-func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req, timings := prepareHTTPTracing(req)
+const (
+	httpDebugResponseBodyLimit = 5_000
+	httpDebugRequestBodyLimit  = 10_000
+	httpDebugDumpLimit         = 20_000
+)
 
-	if cfg.DebugHTTPRaw {
+func httpDebugEnabled() bool {
+	cfgMu.RLock()
+	enabled := cfg.DebugHTTPRaw
+	cfgMu.RUnlock()
+	return enabled
+}
+
+func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	debugEnabled := httpDebugEnabled()
+	req, timings := prepareHTTPTracingEnabled(req, debugEnabled)
+
+	if debugEnabled {
 		logHTTPRequest(req)
 	}
 
@@ -192,15 +247,15 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		return nil, err
 	}
 
-	if cfg.DebugHTTPRaw && resp != nil {
+	if debugEnabled && resp != nil {
 		logHTTPResponse(resp, duration)
 	}
 
 	return resp, nil
 }
 
-func prepareHTTPTracing(req *http.Request) (*http.Request, *httpTimings) {
-	if !cfg.DebugHTTPRaw {
+func prepareHTTPTracingEnabled(req *http.Request, enabled bool) (*http.Request, *httpTimings) {
+	if !enabled {
 		return req, nil
 	}
 
@@ -215,41 +270,58 @@ func logHTTPTimings(req *http.Request, timings *httpTimings) {
 		return
 	}
 
-	timings.end = time.Now()
-	msg := timings.String()
+	timings.finish()
+	msg := sanitizeHTTPDebugBody(timings.String())
+	target := sanitizeURLForLogging(req.URL)
 
-	if replacer := getSecretReplacer(); replacer != nil {
-		msg = replacer.Replace(msg)
-	}
-
-	debugLog("HTTP-TIMING", "", fmt.Sprintf("%s %s → %s", req.Method, req.URL.String(), msg))
+	debugLog("HTTP-TIMING", "", fmt.Sprintf(phrases().HTTPTimingFormat, req.Method, target, msg))
 }
 
 func cloneRequestForLogging(req *http.Request) (*http.Request, func()) {
 	logReq := req.Clone(req.Context())
 
+	cleanup := func() {
+		if logReq.Body == nil {
+			return
+		}
+		if closeErr := logReq.Body.Close(); closeErr != nil {
+			debugLog("HTTP-RAW", "", fmt.Sprintf(phrases().HTTPDebugCloseRequestBodyFailed, closeErr))
+		}
+	}
+
 	if req.GetBody == nil {
 		logReq.Body = nil
-		return logReq, func() {}
+		logReq.ContentLength = 0
+		return logReq, cleanup
 	}
 
 	rc, err := req.GetBody()
 	if err != nil {
 		logReq.Body = nil
-		return logReq, func() {}
+		logReq.ContentLength = 0
+		debugLog("HTTP-RAW", "", fmt.Sprintf(phrases().HTTPDebugCloneRequestBodyFailed, err))
+		return logReq, cleanup
 	}
 
 	logReq.Body = rc
-	return logReq, func() {
-		if closeErr := rc.Close(); closeErr != nil {
-			debugLog("HTTP-RAW", "", fmt.Sprintf("Failed to close cloned body: %v", closeErr))
-		}
-	}
+	return logReq, cleanup
 }
 
 func maskSensitiveRequestHeaders(req *http.Request) {
 	maskAPIKeyHeader(req.Header)
 	maskAuthorizationHeader(req.Header)
+
+	for _, name := range []string{
+		"Proxy-Authorization",
+		"X-Auth-Token",
+		"X-Access-Token",
+		"X-API-Token",
+		"Cookie",
+	} {
+		if req.Header.Get(name) != "" {
+			req.Header.Set(name, "***MASKED***")
+		}
+	}
 }
 
 func maskAPIKeyHeader(header http.Header) {
@@ -294,42 +366,163 @@ func maskAuthorizationHeader(header http.Header) {
 	header.Set("Authorization", "***MASKED***")
 }
 
-func logHTTPRequest(req *http.Request) {
-	if !cfg.DebugHTTPRaw {
+func sanitizeURLForLogging(u *url.URL) string {
+	if u == nil {
+		return ""
+	}
+
+	copyURL := *u
+	query := copyURL.Query()
+	redactSensitiveValues(query)
+	copyURL.RawQuery = query.Encode()
+
+	return sanitizeHTTPDebugBody(copyURL.String())
+}
+
+func redactSensitiveRequestQuery(req *http.Request) {
+	if req.URL == nil {
 		return
 	}
 
+	copyURL := *req.URL
+	query := copyURL.Query()
+	redactSensitiveValues(query)
+	copyURL.RawQuery = query.Encode()
+	req.URL = &copyURL
+}
+
+func redactSensitiveValues(values url.Values) {
+	for key := range values {
+		if isSensitiveFieldName(key) {
+			values.Set(key, "***MASKED***")
+		}
+	}
+}
+
+func isSensitiveFieldName(name string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(name))
+	normalized = strings.NewReplacer("-", "", "_", "", ".", "").Replace(normalized)
+
+	switch normalized {
+	case "token", "accesstoken", "refreshtoken", "apitoken", "apikey",
+		"apisecret", "secret", "password", "passwd", "authorization",
+		"proxyauthorization", "auth", "credential", "credentials",
+		"cookie", "session", "sessionid", "triggertoken":
+		return true
+	default:
+		return false
+	}
+}
+
+func prepareRequestBodyForLogging(req *http.Request, maxBytes int) (truncated bool) {
+	if req.Body == nil || maxBytes <= 0 {
+		return false
+	}
+
+	original := req.Body
+	body, err := io.ReadAll(io.LimitReader(original, int64(maxBytes+1)))
+	if closeErr := original.Close(); closeErr != nil {
+		debugLog("HTTP-RAW", "", fmt.Sprintf(phrases().HTTPDebugCloseClonedRequestBodyFailed, closeErr))
+	}
+	if err != nil {
+		debugLog("HTTP-RAW", "", fmt.Sprintf(phrases().HTTPDebugReadClonedRequestBodyFailed, err))
+	}
+
+	truncated = len(body) > maxBytes
+	if truncated {
+		body = body[:maxBytes]
+	}
+
+	body = sanitizeStructuredDebugBody(body, req.Header.Get("Content-Type"), !truncated)
+	body = []byte(sanitizeHTTPDebugBody(string(body)))
+
+	req.Body = io.NopCloser(bytes.NewReader(body))
+	req.ContentLength = int64(len(body))
+	req.TransferEncoding = nil
+	req.GetBody = nil
+
+	return truncated
+}
+
+func sanitizeStructuredDebugBody(body []byte, contentType string, complete bool) []byte {
+	if len(body) == 0 || !complete {
+		return body
+	}
+
+	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+	trimmed := bytes.TrimSpace(body)
+
+	if mediaType == "application/json" || mediaType == "application/problem+json" ||
+		(len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[')) {
+		var value any
+		if err := json.Unmarshal(body, &value); err == nil {
+			redactSensitiveJSONValue(value)
+			if sanitized, err := json.Marshal(value); err == nil {
+				return sanitized
+			}
+		}
+	}
+
+	if mediaType == "application/x-www-form-urlencoded" {
+		if values, err := url.ParseQuery(string(body)); err == nil {
+			redactSensitiveValues(values)
+			return []byte(values.Encode())
+		}
+	}
+
+	return body
+}
+
+func redactSensitiveJSONValue(value any) {
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, child := range typed {
+			if isSensitiveFieldName(key) {
+				typed[key] = "***MASKED***"
+				continue
+			}
+			redactSensitiveJSONValue(child)
+		}
+	case []any:
+		for _, child := range typed {
+			redactSensitiveJSONValue(child)
+		}
+	}
+}
+
+func logHTTPRequest(req *http.Request) {
 	logReq, cleanup := cloneRequestForLogging(req)
 	defer cleanup()
 
 	maskSensitiveRequestHeaders(logReq)
+	redactSensitiveRequestQuery(logReq)
+	bodyTruncated := prepareRequestBodyForLogging(logReq, httpDebugRequestBodyLimit)
 
-	requestDump, _ := httputil.DumpRequestOut(logReq, true)
-	debugLog("HTTP-RAW", "", "\n>>> REQUEST >>>\n"+string(requestDump))
-}
-
-func logHTTPResponse(resp *http.Response, duration time.Duration) {
-	if !cfg.DebugHTTPRaw {
+	requestDump, err := httputil.DumpRequestOut(logReq, true)
+	if err != nil {
+		debugLog("HTTP-RAW", "", fmt.Sprintf(phrases().HTTPDebugDumpRequestFailed, err))
 		return
 	}
 
-	bodyBytes, truncated := peekAndRestoreResponseBody(resp, 5000)
+	dump := sanitizeHTTPDebugBody(string(requestDump))
+	dump = truncateHTTPDebugBody(dump, httpDebugDumpLimit)
+	if bodyTruncated {
+		dump += phrases().HTTPDebugRequestBodyTruncated
+	}
+
+	debugLog("HTTP-RAW", "", fmt.Sprintf(phrases().HTTPDebugRequestDump, dump))
+}
+
+func logHTTPResponse(resp *http.Response, duration time.Duration) {
+	bodyBytes, truncated := peekAndRestoreResponseBody(resp, httpDebugResponseBodyLimit)
+	bodyBytes = sanitizeStructuredDebugBody(bodyBytes, resp.Header.Get("Content-Type"), !truncated)
 	bodyStr := sanitizeHTTPDebugBody(string(bodyBytes))
 	bodyStr = prettyPrintHTTPDebugJSON(bodyStr)
 	if truncated {
-		bodyStr += "\n... (response body truncated for debug log)"
+		bodyStr += phrases().HTTPDebugResponseBodyTruncated
 	}
 
-	debugLog(
-		"HTTP-RAW",
-		"",
-		fmt.Sprintf(
-			"\n<<< RESPONSE (%.2fs) <<<\nStatus: %s\nBody:\n%s\n",
-			duration.Seconds(),
-			resp.Status,
-			bodyStr,
-		),
-	)
+	debugLog("HTTP-RAW", "", fmt.Sprintf(phrases().HTTPDebugResponseDump, duration.Seconds(), resp.Status, bodyStr))
 }
 
 func peekAndRestoreResponseBody(resp *http.Response, maxBytes int) ([]byte, bool) {
@@ -338,17 +531,24 @@ func peekAndRestoreResponseBody(resp *http.Response, maxBytes int) ([]byte, bool
 	}
 
 	original := resp.Body
-	peeked, err := io.ReadAll(io.LimitReader(original, int64(maxBytes+1)))
-	if err != nil {
-		resp.Body = original
-		debugLog("HTTP-RAW", "", fmt.Sprintf("Failed to peek response body: %v", err))
-		return nil, false
-	}
-
+	peeked, readErr := io.ReadAll(io.LimitReader(original, int64(maxBytes+1)))
 	truncated := len(peeked) > maxBytes
+
 	logBytes := peeked
 	if truncated {
 		logBytes = peeked[:maxBytes]
+	}
+
+	if readErr != nil {
+		resp.Body = &bodyReadCloser{
+			Reader: io.MultiReader(bytes.NewReader(peeked), original),
+			Closer: original,
+		}
+		debugLog("HTTP-RAW", "", fmt.Sprintf(phrases().HTTPDebugPeekResponseBodyFailed, readErr))
+		return logBytes, truncated
+	}
+
+	if truncated {
 		resp.Body = &bodyReadCloser{
 			Reader: io.MultiReader(bytes.NewReader(peeked), original),
 			Closer: original,
@@ -357,7 +557,7 @@ func peekAndRestoreResponseBody(resp *http.Response, maxBytes int) ([]byte, bool
 	}
 
 	if err := original.Close(); err != nil {
-		debugLog("HTTP-RAW", "", fmt.Sprintf("Failed to close response body: %v", err))
+		debugLog("HTTP-RAW", "", fmt.Sprintf(phrases().HTTPDebugCloseResponseBodyFailed, err))
 	}
 
 	resp.Body = io.NopCloser(bytes.NewReader(peeked))
@@ -365,25 +565,16 @@ func peekAndRestoreResponseBody(resp *http.Response, maxBytes int) ([]byte, bool
 }
 
 func logMQTTPublish(topic string, qos byte, retain bool, payload []byte) {
-	if !cfg.DebugHTTPRaw {
+	if !httpDebugEnabled() {
 		return
 	}
 
+	payload = sanitizeStructuredDebugBody(payload, "", true)
 	body := sanitizeHTTPDebugBody(string(payload))
 	body = prettyPrintHTTPDebugJSON(body)
 	body = truncateHTTPDebugBody(body, 5000)
 
-	debugLog(
-		"MQTT-RAW",
-		"",
-		fmt.Sprintf(
-			"\n>>> PUBLISH >>>\nTopic: %s\nQoS: %d\nRetain: %t\nPayload:\n%s\n",
-			topic,
-			qos,
-			retain,
-			body,
-		),
-	)
+	debugLog("MQTT-RAW", "", fmt.Sprintf(phrases().MQTTDebugPublishDump, topic, qos, retain, body))
 }
 
 func sanitizeHTTPDebugBody(body string) string {
@@ -407,14 +598,19 @@ func truncateHTTPDebugBody(body string, maxLen int) string {
 	}
 
 	totalLen := len(body)
-	return body[:maxLen] + fmt.Sprintf("\n... (%d bytes truncated for debug log)", totalLen-maxLen)
+	return body[:maxLen] + fmt.Sprintf(phrases().HTTPDebugBodyTruncated, totalLen-maxLen)
 }
 
 func ResetHTTPClient() {
 	clientMu.Lock()
-	defer clientMu.Unlock()
+	oldClient := httpClient
 	httpClient = nil
 	clientDNSKey = ""
+	clientMu.Unlock()
+
+	if oldClient != nil {
+		oldClient.CloseIdleConnections()
+	}
 }
 
 func invalidateSecretReplacer() {
@@ -427,39 +623,92 @@ func dnsKey(servers []string) string {
 	return strings.Join(servers, ",")
 }
 
-func getHTTPClient() *http.Client {
+type httpClientSettings struct {
+	dnsServers  []string
+	domainCount int
+	interval    time.Duration
+	ipMode      string
+}
+
+func snapshotHTTPClientSettings() httpClientSettings {
 	cfgMu.RLock()
-	dnsServers := make([]string, len(cfg.DNSServers))
-	copy(dnsServers, cfg.DNSServers)
-	domainCount := len(cfg.DomainConfigs)
+	settings := httpClientSettings{
+		dnsServers:  append([]string(nil), cfg.DNSServers...),
+		domainCount: len(cfg.DomainConfigs),
+		interval:    time.Duration(cfg.Interval) * time.Second,
+		ipMode:      strings.ToLower(strings.TrimSpace(cfg.IPMode)),
+	}
 	cfgMu.RUnlock()
 
-	dnsServers = normalizeDNSServers(dnsServers)
-	currentKey := fmt.Sprintf("%s|domains=%d", dnsKey(dnsServers), domainCount)
+	settings.dnsServers = normalizeDNSServers(settings.dnsServers)
+	return settings
+}
+
+func (s httpClientSettings) key() string {
+	return fmt.Sprintf(
+		"%s|domains=%d|interval=%s|ip_mode=%s",
+		dnsKey(s.dnsServers),
+		s.domainCount,
+		s.interval,
+		strings.ToUpper(strings.TrimSpace(s.ipMode)),
+	)
+}
+
+func networkForIPMode(network, ipMode string) string {
+	if network != ProtocolTCP {
+		return network
+	}
+
+	switch strings.ToUpper(strings.TrimSpace(ipMode)) {
+	case IPModeV4:
+		return TCPIPv4
+
+	case IPModeV6:
+		return TCPIPv6
+
+	case IPModeBoth:
+		return ProtocolTCP
+
+	default:
+		return ProtocolTCP
+	}
+}
+
+func getHTTPClient() *http.Client {
+	settings := snapshotHTTPClientSettings()
+	currentKey := settings.key()
 
 	clientMu.RLock()
 	if httpClient != nil && clientDNSKey == currentKey {
-		c := httpClient
+		client := httpClient
 		clientMu.RUnlock()
-		return c
+		return client
 	}
 	clientMu.RUnlock()
 
 	clientMu.Lock()
-	defer clientMu.Unlock()
-
 	if httpClient != nil && clientDNSKey == currentKey {
-		return httpClient
+		client := httpClient
+		clientMu.Unlock()
+		return client
 	}
 
-	httpClient = buildHTTPClient(dnsServers)
+	oldClient := httpClient
+	newClient := buildHTTPClientWithSettings(settings)
+	httpClient = newClient
 	clientDNSKey = currentKey
-	return httpClient
+	clientMu.Unlock()
+
+	if oldClient != nil {
+		oldClient.CloseIdleConnections()
+	}
+
+	return newClient
 }
 
-func buildHTTPClient(dnsList []string) *http.Client {
-	dnsList = normalizeDNSServers(dnsList)
-	domainCount := len(snapshotDomainConfigs())
+func buildHTTPClientWithSettings(settings httpClientSettings) *http.Client {
+	dnsList := settings.dnsServers
+	domainCount := settings.domainCount
 	maxIdleConns := HTTPMaxIdleConns
 	maxIdleConnsPerHost := HTTPMaxIdleConnsHost
 	maxConnsPerHost := HTTPMaxConnsHost
@@ -470,17 +719,11 @@ func buildHTTPClient(dnsList []string) *http.Client {
 		maxIdleConnsPerHost *= multiplier
 		maxConnsPerHost *= multiplier
 
-		debugLog("HTTP", "", fmt.Sprintf(
-			"🔧 %s %d Domains → MaxConns=%d, IdlePerHost=%d",
-			phrases().HTTPPool, domainCount, maxConnsPerHost, maxIdleConnsPerHost,
-		))
+		debugLog("HTTP", "", fmt.Sprintf(phrases().HTTPPoolConfigured, domainCount, maxConnsPerHost, maxIdleConnsPerHost))
 	}
 
-	dnsList = normalizeDNSServers(dnsList)
-	resolver := newFailoverResolver(dnsList)
-
-	dnsTTL := min(max(time.Duration(cfg.Interval)*time.Second+30*time.Second, 60*time.Second), 10*time.Minute)
-	cache := newDNSCache(resolver, dnsTTL)
+	dnsTTL := min(max(settings.interval+30*time.Second, 60*time.Second), 10*time.Minute)
+	cache := newDNSCacheWithServers(dnsList, dnsTTL)
 
 	baseDialer := &net.Dialer{
 		Timeout:       DNSResolverTimeout,
@@ -489,6 +732,8 @@ func buildHTTPClient(dnsList []string) *http.Client {
 	}
 
 	cachedDialContext := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		network = networkForIPMode(network, settings.ipMode)
+
 		host, port, err := net.SplitHostPort(addr)
 		if err != nil {
 			return baseDialer.DialContext(ctx, network, addr)
@@ -503,12 +748,23 @@ func buildHTTPClient(dnsList []string) *http.Client {
 			return nil, err
 		}
 
-		addrs = filterIPAddrsForNetwork(prioritizeIPAddrs(addrs), network)
+		addrs = filterIPAddrsForNetwork(addrs, network)
 		if len(addrs) == 0 {
-			return nil, fmt.Errorf("dns: keine passende IP für host=%s network=%s", host, network)
+			return nil, fmt.Errorf(
+				phrases().DNSErrorNoMatchingIP,
+				host,
+				network,
+			)
 		}
 
-		conn, err := dialResolvedAddrs(ctx, baseDialer, network, addr, port, addrs)
+		conn, err := dialResolvedAddrs(
+			ctx,
+			baseDialer,
+			network,
+			addr,
+			port,
+			addrs,
+		)
 		if err == nil {
 			return conn, nil
 		}
@@ -518,16 +774,18 @@ func buildHTTPClient(dnsList []string) *http.Client {
 	}
 
 	baseTransport := &http.Transport{
-		DialContext:           cachedDialContext,
-		MaxIdleConns:          maxIdleConns,
-		MaxIdleConnsPerHost:   maxIdleConnsPerHost,
-		MaxConnsPerHost:       maxConnsPerHost,
-		IdleConnTimeout:       HTTPIdleConnTimeout,
-		TLSHandshakeTimeout:   HTTPTLSTimeout,
-		ResponseHeaderTimeout: HTTPResponseTimeout,
-		ExpectContinueTimeout: HTTPExpectTimeout,
-		DisableKeepAlives:     false,
-		ForceAttemptHTTP2:     true,
+		Proxy:                  http.ProxyFromEnvironment,
+		DialContext:            cachedDialContext,
+		MaxIdleConns:           maxIdleConns,
+		MaxIdleConnsPerHost:    maxIdleConnsPerHost,
+		MaxConnsPerHost:        maxConnsPerHost,
+		IdleConnTimeout:        HTTPIdleConnTimeout,
+		TLSHandshakeTimeout:    HTTPTLSTimeout,
+		ResponseHeaderTimeout:  HTTPResponseTimeout,
+		ExpectContinueTimeout:  HTTPExpectTimeout,
+		MaxResponseHeaderBytes: 1 << 20,
+		DisableKeepAlives:      false,
+		ForceAttemptHTTP2:      true,
 		TLSClientConfig: &tls.Config{
 			MinVersion:         tls.VersionTLS12,
 			ClientSessionCache: tls.NewLRUClientSessionCache(32),
@@ -535,14 +793,34 @@ func buildHTTPClient(dnsList []string) *http.Client {
 	}
 
 	client := &http.Client{
-		Timeout: 30 * time.Second,
-		Transport: &loggingTransport{
-			base: baseTransport,
-		},
+		Timeout:       30 * time.Second,
+		Transport:     &loggingTransport{base: baseTransport},
+		CheckRedirect: checkAPIRedirect,
 	}
 
 	debugLog("SYSTEM", "", fmt.Sprintf(phrases().HTTPClientInitialized, len(dnsList), strings.Join(dnsList, ", ")))
 	return client
+}
+
+func checkAPIRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return fmt.Errorf("%s", phrases().HTTPRedirectTooMany)
+	}
+	if len(via) == 0 || req.URL == nil || via[0].URL == nil {
+		return nil
+	}
+
+	originalHost := via[0].URL.Hostname()
+	redirectHost := req.URL.Hostname()
+	if !strings.EqualFold(originalHost, redirectHost) {
+		return fmt.Errorf(
+			phrases().HTTPRedirectCrossHostBlocked,
+			originalHost,
+			redirectHost,
+		)
+	}
+
+	return nil
 }
 
 func normalizeDNSServers(servers []string) []string {
@@ -617,46 +895,20 @@ func normalizeDNSServer(server string) string {
 	return server
 }
 
-func newFailoverResolver(dnsList []string) *net.Resolver {
+func newResolverForDNSServer(server string) *net.Resolver {
 	return &net.Resolver{
-		PreferGo: true,
+		PreferGo:     true,
+		StrictErrors: true,
 		Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
 			if network == "" {
-				network = "udp"
+				network = ProtocolUDP
 			}
 
-			var lastErr error
-			startIndex := int(lastSuccessfulDNS.Load())
-			if len(dnsList) > 0 {
-				startIndex %= len(dnsList)
+			dialer := net.Dialer{
+				Timeout:   dnsLookupTimeout(),
+				KeepAlive: DNSKeepalive,
 			}
-
-			for i := range dnsList {
-				if err := ctx.Err(); err != nil {
-					return nil, err
-				}
-
-				idx := (startIndex + i) % len(dnsList)
-				targetAddr := dnsList[idx]
-				d := net.Dialer{Timeout: dnsLookupTimeout(), KeepAlive: DNSKeepalive}
-
-				conn, err := d.DialContext(ctx, network, targetAddr)
-				if err != nil && strings.HasPrefix(network, "udp") {
-					conn, err = d.DialContext(ctx, "tcp", targetAddr)
-				}
-
-				if err == nil {
-					if idx != startIndex {
-						lastSuccessfulDNS.Store(int64(idx))
-					}
-					return conn, nil
-				}
-
-				lastErr = err
-				debugLog("DNS-FAILOVER", "", fmt.Sprintf("❌ DNS %s via %s fehlgeschlagen: %v", targetAddr, network, err))
-			}
-
-			return nil, fmt.Errorf("alle DNS-Server fehlgeschlagen: %w", lastErr)
+			return dialer.DialContext(ctx, network, server)
 		},
 	}
 }
@@ -711,7 +963,7 @@ func dialResolvedAddrs(ctx context.Context, d *net.Dialer, network, originalAddr
 	}
 
 	if started == 0 {
-		return nil, fmt.Errorf("dial failed for %s: keine IPs", originalAddr)
+		return nil, fmt.Errorf(phrases().DNSErrorDialNoIPs, originalAddr)
 	}
 
 	var lastErr error
@@ -729,11 +981,11 @@ func dialResolvedAddrs(ctx context.Context, d *net.Dialer, network, originalAddr
 				return result.conn, nil
 			}
 			lastErr = result.err
-			debugLog("HTTP-DIAL", "", fmt.Sprintf("Dial %s fehlgeschlagen: %v", result.addr, result.err))
+			debugLog("HTTP-DIAL", "", fmt.Sprintf(phrases().HTTPDialAttemptFailed, result.addr, result.err))
 		}
 	}
 
-	return nil, fmt.Errorf("dial failed for %s (ips=%d): %w", originalAddr, len(addrs), lastErr)
+	return nil, fmt.Errorf(phrases().HTTPDialAllFailed, originalAddr, len(addrs), lastErr)
 }
 
 func closeLateDialResults(results <-chan dialResult, count int) {
@@ -951,8 +1203,10 @@ func sanitizeIDWithHash(s string) string {
 		result = base + "-" + sfx
 	}
 	if sanitizeIDCacheLen.Load() < sanitizeIDCacheMaxSize {
-		sanitizeIDCache.Store(s, result)
-		sanitizeIDCacheLen.Add(1)
+		_, loaded := sanitizeIDCache.LoadOrStore(s, result)
+		if !loaded {
+			sanitizeIDCacheLen.Add(1)
+		}
 	}
 	return result
 }
@@ -960,95 +1214,200 @@ func sanitizeIDWithHash(s string) string {
 // ============================================================================
 // DNS CACHE (TTL cache + in-flight dedupe)
 // ============================================================================
-func newDNSCache(r *net.Resolver, ttl time.Duration) *dnsCache {
+func newDNSCacheWithServers(dnsServers []string, ttl time.Duration) *dnsCache {
+	dnsServers = normalizeDNSServers(dnsServers)
+	resolvers := make([]*net.Resolver, 0, len(dnsServers))
+	for _, server := range dnsServers {
+		resolvers = append(resolvers, newResolverForDNSServer(server))
+	}
+
 	return &dnsCache{
-		ttl:      ttl,
-		entries:  make(map[string]dnsCacheEntry),
-		inflight: make(map[string]*dnsInFlight),
-		resolver: r,
+		ttl:        ttl,
+		entries:    make(map[string]dnsCacheEntry),
+		inflight:   make(map[string]*dnsInFlight),
+		resolvers:  resolvers,
+		dnsServers: append([]string(nil), dnsServers...),
 	}
 }
 
 func (c *dnsCache) getIPAddrs(ctx context.Context, host string) ([]net.IPAddr, error) {
 	host = strings.ToLower(strings.TrimSpace(host))
 	if host == "" {
-		return nil, fmt.Errorf("dns: leerer host")
+		return nil, fmt.Errorf("%s", phrases().DNSErrorEmptyHost)
 	}
 
 	now := time.Now()
 
 	c.mu.Lock()
-	if e, ok := c.entries[host]; ok && now.Before(e.expiry) && len(e.ips) > 0 {
-		out := make([]net.IPAddr, len(e.ips))
-		copy(out, e.ips)
+	if entry, ok := c.entries[host]; ok && now.Before(entry.expiry) && len(entry.ips) > 0 {
+		out := append([]net.IPAddr(nil), entry.ips...)
 		c.mu.Unlock()
 		return out, nil
 	}
 
-	if inf, ok := c.inflight[host]; ok {
-		done := inf.done
+	if inflight, ok := c.inflight[host]; ok {
+		done := inflight.done
 		c.mu.Unlock()
 
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-done:
-			if inf.err != nil {
-				return nil, inf.err
+			if inflight.err != nil {
+				return nil, inflight.err
 			}
-			out := make([]net.IPAddr, len(inf.addrs))
-			copy(out, inf.addrs)
-			return out, nil
+			return append([]net.IPAddr(nil), inflight.addrs...), nil
 		}
 	}
 
-	inf := &dnsInFlight{done: make(chan struct{})}
-	c.inflight[host] = inf
+	inflight := &dnsInFlight{done: make(chan struct{})}
+	c.inflight[host] = inflight
 	c.mu.Unlock()
 
-	lookupCtx, cancel := context.WithTimeout(ctx, dnsLookupTimeout())
-	defer cancel()
-
-	addrs, err := c.lookupWithTrace(lookupCtx, host)
+	addrs, err := c.lookupWithTrace(ctx, host)
+	storedAddrs := append([]net.IPAddr(nil), addrs...)
 
 	c.mu.Lock()
-	inf.addrs = addrs
-	inf.err = err
-	close(inf.done)
+	inflight.addrs = storedAddrs
+	inflight.err = err
+	close(inflight.done)
 	delete(c.inflight, host)
 
-	if err == nil && len(addrs) > 0 {
+	if err == nil && len(storedAddrs) > 0 {
 		c.entries[host] = dnsCacheEntry{
-			ips:    addrs,
+			ips:    storedAddrs,
 			expiry: time.Now().Add(c.ttl),
 		}
 	}
 	c.mu.Unlock()
 
+	return append([]net.IPAddr(nil), storedAddrs...), err
+}
+
+func (c *dnsCache) lookupWithTrace(
+	ctx context.Context,
+	host string,
+) ([]net.IPAddr, error) {
+	trace := startDNSTrace(ctx, host)
+
+	if len(c.resolvers) == 0 {
+		err := fmt.Errorf("%s", phrases().DNSErrorNoResolverConfigured)
+		finishDNSTrace(trace, nil, err)
+		return nil, err
+	}
+
+	addrs, err := c.lookupUsingResolvers(ctx, host)
+	finishDNSTrace(trace, addrs, err)
+
 	return addrs, err
 }
 
-func (c *dnsCache) lookupWithTrace(ctx context.Context, host string) ([]net.IPAddr, error) {
-	if tr := httptrace.ContextClientTrace(ctx); tr != nil && tr.DNSStart != nil {
-		tr.DNSStart(httptrace.DNSStartInfo{Host: host})
+func startDNSTrace(
+	ctx context.Context,
+	host string,
+) *httptrace.ClientTrace {
+	trace := httptrace.ContextClientTrace(ctx)
+
+	if trace != nil && trace.DNSStart != nil {
+		trace.DNSStart(httptrace.DNSStartInfo{Host: host})
 	}
 
-	addrs, err := c.resolver.LookupIPAddr(ctx, host)
+	return trace
+}
 
-	if tr := httptrace.ContextClientTrace(ctx); tr != nil && tr.DNSDone != nil {
-		tr.DNSDone(httptrace.DNSDoneInfo{Addrs: addrs, Err: err})
+func finishDNSTrace(
+	trace *httptrace.ClientTrace,
+	addrs []net.IPAddr,
+	err error,
+) {
+	if trace == nil || trace.DNSDone == nil {
+		return
 	}
 
+	trace.DNSDone(httptrace.DNSDoneInfo{
+		Addrs: addrs,
+		Err:   err,
+	})
+}
+
+func (c *dnsCache) lookupUsingResolvers(
+	ctx context.Context,
+	host string,
+) ([]net.IPAddr, error) {
+	startIndex := int(lastSuccessfulDNS.Load()) % len(c.resolvers)
+	var lastErr error
+
+	for offset := 0; offset < len(c.resolvers); offset++ {
+		if err := ctx.Err(); err != nil {
+			return nil, newAllResolversError(host, err)
+		}
+
+		index := (startIndex + offset) % len(c.resolvers)
+		addrs, err := lookupIPAddrWithTimeout(ctx, c.resolvers[index], host)
+		if err == nil {
+			lastSuccessfulDNS.Store(int64(index))
+			return addrs, nil
+		}
+
+		lastErr = err
+		debugLog("DNS-FAILOVER", "", fmt.Sprintf(phrases().DNSFailoverLookupFailed, c.dnsServerLabel(index), host, err))
+	}
+
+	return nil, newAllResolversError(host, lastErr)
+}
+
+func lookupIPAddrWithTimeout(
+	ctx context.Context,
+	resolver *net.Resolver,
+	host string,
+) ([]net.IPAddr, error) {
+	if resolver == nil {
+		return nil, fmt.Errorf(phrases().DNSErrorNilResolverForHost, host)
+	}
+
+	lookupCtx, cancel := context.WithTimeout(ctx, dnsLookupTimeout())
+	defer cancel()
+
+	addrs, err := resolver.LookupIPAddr(lookupCtx, host)
 	if err != nil {
 		return nil, err
 	}
+
 	if len(addrs) == 0 {
-		return nil, fmt.Errorf("dns: keine IPs für host=%s", host)
+		return nil, fmt.Errorf(phrases().DNSErrorNoIPsForHost, host)
 	}
+
 	return prioritizeIPAddrs(addrs), nil
 }
 
+func (c *dnsCache) dnsServerLabel(index int) string {
+	if index >= 0 &&
+		index < len(c.dnsServers) &&
+		c.dnsServers[index] != "" {
+		return c.dnsServers[index]
+	}
+
+	return fmt.Sprintf(phrases().DNSResolverLabel, index)
+}
+
+func newAllResolversError(host string, lastErr error) error {
+	if lastErr == nil {
+		return fmt.Errorf(phrases().DNSErrorAllResolversFailed, host)
+	}
+
+	return fmt.Errorf(
+		phrases().DNSErrorAllResolversFailedWithCause,
+		host,
+		lastErr,
+	)
+}
+
 func (c *dnsCache) invalidate(host string) {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if host == "" {
+		return
+	}
+
 	c.mu.Lock()
 	delete(c.entries, host)
 	c.mu.Unlock()

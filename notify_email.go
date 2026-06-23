@@ -180,7 +180,7 @@ func (e *emailNotifier) doSend(msg emailMsg) error {
 }
 
 func (e *emailNotifier) sendStartTLS(addr string, msg []byte) error {
-	conn, err := net.DialTimeout("tcp", addr, emailDialTimeout)
+	conn, err := net.DialTimeout(ProtocolTCP, addr, emailDialTimeout)
 	if err != nil {
 		return fmt.Errorf("email dial: %w", err)
 	}
@@ -210,7 +210,7 @@ func (e *emailNotifier) sendTLS(addr string, msg []byte) error {
 	tlsCfg := &tls.Config{ServerName: e.host, MinVersion: tls.VersionTLS12}
 	conn, err := tls.DialWithDialer(
 		&net.Dialer{Timeout: emailDialTimeout},
-		"tcp", addr, tlsCfg,
+		ProtocolTCP, addr, tlsCfg,
 	)
 	if err != nil {
 		return fmt.Errorf("email tls dial: %w", err)

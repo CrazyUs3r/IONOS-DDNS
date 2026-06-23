@@ -298,18 +298,16 @@ const (
 )
 
 const (
-	IPAny IPVersion = 0
-	IPV4  IPVersion = 4
-	IPV6  IPVersion = 6
-)
-
-const (
 	RecordTypeA     = "A"
 	RecordTypeAAAA  = "AAAA"
 	RecordTypeCNAME = "CNAME"
 	IPModeBoth      = "BOTH"
 	IPModeV4        = "IPV4"
 	IPModeV6        = "IPV6"
+	TCPIPv4         = "tcp4"
+	TCPIPv6         = "tcp6"
+	ProtocolTCP     = "tcp"
+	ProtocolUDP     = "udp"
 )
 
 // ============================================================================
@@ -667,6 +665,12 @@ type IONOSCache struct {
 }
 
 type IPVersion int
+
+const (
+	IPAny IPVersion = 0
+	IPV4  IPVersion = 4
+	IPV6  IPVersion = 6
+)
 
 type cacheEntry struct {
 	records  []Record

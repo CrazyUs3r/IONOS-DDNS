@@ -338,8 +338,8 @@ func validateTranslationKeys(translations map[string]string) {
 }
 
 var knownAcronyms = []string{
-	"IPv4", "IPv6", "HTML", "HTTP", "JSON", "FQDN",
-	"API", "CDN", "DNS", "TTL", "URL", "URI", "CF",
+	"IPv4", "IPv6", "HTML", "HTTP", "JSON", "FQDN", "TTFB", "MQTT",
+	"API", "CDN", "DNS", "TTL", "TLS", "URL", "URI", "CF",
 	"OK", "TG", "WS", "ID", "IP", "JS", "QR",
 }
 

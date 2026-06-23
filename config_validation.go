@@ -86,7 +86,7 @@ func validateConfig() error {
 			Action:  ActionConfig,
 			Message: fmt.Sprintf(phrases().InvalidIPMode, cfg.IPMode),
 		})
-		cfg.IPMode = "BOTH"
+		cfg.IPMode = IPModeBoth
 	}
 
 	if len(errs) > 0 {

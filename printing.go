@@ -19,8 +19,8 @@ func printGroupedDomains() {
 	copy(domainConfigs, cfg.DomainConfigs)
 	cfgMu.RUnlock()
 
-	fmt.Printf("\n🚀  %s [%s] (%s: %s) [Multi-Provider]:\n",
-		phrases().ServiceStarted, lang, phrases().Mode, ipMode)
+	fmt.Printf("\n🚀  %s [%s] (%s: %s) [%s]:\n",
+		phrases().ServiceStarted, lang, phrases().Mode, ipMode, phrases().MultiProvider)
 
 	if len(domainConfigs) == 0 {
 		fmt.Println("\n⚠️  " + phrases().NoDomains)
@@ -44,13 +44,8 @@ func printGroupedDomains() {
 		domains := byProvider[provider]
 		sort.Strings(domains)
 
-		fmt.Printf("\n📦 %s (%d %s)\n", provider, len(domains),
-			func() string {
-				if len(domains) == 1 {
-					return "domain"
-				}
-				return "domains"
-			}())
+		domainLabel := localizedCountLabel(len(domains), phrases().DomainSingular, phrases().DomainPlural)
+		fmt.Printf("\n📦 %s (%d %s)\n", provider, len(domains), domainLabel)
 
 		for i, domain := range domains {
 			char := "├"
@@ -96,13 +91,21 @@ func sortedProviderTypes(zonesByProvider map[string][]Zone) []string {
 	return pTypes
 }
 
+func localizedCountLabel(count int, singular, plural string) string {
+	if count == 1 {
+		return singular
+	}
+	return plural
+}
+
 func printProviderInfrastructure(
 	ctx context.Context,
 	provider ProviderType,
 	zones []Zone,
 	domainConfigs []DomainConfig,
 ) {
-	fmt.Printf("\n📦 Provider: %s (%d zones)\n", provider, len(zones))
+	zoneLabel := localizedCountLabel(len(zones), phrases().ZoneSingular, phrases().ZonePlural)
+	fmt.Printf("\n📦 %s: %s (%d %s)\n", phrases().ProviderLabel, provider, len(zones), zoneLabel)
 
 	dc := findProviderConfigForPrinting(provider, domainConfigs)
 
@@ -126,7 +129,7 @@ func printZoneInfrastructure(
 	z Zone,
 	dc *DomainConfig,
 ) {
-	fmt.Printf("\n🌐 Zone: %s\n", z.Name)
+	fmt.Printf("\n🌐 %s: %s\n", phrases().ZoneLabel, z.Name)
 
 	records := loadInfrastructureRecords(ctx, provider, z, dc)
 	relevant := filterRelevantInfrastructureRecords(records)
@@ -136,7 +139,7 @@ func printZoneInfrastructure(
 	})
 
 	if len(relevant) == 0 {
-		fmt.Printf("   └─ ⚠️ Keine relevanten Records gefunden\n")
+		fmt.Printf("   └─ ⚠️ %s\n", phrases().NoRelevantRecords)
 		return
 	}
 
@@ -169,7 +172,12 @@ func loadInfrastructureRecords(ctx context.Context, provider ProviderType, z Zon
 		if dc == nil {
 			return nil
 		}
-		return loadIonosInfrastructureRecords(ctx, dc, z.ID)
+		records, err := loadIonosInfrastructureRecords(ctx, dc, z.ID)
+		if err != nil {
+			debugLog("PRINTING", z.Name, fmt.Sprintf(phrases().IonosInfrastructureLoadFailed, err))
+			return nil
+		}
+		return records
 	}
 }
 
@@ -222,7 +230,11 @@ func logHTTPClientStats() {
 	}
 
 	for provider, count := range providerCounts {
-		debugLog("CONFIG", "", fmt.Sprintf("Provider: %s (%d domains)", provider, count))
+		domainLabel := localizedCountLabel(count, phrases().DomainSingular, phrases().DomainPlural)
+		debugLog("CONFIG", "", fmt.Sprintf(
+			phrases().ConfigProviderCount,
+			phrases().ProviderLabel, provider, count, domainLabel,
+		))
 	}
 
 	debugLog("CONFIG", "", fmt.Sprintf("%s: %ds", phrases().ConfigInterval, interval))

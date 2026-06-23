@@ -107,20 +107,34 @@ type Phrases struct {
 	RotationScannerError, NoLanguageDataLoaded                      string
 
 	// DNS & Netzwerk
-	RecordFound, RecordCurrent, NoRecordFound, RecordUpdateNeeded, WouldSet     string
-	APICall, PayloadSent, ReceivedIP, CheckingInterface, InterfaceNotFound      string
-	AddressesNotReadable, NoIPv6OnInterface                                     string
-	Attempt, NetworkError, RetryIn, Success, BodyReadError, NonRetryableError   string
-	MaxAttemptsReached, RetryScheduled, ContextCancelled, ContextExpired        string
-	RequestCreationFailed, HTTPError, FailedCloseResponseBody                   string
-	BadStatusCode, InvalidIPDetected, ExpectedIPv4ButGot, ExpectedIPv6ButGot    string
-	FallbackFailed, NoIPEndpointsConfigured, AllIPEndpointsFailed               string
-	IPv6PublicFallback, IPv6FallbackEndpoints, IPv4CheckFailed, IPv6CheckFailed string
-	IPv4RequiredButFailed, IPv6RequiredButFailed, BothIPVersionsFailed          string
-	PublicIPDetectedVia, IPv6ViaInterface, IPv4Current, IPv6Current             string
-	DomainLoopCancelled, PanicOccurred, WorkerCancelledContext                  string
-	NoZonesFoundForProvider, NoZoneFound, MatchedZoneEmptyID                    string
-	NonRecoverableIPv64Error, NonRecoverableIPv4Error, NonRecoverableIPv6Error  string
+	RecordFound, RecordCurrent, NoRecordFound, RecordUpdateNeeded, WouldSet              string
+	APICall, PayloadSent, ReceivedIP, CheckingInterface, InterfaceNotFound               string
+	AddressesNotReadable, NoIPv6OnInterface                                              string
+	Attempt, NetworkError, RetryIn, Success, BodyReadError, NonRetryableError            string
+	MaxAttemptsReached, RetryScheduled, ContextCancelled, ContextExpired                 string
+	RequestCreationFailed, HTTPError, FailedCloseResponseBody                            string
+	BadStatusCode, InvalidIPDetected, ExpectedIPv4ButGot, ExpectedIPv6ButGot             string
+	FallbackFailed, NoIPEndpointsConfigured, AllIPEndpointsFailed                        string
+	IPv6PublicFallback, IPv6FallbackEndpoints, IPv4CheckFailed, IPv6CheckFailed          string
+	IPv4RequiredButFailed, IPv6RequiredButFailed, BothIPVersionsFailed                   string
+	PublicIPDetectedVia, IPv6ViaInterface, IPv4Current, IPv6Current                      string
+	DomainLoopCancelled, PanicOccurred, WorkerCancelledContext                           string
+	NoZonesFoundForProvider, NoZoneFound, MatchedZoneEmptyID                             string
+	NonRecoverableIPv64Error, NonRecoverableIPv4Error, NonRecoverableIPv6Error           string
+	HTTPTimingFormat, HTTPTimingRoundTrip, HTTPTimingDNS, HTTPTimingConnect              string
+	HTTPTimingTLS, HTTPTimingTTFB, HTTPTimingReused, HTTPTimingIdle                      string
+	HTTPTimingIdleTime, HTTPTimingDial, HTTPTimingDNSError, HTTPTimingConnectError       string
+	HTTPTimingTLSError, HTTPDebugCloseRequestBodyFailed, HTTPDebugCloneRequestBodyFailed string
+	HTTPDebugCloseClonedRequestBodyFailed, HTTPDebugReadClonedRequestBodyFailed          string
+	HTTPDebugDumpRequestFailed, HTTPDebugRequestBodyTruncated                            string
+	HTTPDebugRequestDump, HTTPDebugResponseBodyTruncated, HTTPDebugResponseDump          string
+	HTTPDebugPeekResponseBodyFailed, HTTPDebugCloseResponseBodyFailed                    string
+	MQTTDebugPublishDump, HTTPDebugBodyTruncated, HTTPPoolConfigured                     string
+	DNSErrorNoMatchingIP, HTTPRedirectTooMany, HTTPRedirectCrossHostBlocked              string
+	DNSErrorDialNoIPs, HTTPDialAttemptFailed, HTTPDialAllFailed                          string
+	DNSErrorEmptyHost, DNSErrorNoResolverConfigured, DNSErrorNilResolverForHost          string
+	DNSErrorNoIPsForHost, DNSFailoverLookupFailed, DNSResolverLabel                      string
+	DNSErrorAllResolversFailed, DNSErrorAllResolversFailedWithCause                      string
 
 	// Worker & Status
 	WorkerSlotAcquired, WorkerSlotReleased                                     string
@@ -179,6 +193,18 @@ type Phrases struct {
 	NoConfigJSONAndNoDomainsConfigFoundUsingLegacyMode                             string
 	IonosRequiresAPIPrefixAndAPISecret, CloudflareRequiresTokenOrEmailAndAPISecret string
 	Ipv64RequiresToken, UnknownProviderFormat                                      string
+	MultiProvider, DomainSingular, DomainPlural, ZoneSingular, ZonePlural          string
+	ProviderLabel, ZoneLabel, NoRelevantRecords, ConfigProviderCount               string
+
+	// Ionos
+	HTTPStatusLatency, IonosNetworkErrorNoRetry, IonosRecordsLoadFailed                        string
+	IonosRecordsParseFailed, IonosInvalidCachedRecordID, IonosRefreshInvalidCachedRecordFailed string
+	IonosCreateReconciled, IonosCreateReconcileFailed, IonosSuccessResponseParseFailed         string
+	IonosCreatedRecordIDLoadFailed, IonosCreatedRecordIDMissing, IonosUnexpectedResponseBody   string
+	IonosAPIError, IonosAPIErrorWithIP, IonosZonesLoadFailed, IonosEmptyAPIResponse            string
+	IonosZonesParseFailed, IonosZonesFiltered, IonosCacheMissingRealRecordID                   string
+	IonosCleanupInvalidCachedRecordID, IonosInfrastructureLoadFailed                           string
+	IonosCreateReconciliationFailed, UpdateFailedWithError                                     string
 
 	// Trigger / Rate Limit
 	InvalidOrMissingTriggerToken, TriggerBlockedInvalidToken                  string
