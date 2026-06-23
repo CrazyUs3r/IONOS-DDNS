@@ -1134,6 +1134,9 @@ function _initSettingsFields() {
 	_setVal('cfg-tg-chat-id', sys.telegram_chat_id || '');
 	_setVal('cfg-gotify-url', sys.gotify_url || '');
 	_setVal('cfg-gotify-token', sys.gotify_token || '');
+	_setVal('cfg-ntfy-url', sys.ntfy_url || '');
+	_setVal('cfg-ntfy-topic', sys.ntfy_topic || '');
+	_setVal('cfg-ntfy-token', sys.ntfy_token || '');
 	_setVal('cfg-webhook-url', sys.webhook_url || '');
 	_setVal('cfg-webhook-secret', sys.webhook_secret || '');
 	_setVal('cfg-mqtt-broker', mqtt.broker || '');
@@ -1540,6 +1543,9 @@ async function saveFullConfig() {
 		telegram_chat_id: _getVal('cfg-tg-chat-id'),
 		gotify_url: _getVal('cfg-gotify-url'),
 		gotify_token: _getVal('cfg-gotify-token'),
+		ntfy_url: _getVal('cfg-ntfy-url'),
+		ntfy_topic: _getVal('cfg-ntfy-topic'),
+		ntfy_token: _getVal('cfg-ntfy-token'),
 		webhook_url: _getVal('cfg-webhook-url'),
 		webhook_secret: _getVal('cfg-webhook-secret'),
 		mqtt: {
@@ -2796,4 +2802,4 @@ function restoreFullBackup() {
 			}
 			showToast(tr('backup_restore_failed', '❌ Restore failed'), 'error');
 		});
-			}
+}
