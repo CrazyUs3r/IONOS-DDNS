@@ -636,7 +636,7 @@ func snapshotHTTPClientSettings() httpClientSettings {
 		dnsServers:  append([]string(nil), cfg.DNSServers...),
 		domainCount: len(cfg.DomainConfigs),
 		interval:    time.Duration(cfg.Interval) * time.Second,
-		ipMode:      strings.ToLower(strings.TrimSpace(cfg.IPMode)),
+		ipMode:      strings.ToUpper(strings.TrimSpace(cfg.IPMode)),
 	}
 	cfgMu.RUnlock()
 

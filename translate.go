@@ -203,8 +203,27 @@ type Phrases struct {
 	IonosCreatedRecordIDLoadFailed, IonosCreatedRecordIDMissing, IonosUnexpectedResponseBody   string
 	IonosAPIError, IonosAPIErrorWithIP, IonosZonesLoadFailed, IonosEmptyAPIResponse            string
 	IonosZonesParseFailed, IonosZonesFiltered, IonosCacheMissingRealRecordID                   string
-	IonosCleanupInvalidCachedRecordID, IonosInfrastructureLoadFailed                           string
-	IonosCreateReconciliationFailed, UpdateFailedWithError                                     string
+	IonosCleanupInvalidCachedRecordID, IonosCreateReconciliationFailed                         string
+	UpdateFailedWithError                                                                      string
+
+	// Printing
+	IonosInfrastructureLoadFailed, LoadHetznerCloudZoneLoadFailed, LoadHetznerDNSZoneLoadFailed string
+	LoadCloudflareLoadFailed, LoadIPv64InfrastructureLoadFailed, MissingDomainConfigForProvider string
+	UnsupportedProvider, NoCachedIPv64InfrastructureRecords                                     string
+	// MQTT
+	MqttCAFileReadError, MqttCAFileInvalid, MqttConnected, MqttConnectionLost                     string
+	MqttConnecting, MqttInitialConnectionPending, MqttConnectFailed, MqttSubscribeTimeout         string
+	MqttSubscribeFailed, MqttDiscoveryError, MqttStatePublishFailed, MqttDomainStatePublishFailed string
+	MqttNotConnected, MqttCmdRetainedIgnored, MqttCmdPayloadTooLarge, MqttCmdInvalidUpdatePayload string
+	MqttCmdUpdateAlreadyRunning, MqttCmdManualUpdateStarted, MqttManualUpdateTriggered            string
+	MqttCmdManualUpdateCompleted, MqttCmdManualUpdateFailed, MqttCmdInvalidRefreshPayload         string
+	MqttCmdStateRefreshFailed, MqttCmdStateRepublished, MqttCmdUnknown                            string
+	MqttDiscoveryLastEvent, MqttDiscoveryStatus, MqttDiscoveryHealth                              string
+	MqttDiscoveryUpdateRunning, MqttDiscoveryDomains, MqttDiscoveryRequests                       string
+	MqttDiscoverySuccessRate, MqttDiscoveryAverageLatency, MqttDiscoveryUptime                    string
+	MqttDiscoveryLastCommand, MqttDiscoveryUpdateNow, MqttDiscoveryRefreshState                   string
+	MqttDiscoveryPublished, MqttDiscoveryIPv4, MqttDiscoveryIPv6                                  string
+	MqttPublishTimeout                                                                            string
 
 	// Trigger / Rate Limit
 	InvalidOrMissingTriggerToken, TriggerBlockedInvalidToken                  string

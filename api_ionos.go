@@ -139,28 +139,6 @@ func handleIonosResponse(
 	return handleProviderHTTPResponse(ctx, "IONOS", phrases().IonosMaxAttempts, res, method, url, duration, attempt)
 }
 
-func loadIPv64InfrastructureRecords(z Zone) []Record {
-	providerCache.RLock()
-	defer providerCache.RUnlock()
-
-	var records []Record
-	if data, ok := providerCache.ipv64Records[z.Name]; ok {
-		for _, ir := range data.Records {
-			name := z.Name
-			if ir.Praefix != "" {
-				name = ir.Praefix + "." + z.Name
-			}
-			records = append(records, Record{
-				Name:    name,
-				Type:    ir.Type,
-				Content: ir.Content,
-			})
-		}
-	}
-
-	return records
-}
-
 func loadIonosInfrastructureRecords(ctx context.Context, dc *DomainConfig, zoneID string) ([]Record, error) {
 	data, err := ionosAPI(ctx, dc, MethodGET, ionosBaseURL+"/"+zoneID, nil)
 	if err != nil {

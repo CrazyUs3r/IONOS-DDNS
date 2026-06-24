@@ -669,6 +669,36 @@ func loadAllIPv64Domains(ctx context.Context, dc *DomainConfig) error {
 	return nil
 }
 
+func loadIPv64InfrastructureRecords(z Zone) ([]Record, error) {
+	providerCache.RLock()
+	defer providerCache.RUnlock()
+
+	data, ok := providerCache.ipv64Records[z.Name]
+	if !ok {
+		return nil, fmt.Errorf(
+			phrases().NoCachedIPv64InfrastructureRecords,
+			z.Name,
+		)
+	}
+
+	records := make([]Record, 0, len(data.Records))
+
+	for _, ir := range data.Records {
+		name := z.Name
+		if ir.Praefix != "" {
+			name = ir.Praefix + "." + z.Name
+		}
+
+		records = append(records, Record{
+			Name:    name,
+			Type:    ir.Type,
+			Content: ir.Content,
+		})
+	}
+
+	return records, nil
+}
+
 // ============================================================================
 // DNS LOGIC - IPV64
 // ============================================================================

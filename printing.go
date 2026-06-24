@@ -131,7 +131,13 @@ func printZoneInfrastructure(
 ) {
 	fmt.Printf("\n🌐 %s: %s\n", phrases().ZoneLabel, z.Name)
 
-	records := loadInfrastructureRecords(ctx, provider, z, dc)
+	records, err := loadInfrastructureRecords(ctx, provider, z, dc)
+	if err != nil {
+		debugLog("DEBUG", z.Name, err.Error())
+		fmt.Printf("   └─ ⚠️ %s\n", err)
+		return
+	}
+
 	relevant := filterRelevantInfrastructureRecords(records)
 
 	sort.Slice(relevant, func(i, j int) bool {
@@ -146,55 +152,62 @@ func printZoneInfrastructure(
 	printRelevantInfrastructureRecords(relevant)
 }
 
-func loadInfrastructureRecords(ctx context.Context, provider ProviderType, z Zone, dc *DomainConfig) []Record {
+func loadInfrastructureRecords(ctx context.Context, provider ProviderType, z Zone, dc *DomainConfig) ([]Record, error) {
 	switch provider {
 	case ProviderIPv64:
 		records, err := loadIPv64InfrastructureRecords(z)
 		if err != nil {
-			debugLog("DEBUG", z.Name, fmt.Sprintf("IPv64 load failed: %v", err))
-			return nil
+			return nil, fmt.Errorf(phrases().LoadIPv64InfrastructureLoadFailed, err)
 		}
-		return records
+		return records, nil
+
 	case ProviderCloudflare:
 		if dc == nil {
-			return nil
+			return nil, fmt.Errorf(
+				phrases().MissingDomainConfigForProvider, provider)
 		}
+
 		records, err := loadCloudflareRecords(ctx, dc, z.ID)
 		if err != nil {
-			debugLog("DEBUG", z.Name, fmt.Sprintf("Cloudflare load failed: %v", err))
-			return nil
+			return nil, fmt.Errorf(phrases().LoadCloudflareLoadFailed, err)
 		}
-		return records
+		return records, nil
+
 	case ProviderHetzner:
 		if dc == nil {
-			return nil
+			return nil, fmt.Errorf(phrases().MissingDomainConfigForProvider, provider)
 		}
+
 		records, err := loadHetznerDNSZoneRecords(ctx, dc, z.ID)
 		if err != nil {
-			debugLog("DEBUG", z.Name, fmt.Sprintf("Hetzner DNS load failed: %v", err))
-			return nil
+			return nil, fmt.Errorf(phrases().LoadHetznerDNSZoneLoadFailed, err)
 		}
-		return records
+		return records, nil
+
 	case ProviderHetznerCloud:
 		if dc == nil {
-			return nil
+			return nil, fmt.Errorf(phrases().MissingDomainConfigForProvider, provider)
 		}
+
 		records, err := loadHetznerCloudZoneRecords(ctx, dc, z.ID)
 		if err != nil {
-			debugLog("DEBUG", z.Name, fmt.Sprintf("Hetzner Cloud load failed: %v", err))
-			return nil
+			return nil, fmt.Errorf(phrases().LoadHetznerCloudZoneLoadFailed, err)
 		}
-		return records
-	default: // IONOS
+		return records, nil
+
+	case ProviderIONOS:
 		if dc == nil {
-			return nil
+			return nil, fmt.Errorf(phrases().MissingDomainConfigForProvider, provider)
 		}
+
 		records, err := loadIonosInfrastructureRecords(ctx, dc, z.ID)
 		if err != nil {
-			debugLog("DEBUG", z.Name, fmt.Sprintf(phrases().IonosInfrastructureLoadFailed, err))
-			return nil
+			return nil, fmt.Errorf(phrases().IonosInfrastructureLoadFailed, err)
 		}
-		return records
+		return records, nil
+
+	default:
+		return nil, fmt.Errorf(phrases().UnsupportedProvider, provider)
 	}
 }
 
