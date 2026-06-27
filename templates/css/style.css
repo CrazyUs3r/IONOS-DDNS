@@ -1117,6 +1117,17 @@ button:disabled {
 	font-size: 0.75rem;
 }
 
+.log-delete-btn {
+	opacity: 0;
+	transition: opacity 0.15s;
+	flex-shrink: 0;
+	align-self: center;
+	padding: 3px 6px;
+	font-size: 0.75rem;
+}
+
+.log-delete-btn:hover { color: var(--color-err, #e55); }
+
 .log-entry-row:hover .log-copy-btn {
 	opacity: 1;
 }
@@ -2157,6 +2168,11 @@ body.auth-page .dashboard-footer {
 	}
 
 	.log-copy-btn {
+		opacity: 1;
+		padding: 8px 10px;
+	}
+
+	.log-delete-btn {
 		opacity: 1;
 		padding: 8px 10px;
 	}
