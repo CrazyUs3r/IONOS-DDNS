@@ -451,7 +451,7 @@ func (m *mqttNotifier) handleCommand(client mqtt.Client, topic string, payload [
 			defer updateInProgress.Store(false)
 			debugLog("NOTIFY", "", phrases().MqttManualUpdateTriggered)
 			forceNextUpdate.Store(true)
-			runUpdate(false)
+			runClaimedUpdate(false)
 
 			status := "completed"
 			message := phrases().MqttCmdManualUpdateCompleted

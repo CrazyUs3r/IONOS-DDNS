@@ -6,17 +6,35 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
+	"strings"
 	"time"
 )
 
 // ============================================================================
 // UPDATE ORCHESTRATION
 // ============================================================================
+func tryClaimUpdate() bool {
+	return updateInProgress.CompareAndSwap(false, true)
+}
+
 func runUpdate(firstRun bool) {
+	if !tryClaimUpdate() {
+		debugLog("SCHEDULER", "", phrases().UpdateAlreadyRunning)
+		return
+	}
+
+	runClaimedUpdate(firstRun)
+}
+
+func runClaimedUpdate(firstRun bool) {
+	defer updateInProgress.Store(false)
+
 	activeUpdates.Add(1)
 	defer activeUpdates.Add(-1)
 
-	forced := firstRun || forceNextUpdate.Swap(false)
+	forceRequested := forceNextUpdate.Swap(false)
+	forced := firstRun || forceRequested
 
 	debugLog("SCHEDULER", "", fmt.Sprintf(phrases().SchedulerStarted, firstRun))
 
@@ -36,25 +54,53 @@ func runUpdate(firstRun bool) {
 		return
 	}
 
-	logMissingProviderZones(zonesByProvider, domainConfigs)
+	logMissingProviderZones(
+		zonesByProvider,
+		domainConfigs,
+	)
 
-	cache, ok := loadRunUpdateRecords(ctx, zonesByProvider, forced)
+	cache, ok := loadRunUpdateRecords(
+		ctx,
+		zonesByProvider,
+		forced,
+	)
 	if !ok {
 		return
 	}
 
-	refreshIPv64DomainsIfNeeded(ctx, forced, domainConfigs)
+	refreshIPv64DomainsIfNeeded(
+		ctx,
+		forced,
+		domainConfigs,
+	)
+
 	saveCachesToDisk(zonesByProvider, cache)
 
 	if firstRun {
 		printGroupedDomains()
-		printInfrastructure(ctx, zonesByProvider)
+		printInfrastructure(
+			ctx,
+			zonesByProvider,
+			cache,
+		)
 	}
 
-	successCount := processDomains(ctx, zonesByProvider, cache, currentIPv4, currentIPv6)
+	successCount := processDomains(
+		ctx,
+		zonesByProvider,
+		cache,
+		currentIPv4,
+		currentIPv6,
+	)
+
 	debugLog("SCHEDULER", "", fmt.Sprintf(phrases().SchedulerCompleted, successCount))
 
-	runCleanupIfNeeded(ctx, zonesByProvider, cache, domainConfigs)
+	runCleanupIfNeeded(
+		ctx,
+		zonesByProvider,
+		cache,
+		domainConfigs,
+	)
 }
 
 func createRunUpdateContexts(domainCount int) (context.Context, context.Context, context.CancelFunc, context.CancelFunc) {
@@ -210,36 +256,170 @@ func refreshIPv64DomainsIfNeeded(ctx context.Context, forced bool, domainConfigs
 	}
 }
 
-func loadLastKnownIPs() (ipv4, ipv6 string) {
-	statusMutex.Lock()
-	defer statusMutex.Unlock()
+type lastKnownIPState struct {
+	ipv4     string
+	ipv6     string
+	ipv4Time time.Time
+	ipv6Time time.Time
+	ipv4Seq  int
+	ipv6Seq  int
+}
 
-	b, err := os.ReadFile(updatePath)
+func loadLastKnownIPs() (string, string) {
+	domains, err := readDomainHistories()
 	if err != nil {
 		return "", ""
 	}
 
-	var domains map[string]DomainHistory
-	if err := json.Unmarshal(b, &domains); err != nil {
-		return "", ""
+	state := findLastKnownIPs(domains)
+	return state.ipv4, state.ipv6
+}
+
+func readDomainHistories() (
+	map[string]DomainHistory,
+	error,
+) {
+	statusMutex.Lock()
+	defer statusMutex.Unlock()
+
+	data, err := os.ReadFile(updatePath)
+	if err != nil {
+		return nil, err
 	}
 
-	for _, h := range domains {
-		if len(h.IPs) == 0 {
-			continue
-		}
-		latest := h.IPs[len(h.IPs)-1]
-		if latest.IPv4 != "" {
-			ipv4 = latest.IPv4
-		}
-		if latest.IPv6 != "" {
-			ipv6 = latest.IPv6
-		}
-		if ipv4 != "" && ipv6 != "" {
-			break
+	var domains map[string]DomainHistory
+	if err := json.Unmarshal(data, &domains); err != nil {
+		return nil, err
+	}
+
+	return domains, nil
+}
+
+func findLastKnownIPs(
+	domains map[string]DomainHistory,
+) lastKnownIPState {
+	state := lastKnownIPState{
+		ipv4Seq: -1,
+		ipv6Seq: -1,
+	}
+
+	domainNames := sortedHistoryDomainNames(domains)
+	sequence := 0
+
+	for _, domainName := range domainNames {
+		history := domains[domainName]
+
+		for _, entry := range history.IPs {
+			sequence++
+
+			state.consider(
+				entry,
+				parseHistoryIPTime(entry.Time),
+				sequence,
+			)
 		}
 	}
-	return ipv4, ipv6
+
+	return state
+}
+
+func sortedHistoryDomainNames(
+	domains map[string]DomainHistory,
+) []string {
+	names := make([]string, 0, len(domains))
+
+	for domainName := range domains {
+		names = append(names, domainName)
+	}
+
+	sort.Strings(names)
+	return names
+}
+
+func (state *lastKnownIPState) consider(
+	entry IPEntry,
+	entryTime time.Time,
+	sequence int,
+) {
+	if isNewerIPCandidate(
+		entry.IPv4,
+		state.ipv4,
+		entryTime,
+		state.ipv4Time,
+		sequence,
+		state.ipv4Seq,
+	) {
+		state.ipv4 = entry.IPv4
+		state.ipv4Time = entryTime
+		state.ipv4Seq = sequence
+	}
+
+	if isNewerIPCandidate(
+		entry.IPv6,
+		state.ipv6,
+		entryTime,
+		state.ipv6Time,
+		sequence,
+		state.ipv6Seq,
+	) {
+		state.ipv6 = entry.IPv6
+		state.ipv6Time = entryTime
+		state.ipv6Seq = sequence
+	}
+}
+
+func isNewerIPCandidate(
+	value string,
+	currentValue string,
+	candidateTime time.Time,
+	currentTime time.Time,
+	candidateSequence int,
+	currentSequence int,
+) bool {
+	switch {
+	case value == "":
+		return false
+
+	case currentValue == "":
+		return true
+
+	case candidateTime.After(currentTime):
+		return true
+
+	case candidateTime.Before(currentTime):
+		return false
+
+	default:
+		return candidateSequence > currentSequence
+	}
+}
+
+func parseHistoryIPTime(value string) time.Time {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return time.Time{}
+	}
+
+	layouts := [...]string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		statusTimestampLayoutT,
+		statusTimestampLayout,
+		statusTimestampLayoutwS,
+	}
+
+	for _, layout := range layouts {
+		parsed, err := time.ParseInLocation(
+			layout,
+			value,
+			time.Local,
+		)
+		if err == nil {
+			return parsed
+		}
+	}
+
+	return time.Time{}
 }
 
 // ============================================================================
@@ -253,11 +433,18 @@ func getCachedZonesState() (map[string][]Zone, time.Duration, bool) {
 }
 
 func setCachedZones(zones map[string][]Zone) {
+	setCachedZonesAt(zones, time.Now())
+}
+
+func setCachedZonesAt(
+	zones map[string][]Zone,
+	loadedAt time.Time,
+) {
 	zoneCacheMutex.Lock()
 	defer zoneCacheMutex.Unlock()
 
 	cachedZones = zones
-	lastZoneLoad = time.Now()
+	lastZoneLoad = loadedAt
 }
 
 func getCachedRecordsState() (*ZoneRecordCache, time.Duration, bool) {
@@ -268,11 +455,19 @@ func getCachedRecordsState() (*ZoneRecordCache, time.Duration, bool) {
 }
 
 func setCachedRecords(cache *ZoneRecordCache) {
+	loadedAt := time.Now()
+
+	if cache != nil {
+		if oldest, exists := cache.OldestStoredAt(); exists {
+			loadedAt = oldest
+		}
+	}
+
 	zoneCacheMutex.Lock()
 	defer zoneCacheMutex.Unlock()
 
 	cachedRecords = cache
-	lastRecordLoad = time.Now()
+	lastRecordLoad = loadedAt
 }
 
 func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zone, error) {
@@ -297,15 +492,19 @@ func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zo
 		if zonesFromDisk, err := loadZonesFromDiskCache(); err == nil && len(zonesFromDisk) > 0 {
 			debugLog("SCHEDULER", "", phrases().ZonesLoadedFromDiskNoAPICall)
 
-			setCachedZones(zonesFromDisk)
+			setCachedZonesAt(zonesFromDisk, time.Time{})
 
 			return zonesFromDisk, nil
 		}
 	}
 
-	zonesByProvider, err := doSingleflight(ctx, &zonesLoadGroup, "zones_api", func() (map[string][]Zone, error) {
-		return loadAllProviderZones(ctx)
-	})
+	loadedFromDisk := false
+
+	zonesByProvider, err := doSingleflight(ctx, &zonesLoadGroup, "zones_api",
+		func() (map[string][]Zone, error) {
+			return loadAllProviderZones(ctx)
+		},
+	)
 
 	if err != nil {
 		debugLog("SCHEDULER", "", fmt.Sprintf(phrases().ZoneAPILoadFailed, err))
@@ -315,12 +514,18 @@ func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zo
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", phrases().APIAndDiskCacheFailed, err)
 		}
+
+		loadedFromDisk = true
 		debugLog("SCHEDULER", "", phrases().ZonesLoadedFromDisk)
 	} else {
 		debugLog("SCHEDULER", "", phrases().ZonesLoadedFromAPI)
 	}
 
-	setCachedZones(zonesByProvider)
+	if loadedFromDisk {
+		setCachedZonesAt(zonesByProvider, time.Time{})
+	} else {
+		setCachedZones(zonesByProvider)
+	}
 
 	return zonesByProvider, nil
 }
@@ -436,38 +641,51 @@ func saveProviderCacheJob(job cacheSaveJob, cache *ZoneRecordCache) bool {
 		}
 		return true
 
+	case ProviderFebas:
+		// Febas zones are generated from config and records are resolved live.
+		return true
+
 	default:
 		return false
 	}
 }
 
-func saveCachesToDisk(zonesByProvider map[string][]Zone, cache *ZoneRecordCache) {
+func saveCachesToDisk(
+	zonesByProvider map[string][]Zone,
+	cache *ZoneRecordCache,
+) {
 	zoneCacheMutex.RLock()
 	zoneLoadTs := lastZoneLoad
 	recordLoadTs := lastRecordLoad
 	zoneCacheMutex.RUnlock()
 
 	diskPersistMutex.Lock()
-	needsPersist := zoneLoadTs.After(lastDiskPersistZone) || recordLoadTs.After(lastDiskPersistRecord)
+	needsPersist := zoneLoadTs.After(lastDiskPersistZone) ||
+		recordLoadTs.After(lastDiskPersistRecord)
+	diskPersistMutex.Unlock()
+
 	if !needsPersist {
-		diskPersistMutex.Unlock()
 		debugLog("CACHE", "", phrases().DiskCachePersistSkipped)
 		return
 	}
-	diskPersistMutex.Unlock()
 
 	cacheWriteMutex.Lock()
-	jobs := buildCacheSaveJobs(zonesByProvider)
-	cacheWriteMutex.Unlock()
+	defer cacheWriteMutex.Unlock()
 
-	saved := false
+	jobs := buildCacheSaveJobs(zonesByProvider)
+	if len(jobs) == 0 {
+		return
+	}
+
+	allSaved := true
+
 	for _, job := range jobs {
-		if saveProviderCacheJob(job, cache) {
-			saved = true
+		if !saveProviderCacheJob(job, cache) {
+			allSaved = false
 		}
 	}
 
-	if !saved {
+	if !allSaved {
 		return
 	}
 
@@ -604,6 +822,12 @@ func loadProviderRecordCacheFromDisk(
 	case ProviderHetznerCloud:
 		return loadProviderRecordCache(cache, zones, loadHetznerCloudCacheFromFile)
 
+	case ProviderFebas:
+		for _, zone := range zones {
+			cache.Set(zone.ID, []Record{})
+		}
+		return len(zones) > 0, nil
+
 	default:
 		return false, nil
 	}
@@ -617,18 +841,29 @@ func loadProviderRecordCache(
 	loader providerCacheLoader,
 ) (bool, error) {
 	_, recordCache, err := loader()
-	if err != nil || recordCache == nil {
+	if err != nil {
 		return false, err
 	}
 
+	if recordCache == nil {
+		return false, nil
+	}
+
 	loadedAny := false
+
 	for _, zone := range zones {
-		records, exists := recordCache.Get(zone.ID)
+		records, storedAt, exists := recordCache.GetWithStoredAt(zone.ID)
+
 		if !exists {
 			continue
 		}
 
-		cache.Set(zone.ID, records)
+		cache.SetAt(
+			zone.ID,
+			records,
+			storedAt,
+		)
+
 		loadedAny = true
 	}
 
@@ -690,6 +925,15 @@ func loadProviderZonesFromDisk(provider ProviderType) ([]Zone, bool) {
 		if err == nil && len(zones) > 0 {
 			debugLog("CACHE", "", fmt.Sprintf(phrases().HetznerCloudZonesLoadedFromDisk, len(zones)))
 			return zones, true
+		}
+
+	case ProviderFebas:
+		domainConfigs := snapshotDomainConfigs()
+		if dc := findProviderDomainConfig(domainConfigs, ProviderFebas); dc != nil {
+			zones, err := loadFebasZones(context.Background())
+			if err == nil && len(zones) > 0 {
+				return zones, true
+			}
 		}
 	}
 

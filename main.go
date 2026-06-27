@@ -26,7 +26,12 @@ func initTimezone() {
 	}
 	loc, err := time.LoadLocation(tz)
 	if err != nil {
-		fmt.Printf("[WARN] Could not load timezone %q: %v – using UTC\n", tz, err)
+		fmt.Printf(
+			"[WARN] Could not load timezone %q: %v – using UTC\n",
+			tz,
+			err,
+		)
+		time.Local = time.UTC
 		return
 	}
 	time.Local = loc
@@ -34,12 +39,14 @@ func initTimezone() {
 
 func main() {
 	initTimezone()
+	startTime = time.Now()
+
 	exitCode := run()
 	os.Exit(exitCode)
 }
 
-func run() int {
-	defer handleRunPanic()
+func run() (exitCode int) {
+	defer handleRunPanic(&exitCode)
 
 	paths := initRuntimePaths()
 
@@ -153,17 +160,17 @@ type envConfig struct {
 	maxConcurrent int
 }
 
-func handleRunPanic() {
+func handleRunPanic(exitCode *int) {
 	if r := recover(); r != nil {
-		fmt.Printf("[FATAL] Main-Panic: %v\n", r)
+		*exitCode = 1
 
-		flushLogQueue()
+		fmt.Printf("[FATAL] Main-Panic: %v\n", r)
 
 		if metricsPersistPath != "" {
 			_ = apiMetrics.SaveToFile(metricsPersistPath)
 		}
 
-		flushLogQueue()
+		stopLogWriterAndWait()
 	}
 }
 
@@ -401,11 +408,21 @@ func loadConfigFromFile() bool {
 		loaded.HourlyRateLimit = DefaultHourlyRateLimit
 	}
 
+	loaded.IPMode = strings.ToUpper(strings.TrimSpace(loaded.IPMode))
+
+	for i := range loaded.DomainConfigs {
+		dc := &loaded.DomainConfigs[i]
+
+		dc.FQDN = normalizeDomain(dc.FQDN)
+		dc.Provider = normalizeProviderName(string(dc.Provider))
+		dc.IPMode = strings.ToUpper(strings.TrimSpace(dc.IPMode))
+	}
+
 	cfgMu.Lock()
 	cfg = loaded
 	cfgMu.Unlock()
 
-	return len(cfg.DomainConfigs) > 0
+	return true
 }
 
 func applyDebugOverrides() {
@@ -613,6 +630,10 @@ func newDashboardServer(addr string, handler http.Handler) *http.Server {
 		Addr:              addr,
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 20,
 	}
 }
 
@@ -699,7 +720,10 @@ func startWebSocketHub() {
 }
 
 func runMainLoop(servers *dashboardServers) int {
+	cfgMu.RLock()
 	currentInterval := cfg.Interval
+	cfgMu.RUnlock()
+
 	ticker := time.NewTicker(time.Duration(currentInterval) * time.Second)
 	defer ticker.Stop()
 
@@ -721,25 +745,29 @@ func runMainLoop(servers *dashboardServers) int {
 	}
 }
 
-func handleContextShutdown(ticker *time.Ticker, servers *dashboardServers) int {
+func handleContextShutdown(
+	ticker *time.Ticker,
+	servers *dashboardServers,
+) int {
 	ticker.Stop()
 
 	if httpClient != nil {
 		httpClient.CloseIdleConnections()
+
 		debugLog("SYSTEM", "", phrases().HTTPConnectionsClosed)
 	}
 
-	waitForRunningUpdates()
+	shutdownDashboardServers(servers)
 
-	debugLog("SYSTEM", "", t(phrases().WaitingForLogQueue, "📝 Waiting for log queue..."))
-	flushLogQueue()
+	waitForRunningUpdates()
 
 	if err := apiMetrics.SaveToFile(metricsPersistPath); err != nil {
 		debugLog("SYSTEM", "", fmt.Sprintf(t(phrases().MetricsSaveFailed, "Metrics could not be saved: %v"), err))
 	}
 
-	safeCloseLogWriteQueue()
-	shutdownDashboardServers(servers)
+	debugLog("SYSTEM", "", t(phrases().WaitingForLogQueue, "📝 Waiting for log queue..."))
+
+	stopLogWriterAndWait()
 
 	return 0
 }
@@ -764,7 +792,7 @@ func handleSchedulerTick(ticker *time.Ticker, currentInterval *int) *time.Ticker
 
 	debugLog("SCHEDULER", "", t(phrases().SchedulerIntervalReached, "Interval reached, starting runUpdate(false)"))
 
-	if activeUpdates.Load() > 0 {
+	if !tryClaimUpdate() {
 		debugLog("SCHEDULER", "", t(phrases().SchedulerPreviousUpdateRunning, "⚠️ Previous update is still running. Skipping this cycle..."))
 
 		limit := maxLogLines
@@ -775,7 +803,7 @@ func handleSchedulerTick(ticker *time.Ticker, currentInterval *int) *time.Ticker
 		return ticker
 	}
 
-	go runUpdate(false)
+	go runClaimedUpdate(false)
 
 	limit := maxLogLines
 	if interval > 500 && limit == DefaultMaxLogLines {
@@ -792,66 +820,96 @@ func handleShutdownSignal(sig os.Signal, ticker *time.Ticker, servers *dashboard
 	debugLog("SYSTEM", "", fmt.Sprintf(t(phrases().ShutdownSignalReceived, "Shutdown signal received: %v"), sig))
 
 	stopCtx := LogContext{
-		Level:   LogInfo,
-		Action:  ActionStop,
-		Message: fmt.Sprintf("🛑 %s (Signal: %v)", phrases().Shutdown, sig),
+		Level:  LogInfo,
+		Action: ActionStop,
+		Message: fmt.Sprintf(
+			"🛑 %s (Signal: %v)",
+			phrases().Shutdown,
+			sig,
+		),
 	}
+
 	notifySync(stopCtx)
+
 	stopCtx.SkipNotify = true
 	log(stopCtx)
 
 	ticker.Stop()
+
 	shutdownCancel()
 
 	if httpClient != nil {
 		httpClient.CloseIdleConnections()
+
 		debugLog("SYSTEM", "", phrases().HTTPConnectionsClosed)
 	}
 
-	waitForRunningUpdates()
+	shutdownDashboardServers(servers)
 
-	debugLog("SYSTEM", "", t(phrases().WaitingForLogQueue, "📝 Waiting for log queue..."))
-	flushLogQueue()
+	waitForRunningUpdates()
 
 	if err := apiMetrics.SaveToFile(metricsPersistPath); err != nil {
 		debugLog("SYSTEM", "", fmt.Sprintf(t(phrases().MetricsSaveFailed, "Metrics could not be saved: %v"), err))
 	}
 
-	safeCloseLogWriteQueue()
-	shutdownDashboardServers(servers)
+	debugLog("SYSTEM", "", t(phrases().WaitingForLogQueue, "📝 Waiting for log queue..."))
+
+	stopLogWriterAndWait()
 
 	return 0
 }
 
-func safeCloseLogWriteQueue() {
-	closeLogWriterOnce.Do(func() {
-		close(logWriteQueue)
+func stopLogWriterAndWait() {
+	if !logWriterStarted.Load() {
+		return
+	}
+
+	stopLogWriterOnce.Do(func() {
+		close(logWriterStop)
 	})
+
+	timer := time.NewTimer(logFlushTimeout)
+	defer timer.Stop()
+
+	select {
+	case <-logWriterDone:
+
+	case <-timer.C:
+		fmt.Fprintf(
+			os.Stderr,
+			"log writer shutdown timed out; %d entries may remain\n",
+			len(logWriteQueue),
+		)
+	}
 }
 
 func waitForRunningUpdates() {
 	debugLog("SYSTEM", "", t(phrases().WaitingForRunningUpdates, "⏳ Waiting for running updates..."))
 
-	waitCtx, waitCancel := context.WithTimeout(context.Background(), ShutdownWaitTimeout)
+	waitCtx, waitCancel := context.WithTimeout(
+		context.Background(),
+		ShutdownWaitTimeout,
+	)
 	defer waitCancel()
 
-	done := make(chan bool, 1)
-	go func() {
-		defer close(done)
-		for {
-			if activeUpdates.Load() == 0 {
-				done <- true
-				return
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
-	}()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
 
-	select {
-	case <-done:
-		debugLog("SYSTEM", "", t(phrases().AllUpdatesFinished, "✅ All updates finished"))
-	case <-waitCtx.Done():
-		debugLog("SYSTEM", "", t(phrases().WaitForUpdatesTimeout, "⚠️ Timeout while waiting for updates - force shutdown"))
+	for {
+		if activeUpdates.Load() == 0 && !updateInProgress.Load() {
+			debugLog("SYSTEM", "", t(phrases().AllUpdatesFinished, "✅ All updates finished"))
+
+			return
+		}
+
+		select {
+		case <-ticker.C:
+
+		case <-waitCtx.Done():
+			debugLog("SYSTEM", "", t(phrases().WaitForUpdatesTimeout, "⚠️ Timeout while waiting for updates - force shutdown"))
+
+			return
+		}
 	}
 }
 

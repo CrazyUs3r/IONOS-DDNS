@@ -3,7 +3,6 @@ package main
 
 import (
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -69,26 +68,18 @@ func (h *WSHub) run() {
 }
 
 func (h *WSHub) broadcastToClients(clients []*WSClient, msg WSMessage) {
-	go func() {
-		var wg sync.WaitGroup
-		for _, c := range clients {
-			wg.Add(1)
-			go func(client *WSClient) {
-				defer wg.Done()
-				select {
-				case client.send <- msg:
-				default:
-					debugLog("WS", "", "client send queue full - disconnecting")
-					select {
-					case h.unregister <- client:
-					default:
-						h.forceRemoveClient(client)
-					}
-				}
-			}(c)
+	for _, client := range clients {
+		select {
+		case client.send <- msg:
+		default:
+			debugLog("WS", "", "client send queue full - disconnecting")
+			select {
+			case h.unregister <- client:
+			default:
+				h.forceRemoveClient(client)
+			}
 		}
-		wg.Wait()
-	}()
+	}
 }
 
 func (c *WSClient) writePump() {

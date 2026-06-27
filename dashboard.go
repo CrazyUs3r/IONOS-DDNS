@@ -3,7 +3,9 @@ package main
 
 import (
 	"bufio"
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -486,8 +488,8 @@ func buildSettingsSystemSection(c Config) string {
 }
 
 func buildSettingsDomainsSection() string {
-	addDomainForm := `<div class="add-domain-box"><input type="text" id="new-domain-fqdn" class="s-input mb-8" placeholder="` + phrases().SettingsDomainPlaceholder + `"><input type="number" id="new-domain-ttl" class="s-input mb-8" placeholder="TTL (z. B. 60)" min="1" step="1"><select id="new-domain-ip-mode" class="s-input mb-8"><option value="">` + phrases().SettingsIPMode + ` (` + phrases().SettingsIPMode + ` global)</option><option value="BOTH">BOTH – IPv4 + IPv6</option><option value="IPV4">IPV4 – nur IPv4</option><option value="IPV6">IPV6 – nur IPv6</option></select><select id="new-domain-provider" class="s-input mb-8" data-change="toggleProviderFields()"><option value="IONOS">IONOS</option><option value="CLOUDFLARE">Cloudflare</option><option value="IPV64">IPv64</option><option value="HETZNER">Hetzner DNS</option><option value="HETZNERCLOUD">Hetzner Cloud DNS</option></select><div id="fields-ionos"><input type="text" id="new-ionos-prefix" class="s-input mb-8" placeholder="` + phrases().SettingsAPIPrefix + `"><div class="input-with-action mt-8"><input type="password" id="new-ionos-secret" class="s-input" placeholder="` + phrases().SettingsAPISecret + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-ionos-secret', this)">👁️</button></div></div><div id="fields-cloudflare" class="is-hidden"><input type="text" id="new-cf-token" class="s-input mb-8" placeholder="` + phrases().SettingsCFTokenHint + `"><div class="center-note">` + phrases().SettingsCFOr + `</div><input type="text" id="new-cf-email" class="s-input mb-8" placeholder="` + phrases().SettingsCFEmail + `"><div class="input-with-action mt-8"><input type="password" id="new-cf-secret" class="s-input" placeholder="` + phrases().SettingsCFGlobalKey + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-cf-secret', this)">👁️</button></div><label class="inline-check"><input type="checkbox" id="new-cf-proxied"> ` + phrases().SettingsCFProxyLabel +
-		`</label></div><div id="fields-ipv64" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-ipv64-token" class="s-input" placeholder="` + phrases().SettingsIPv64Token + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-ipv64-token', this)">👁️</button></div></div><div id="fields-hetzner" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-hetzner-token" class="s-input" placeholder="Hetzner DNS API Token"><button type="button" class="input-action-btn" data-click="togglePassword('new-hetzner-token', this)">👁️</button></div></div><div id="fields-hetznercloud" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-hcloud-token" class="s-input" placeholder="Hetzner Cloud/Console Token"><button type="button" class="input-action-btn" data-click="togglePassword('new-hcloud-token', this)">👁️</button></div></div><div class="s-btn-row"><button class="s-btn s-btn-success-full" data-click="addDomainToList()">` +
+	addDomainForm := `<div class="add-domain-box"><input type="text" id="new-domain-fqdn" class="s-input mb-8" placeholder="` + phrases().SettingsDomainPlaceholder + `"><input type="number" id="new-domain-ttl" class="s-input mb-8" placeholder="TTL (z. B. 60)" min="1" step="1"><select id="new-domain-ip-mode" class="s-input mb-8"><option value="">` + phrases().SettingsIPMode + ` (` + phrases().SettingsIPMode + ` global)</option><option value="BOTH">BOTH – IPv4 + IPv6</option><option value="IPV4">IPV4 – nur IPv4</option><option value="IPV6">IPV6 – nur IPv6</option></select><select id="new-domain-provider" class="s-input mb-8" data-change="toggleProviderFields()"><option value="IONOS">IONOS</option><option value="CLOUDFLARE">Cloudflare</option><option value="IPV64">IPv64</option><option value="HETZNER">Hetzner DNS</option><option value="HETZNERCLOUD">Hetzner Cloud DNS</option><option value="FEBAS">Febas DynDNS</option></select><div id="fields-ionos"><input type="text" id="new-ionos-prefix" class="s-input mb-8" placeholder="` + phrases().SettingsAPIPrefix + `"><div class="input-with-action mt-8"><input type="password" id="new-ionos-secret" class="s-input" placeholder="` + phrases().SettingsAPISecret + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-ionos-secret', this)">👁️</button></div></div><div id="fields-cloudflare" class="is-hidden"><input type="text" id="new-cf-token" class="s-input mb-8" placeholder="` + phrases().SettingsCFTokenHint + `"><div class="center-note">` + phrases().SettingsCFOr + `</div><input type="text" id="new-cf-email" class="s-input mb-8" placeholder="` + phrases().SettingsCFEmail + `"><div class="input-with-action mt-8"><input type="password" id="new-cf-secret" class="s-input" placeholder="` + phrases().SettingsCFGlobalKey + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-cf-secret', this)">👁️</button></div><label class="inline-check"><input type="checkbox" id="new-cf-proxied"> ` + phrases().SettingsCFProxyLabel +
+		`</label></div><div id="fields-ipv64" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-ipv64-token" class="s-input" placeholder="` + phrases().SettingsIPv64Token + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-ipv64-token', this)">👁️</button></div></div><div id="fields-hetzner" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-hetzner-token" class="s-input" placeholder="Hetzner DNS API Token"><button type="button" class="input-action-btn" data-click="togglePassword('new-hetzner-token', this)">👁️</button></div></div><div id="fields-hetznercloud" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-hcloud-token" class="s-input" placeholder="Hetzner Cloud/Console Token"><button type="button" class="input-action-btn" data-click="togglePassword('new-hcloud-token', this)">👁️</button></div></div><div id="fields-febas" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-febas-update-url" class="s-input" placeholder="Febas DynDNS Update-URL"><button type="button" class="input-action-btn" data-click="togglePassword('new-febas-update-url', this)">👁️</button></div><small class="s-label-hint-block">Komplette URL aus Febas Kundenbereich → Domains → DynDNS</small></div><div class="s-btn-row"><button class="s-btn s-btn-success-full" data-click="addDomainToList()">` +
 		phrases().SettingsAddBtn +
 		`</button><button type="button" class="s-btn s-btn--cancel" data-click="cancelEdit()">` +
 		phrases().SettingsCancelBtn +
@@ -605,17 +607,18 @@ func buildSettingsNotifySection(c Config) string {
 }
 
 type safeDomainConfig struct {
-	FQDN       string `json:"fqdn"`
-	Provider   string `json:"provider"`
-	APIPrefix  string `json:"api_prefix,omitempty"`
-	APISecret  string `json:"api_secret,omitempty"`
-	CFToken    string `json:"cf_token,omitempty"`
-	CFEmail    string `json:"cf_email,omitempty"`
-	CFSecret   string `json:"cf_secret,omitempty"`
-	IPv64Token string `json:"ipv64_token,omitempty"`
-	TTL        int    `json:"ttl,omitempty"`
-	CFProxied  bool   `json:"cf_proxied,omitempty"`
-	IPMode     string `json:"ip_mode,omitempty"`
+	FQDN           string `json:"fqdn"`
+	Provider       string `json:"provider"`
+	APIPrefix      string `json:"api_prefix,omitempty"`
+	APISecret      string `json:"api_secret,omitempty"`
+	CFToken        string `json:"cf_token,omitempty"`
+	CFEmail        string `json:"cf_email,omitempty"`
+	CFSecret       string `json:"cf_secret,omitempty"`
+	IPv64Token     string `json:"ipv64_token,omitempty"`
+	FebasUpdateURL string `json:"febas_update_url,omitempty"`
+	TTL            int    `json:"ttl,omitempty"`
+	CFProxied      bool   `json:"cf_proxied,omitempty"`
+	IPMode         string `json:"ip_mode,omitempty"`
 }
 
 type safeMQTTConfig struct {
@@ -681,202 +684,89 @@ func safeDomainConfigs(dcs []DomainConfig) []safeDomainConfig {
 	out := make([]safeDomainConfig, len(dcs))
 	for i, dc := range dcs {
 		out[i] = safeDomainConfig{
-			FQDN:       dc.FQDN,
-			Provider:   string(dc.Provider),
-			APIPrefix:  dc.APIPrefix,
-			APISecret:  dc.APISecret,
-			CFToken:    dc.CFToken,
-			CFEmail:    dc.CFEmail,
-			CFSecret:   dc.CFSecret,
-			IPv64Token: dc.IPv64Token,
-			TTL:        dc.TTL,
-			CFProxied:  dc.CFProxied,
-			IPMode:     dc.IPMode,
+			FQDN:           dc.FQDN,
+			Provider:       string(dc.Provider),
+			APIPrefix:      dc.APIPrefix,
+			APISecret:      dc.APISecret,
+			CFToken:        dc.CFToken,
+			CFEmail:        dc.CFEmail,
+			CFSecret:       dc.CFSecret,
+			IPv64Token:     dc.IPv64Token,
+			FebasUpdateURL: dc.FebasUpdateURL,
+			TTL:            dc.TTL,
+			CFProxied:      dc.CFProxied,
+			IPMode:         dc.IPMode,
 		}
 	}
 	return out
 }
 
-func currentSystemConfig() safeSystemConfig {
-	return safeSystemConfig{
-		IPMode:          cfg.IPMode,
-		IfaceName:       cfg.IfaceName,
-		HealthPort:      cfg.HealthPort,
-		DNSServers:      cfg.DNSServers,
-		Interval:        cfg.Interval,
-		DryRun:          cfg.DryRun,
-		DebugEnabled:    cfg.DebugEnabled,
-		DebugHTTPRaw:    cfg.DebugHTTPRaw,
-		HourlyRateLimit: cfg.HourlyRateLimit,
-		MaxConcurrent:   cfg.MaxConcurrent,
-		MaxLogLines:     cfg.MaxLogLines,
-		MaxAPIRetries:   cfg.MaxAPIRetries,
-		Lang:            cfg.Lang,
-		NotifyEnabled:   cfg.Notifications.Enabled,
-		NotifyEvents:    cfg.Notifications.Events,
-		TelegramToken:   cfg.Notifications.Telegram.Token,
-		TelegramChatID:  cfg.Notifications.Telegram.ChatID,
-		GotifyURL:       cfg.Notifications.Gotify.URL,
-		GotifyToken:     cfg.Notifications.Gotify.Token,
-		NtfyURL:         cfg.Notifications.Ntfy.URL,
-		NtfyTopic:       cfg.Notifications.Ntfy.Topic,
-		NtfyToken:       cfg.Notifications.Ntfy.Token,
-		WebhookURL:      cfg.Notifications.Webhook.URL,
-		WebhookSecret:   cfg.Notifications.Webhook.Secret,
-		MQTT: safeMQTTConfig{
-			Broker:          cfg.Notifications.MQTTConfig.Broker,
-			ClientID:        cfg.Notifications.MQTTConfig.ClientID,
-			Username:        cfg.Notifications.MQTTConfig.Username,
-			Password:        cfg.Notifications.MQTTConfig.Password,
-			Topic:           cfg.Notifications.MQTTConfig.Topic,
-			QoS:             cfg.Notifications.MQTTConfig.QoS,
-			Retain:          cfg.Notifications.MQTTConfig.Retain,
-			Discovery:       cfg.Notifications.MQTTConfig.Discovery,
-			DiscoveryPrefix: cfg.Notifications.MQTTConfig.DiscoveryPrefix,
-		},
-		Email: safeEmail{
-			Host:          cfg.Notifications.Email.Host,
-			Port:          cfg.Notifications.Email.Port,
-			Username:      cfg.Notifications.Email.Username,
-			Password:      cfg.Notifications.Email.Password,
-			From:          cfg.Notifications.Email.From,
-			To:            cfg.Notifications.Email.To,
-			SubjectPrefix: cfg.Notifications.Email.SubjectPrefix,
-			TLSMode:       cfg.Notifications.Email.TLSMode,
-		},
-		IPv4Endpoints: cfg.IPv4Endpoints,
-		IPv6Endpoints: cfg.IPv6Endpoints,
-	}
+func snapshotConfig() Config {
+	cfgMu.RLock()
+	defer cfgMu.RUnlock()
+
+	cp := cfg
+	cp.DomainConfigs = append([]DomainConfig(nil), cfg.DomainConfigs...)
+	cp.DNSServers = append([]string(nil), cfg.DNSServers...)
+	cp.IPv4Endpoints = append([]string(nil), cfg.IPv4Endpoints...)
+	cp.IPv6Endpoints = append([]string(nil), cfg.IPv6Endpoints...)
+	cp.Notifications.Events = append([]string(nil), cfg.Notifications.Events...)
+
+	return cp
 }
 
-func dashboardI18NJSON() string {
-	m := map[string]string{
-		"theme":                         t(phrases().ThemeLabelJS, "Theme"),
-		"no_ip_to_copy":                 t(phrases().NoIPToCopyJS, "❌ No IP to copy"),
-		"copied":                        t(phrases().CopiedJS, "✓ Copied: "),
-		"copy_failed":                   t(phrases().CopyFailedJS, "❌ Copy failed"),
-		"copy_error":                    t(phrases().CopyFailedJS, "❌ Copy failed"),
-		"update_starting":               t(phrases().UpdateStartingJS, "⏳ Starting update..."),
-		"update_started":                t(phrases().UpdateStartedJS, "✅ Update started"),
-		"connection_error":              t(phrases().ConnectionErrorJS, "❌ Connection error"),
-		"export_started":                t(phrases().ExportStartedJS, "✓ Export started"),
-		"export_failed":                 t(phrases().ExportFailedJS, "Export failed"),
-		"fqdn_missing":                  t(phrases().FQDNMissingJS, "FQDN missing"),
-		"domain_updated":                t(phrases().DomainUpdatedJS, "✓ {domain} updated"),
-		"delete_domain_confirm":         t(phrases().DeleteDomainConfirmJS, `Domain "{domain}" remove from status?`),
-		"domain_removed":                t(phrases().DomainRemovedJS, "🗑️ {domain} removed"),
-		"delete_failed":                 t(phrases().DeleteFailedJS, "Deletion failed"),
-		"remove_btn":                    t(phrases().RemoveBtn, "🗑️ Remove"),
-		"save_config_confirm":           t(phrases().SaveConfigConfirmJS, "Save all settings to config.json?"),
-		"saved_reload":                  t(phrases().SavedReloadJS, "✅ Saved! Reloading..."),
-		"error_prefix":                  t(phrases().ErrorPrefixJS, "❌ Error: "),
-		"loading_saving":                t(phrases().LoadingSavingJS, "⏳ Saving configuration..."),
-		"loading_slow":                  t(phrases().LoadingSlowJS, "⚠️ Taking longer than expected..."),
-		"reset_metrics_confirm":         t(phrases().ResetMetricsConfirmJS, "Clear all metrics?"),
-		"metrics_reset_ok":              t(phrases().MetricsResetOKJS, "✅ Metrics reset"),
-		"metrics_reset_failed":          t(phrases().MetricsResetFailedJS, "❌ Reset failed"),
-		"token_saved":                   t(phrases().TokenSavedJS, "✅ Token saved"),
-		"token_deleted":                 t(phrases().TokenDeletedJS, "🗑️ Token deleted"),
-		"token_saved_masked":            t(phrases().TokenSavedMaskedJS, "●●●●●● (saved)"),
-		"token_enter":                   t(phrases().TokenEnterJS, "Enter token..."),
-		"cleared":                       t(phrases().ClearedJS, "Cleared."),
-		"no_log_entries":                t(phrases().NoLogEntries, "No log entries visible"),
-		"user_load_failed":              t(phrases().UserLoadFailedJS, "Failed to load"),
-		"no_users_found":                t(phrases().NoUsersFoundJS, "No users found."),
-		"user_created":                  t(phrases().UserCreatedJS, "User created"),
-		"user_deleted":                  t(phrases().UserDeletedJS, "User deleted"),
-		"role_changed":                  t(phrases().RoleChangedJS, "Role changed"),
-		"role_admin":                    t(phrases().RoleAdminJS, "Admin"),
-		"role_editor":                   t(phrases().RoleEditorJS, "Editor"),
-		"role_viewer":                   t(phrases().RoleViewerJS, "Viewer"),
-		"generic_error":                 t(phrases().GenericErrorJS, "Error"),
-		"auth_user_min":                 t(phrases().AuthUserMinJS, "Username min. 3 characters"),
-		"auth_pass_min":                 t(phrases().AuthPassMinJS, "Password min. 8 characters"),
-		"edit_domain_cancelled":         t(phrases().EditDomainCancelledJS, "Edit cancelled"),
-		"edit_domain_saved":             t(phrases().EditDomainSavedJS, "Changes saved"),
-		"settings_add_btn":              t(phrases().SettingsAddBtnJS, "➕ Add to list"),
-		"notify_test_success":           t(phrases().NotifyTestSuccess, "✅ Test message sent successfully!"),
-		"notify_test_unauthorized":      t(phrases().NotifyTestUnauthorized, "❌ Unauthorized (check token)"),
-		"notify_test_error":             t(phrases().NotifyTestError, "❌ Error while sending"),
-		"notify_test_conn_error":        t(phrases().NotifyTestConnError, "❌ Connection error to server"),
-		"notify_btn_sending":            t(phrases().NotifyBtnSending, "⏳ Sende..."),
-		"notify_btn_test":               t(phrases().NotifyBtnTest, "🧪 Test-Nachricht senden"),
-		"notify_no_notifier":            t(phrases().NotifyNoNotifier, "⚠️ Keine aktiven Notifier konfiguriert."),
-		"notify_stat_success":           t(phrases().NotifyStatSuccess, "erfolgreich"),
-		"nav_dashboard":                 t(phrases().NavDashboardJS, "🌐 Dashboard"),
-		"nav_domains":                   t(phrases().NavDomainsJS, "🌐 Domains"),
-		"nav_metrics":                   t(phrases().NavMetricsJS, "📊 Metrics"),
-		"nav_logs":                      t(phrases().NavLogsJS, "🧾 Logs"),
-		"nav_debug":                     t(phrases().NavDebugJS, "🐞 Debug"),
-		"nav_settings":                  t(phrases().NavSettingsJS, "⚙️ Settings"),
-		"nav_users":                     t(phrases().SettingsUserManagement, "👥 User Management"),
-		"nav_diagnose":                  t(phrases().NavDiagnoseJS, "🩺 Diagnose"),
-		"nav_backup":                    t(phrases().NavBackupJS, "💾 Backup & Restore"),
-		"diagnose_title":                t(phrases().DiagnoseTitle, "Diagnose / Health Center"),
-		"diagnose_loading":              t(phrases().DiagnoseLoading, "Loading diagnosis..."),
-		"diagnose_load_failed":          t(phrases().DiagnoseLoadFailed, "Diagnosis failed"),
-		"diagnose_connection_failed":    t(phrases().DiagnoseConnectionFailed, "Connection failed"),
-		"diagnose_status_healthy":       t(phrases().DiagnoseStatusHealthy, "Healthy"),
-		"diagnose_status_degraded":      t(phrases().DiagnoseStatusDegraded, "Degraded"),
-		"diagnose_status_starting":      t(phrases().DiagnoseStatusStarting, "Starting"),
-		"diagnose_status_unhealthy":     t(phrases().DiagnoseStatusUnhealthy, "Unhealthy"),
-		"diagnose_system_title":         t(phrases().DiagnoseSystemTitle, "System"),
-		"diagnose_ip_dns_title":         t(phrases().DiagnoseIPDNSTitle, "IP / DNS"),
-		"diagnose_api_metrics_title":    t(phrases().DiagnoseAPIMetricsTitle, "API metrics"),
-		"diagnose_config_title":         t(phrases().DiagnoseConfigTitle, "Config"),
-		"diagnose_provider_title":       t(phrases().DiagnoseProviderTitle, "Provider"),
-		"diagnose_notifier_title":       t(phrases().DiagnoseNotifierTitle, "Notifier"),
-		"diagnose_warnings_title":       t(phrases().DiagnoseWarningsTitle, "Warnings"),
-		"diagnose_files_title":          t(phrases().DiagnoseFilesTitle, "Files"),
-		"diagnose_uptime":               t(phrases().DiagnoseUptime, "Uptime"),
-		"diagnose_scheduler_ran":        t(phrases().DiagnoseSchedulerRan, "Scheduler ran"),
-		"diagnose_last_run_ok":          t(phrases().DiagnoseLastRunOK, "Last run OK"),
-		"diagnose_update_running":       t(phrases().DiagnoseUpdateRunning, "Update running"),
-		"diagnose_active_updates":       t(phrases().DiagnoseActiveUpdates, "Active updates"),
-		"diagnose_last_ipv4":            t(phrases().DiagnoseLastIPv4, "Last IPv4"),
-		"diagnose_last_ipv6":            t(phrases().DiagnoseLastIPv6, "Last IPv6"),
-		"diagnose_last_domain_change":   t(phrases().DiagnoseLastDomainChange, "Last domain change"),
-		"diagnose_configured_domains":   t(phrases().DiagnoseConfiguredDomains, "Domains in status"),
-		"diagnose_total_requests":       t(phrases().DiagnoseTotalRequests, "Total requests"),
-		"diagnose_success_rate":         t(phrases().DiagnoseSuccessRate, "Success rate"),
-		"diagnose_average_latency":      t(phrases().DiagnoseAverageLatency, "Average latency"),
-		"diagnose_log_errors":           t(phrases().DiagnoseLogErrors, "Log errors"),
-		"diagnose_log_warnings":         t(phrases().DiagnoseLogWarnings, "Log warnings"),
-		"diagnose_ip_mode":              t(phrases().DiagnoseIPMode, "IP mode"),
-		"diagnose_interval":             t(phrases().DiagnoseInterval, "Interval"),
-		"diagnose_ipv4_endpoints":       t(phrases().DiagnoseIPv4Endpoints, "IPv4 endpoints"),
-		"diagnose_ipv6_endpoints":       t(phrases().DiagnoseIPv6Endpoints, "IPv6 endpoints"),
-		"diagnose_no_providers":         t(phrases().DiagnoseNoProviders, "No providers found"),
-		"diagnose_no_notifiers":         t(phrases().DiagnoseNoNotifiers, "No notifiers"),
-		"diagnose_no_config_warnings":   t(phrases().DiagnoseNoConfigWarnings, "No config warnings"),
-		"diagnose_file_missing":         t(phrases().DiagnoseFileMissing, "missing"),
-		"diagnose_bytes":                t(phrases().DiagnoseBytes, "bytes"),
-		"diagnose_yes":                  t(phrases().DiagnoseYes, "Yes"),
-		"diagnose_no":                   t(phrases().DiagnoseNo, "No"),
-		"backup_download_success":       t(phrases().BackupDownloadSuccess, "✅ Backup downloaded"),
-		"backup_download_failed":        t(phrases().BackupDownloadFailed, "❌ Backup failed"),
-		"backup_select_file":            t(phrases().BackupSelectFile, "❌ Please select a backup file"),
-		"backup_select_area":            t(phrases().BackupSelectArea, "❌ Please select at least one area"),
-		"backup_confirm_title":          t(phrases().BackupConfirmTitle, "Really restore backup?"),
-		"backup_confirm_config":         t(phrases().BackupConfirmConfig, "• Config will be overwritten"),
-		"backup_confirm_status":         t(phrases().BackupConfirmStatus, "• Domain status will be overwritten"),
-		"backup_confirm_users":          t(phrases().BackupConfirmUsers, "• Users will be overwritten"),
-		"backup_confirm_hint":           t(phrases().BackupConfirmHint, "This action may replace existing data."),
-		"backup_restore_running":        t(phrases().BackupRestoreRunning, "⏳ Restore running..."),
-		"backup_restore_success_format": t(phrases().BackupRestoreSuccessFormat, "✅ Restored: {restored}"),
-		"backup_restore_failed":         t(phrases().BackupRestoreFailed, "❌ Restore failed"),
-		"nav_totp":                      t(phrases().NavTotpJS, "🔐 2FA / Account Security"),
-		"totp_settings_load_failed":     t(phrases().TotpSettingsLoadFailedJS, "2FA settings could not be loaded"),
-		"totp_action_failed":            t(phrases().TotpActionFailedJS, "2FA action failed"),
-		"totp_badge_active":             t(phrases().TotpBadgeActiveJS, "🔐 2FA active"),
-		"totp_badge_inactive":           t(phrases().TotpBadgeInactiveJS, "🔓 2FA inactive"),
-	}
+func currentSystemConfig() safeSystemConfig {
+	config := snapshotConfig()
 
-	b, err := json.Marshal(m)
-	if err != nil {
-		return "{}"
+	return safeSystemConfig{
+		IPMode:          config.IPMode,
+		IfaceName:       config.IfaceName,
+		HealthPort:      config.HealthPort,
+		DNSServers:      config.DNSServers,
+		Interval:        config.Interval,
+		DryRun:          config.DryRun,
+		DebugEnabled:    config.DebugEnabled,
+		DebugHTTPRaw:    config.DebugHTTPRaw,
+		HourlyRateLimit: config.HourlyRateLimit,
+		MaxConcurrent:   config.MaxConcurrent,
+		MaxLogLines:     config.MaxLogLines,
+		MaxAPIRetries:   config.MaxAPIRetries,
+		Lang:            config.Lang,
+		NotifyEnabled:   config.Notifications.Enabled,
+		NotifyEvents:    config.Notifications.Events,
+		TelegramToken:   config.Notifications.Telegram.Token,
+		TelegramChatID:  config.Notifications.Telegram.ChatID,
+		GotifyURL:       config.Notifications.Gotify.URL,
+		GotifyToken:     config.Notifications.Gotify.Token,
+		NtfyURL:         config.Notifications.Ntfy.URL,
+		NtfyTopic:       config.Notifications.Ntfy.Topic,
+		NtfyToken:       config.Notifications.Ntfy.Token,
+		WebhookURL:      config.Notifications.Webhook.URL,
+		WebhookSecret:   config.Notifications.Webhook.Secret,
+		MQTT: safeMQTTConfig{
+			Broker:          config.Notifications.MQTTConfig.Broker,
+			ClientID:        config.Notifications.MQTTConfig.ClientID,
+			Username:        config.Notifications.MQTTConfig.Username,
+			Password:        config.Notifications.MQTTConfig.Password,
+			Topic:           config.Notifications.MQTTConfig.Topic,
+			QoS:             config.Notifications.MQTTConfig.QoS,
+			Retain:          config.Notifications.MQTTConfig.Retain,
+			Discovery:       config.Notifications.MQTTConfig.Discovery,
+			DiscoveryPrefix: config.Notifications.MQTTConfig.DiscoveryPrefix,
+		},
+		Email: safeEmail{
+			Host:          config.Notifications.Email.Host,
+			Port:          config.Notifications.Email.Port,
+			Username:      config.Notifications.Email.Username,
+			Password:      config.Notifications.Email.Password,
+			From:          config.Notifications.Email.From,
+			To:            config.Notifications.Email.To,
+			SubjectPrefix: config.Notifications.Email.SubjectPrefix,
+			TLSMode:       config.Notifications.Email.TLSMode,
+		},
+		IPv4Endpoints: config.IPv4Endpoints,
+		IPv6Endpoints: config.IPv6Endpoints,
 	}
-	return string(b)
 }
 
 func createMux() *http.ServeMux {
@@ -919,6 +809,7 @@ func registerAPIroutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/users", handleAPIUsers)
 	mux.HandleFunc("/api/users/", handleAPIUsersID)
 	mux.HandleFunc("/api/logs", handleAPILogs)
+	mux.HandleFunc("/api/logs/delete", handleAPILogDelete)
 
 	mux.HandleFunc("/api/diagnose", handleAPIDiagnose)
 	mux.HandleFunc("/api/backup/download", handleAPIBackupDownload)
@@ -1135,13 +1026,15 @@ func handleAPIConfig(w http.ResponseWriter, r *http.Request) {
 		sys.Email.Password = maskSecret(sys.Email.Password)
 	}
 
-	domains := safeDomainConfigs(cfg.DomainConfigs)
+	config := snapshotConfig()
+	domains := safeDomainConfigs(config.DomainConfigs)
 	if !isAdmin {
 		for i := range domains {
 			domains[i].APISecret = maskSecret(domains[i].APISecret)
 			domains[i].CFToken = maskSecret(domains[i].CFToken)
 			domains[i].CFSecret = maskSecret(domains[i].CFSecret)
 			domains[i].IPv64Token = maskSecret(domains[i].IPv64Token)
+			domains[i].FebasUpdateURL = maskSecret(domains[i].FebasUpdateURL)
 		}
 	}
 
@@ -1218,7 +1111,7 @@ func handleAPISaveConfig(w http.ResponseWriter, r *http.Request) {
 	oldMaxConcurrent := cfg.MaxConcurrent
 	applySystemConfigPayload(payload.System)
 	cfg.DomainConfigs = mergeDomainConfigs(cfg.DomainConfigs, payload.DomainConfigs)
-	validationErr = validateDomainConfigs()
+	validationErr = validateDomainConfigList(cfg.DomainConfigs)
 	if validationErr != nil {
 		cfg = oldCfg
 		cfgMu.Unlock()
@@ -1402,6 +1295,9 @@ func mergeDomainConfigs(existingCfg []DomainConfig, incoming []safeDomainConfig)
 			if sc.IPv64Token != "" {
 				found.IPv64Token = sc.IPv64Token
 			}
+			if sc.FebasUpdateURL != "" {
+				found.FebasUpdateURL = sc.FebasUpdateURL
+			}
 
 			found.TTL = sc.TTL
 			found.CFProxied = sc.CFProxied
@@ -1411,17 +1307,18 @@ func mergeDomainConfigs(existingCfg []DomainConfig, incoming []safeDomainConfig)
 		}
 
 		newConfigs = append(newConfigs, DomainConfig{
-			FQDN:       fqdn,
-			Provider:   normalizeProviderName(sc.Provider),
-			APIPrefix:  sc.APIPrefix,
-			APISecret:  sc.APISecret,
-			CFToken:    sc.CFToken,
-			CFEmail:    sc.CFEmail,
-			CFSecret:   sc.CFSecret,
-			IPv64Token: sc.IPv64Token,
-			TTL:        sc.TTL,
-			CFProxied:  sc.CFProxied,
-			IPMode:     sc.IPMode,
+			FQDN:           fqdn,
+			Provider:       normalizeProviderName(sc.Provider),
+			APIPrefix:      sc.APIPrefix,
+			APISecret:      sc.APISecret,
+			CFToken:        sc.CFToken,
+			CFEmail:        sc.CFEmail,
+			CFSecret:       sc.CFSecret,
+			IPv64Token:     sc.IPv64Token,
+			FebasUpdateURL: sc.FebasUpdateURL,
+			TTL:            sc.TTL,
+			CFProxied:      sc.CFProxied,
+			IPMode:         sc.IPMode,
 		})
 	}
 
@@ -1473,27 +1370,18 @@ func handleAPISetLanguage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	cfgMu.Lock()
 	cfg.Lang = lang
+	cfgMu.Unlock()
 	p = phrases()
 
 	if err := saveConfigToFile(); err != nil {
-		debugLog(
-			"API",
-			getClientIP(r),
-			fmt.Sprintf(p.ConfigSaveWarnAfterLanguageChange, err),
-		)
+		debugLog("API", getClientIP(r), fmt.Sprintf(p.ConfigSaveWarnAfterLanguageChange, err))
 	}
 
-	debugLog(
-		"API",
-		getClientIP(r),
-		fmt.Sprintf(p.LanguageChangedLog, lang),
-	)
+	debugLog("API", getClientIP(r), fmt.Sprintf(p.LanguageChangedLog, lang))
 
-	broadcastNotification(
-		fmt.Sprintf(p.LanguageChangedNotification, lang),
-		"info",
-	)
+	broadcastNotification(fmt.Sprintf(p.LanguageChangedNotification, lang), "info")
 
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status": "ok",
@@ -1611,7 +1499,9 @@ func handleAPIDomainDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func isDomainActiveInConfig(domain string) bool {
-	for _, dc := range cfg.DomainConfigs {
+	config := snapshotConfig()
+
+	for _, dc := range config.DomainConfigs {
 		if strings.EqualFold(dc.FQDN, domain) {
 			return true
 		}
@@ -1653,6 +1543,7 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1024)
 
 	if r.Method != MethodPOST {
+		w.Header().Set("Allow", MethodPOST)
 		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
 		return
 	}
@@ -1675,33 +1566,7 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !globalTriggerLimiter.Allow() {
-		w.Header().Set("Retry-After", "10")
-		writeJSON(w, http.StatusTooManyRequests, map[string]any{
-			"error":               phrases().GlobalRateLimitExceeded,
-			"retry_after_seconds": 10,
-		})
-		debugLog("API", clientIP, phrases().TriggerBlockedGlobalRateLimit)
-		broadcastNotification(phrases().RateLimitGlobal, "warning")
-		return
-	}
-
-	ipLimiter := ipTriggerLimiter.GetLimiter(clientIP)
-	if !ipLimiter.Allow() {
-		remaining := ipLimiter.Remaining()
-		w.Header().Set("Retry-After", "10")
-		w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
-		writeJSON(w, http.StatusTooManyRequests, map[string]any{
-			"error":               phrases().IPRateLimitExceeded,
-			"retry_after_seconds": 10,
-			"remaining":           remaining,
-		})
-		debugLog("API", clientIP, phrases().TriggerBlockedIPRateLimit)
-		broadcastNotification(phrases().TooManyUpdateRequestsWait, "warning")
-		return
-	}
-
-	if !updateInProgress.CompareAndSwap(false, true) {
+	if updateInProgress.Load() {
 		writeJSON(w, http.StatusConflict, map[string]any{
 			"error":  phrases().UpdateAlreadyInProgressAPI,
 			"status": phrases().TriggerStatusBusy,
@@ -1711,17 +1576,43 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go func() {
-		defer updateInProgress.Store(false)
-		if !hasDomainConfig() {
-			debugLog("API", clientIP, "Update aborted: no domains configured")
-			return
-		}
-		debugLog("API", clientIP, phrases().ManualUpdateTriggeredLog)
-		broadcastNotification(phrases().ManualUpdateStartedNotification, "info")
-		forceNextUpdate.Store(true)
-		runUpdate(false)
-	}()
+	if !globalTriggerLimiter.Allow() {
+		const retryAfter = 10
+		w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+		writeJSON(w, http.StatusTooManyRequests, map[string]any{
+			"error":               phrases().GlobalRateLimitExceeded,
+			"retry_after_seconds": retryAfter,
+		})
+		debugLog("API", clientIP, phrases().TriggerBlockedGlobalRateLimit)
+		broadcastNotification(phrases().RateLimitGlobal, "warning")
+		return
+	}
+
+	ipLimiter := ipTriggerLimiter.GetLimiter(clientIP)
+	if !ipLimiter.Allow() {
+		const retryAfter = 10
+		remaining := ipLimiter.Remaining()
+		w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+		w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
+		writeJSON(w, http.StatusTooManyRequests, map[string]any{
+			"error":               phrases().IPRateLimitExceeded,
+			"retry_after_seconds": retryAfter,
+			"remaining":           remaining,
+		})
+		debugLog("API", clientIP, phrases().TriggerBlockedIPRateLimit)
+		broadcastNotification(phrases().TooManyUpdateRequestsWait, "warning")
+		return
+	}
+
+	if !tryClaimUpdate() {
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error":  phrases().UpdateAlreadyInProgressAPI,
+			"status": phrases().TriggerStatusBusy,
+		})
+		debugLog("API", clientIP, phrases().TriggerBlockedUpdateRunning)
+		broadcastNotification(phrases().UpdateAlreadyRunningNotification, "info")
+		return
+	}
 
 	remaining := ipLimiter.Remaining()
 	w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
@@ -1730,6 +1621,20 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 		"message":              phrases().UpdateStartedMessage,
 		"rate_limit_remaining": remaining,
 	})
+
+	go func(triggerIP string) {
+		if !hasDomainConfig() {
+			updateInProgress.Store(false)
+			debugLog("API", triggerIP, "Update aborted: no domains configured")
+			return
+		}
+
+		debugLog("API", triggerIP, phrases().ManualUpdateTriggeredLog)
+		broadcastNotification(phrases().ManualUpdateStartedNotification, "info")
+
+		forceNextUpdate.Store(true)
+		runClaimedUpdate(false)
+	}(clientIP)
 }
 
 func handleAPINotifyTest(w http.ResponseWriter, r *http.Request) {
@@ -1804,18 +1709,27 @@ func handleAPINotifyTest(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAPITriggerStatus(w http.ResponseWriter, r *http.Request) {
-	clientIP := getClientIP(r)
-	ipLimiter := ipTriggerLimiter.GetLimiter(clientIP)
-
-	if !ipLimiter.Allow() {
-		http.Error(w, phrases().APIErrorRateLimitExceeded, http.StatusTooManyRequests)
+	if r.Method != MethodGET {
+		w.Header().Set("Allow", MethodGET)
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
 		return
 	}
+
+	if !validateTriggerToken(r) {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": phrases().InvalidOrMissingTriggerToken,
+		})
+		return
+	}
+
+	clientIP := getClientIP(r)
+	ipLimiter := ipTriggerLimiter.GetLimiter(clientIP)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ip":                 clientIP,
 		"remaining_requests": ipLimiter.Remaining(),
 		"update_in_progress": updateInProgress.Load(),
+		"active_updates":     activeUpdates.Load(),
 		"global_limit":       globalTriggerLimiter.Remaining(),
 	})
 }
@@ -2032,6 +1946,7 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 
 	stats := getDashboardStats()
 	chartSVG, latencySVG, nicHTML := buildDashboardMetricsParts(stats)
+	config := snapshotConfig()
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
@@ -2051,7 +1966,7 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 	writeLogsCard(w, logs, logTimeRange)
 	writeBackupSection(w, isAdmin)
 
-	if cfg.DebugEnabled || cfg.DebugHTTPRaw {
+	if config.DebugEnabled || config.DebugHTTPRaw {
 		writeDebugCard(w)
 	} else {
 		_, _ = fmt.Fprint(w, `
@@ -2065,7 +1980,7 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 	</div>`)
 	}
 
-	writeSettingsSection(w, cfg)
+	writeSettingsSection(w, config)
 	writeTOTPSection(w, sess, authEnabled && sess != nil)
 	writeUsersSection(w, isAdmin)
 
@@ -2123,8 +2038,9 @@ func buildDashboardMetricsParts(stats map[string]any) (string, string, string) {
 }
 
 func buildNICHTML(stats map[string]any) string {
+	config := snapshotConfig()
 	hasIPv64 := false
-	for _, dc := range cfg.DomainConfigs {
+	for _, dc := range config.DomainConfigs {
 		if dc.Provider == ProviderIPv64 {
 			hasIPv64 = true
 			break
@@ -2199,6 +2115,72 @@ func handleAPILogs(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func handleAPILogDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		return
+	}
+	if !requireAdminAPI(w, r) {
+		return
+	}
+
+	var body struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&body); err != nil || body.ID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing id"})
+		return
+	}
+
+	logMutex.Lock()
+	defer logMutex.Unlock()
+
+	if logWriter != nil {
+		_ = logWriter.Flush()
+		logWriter = nil
+	}
+	if logFile != nil {
+		_ = logFile.Close()
+		logFile = nil
+	}
+
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var kept []string
+	for line := range strings.SplitSeq(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var e LogEntry
+		if json.Unmarshal([]byte(line), &e) != nil {
+			kept = append(kept, line)
+			continue
+		}
+		e.Timestamp = formatDashboardLogTimestamp(e.Timestamp)
+		if logEntryID(e) != body.ID {
+			kept = append(kept, line)
+		}
+	}
+
+	output := strings.Join(kept, "\n") + "\n"
+	if err := os.WriteFile(logPath, []byte(output), 0o600); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	logMemCacheMu.Lock()
+	logMemCache = nil
+	logMemCacheTime = time.Time{}
+	logMemCacheMu.Unlock()
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
 func loadLogsFromMainFile() ([]LogEntry, string) {
 	f, err := os.Open(logPath)
 	if err != nil {
@@ -2215,7 +2197,11 @@ func loadLogsFromMainFile() ([]LogEntry, string) {
 		}
 	}()
 
-	limit := cfg.MaxLogLines
+	config := snapshotConfig()
+	limit := config.MaxLogLines
+	if limit <= 0 {
+		limit = DefaultMaxLogLines
+	}
 	ring := make([]string, limit)
 	head, count := 0, 0
 
@@ -2762,6 +2748,11 @@ func writeDebugCard(w http.ResponseWriter) {
 	`)
 }
 
+func logEntryID(e LogEntry) string {
+	h := sha256.Sum256([]byte(e.Timestamp + "|" + e.Action + "|" + e.Message))
+	return hex.EncodeToString(h[:8])
+}
+
 func writeLogsCard(w io.Writer, logs []LogEntry, logTimeRange string) {
 	entryCount := len(logs)
 	timeRangeHTML := ""
@@ -2819,15 +2810,16 @@ func writeLogsCard(w io.Writer, logs []LogEntry, logTimeRange string) {
 		copyText += " " + e.Message
 
 		_, _ = fmt.Fprintf(w, `
-		<div class="log-entry log-entry-row" data-action="%s" data-level="%s" data-copy="%s">
-			<span class="log-entry-icon">%s</span>
-			<span class="log-entry-time">%s</span>
-			<div class="log-entry-body">%s<span class="log-entry-message">%s</span></div>
-			<button class="copy-btn log-copy-btn" data-click="copyLogEntry(this)" title="Kopieren">📋</button>
-		</div>`,
-			actionUpper, e.Level, html.EscapeString(copyText),
-			icon, displayTime, domainHTML, html.EscapeString(e.Message),
-		)
+				<div class="log-entry log-entry-row" data-action="%s" data-level="%s" data-copy="%s" data-log-id="%s">
+					<span class="log-entry-icon">%s</span>
+					<span class="log-entry-time">%s</span>
+					<div class="log-entry-body">%s<span class="log-entry-message">%s</span></div>
+					<button class="copy-btn log-copy-btn" data-click="copyLogEntry(this)" title="Kopieren">📋</button>
+					<button class="copy-btn log-delete-btn" data-click="deleteLogEntry(this)" title="Eintrag löschen">🗑️</button>
+				</div>`,
+					actionUpper, e.Level, html.EscapeString(copyText), logEntryID(e),
+					icon, displayTime, domainHTML, html.EscapeString(e.Message),
+				)
 	}
 
 	if len(logs) == 0 {
@@ -2976,7 +2968,7 @@ func domainKeysFromStatusData(data map[string]any) []string {
 
 func configuredDomainSet() map[string]struct{} {
 	configured := make(map[string]struct{})
-	for _, dc := range cfg.DomainConfigs {
+	for _, dc := range snapshotDomainConfigs() {
 		configured[strings.ToLower(strings.TrimSuffix(dc.FQDN, "."))] = struct{}{}
 	}
 	return configured
@@ -3022,14 +3014,12 @@ func writeSingleDomainCard(w io.Writer, domain string, h DomainHistory, configur
 	orphanStyle, orphanLabel, deleteBtn := buildOrphanDomainVisuals(isOrphan, domain)
 
 	ipModeLabel := ""
-	cfgMu.RLock()
-	for _, dc := range cfg.DomainConfigs {
+	for _, dc := range snapshotDomainConfigs() {
 		if strings.EqualFold(dc.FQDN, domain) && dc.IPMode != "" {
 			ipModeLabel = " · " + dc.IPMode
 			break
 		}
 	}
-	cfgMu.RUnlock()
 
 	_, _ = fmt.Fprintf(w, `
 	<details class="card domain-item%s" data-domain="%s" data-ip-history="%s">
@@ -3434,6 +3424,11 @@ func providerCredentialWarning(dc DomainConfig) string {
 				fqdn,
 			)
 		}
+
+	case ProviderFebas:
+		if err := validateFebasUpdateURL(dc.FebasUpdateURL); err != nil {
+			return fmt.Sprintf("%s: %v", fqdn, err)
+		}
 	}
 
 	return ""
@@ -3639,17 +3634,7 @@ func requireAdminAPI(w http.ResponseWriter, r *http.Request) bool {
 }
 
 func cloneConfigForBackup() Config {
-	cfgMu.RLock()
-	defer cfgMu.RUnlock()
-
-	cp := cfg
-	cp.DomainConfigs = append([]DomainConfig(nil), cfg.DomainConfigs...)
-	cp.DNSServers = append([]string(nil), cfg.DNSServers...)
-	cp.IPv4Endpoints = append([]string(nil), cfg.IPv4Endpoints...)
-	cp.IPv6Endpoints = append([]string(nil), cfg.IPv6Endpoints...)
-	cp.Notifications.Events = append([]string(nil), cfg.Notifications.Events...)
-
-	return cp
+	return snapshotConfig()
 }
 
 func readStatusBackup() map[string]DomainHistory {
@@ -3862,7 +3847,9 @@ func applyBackupConfig(newCfg Config) (Config, error) {
 	oldCfg := cfg
 	cfg = newCfg
 
-	if err := validateDomainConfigs(); err != nil {
+	if err := validateDomainConfigList(
+		cfg.DomainConfigs,
+	); err != nil {
 		cfg = oldCfg
 		return oldCfg, err
 	}

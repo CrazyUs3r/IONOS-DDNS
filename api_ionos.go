@@ -40,10 +40,7 @@ func ionosAPIAttempt(
 	attempt, maxRetries int,
 	allowRetry bool,
 ) ([]byte, bool, error) {
-	debugLog("HTTP", "", fmt.Sprintf(
-		phrases().IonosAttempt,
-		phrases().Attempt, attempt+1, maxRetries, method, url,
-	))
+	debugLog("HTTP", "", fmt.Sprintf(phrases().IonosAttempt, phrases().Attempt, attempt+1, maxRetries, method, url))
 
 	bodyBytes, err := marshalIonosBody(body)
 	if err != nil {
@@ -250,8 +247,7 @@ func findIonosExistingRecord(records []Record, fqdn, recordName, recordType stri
 
 		if (actualName == wantedFQDN || actualName == wantedRecordName) && actualType == wantedType {
 			existing := &records[i]
-			debugLog("DNS-LOGIC", fqdn,
-				fmt.Sprintf("📌 %s: %s (ID: %s)", phrases().RecordFound, existing.Content, existing.ID))
+			debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("📌 %s: %s (ID: %s)", phrases().RecordFound, existing.Content, existing.ID))
 			return existing
 		}
 	}
@@ -352,14 +348,7 @@ func executeIonosDNSUpdate(
 		newIP,
 	)
 	if parseErr != nil {
-		debugLog(
-			"DNS-LOGIC",
-			fqdn,
-			fmt.Sprintf(
-				phrases().IonosSuccessResponseParseFailed,
-				parseErr,
-			),
-		)
+		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf(phrases().IonosSuccessResponseParseFailed, parseErr))
 	}
 
 	updatedRecord, err = ensureIonosCreatedRecord(
@@ -386,16 +375,7 @@ func executeIonosDNSUpdate(
 		newIP,
 	)
 
-	debugLog(
-		"DNS-LOGIC",
-		fqdn,
-		fmt.Sprintf(
-			phrases().IonosRecordArrow,
-			phrases().Success,
-			recordType,
-			newIP,
-		),
-	)
+	debugLog("DNS-LOGIC", fqdn, fmt.Sprintf(phrases().IonosRecordArrow, phrases().Success, recordType, newIP))
 
 	return updatedRecord, nil
 }
@@ -418,23 +398,12 @@ func handleIonosUpdateError(
 		)
 
 		if reconcileErr == nil && hasUsableIonosRecordID(record) {
-			debugLog(
-				"DNS-LOGIC",
-				fqdn,
-				phrases().IonosCreateReconciled,
-			)
+			debugLog("DNS-LOGIC", fqdn, phrases().IonosCreateReconciled)
 			return record, nil
 		}
 
 		if reconcileErr != nil {
-			debugLog(
-				"DNS-LOGIC",
-				fqdn,
-				fmt.Sprintf(
-					phrases().IonosCreateReconciliationFailed,
-					reconcileErr,
-				),
-			)
+			debugLog("DNS-LOGIC", fqdn, fmt.Sprintf(phrases().IonosCreateReconciliationFailed, reconcileErr))
 		}
 	}
 
@@ -449,14 +418,7 @@ func handleIonosUpdateError(
 		)
 	}
 
-	debugLog(
-		"DNS-LOGIC",
-		fqdn,
-		fmt.Sprintf(
-			phrases().UpdateFailedWithError,
-			updateErr,
-		),
-	)
+	debugLog("DNS-LOGIC", fqdn, fmt.Sprintf(phrases().UpdateFailedWithError, updateErr))
 
 	return nil, updateErr
 }
@@ -639,10 +601,7 @@ func logIonosDNSAPIError(fqdn, recordType, newIP string, apiErr *APIError) {
 }
 
 func loadIONOSZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
-	cfgMu.RLock()
-	domainConfigs := make([]DomainConfig, len(cfg.DomainConfigs))
-	copy(domainConfigs, cfg.DomainConfigs)
-	cfgMu.RUnlock()
+	domainConfigs := snapshotDomainConfigs()
 
 	data, err := ionosAPI(ctx, dc, MethodGET, ionosBaseURL, nil)
 	if err != nil {

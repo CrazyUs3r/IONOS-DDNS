@@ -37,9 +37,13 @@ var (
 	atomicDebugHTTPRaw atomic.Bool
 	cfgMu              sync.RWMutex
 	logMutex           sync.Mutex
+	metricsPersistMu   sync.Mutex
 	logFile            *os.File
 	logWriter          *bufio.Writer
-	closeLogWriterOnce sync.Once
+	logWriterStarted   atomic.Bool
+	stopLogWriterOnce  sync.Once
+	logWriterStop      = make(chan struct{})
+	logWriterDone      = make(chan struct{})
 	statusMutex        sync.Mutex
 	lastErrorMsg       = &SafeErrorMsg{}
 
@@ -60,7 +64,7 @@ var (
 
 	metricsSignal = make(chan struct{}, 1)
 
-	domainRegex = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$`)
+	domainRegex = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+([a-z]{2,63}|xn--[a-z0-9-]{2,59})$`)
 	labelRegex  = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
 	secretReplacer   *strings.Replacer
@@ -395,6 +399,7 @@ const (
 	ProviderIPv64        ProviderType = "IPV64"
 	ProviderHetzner      ProviderType = "HETZNER"
 	ProviderHetznerCloud ProviderType = "HETZNERCLOUD"
+	ProviderFebas        ProviderType = "FEBAS"
 
 	ionosBaseURL        = "https://api.hosting.ionos.com/dns/v1/zones"
 	cloudflareAPIBase   = "https://api.cloudflare.com/client/v4"
@@ -449,18 +454,19 @@ type DomainHistory struct {
 }
 
 type DomainConfig struct {
-	FQDN       string       `json:"fqdn"`
-	Provider   ProviderType `json:"provider"`
-	APIPrefix  string       `json:"api_prefix,omitempty"`
-	APISecret  string       `json:"api_secret,omitempty"`
-	CFToken    string       `json:"cf_token,omitempty"`
-	CFEmail    string       `json:"cf_email,omitempty"`
-	CFSecret   string       `json:"cf_secret,omitempty"`
-	CFZoneID   string       `json:"cf_zone_id,omitempty"`
-	IPv64Token string       `json:"ipv64_token,omitempty"`
-	TTL        int          `json:"ttl,omitempty"`
-	CFProxied  bool         `json:"cf_proxied,omitempty"`
-	IPMode     string       `json:"ip_mode,omitempty"`
+	FQDN           string       `json:"fqdn"`
+	Provider       ProviderType `json:"provider"`
+	APIPrefix      string       `json:"api_prefix,omitempty"`
+	APISecret      string       `json:"api_secret,omitempty"`
+	CFToken        string       `json:"cf_token,omitempty"`
+	CFEmail        string       `json:"cf_email,omitempty"`
+	CFSecret       string       `json:"cf_secret,omitempty"`
+	CFZoneID       string       `json:"cf_zone_id,omitempty"`
+	IPv64Token     string       `json:"ipv64_token,omitempty"`
+	FebasUpdateURL string       `json:"febas_update_url,omitempty"`
+	TTL            int          `json:"ttl,omitempty"`
+	CFProxied      bool         `json:"cf_proxied,omitempty"`
+	IPMode         string       `json:"ip_mode,omitempty"`
 }
 
 type rawEntry struct {
@@ -485,6 +491,10 @@ type rawEntry struct {
 	// IPv64
 	IPv64Token  string `json:"ipv64_token"`
 	IPv64Token2 string `json:"IPV64_TOKEN"`
+
+	// Febas DynDNS
+	FebasUpdateURL  string `json:"febas_update_url"`
+	FebasUpdateURL2 string `json:"FEBAS_UPDATE_URL"`
 
 	// Hetzner DNS / Hetzner Cloud DNS aliases
 	HetznerToken       string `json:"hetzner_token"`

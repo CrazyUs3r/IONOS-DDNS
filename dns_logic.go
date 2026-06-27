@@ -51,6 +51,10 @@ func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdate
 		return processIPv64DomainUpdate(ctx, dc, job, result, ipMode)
 	}
 
+	if dc.Provider == ProviderFebas {
+		return processFebasDomainUpdate(ctx, dc, job, result, ipMode, cache)
+	}
+
 	v4Changed, err := processDomainIPv4Update(ctx, dc, job, cache, ipMode)
 	if err != nil {
 		result.Error = err
@@ -116,10 +120,22 @@ func startDomainWorker(
 			}
 		}()
 
-		if ctx.Err() != nil {
+		if err := ctx.Err(); err != nil {
+			results <- domainUpdateResult{
+				Domain: domainConfig.FQDN,
+				Error:  fmt.Errorf("domain update cancelled before start: %w", err),
+			}
 			return
 		}
 		if !acquireWorkerSlot(ctx, domainConfig.FQDN) {
+			err := ctx.Err()
+			if err == nil {
+				err = context.Canceled
+			}
+			results <- domainUpdateResult{
+				Domain: domainConfig.FQDN,
+				Error:  fmt.Errorf("worker slot acquisition cancelled: %w", err),
+			}
 			return
 		}
 		defer releaseWorkerSlot(domainConfig.FQDN)
@@ -248,8 +264,10 @@ func handleDomainResultStatus(
 func finalizeDomainResults(results <-chan domainUpdateResult, totalDomains int) int {
 	successCount := 0
 	errorCount := 0
+	receivedCount := 0
 
 	for result := range results {
+		receivedCount++
 		if result.Error != nil {
 			errorCount++
 			log(LogContext{
@@ -265,8 +283,18 @@ func finalizeDomainResults(results <-chan domainUpdateResult, totalDomains int) 
 		}
 	}
 
+	missingResults := totalDomains - receivedCount
+	if missingResults > 0 {
+		errorCount += missingResults
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: fmt.Sprintf("%d domain worker result(s) missing", missingResults),
+		})
+	}
+
 	if totalDomains > 0 {
-		lastOk.Store(errorCount == 0)
+		lastOk.Store(errorCount == 0 && receivedCount == totalDomains)
 	}
 	schedulerRanOnce.Store(true)
 
@@ -301,15 +329,16 @@ func processIPv64DomainUpdate(
 	}
 
 	changed, err := updateIPv64DNS(ctx, dc, job.Domain, ipv4, ipv6)
+	result.Changed = changed
 	if err != nil {
 		if isNonRecoverableError(err) {
 			result.Error = fmt.Errorf(t(phrases().NonRecoverableIPv64Error, "Non-recoverable IPv64 error: %w"), err)
 			return result
 		}
-		debugLog("DNS-LOGIC", job.Domain, fmt.Sprintf("%s IPv64: %v", phrases().UpdateFailed, err))
+		result.Error = fmt.Errorf("IPv64 update failed: %w", err)
+		return result
 	}
 
-	result.Changed = changed
 	return result
 }
 
@@ -329,9 +358,9 @@ func processDomainIPv4Update(
 	changed, err := updateDomainRecord(ctx, dc, job, cache, RecordTypeA, job.IPv4)
 	if err != nil {
 		if isNonRecoverableError(err) {
-			return false, fmt.Errorf(t(phrases().NonRecoverableIPv4Error, "Non-recoverable IPv4 error: %w"), err)
+			return changed, fmt.Errorf(t(phrases().NonRecoverableIPv4Error, "Non-recoverable IPv4 error: %w"), err)
 		}
-		debugLog("DNS-LOGIC", job.Domain, fmt.Sprintf("%s IPv4: %v", phrases().UpdateFailed, err))
+		return changed, fmt.Errorf("IPv4 update failed: %w", err)
 	}
 
 	return changed, nil
@@ -353,9 +382,9 @@ func processDomainIPv6Update(
 	changed, err := updateDomainRecord(ctx, dc, job, cache, RecordTypeAAAA, job.IPv6)
 	if err != nil {
 		if isNonRecoverableError(err) {
-			return false, fmt.Errorf(t(phrases().NonRecoverableIPv6Error, "Non-recoverable IPv6 error: %w"), err)
+			return changed, fmt.Errorf(t(phrases().NonRecoverableIPv6Error, "Non-recoverable IPv6 error: %w"), err)
 		}
-		debugLog("DNS-LOGIC", job.Domain, fmt.Sprintf("%s IPv6: %v", phrases().UpdateFailed, err))
+		return changed, fmt.Errorf("IPv6 update failed: %w", err)
 	}
 
 	return changed, nil

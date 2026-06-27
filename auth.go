@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -260,8 +261,17 @@ func (s *SessionStore) cleanupLoop() {
 // ============================================================================
 
 var (
-	usersCache   []DashboardUser
-	usersCacheMu sync.RWMutex
+	usersCache      []DashboardUser
+	usersCacheMu    sync.RWMutex
+	usersMutationMu sync.Mutex
+
+	errUserNotFound  = errors.New("user not found")
+	errUsernameTaken = errors.New("username already exists")
+	errLastAdmin     = errors.New("the last administrator cannot be demoted or deleted")
+	errInvalidRole   = errors.New("invalid role")
+	errPasswordShort = errors.New("password must be at least 8 characters")
+	errNoUserChanges = errors.New("no valid user changes supplied")
+	errUsersExist    = errors.New("users already configured")
 )
 
 func loadUsers() []DashboardUser {
@@ -297,21 +307,58 @@ func loadUsers() []DashboardUser {
 }
 
 func saveUsers(users []DashboardUser) error {
+	usersMutationMu.Lock()
+	defer usersMutationMu.Unlock()
+	return saveUsersLocked(users)
+}
+
+func saveUsersLocked(users []DashboardUser) error {
 	data, err := marshalUsersWithTOTP(users)
 	if err != nil {
 		return err
 	}
-	tmp := usersFilePath + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	if err := writeFileAtomic(usersFilePath, data); err != nil {
 		return err
 	}
-	if err := os.Rename(tmp, usersFilePath); err != nil {
-		return err
-	}
+
 	usersCacheMu.Lock()
-	usersCache = nil
+	usersCache = append([]DashboardUser(nil), users...)
 	usersCacheMu.Unlock()
 	return nil
+}
+
+func mutateUsers(fn func([]DashboardUser) ([]DashboardUser, error)) error {
+	usersMutationMu.Lock()
+	defer usersMutationMu.Unlock()
+
+	users := loadUsers()
+	updated, err := fn(users)
+	if err != nil {
+		return err
+	}
+	return saveUsersLocked(updated)
+}
+
+func countAdmins(users []DashboardUser) int {
+	count := 0
+	for _, user := range users {
+		if user.Role == RoleAdmin {
+			count++
+		}
+	}
+	return count
+}
+
+func updateUserLastLogin(userID string, when time.Time) error {
+	return mutateUsers(func(users []DashboardUser) ([]DashboardUser, error) {
+		for i := range users {
+			if users[i].ID == userID {
+				users[i].LastLogin = when
+				return users, nil
+			}
+		}
+		return nil, errUserNotFound
+	})
 }
 
 func findUserByUsername(username string) (*DashboardUser, bool) {
@@ -474,6 +521,8 @@ func sessionFromRequest(r *http.Request) (*Session, bool) {
 func isPublicAuthPath(path string) bool {
 	switch path {
 	case "/health",
+		"/health/live",
+		"/health/ready",
 		"/favicon.svg",
 		"/assets/style.css",
 		"/assets/dashboard.js",
@@ -753,7 +802,12 @@ func handleSetup(w http.ResponseWriter, r *http.Request) {
 				CreatedAt:    time.Now(),
 			}
 
-			if err := saveUsers([]DashboardUser{newUser}); err != nil {
+			if err := mutateUsers(func(users []DashboardUser) ([]DashboardUser, error) {
+				if len(users) > 0 {
+					return nil, errUsersExist
+				}
+				return []DashboardUser{newUser}, nil
+			}); err != nil {
 				errMsg = phrases().ErrAccountSave
 				break
 			}
@@ -784,6 +838,21 @@ func handleSetup(w http.ResponseWriter, r *http.Request) {
 // HANDLER: /api/users  (nur Admin)
 // ============================================================================
 
+type safeUser struct {
+	ID          string    `json:"id"`
+	Username    string    `json:"username"`
+	Role        UserRole  `json:"role"`
+	CreatedAt   time.Time `json:"created_at"`
+	LastLogin   time.Time `json:"last_login"`
+	TOTPEnabled bool      `json:"totp_enabled"`
+}
+
+type createUserRequest struct {
+	Username string   `json:"username"`
+	Password string   `json:"password"`
+	Role     UserRole `json:"role"`
+}
+
 func handleAPIUsers(w http.ResponseWriter, r *http.Request) {
 	sess, ok := requireAdmin(w, r)
 	if !ok {
@@ -791,78 +860,140 @@ func handleAPIUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch r.Method {
-
 	case MethodGET:
-		users := loadUsers()
-		type safeUser struct {
-			ID          string    `json:"id"`
-			Username    string    `json:"username"`
-			Role        UserRole  `json:"role"`
-			CreatedAt   time.Time `json:"created_at"`
-			LastLogin   time.Time `json:"last_login"`
-			TOTPEnabled bool      `json:"totp_enabled"`
-		}
-		out := make([]safeUser, len(users))
-		for i, u := range users {
-			out[i] = safeUser{u.ID, u.Username, u.Role, u.CreatedAt, u.LastLogin, u.TOTPEnabled}
-		}
-		writeJSON(w, http.StatusOK, out)
-
+		handleListUsers(w)
 	case MethodPOST:
-		var req struct {
-			Username string   `json:"username"`
-			Password string   `json:"password"`
-			Role     UserRole `json:"role"`
-		}
-		if err := decodeJSONBody(w, r, &req); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": phrases().ErrInvalidJSON})
-			return
-		}
-
-		req.Username = strings.TrimSpace(req.Username)
-		if len(req.Username) < 3 || len(req.Password) < 8 {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": phrases().ErrUsernamePasswordMin})
-			return
-		}
-		if req.Role != RoleAdmin && req.Role != RoleEditor && req.Role != RoleViewer {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": phrases().ErrInvalidRole})
-			return
-		}
-		if _, exists := findUserByUsername(req.Username); exists {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": phrases().ErrUsernameTaken})
-			return
-		}
-
-		hash, err := hashPassword(req.Password)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": phrases().ErrHash})
-			return
-		}
-
-		users := loadUsers()
-		users = append(users, DashboardUser{
-			ID:           generateUserID(),
-			Username:     req.Username,
-			PasswordHash: hash,
-			Role:         req.Role,
-			CreatedAt:    time.Now(),
-		})
-
-		if err := saveUsers(users); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": phrases().ErrSave})
-			return
-		}
-
-		log(LogContext{
-			Level:   LogInfo,
-			Action:  ActionConfig,
-			Message: fmt.Sprintf(phrases().UserCreatedLog, req.Username, req.Role, sess.Username),
-		})
-		writeJSON(w, http.StatusOK, map[string]string{"status": phrases().StatusCreated})
-
+		handleCreateUser(w, r, sess)
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func handleListUsers(w http.ResponseWriter) {
+	users := loadUsers()
+	out := make([]safeUser, len(users))
+
+	for i, user := range users {
+		out[i] = safeUser{
+			ID:          user.ID,
+			Username:    user.Username,
+			Role:        user.Role,
+			CreatedAt:   user.CreatedAt,
+			LastLogin:   user.LastLogin,
+			TOTPEnabled: user.TOTPEnabled,
+		}
+	}
+
+	writeJSON(w, http.StatusOK, out)
+}
+
+func handleCreateUser(w http.ResponseWriter, r *http.Request, sess *Session) {
+	req, ok := decodeCreateUserRequest(w, r)
+	if !ok {
+		return
+	}
+
+	hash, err := hashPassword(req.Password)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": phrases().ErrHash,
+		})
+		return
+	}
+
+	if err := createDashboardUser(req, hash); err != nil {
+		writeCreateUserError(w, err)
+		return
+	}
+
+	log(LogContext{
+		Level:  LogInfo,
+		Action: ActionConfig,
+		Message: fmt.Sprintf(
+			phrases().UserCreatedLog,
+			req.Username,
+			req.Role,
+			sess.Username,
+		),
+	})
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status": phrases().StatusCreated,
+	})
+}
+
+func decodeCreateUserRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+) (createUserRequest, bool) {
+	var req createUserRequest
+
+	if err := decodeJSONBody(w, r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": phrases().ErrInvalidJSON,
+		})
+		return createUserRequest{}, false
+	}
+
+	req.Username = strings.TrimSpace(req.Username)
+
+	if len(req.Username) < 3 || len(req.Password) < 8 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": phrases().ErrUsernamePasswordMin,
+		})
+		return createUserRequest{}, false
+	}
+
+	if !isValidRole(req.Role) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": phrases().ErrInvalidRole,
+		})
+		return createUserRequest{}, false
+	}
+
+	return req, true
+}
+
+func createDashboardUser(
+	req createUserRequest,
+	passwordHash string,
+) error {
+	return mutateUsers(func(users []DashboardUser) ([]DashboardUser, error) {
+		if usernameExists(users, req.Username) {
+			return nil, errUsernameTaken
+		}
+
+		return append(users, DashboardUser{
+			ID:           generateUserID(),
+			Username:     req.Username,
+			PasswordHash: passwordHash,
+			Role:         req.Role,
+			CreatedAt:    time.Now(),
+		}), nil
+	})
+}
+
+func usernameExists(users []DashboardUser, username string) bool {
+	for _, user := range users {
+		if strings.EqualFold(user.Username, username) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func writeCreateUserError(w http.ResponseWriter, err error) {
+	if errors.Is(err, errUsernameTaken) {
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": phrases().ErrUsernameTaken,
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusInternalServerError, map[string]string{
+		"error": phrases().ErrSave,
+	})
 }
 
 func handleAPIUsersID(w http.ResponseWriter, r *http.Request) {
@@ -898,40 +1029,135 @@ func handleUpdateUser(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	if !updateUserByID(id, req.Role, req.Password) {
+	err := updateUserByID(id, req.Role, req.Password)
+	switch {
+	case errors.Is(err, errUserNotFound):
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": phrases().ErrUserNotFound})
+		return
+	case errors.Is(err, errLastAdmin), errors.Is(err, errInvalidRole),
+		errors.Is(err, errPasswordShort), errors.Is(err, errNoUserChanges):
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	case err != nil:
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": phrases().ErrSave})
 		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": phrases().StatusUpdated})
 }
 
-func updateUserByID(id string, role UserRole, password string) bool {
-	users := loadUsers()
+type userUpdate struct {
+	role         UserRole
+	passwordHash string
+}
 
-	for i := range users {
-		if users[i].ID != id {
-			continue
-		}
-
-		if isValidRole(role) {
-			users[i].Role = role
-		}
-
-		if len(password) >= 8 {
-			if hash, err := hashPassword(password); err == nil {
-				users[i].PasswordHash = hash
-			}
-		}
-
-		if err := saveUsers(users); err != nil {
-			return false
-		}
-		sessionStore.DeleteByUserID(id)
-		return true
+func updateUserByID(id string, role UserRole, password string) error {
+	update, err := buildUserUpdate(role, password)
+	if err != nil {
+		return err
 	}
 
-	return false
+	err = mutateUsers(func(users []DashboardUser) ([]DashboardUser, error) {
+		return applyUserUpdate(users, id, update)
+	})
+	if err != nil {
+		return err
+	}
+
+	sessionStore.DeleteByUserID(id)
+	return nil
+}
+
+func buildUserUpdate(
+	role UserRole,
+	password string,
+) (userUpdate, error) {
+	if role == "" && password == "" {
+		return userUpdate{}, errNoUserChanges
+	}
+
+	if role != "" && !isValidRole(role) {
+		return userUpdate{}, errInvalidRole
+	}
+
+	if password != "" && len(password) < 8 {
+		return userUpdate{}, errPasswordShort
+	}
+
+	passwordHash, err := hashOptionalPassword(password)
+	if err != nil {
+		return userUpdate{}, err
+	}
+
+	return userUpdate{
+		role:         role,
+		passwordHash: passwordHash,
+	}, nil
+}
+
+func hashOptionalPassword(password string) (string, error) {
+	if password == "" {
+		return "", nil
+	}
+
+	return hashPassword(password)
+}
+
+func applyUserUpdate(
+	users []DashboardUser,
+	id string,
+	update userUpdate,
+) ([]DashboardUser, error) {
+	index := findUserIndexByID(users, id)
+	if index < 0 {
+		return nil, errUserNotFound
+	}
+
+	if err := validateAdminRoleChange(
+		users,
+		users[index],
+		update.role,
+	); err != nil {
+		return nil, err
+	}
+
+	if update.role != "" {
+		users[index].Role = update.role
+	}
+
+	if update.passwordHash != "" {
+		users[index].PasswordHash = update.passwordHash
+	}
+
+	return users, nil
+}
+
+func findUserIndexByID(users []DashboardUser, id string) int {
+	for i := range users {
+		if users[i].ID == id {
+			return i
+		}
+	}
+
+	return -1
+}
+
+func validateAdminRoleChange(
+	users []DashboardUser,
+	user DashboardUser,
+	newRole UserRole,
+) error {
+	if newRole == "" ||
+		newRole == RoleAdmin ||
+		user.Role != RoleAdmin {
+		return nil
+	}
+
+	if countAdmins(users) <= 1 {
+		return errLastAdmin
+	}
+
+	return nil
 }
 
 func isValidRole(role UserRole) bool {
@@ -959,6 +1185,10 @@ func handleDeleteUser(w http.ResponseWriter, id, currentUserID string) {
 	}
 
 	found, err := removeUserByID(id)
+	if errors.Is(err, errLastAdmin) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": phrases().ErrSave})
 		return
@@ -973,26 +1203,33 @@ func handleDeleteUser(w http.ResponseWriter, id, currentUserID string) {
 }
 
 func removeUserByID(id string) (bool, error) {
-	users := loadUsers()
-	filtered := users[:0]
+	found := false
+	err := mutateUsers(func(users []DashboardUser) ([]DashboardUser, error) {
+		filtered := make([]DashboardUser, 0, len(users))
+		for _, user := range users {
+			if user.ID != id {
+				filtered = append(filtered, user)
+				continue
+			}
 
-	for _, u := range users {
-		if u.ID == id {
-			continue
+			found = true
+			if user.Role == RoleAdmin && countAdmins(users) <= 1 {
+				return nil, errLastAdmin
+			}
 		}
 
-		filtered = append(filtered, u)
-	}
-
-	if len(filtered) == len(users) {
-		return false, nil
-	}
-
-	if err := saveUsers(filtered); err != nil {
+		if !found {
+			return users, nil
+		}
+		return filtered, nil
+	})
+	if err != nil {
 		return false, err
 	}
-	sessionStore.DeleteByUserID(id)
-	return true, nil
+	if found {
+		sessionStore.DeleteByUserID(id)
+	}
+	return found, nil
 }
 
 func hashPassword(password string) (string, error) {

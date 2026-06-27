@@ -23,7 +23,16 @@ func saveConfigToFile() error {
 		return fmt.Errorf(phrases().CreateConfigDirectoryFormat, err)
 	}
 
-	data, err := json.MarshalIndent(cfg, "", "  ")
+	cfgMu.RLock()
+	configSnapshot := cfg
+	configSnapshot.DomainConfigs = append([]DomainConfig(nil), cfg.DomainConfigs...)
+	configSnapshot.DNSServers = append([]string(nil), cfg.DNSServers...)
+	configSnapshot.IPv4Endpoints = append([]string(nil), cfg.IPv4Endpoints...)
+	configSnapshot.IPv6Endpoints = append([]string(nil), cfg.IPv6Endpoints...)
+	configSnapshot.Notifications.Events = append([]string(nil), cfg.Notifications.Events...)
+	cfgMu.RUnlock()
+
+	data, err := json.MarshalIndent(configSnapshot, "", "  ")
 	if err != nil {
 		log(LogContext{
 			Level:   LogError,
@@ -33,18 +42,7 @@ func saveConfigToFile() error {
 		return fmt.Errorf(phrases().MarshalConfigFormat, err)
 	}
 
-	tmp := configPath + ".tmp"
-
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		log(LogContext{
-			Level:   LogError,
-			Action:  ActionError,
-			Message: fmt.Sprintf(phrases().FailedToWriteTempConfigFileFormat, err),
-		})
-		return fmt.Errorf(phrases().WriteTempConfigFileFormat, err)
-	}
-
-	if err := os.Rename(tmp, configPath); err != nil {
+	if err := writeFileAtomic(configPath, data); err != nil {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionError,
@@ -58,7 +56,10 @@ func saveConfigToFile() error {
 
 func initProviderConfig() error {
 	if len(cfg.DomainConfigs) > 0 {
-		return validateConfig()
+		if err := validateConfig(); err != nil {
+			return err
+		}
+		return validateDomainConfigs()
 	}
 
 	configJSON := os.Getenv("DOMAINS_CONFIG")
@@ -114,11 +115,14 @@ func (r rawEntry) toDomainConfig() DomainConfig {
 			r.HetznerCloudToken, r.HetznerCloudToken2,
 			r.HCloudToken, r.HCloudToken2,
 		),
-		CFToken:    pick(r.CFToken, r.CFToken2),
-		CFEmail:    pick(r.CFEmail, r.CFEmail2),
-		CFSecret:   pick(r.CFSecret, r.CFSecret2),
-		CFZoneID:   r.CFZoneID,
-		IPv64Token: pick(r.IPv64Token, r.IPv64Token2),
+		CFToken:        pick(r.CFToken, r.CFToken2),
+		CFEmail:        pick(r.CFEmail, r.CFEmail2),
+		CFSecret:       pick(r.CFSecret, r.CFSecret2),
+		CFZoneID:       r.CFZoneID,
+		IPv64Token:     pick(r.IPv64Token, r.IPv64Token2),
+		FebasUpdateURL: pick(r.FebasUpdateURL, r.FebasUpdateURL2),
+		TTL:            r.TTL,
+		CFProxied:      r.CFProxied,
 	}
 }
 
@@ -152,7 +156,8 @@ func splitDomains(s string) []string {
 }
 
 func normalizeDomain(d string) string {
-	return strings.TrimSpace(strings.ToLower(d))
+	d = strings.TrimSpace(strings.ToLower(d))
+	return strings.TrimSuffix(d, ".")
 }
 
 func initLegacyConfig() error {
@@ -210,6 +215,8 @@ func buildLegacyDomainConfigs(providerEnv string, domains []string) ([]DomainCon
 		return buildLegacyHetznerDNSConfigs(domains)
 	case "HETZNERCLOUD":
 		return buildLegacyHetznerCloudConfigs(domains)
+	case "FEBAS":
+		return buildLegacyFebasConfigs(domains)
 	default:
 		return nil, fmt.Errorf(phrases().UnknownProviderFormat, providerEnv)
 	}
@@ -269,6 +276,18 @@ func buildLegacyIPv64Configs(domains []string) ([]DomainConfig, error) {
 	return buildLegacyConfigs(domains, DomainConfig{
 		Provider:   ProviderIPv64,
 		IPv64Token: token,
+	}), nil
+}
+
+func buildLegacyFebasConfigs(domains []string) ([]DomainConfig, error) {
+	updateURL := strings.TrimSpace(os.Getenv("FEBAS_UPDATE_URL"))
+	if updateURL == "" {
+		return nil, fmt.Errorf("%s", phrases().FebasUpdateURLRequired)
+	}
+
+	return buildLegacyConfigs(domains, DomainConfig{
+		Provider:       ProviderFebas,
+		FebasUpdateURL: updateURL,
 	}), nil
 }
 

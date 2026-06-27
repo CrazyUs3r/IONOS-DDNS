@@ -59,14 +59,14 @@ func printGroupedDomains() {
 	fmt.Println("\n" + strings.Repeat("-", 40))
 }
 
-func printInfrastructure(ctx context.Context, zonesByProvider map[string][]Zone) {
+func printInfrastructure(ctx context.Context, zonesByProvider map[string][]Zone, cache *ZoneRecordCache) {
 	domainConfigs := snapshotDomainConfigsForPrinting()
 
 	fmt.Println("\n" + phrases().InfraHeading)
 
 	providerTypes := sortedProviderTypes(zonesByProvider)
 	for _, pt := range providerTypes {
-		printProviderInfrastructure(ctx, ProviderType(pt), zonesByProvider[pt], domainConfigs)
+		printProviderInfrastructure(ctx, ProviderType(pt), zonesByProvider[pt], domainConfigs, cache)
 	}
 
 	fmt.Println("\n" + strings.Repeat("-", 40))
@@ -98,19 +98,13 @@ func localizedCountLabel(count int, singular, plural string) string {
 	return plural
 }
 
-func printProviderInfrastructure(
-	ctx context.Context,
-	provider ProviderType,
-	zones []Zone,
-	domainConfigs []DomainConfig,
-) {
-	zoneLabel := localizedCountLabel(len(zones), phrases().ZoneSingular, phrases().ZonePlural)
-	fmt.Printf("\n📦 %s: %s (%d %s)\n", phrases().ProviderLabel, provider, len(zones), zoneLabel)
+func printProviderInfrastructure(ctx context.Context, provider ProviderType, zones []Zone, domainConfigs []DomainConfig, cache *ZoneRecordCache) {
+	fmt.Printf("\n📦 "+phrases().ProviderZonesFormat+"\n", provider, len(zones))
 
 	dc := findProviderConfigForPrinting(provider, domainConfigs)
 
 	for _, z := range zones {
-		printZoneInfrastructure(ctx, provider, z, dc)
+		printZoneInfrastructure(ctx, provider, z, dc, cache)
 	}
 }
 
@@ -123,15 +117,10 @@ func findProviderConfigForPrinting(provider ProviderType, domainConfigs []Domain
 	return nil
 }
 
-func printZoneInfrastructure(
-	ctx context.Context,
-	provider ProviderType,
-	z Zone,
-	dc *DomainConfig,
-) {
-	fmt.Printf("\n🌐 %s: %s\n", phrases().ZoneLabel, z.Name)
+func printZoneInfrastructure(ctx context.Context, provider ProviderType, z Zone, dc *DomainConfig, cache *ZoneRecordCache) {
+	fmt.Printf("\n🌐 "+phrases().ZoneFormat+"\n", z.Name)
 
-	records, err := loadInfrastructureRecords(ctx, provider, z, dc)
+	records, err := loadInfrastructureRecords(ctx, provider, z, dc, cache)
 	if err != nil {
 		debugLog("DEBUG", z.Name, err.Error())
 		fmt.Printf("   └─ ⚠️ %s\n", err)
@@ -145,69 +134,75 @@ func printZoneInfrastructure(
 	})
 
 	if len(relevant) == 0 {
-		fmt.Printf("   └─ ⚠️ %s\n", phrases().NoRelevantRecords)
+		fmt.Printf("   └─ ⚠️ %s\n", phrases().NoRelevantRecordsFound)
 		return
 	}
 
 	printRelevantInfrastructureRecords(relevant)
 }
 
-func loadInfrastructureRecords(ctx context.Context, provider ProviderType, z Zone, dc *DomainConfig) ([]Record, error) {
-	switch provider {
-	case ProviderIPv64:
-		records, err := loadIPv64InfrastructureRecords(z)
-		if err != nil {
-			return nil, fmt.Errorf(phrases().LoadIPv64InfrastructureLoadFailed, err)
-		}
+func loadInfrastructureRecords(ctx context.Context, provider ProviderType, z Zone, dc *DomainConfig, cache *ZoneRecordCache) ([]Record, error) {
+	if records, exists := cachedInfrastructureRecords(
+		cache,
+		z.ID,
+	); exists {
 		return records, nil
+	}
+
+	if provider == ProviderIPv64 {
+		return loadIPv64InfrastructureRecords(z)
+	}
+
+	if dc == nil {
+		return nil, fmt.Errorf(
+			phrases().MissingDomainConfigurationFormat,
+			provider,
+		)
+	}
+
+	return loadInfrastructureRecordsFromProvider(
+		ctx,
+		provider,
+		z.ID,
+		dc,
+	)
+}
+
+func cachedInfrastructureRecords(
+	cache *ZoneRecordCache,
+	zoneID string,
+) ([]Record, bool) {
+	if cache == nil {
+		return nil, false
+	}
+
+	return cache.Get(zoneID)
+}
+
+func loadInfrastructureRecordsFromProvider(
+	ctx context.Context,
+	provider ProviderType,
+	zoneID string,
+	dc *DomainConfig,
+) ([]Record, error) {
+	switch provider {
+	case ProviderIONOS:
+		return loadIonosInfrastructureRecords(ctx, dc, zoneID)
 
 	case ProviderCloudflare:
-		if dc == nil {
-			return nil, fmt.Errorf(
-				phrases().MissingDomainConfigForProvider, provider)
-		}
-
-		records, err := loadCloudflareRecords(ctx, dc, z.ID)
-		if err != nil {
-			return nil, fmt.Errorf(phrases().LoadCloudflareLoadFailed, err)
-		}
-		return records, nil
+		return loadCloudflareRecords(ctx, dc, zoneID)
 
 	case ProviderHetzner:
-		if dc == nil {
-			return nil, fmt.Errorf(phrases().MissingDomainConfigForProvider, provider)
-		}
-
-		records, err := loadHetznerDNSZoneRecords(ctx, dc, z.ID)
-		if err != nil {
-			return nil, fmt.Errorf(phrases().LoadHetznerDNSZoneLoadFailed, err)
-		}
-		return records, nil
+		return loadHetznerDNSZoneRecords(ctx, dc, zoneID)
 
 	case ProviderHetznerCloud:
-		if dc == nil {
-			return nil, fmt.Errorf(phrases().MissingDomainConfigForProvider, provider)
-		}
+		return loadHetznerCloudZoneRecords(ctx, dc, zoneID)
 
-		records, err := loadHetznerCloudZoneRecords(ctx, dc, z.ID)
-		if err != nil {
-			return nil, fmt.Errorf(phrases().LoadHetznerCloudZoneLoadFailed, err)
-		}
-		return records, nil
-
-	case ProviderIONOS:
-		if dc == nil {
-			return nil, fmt.Errorf(phrases().MissingDomainConfigForProvider, provider)
-		}
-
-		records, err := loadIonosInfrastructureRecords(ctx, dc, z.ID)
-		if err != nil {
-			return nil, fmt.Errorf(phrases().IonosInfrastructureLoadFailed, err)
-		}
-		return records, nil
+	case ProviderFebas:
+		return loadFebasZoneRecords(ctx, Zone{ID: zoneID, Name: dc.FQDN})
 
 	default:
-		return nil, fmt.Errorf(phrases().UnsupportedProvider, provider)
+		return nil, fmt.Errorf(phrases().UnsupportedInfrastructureProviderFormat, provider)
 	}
 }
 

@@ -577,8 +577,7 @@ func recoverCloudflareMissingRecord(
 // ============================================================================
 func cloudflareDCForZone(zoneName string) *DomainConfig {
 	zoneName = strings.ToLower(strings.TrimSuffix(zoneName, "."))
-	for i := range cfg.DomainConfigs {
-		dc := &cfg.DomainConfigs[i]
+	for _, dc := range snapshotDomainConfigs() {
 		if dc.Provider != ProviderCloudflare {
 			continue
 		}
@@ -587,7 +586,7 @@ func cloudflareDCForZone(zoneName string) *DomainConfig {
 			continue
 		}
 		if fqdn == zoneName || strings.HasSuffix(fqdn, "."+zoneName) {
-			return dc
+			return &dc
 		}
 	}
 	return nil
@@ -643,11 +642,7 @@ func cleanupSingleCloudflareRecord(
 		return
 	}
 
-	debugLog(
-		"MAINTENANCE",
-		fqdn,
-		fmt.Sprintf(phrases().CleanupOrphanedCF, rec.Type, rec.ID, zone.Name),
-	)
+	debugLog("MAINTENANCE", fqdn, fmt.Sprintf(phrases().CleanupOrphanedCF, rec.Type, rec.ID, zone.Name))
 
 	if cfg.DryRun {
 		log(LogContext{

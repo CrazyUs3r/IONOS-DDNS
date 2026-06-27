@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -20,19 +21,68 @@ func NewZoneRecordCache() *ZoneRecordCache {
 }
 
 func (c *ZoneRecordCache) Set(zoneID string, records []Record) {
+	c.SetAt(zoneID, records, time.Now())
+}
+
+func (c *ZoneRecordCache) SetAt(
+	zoneID string,
+	records []Record,
+	storedAt time.Time,
+) {
 	c.Lock()
 	defer c.Unlock()
+
 	c.data[zoneID] = cacheEntry{
-		records:  records,
-		storedAt: time.Now(),
+		records:  slices.Clone(records),
+		storedAt: storedAt,
 	}
 }
 
-func (c *ZoneRecordCache) Get(zoneID string) ([]Record, bool) {
+func (c *ZoneRecordCache) Get(
+	zoneID string,
+) ([]Record, bool) {
 	c.RLock()
 	defer c.RUnlock()
+
 	entry, exists := c.data[zoneID]
-	return entry.records, exists
+	if !exists {
+		return nil, false
+	}
+
+	return slices.Clone(entry.records), true
+}
+
+func (c *ZoneRecordCache) GetWithStoredAt(
+	zoneID string,
+) ([]Record, time.Time, bool) {
+	c.RLock()
+	defer c.RUnlock()
+
+	entry, exists := c.data[zoneID]
+	if !exists {
+		return nil, time.Time{}, false
+	}
+
+	return slices.Clone(entry.records), entry.storedAt, true
+}
+
+func (c *ZoneRecordCache) OldestStoredAt() (time.Time, bool) {
+	c.RLock()
+	defer c.RUnlock()
+
+	var oldest time.Time
+
+	for _, entry := range c.data {
+		if entry.storedAt.IsZero() {
+			return time.Time{}, true
+		}
+
+		if oldest.IsZero() || entry.storedAt.Before(oldest) {
+			oldest = entry.storedAt
+		}
+	}
+
+	return oldest, !oldest.IsZero()
 }
 
 func (c *ZoneRecordCache) Age(zoneID string) time.Duration {
@@ -45,12 +95,17 @@ func (c *ZoneRecordCache) Age(zoneID string) time.Duration {
 	return time.Since(entry.storedAt)
 }
 
-func loadZoneCache(ctx context.Context, zonesByProvider map[string][]Zone) (*ZoneRecordCache, error) {
+func loadZoneCache(
+	ctx context.Context,
+	zonesByProvider map[string][]Zone,
+) (*ZoneRecordCache, error) {
 	cache := NewZoneRecordCache()
 
 	var cacheWg sync.WaitGroup
 	var cacheErrors []string
 	var cacheErrorsMu sync.Mutex
+
+	attemptedLoads := 0
 
 	domainConfigs := snapshotDomainConfigs()
 
@@ -62,41 +117,52 @@ func loadZoneCache(ctx context.Context, zonesByProvider map[string][]Zone) (*Zon
 			continue
 		}
 
-		dc := findProviderDomainConfig(domainConfigs, provider)
-		if dc == nil {
+		domainConfig := findProviderDomainConfig(
+			domainConfigs,
+			provider,
+		)
+		if domainConfig == nil {
 			continue
 		}
 
-		for _, z := range zones {
-			if !zoneNeededForProvider(domainConfigs, provider, z) {
+		for _, zone := range zones {
+			if !zoneNeededForProvider(
+				domainConfigs,
+				provider,
+				zone,
+			) {
 				continue
 			}
 
-			if shouldSkipZoneCacheLoad(cache, z) {
+			if shouldSkipZoneCacheLoad(cache, zone) {
 				continue
 			}
 
-			startZoneCacheLoad(ctx, &cacheWg, &cacheErrors, &cacheErrorsMu, cache, z, dc, provider)
+			attemptedLoads++
+
+			startZoneCacheLoad(
+				ctx,
+				&cacheWg,
+				&cacheErrors,
+				&cacheErrorsMu,
+				cache,
+				zone,
+				domainConfig,
+				provider,
+			)
 		}
 	}
 
 	cacheWg.Wait()
 
-	if err := finalizeZoneCacheErrors(cacheErrors, zonesByProvider); err != nil {
+	if err := finalizeZoneCacheErrors(
+		cacheErrors,
+		attemptedLoads,
+	); err != nil {
 		return nil, err
 	}
 
 	return cache, nil
-}
-
-func snapshotDomainConfigs() []DomainConfig {
-	cfgMu.RLock()
-	defer cfgMu.RUnlock()
-
-	domainConfigs := make([]DomainConfig, len(cfg.DomainConfigs))
-	copy(domainConfigs, cfg.DomainConfigs)
-
-	return domainConfigs
 }
 
 func loadIPv64ZoneCache(cache *ZoneRecordCache, zones []Zone) {
@@ -136,14 +202,43 @@ func ensureIPv64CacheLoaded() {
 
 func convertIPv64DomainRecords(domain IPv64Domain) []Record {
 	records := make([]Record, 0, len(domain.Records))
+
 	for _, rec := range domain.Records {
 		records = append(records, Record{
 			ID:      fmt.Sprintf("%d", rec.RecordID),
+			Name:    ipv64RecordName(domain.Domain, rec.Praefix),
 			Type:    rec.Type,
 			Content: rec.Content,
 		})
 	}
+
 	return records
+}
+
+func ipv64RecordName(domain, prefix string) string {
+	domain = strings.TrimSuffix(
+		strings.TrimSpace(domain),
+		".",
+	)
+
+	prefix = strings.TrimSuffix(
+		strings.TrimSpace(prefix),
+		".",
+	)
+
+	switch {
+	case prefix == "", prefix == "@":
+		return domain
+
+	case prefix == domain:
+		return domain
+
+	case strings.HasSuffix(prefix, "."+domain):
+		return prefix
+
+	default:
+		return prefix + "." + domain
+	}
 }
 
 func findProviderDomainConfig(domainConfigs []DomainConfig, provider ProviderType) *DomainConfig {
@@ -209,7 +304,31 @@ func startZoneCacheLoad(
 	go func(zone Zone, domainConfig *DomainConfig, prov ProviderType) {
 		defer cacheWg.Done()
 
-		records, err := loadZoneRecordsForProvider(ctx, domainConfig, zone, prov)
+		if workerLimiter != nil {
+			if !workerLimiter.Acquire(ctx) {
+				err := ctx.Err()
+				if err == nil {
+					err = context.Canceled
+				}
+
+				recordZoneCacheError(
+					cacheErrors,
+					cacheErrorsMu,
+					zone,
+					err,
+				)
+				return
+			}
+
+			defer workerLimiter.Release()
+		}
+
+		records, err := loadZoneRecordsForProvider(
+			ctx,
+			domainConfig,
+			zone,
+			prov,
+		)
 		if err != nil {
 			recordZoneCacheError(cacheErrors, cacheErrorsMu, zone, err)
 			debugLog("CACHE", zone.Name, fmt.Sprintf(phrases().CacheLoadError, err))
@@ -234,6 +353,8 @@ func loadZoneRecordsForProvider(
 		return loadHetznerDNSZoneRecords(ctx, domainConfig, zone.ID)
 	case ProviderHetznerCloud:
 		return loadHetznerCloudZoneRecords(ctx, domainConfig, zone.ID)
+	case ProviderFebas:
+		return loadFebasZoneRecords(ctx, zone)
 	default:
 		return loadIonosZoneRecords(ctx, domainConfig, zone.ID)
 	}
@@ -268,29 +389,35 @@ func recordZoneCacheError(
 	cacheErrorsMu.Unlock()
 }
 
-func finalizeZoneCacheErrors(cacheErrors []string, zonesByProvider map[string][]Zone) error {
+func finalizeZoneCacheErrors(
+	cacheErrors []string,
+	attemptedLoads int,
+) error {
 	if len(cacheErrors) == 0 {
 		return nil
 	}
 
+	details := strings.Join(cacheErrors, "; ")
+
 	log(LogContext{
-		Level:   LogWarn,
-		Action:  ActionError,
-		Message: fmt.Sprintf(phrases().RecordCacheErrorZone, len(cacheErrors), strings.Join(cacheErrors, "; ")),
+		Level:  LogWarn,
+		Action: ActionError,
+		Message: fmt.Sprintf(
+			phrases().RecordCacheErrorZone,
+			len(cacheErrors),
+			details,
+		),
 	})
 
-	totalZones := countTotalZones(zonesByProvider)
-	if len(cacheErrors) >= totalZones {
-		return fmt.Errorf("all zone record loads failed: %s", strings.Join(cacheErrors, "; "))
+	if attemptedLoads > 0 &&
+		len(cacheErrors) >= attemptedLoads {
+
+		return fmt.Errorf(
+			"all %d zone record loads failed: %s",
+			attemptedLoads,
+			details,
+		)
 	}
 
 	return nil
-}
-
-func countTotalZones(zonesByProvider map[string][]Zone) int {
-	totalZones := 0
-	for _, zones := range zonesByProvider {
-		totalZones += len(zones)
-	}
-	return totalZones
 }

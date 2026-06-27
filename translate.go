@@ -33,7 +33,7 @@ type Phrases struct {
 	UserRoleViewer, UserRoleEditor, UserRoleAdmin, UserBtnCreate, NotifyTestDesc          string
 	IPv64DomainManagement, IPv64DomainFQDN, IPv64DomainPlaceholder, IPv64ActionAdd        string
 	ProviderStatusOK, ProviderStatusError, IPv64DomainPlaceholderToken                    string
-	IPv64DomainAPITokenOptional                                                           string
+	IPv64DomainAPITokenOptional, LogDeleteFailedJS, LogEntryDeletedJS         string
 
 	// Diagnose / Backup
 	NavOverview, NavMonitoring, NavTools, NavConfig, NavDiagnoseJS, NavBackupJS string
@@ -180,7 +180,7 @@ type Phrases struct {
 
 	// Provider-Hinweise / Config
 	IonosAPIRequired, Ipv64TokenRequired, CloudflareAuthRequired, UnknownProvider  string
-	HetznerAuthRequired                                                            string
+	HetznerAuthRequired, FebasUpdateURLRequired                                                            string
 	DomainParamMissing, DomainStillActiveInConfig, NicIPv64Updates                 string
 	NoStatusFileFound, DomainNotFoundInStatus                                      string
 	DomainDeletedFromStatusLog, DomainRemovedFromStatus                            string
@@ -210,6 +210,10 @@ type Phrases struct {
 	IonosInfrastructureLoadFailed, LoadHetznerCloudZoneLoadFailed, LoadHetznerDNSZoneLoadFailed string
 	LoadCloudflareLoadFailed, LoadIPv64InfrastructureLoadFailed, MissingDomainConfigForProvider string
 	UnsupportedProvider, NoCachedIPv64InfrastructureRecords                                     string
+	DomainConfiguredMoreThanOnceFormat, InvalidDomainIPModeFormat, InvalidNegativeTTLFormat     string
+	MultipleProviderAccountsNotSupportedFormat, MissingDomainConfigurationFormat                string
+	UnsupportedInfrastructureProviderFormat, UpdateAlreadyRunning                               string
+	ProviderZonesFormat, ZoneFormat, NoRelevantRecordsFound                                     string
 	// MQTT
 	MqttCAFileReadError, MqttCAFileInvalid, MqttConnected, MqttConnectionLost                     string
 	MqttConnecting, MqttInitialConnectionPending, MqttConnectFailed, MqttSubscribeTimeout         string

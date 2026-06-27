@@ -266,8 +266,7 @@ func handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 			}
 			setSessionCookie(w, r, sess)
 
-			foundUser.LastLogin = time.Now()
-			_ = saveUsers(users)
+			_ = updateUserLastLogin(foundUser.ID, time.Now())
 
 			log(LogContext{
 				Level:   LogInfo,
@@ -360,7 +359,7 @@ func handleSettings2FA(w http.ResponseWriter, r *http.Request) {
 
 	flash := totpFlash{}
 	if r.Method == MethodPOST {
-		flash = handleSettings2FAPost(r, currentUser, users)
+		flash = handleSettings2FAPost(r, currentUser)
 		users = loadUsers()
 		currentUser, ok = findDashboardUser(users, sess.UserID)
 		if !ok {
@@ -391,14 +390,14 @@ func findDashboardUser(users []DashboardUser, userID string) (*DashboardUser, bo
 	return nil, false
 }
 
-func handleSettings2FAPost(r *http.Request, currentUser *DashboardUser, users []DashboardUser) totpFlash {
+func handleSettings2FAPost(r *http.Request, currentUser *DashboardUser) totpFlash {
 	switch r.FormValue("action") {
 	case "generate":
 		return handle2FAGenerate(currentUser)
 	case "confirm":
-		return handle2FAConfirm(r, currentUser, users)
+		return handle2FAConfirm(r, currentUser)
 	case "disable":
-		return handle2FADisable(r, currentUser, users)
+		return handle2FADisable(r, currentUser)
 	default:
 		return totpFlash{Message: "Unknown 2FA action", Type: flashTypeError}
 	}
@@ -419,7 +418,7 @@ func handle2FAGenerate(currentUser *DashboardUser) totpFlash {
 	), Type: flashTypeInfo}
 }
 
-func handle2FAConfirm(r *http.Request, currentUser *DashboardUser, users []DashboardUser) totpFlash {
+func handle2FAConfirm(r *http.Request, currentUser *DashboardUser) totpFlash {
 	pendingSecret, hasPending := loadTOTPPending(currentUser.ID)
 	if !hasPending {
 		return totpFlash{Message: t(
@@ -437,15 +436,17 @@ func handle2FAConfirm(r *http.Request, currentUser *DashboardUser, users []Dashb
 	}
 
 	deleteTOTPPending(currentUser.ID)
-	for i := range users {
-		if users[i].ID == currentUser.ID {
-			users[i].TOTPSecret = pendingSecret
-			users[i].TOTPEnabled = true
-			break
+	err := mutateUsers(func(users []DashboardUser) ([]DashboardUser, error) {
+		for i := range users {
+			if users[i].ID == currentUser.ID {
+				users[i].TOTPSecret = pendingSecret
+				users[i].TOTPEnabled = true
+				return users, nil
+			}
 		}
-	}
-
-	if err := saveUsers(users); err != nil {
+		return nil, errUserNotFound
+	})
+	if err != nil {
 		return totpFlash{Message: fmt.Sprintf(
 			t(phrases().TotpFlashSaveFailed, "Could not save: %s"),
 			err.Error(),
@@ -457,7 +458,7 @@ func handle2FAConfirm(r *http.Request, currentUser *DashboardUser, users []Dashb
 	), Type: flashTypeSuccess}
 }
 
-func handle2FADisable(r *http.Request, currentUser *DashboardUser, users []DashboardUser) totpFlash {
+func handle2FADisable(r *http.Request, currentUser *DashboardUser) totpFlash {
 	code := strings.TrimSpace(r.FormValue("totp_code"))
 	if !totpEnabledForUser(currentUser) || !validateTOTPCode(currentUser.TOTPSecret, code) {
 		return totpFlash{Message: t(
@@ -466,15 +467,17 @@ func handle2FADisable(r *http.Request, currentUser *DashboardUser, users []Dashb
 		), Type: flashTypeError}
 	}
 
-	for i := range users {
-		if users[i].ID == currentUser.ID {
-			users[i].TOTPSecret = ""
-			users[i].TOTPEnabled = false
-			break
+	err := mutateUsers(func(users []DashboardUser) ([]DashboardUser, error) {
+		for i := range users {
+			if users[i].ID == currentUser.ID {
+				users[i].TOTPSecret = ""
+				users[i].TOTPEnabled = false
+				return users, nil
+			}
 		}
-	}
-
-	if err := saveUsers(users); err != nil {
+		return nil, errUserNotFound
+	})
+	if err != nil {
 		return totpFlash{Message: fmt.Sprintf(
 			t(phrases().TotpFlashSaveFailed, "Could not save: %s"),
 			err.Error(),
@@ -610,14 +613,7 @@ func handleLoginPost2FA(w http.ResponseWriter, r *http.Request, user *DashboardU
 	}
 	setSessionCookie(w, r, sess)
 
-	users := loadUsers()
-	for i := range users {
-		if users[i].ID == user.ID {
-			users[i].LastLogin = time.Now()
-			break
-		}
-	}
-	_ = saveUsers(users)
+	_ = updateUserLastLogin(user.ID, time.Now())
 
 	log(LogContext{
 		Level:   LogInfo,

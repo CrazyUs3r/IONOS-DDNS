@@ -48,14 +48,8 @@ func saveDNSProviderCacheToFile(providerName, cachePath string, zones []Zone, re
 		return fmt.Errorf("%s: %w", phrases().ErrCacheMarshal, err)
 	}
 
-	tmpPath := cachePath + ".tmp"
-	if err := os.WriteFile(tmpPath, jsonData, 0o600); err != nil {
+	if err := writeFileAtomic(cachePath, jsonData); err != nil {
 		return fmt.Errorf("%s: %w", phrases().ErrCacheWrite, err)
-	}
-
-	if err := os.Rename(tmpPath, cachePath); err != nil {
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("%s: %w", phrases().ErrCacheRename, err)
 	}
 
 	debugLog("CACHE", "", fmt.Sprintf(phrases().CacheSavedZones, providerName, len(zones), totalRecords))
@@ -87,7 +81,7 @@ func loadDNSProviderCacheFromFile(providerName, cachePath string) ([]Zone, *Zone
 
 	recordCache := NewZoneRecordCache()
 	for zoneID, records := range cache.Records {
-		recordCache.Set(zoneID, records)
+		recordCache.SetAt(zoneID, records, cache.LastUpdate)
 	}
 
 	age := time.Since(cache.LastUpdate)

@@ -17,6 +17,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -810,13 +811,18 @@ func checkAPIRedirect(req *http.Request, via []*http.Request) error {
 		return nil
 	}
 
-	originalHost := via[0].URL.Hostname()
-	redirectHost := req.URL.Hostname()
-	if !strings.EqualFold(originalHost, redirectHost) {
+	original := via[0].URL
+
+	sameScheme := strings.EqualFold(original.Scheme, req.URL.Scheme)
+	sameHostAndPort := strings.EqualFold(original.Host, req.URL.Host)
+
+	if !sameScheme || !sameHostAndPort {
 		return fmt.Errorf(
-			phrases().HTTPRedirectCrossHostBlocked,
-			originalHost,
-			redirectHost,
+			"API redirect changed origin: %s://%s -> %s://%s",
+			original.Scheme,
+			original.Host,
+			req.URL.Scheme,
+			req.URL.Host,
 		)
 	}
 
@@ -1097,6 +1103,9 @@ func appendProviderReplacements(replacements []string, dc DomainConfig) []string
 	case ProviderHetzner, ProviderHetznerCloud:
 		return appendHetznerReplacements(replacements, dc)
 
+	case ProviderFebas:
+		return appendFebasReplacements(replacements, dc)
+
 	default:
 		return replacements
 	}
@@ -1127,6 +1136,21 @@ func appendIPv64Replacements(replacements []string, dc DomainConfig) []string {
 func appendHetznerReplacements(replacements []string, dc DomainConfig) []string {
 	replacements = appendIfNotEmpty(replacements, dc.APISecret, "***HETZNER-TOKEN***")
 	replacements = appendIfNotEmpty(replacements, dc.APIPrefix, "***HETZNER-TOKEN***")
+
+	return replacements
+}
+
+func appendFebasReplacements(replacements []string, dc DomainConfig) []string {
+	if strings.TrimSpace(dc.FebasUpdateURL) == "" {
+		return replacements
+	}
+
+	replacements = appendIfNotEmpty(replacements, dc.FebasUpdateURL, "***FEBAS-UPDATE-URL***")
+
+	if parsed, err := url.Parse(dc.FebasUpdateURL); err == nil {
+		replacements = appendIfNotEmpty(replacements, parsed.Query().Get("token"), "***FEBAS-TOKEN***")
+		replacements = appendIfNotEmpty(replacements, parsed.Query().Get("kundenid"), "***FEBAS-CUSTOMER-ID***")
+	}
 
 	return replacements
 }
@@ -1417,29 +1441,34 @@ func (c *dnsCache) invalidate(host string) {
 // TRUST_PROXY - Forwarded-For
 // ============================================================================
 func getClientIP(r *http.Request) string {
-	trustProxy := true
-
-	if v := strings.TrimSpace(os.Getenv("TRUST_PROXY")); v != "" {
-		trustProxy = strings.ToLower(v) != constFalse
+	remoteIP := r.RemoteAddr
+	if ip, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		remoteIP = ip
 	}
 
-	if trustProxy {
-		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			ips := strings.Split(xff, ",")
-			if len(ips) > 0 {
-				return strings.TrimSpace(ips[0])
-			}
+	trustProxy, err := strconv.ParseBool(
+		strings.TrimSpace(os.Getenv("TRUST_PROXY")),
+	)
+	if err != nil || !trustProxy {
+		return remoteIP
+	}
+
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		first, _, _ := strings.Cut(xff, ",")
+		first = strings.TrimSpace(first)
+
+		if parsed := net.ParseIP(first); parsed != nil {
+			return parsed.String()
 		}
-		if xri := r.Header.Get("X-Real-IP"); xri != "" {
-			return xri
+	}
+
+	if value := strings.TrimSpace(r.Header.Get("X-Real-IP")); value != "" {
+		if parsed := net.ParseIP(value); parsed != nil {
+			return parsed.String()
 		}
 	}
 
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return ip
+	return remoteIP
 }
 
 var triggerToken = os.Getenv("TRIGGER_TOKEN")

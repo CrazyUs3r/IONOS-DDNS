@@ -221,11 +221,26 @@ func ipLog(msg string) {
 // LOG WRITER
 // ============================================================================
 func startLogWriter() {
+	if !logWriterStarted.CompareAndSwap(false, true) {
+		return
+	}
+
 	go runLogWriterLoop()
 }
 
 func runLogWriterLoop() {
-	defer recoverLogWriterPanic()
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			fmt.Fprintf(
+				os.Stderr,
+				"log writer panic: %v\n",
+				recovered,
+			)
+		}
+
+		closeLogWriterResources()
+		close(logWriterDone)
+	}()
 
 	flushTicker := time.NewTicker(2 * time.Second)
 	defer flushTicker.Stop()
@@ -237,32 +252,38 @@ func runLogWriterLoop() {
 		select {
 		case entry, ok := <-logWriteQueue:
 			if !ok {
-				closeLogWriterResources()
 				return
 			}
 
-			batchCount = handleLogWriterEntry(entry, batchCount, maxBatchSize)
+			batchCount = handleLogWriterEntry(
+				entry,
+				batchCount,
+				maxBatchSize,
+			)
 
 		case <-flushTicker.C:
 			batchCount = flushLogWriterBatch(batchCount)
 
-		case <-shutdownCtx.Done():
-			closeLogWriterResources()
-			return
-		}
-	}
-}
+		case <-logWriterStop:
+			for {
+				select {
+				case entry, ok := <-logWriteQueue:
+					if !ok {
+						return
+					}
 
-func recoverLogWriterPanic() {
-	if r := recover(); r != nil {
-		log(LogContext{
-			Level:      LogError,
-			Category:   "SYSTEM",
-			Action:     ActionError,
-			Message:    t(phrases().LogWriterPanic, "Log writer panic"),
-			Error:      fmt.Errorf("%v", r),
-			SkipNotify: true,
-		})
+					batchCount = handleLogWriterEntry(
+						entry,
+						batchCount,
+						maxBatchSize,
+					)
+
+				default:
+					_ = flushLogWriterBatch(batchCount)
+					return
+				}
+			}
+		}
 	}
 }
 
@@ -515,37 +536,5 @@ func rotateLogFile(path string, maxLines int) {
 		debugLog("MAINTENANCE", "", t(phrases().RotationQueued, "Log rotation queued"))
 	default:
 		debugLog("MAINTENANCE", "", t(phrases().RotationQueueFull, "Rotation queue full, skipping"))
-	}
-}
-
-// ============================================================================
-// LOG QUEUE FLUSH
-// ============================================================================
-func flushLogQueue() {
-	timer := time.NewTimer(logFlushTimeout)
-	defer timer.Stop()
-
-	for {
-		select {
-		case <-timer.C:
-			if n := len(logWriteQueue); n > 0 {
-				log(LogContext{
-					Level:      LogWarn,
-					Category:   "SYSTEM",
-					Action:     ActionError,
-					Message:    fmt.Sprintf(t(phrases().LogFlushQueueNotEmptyWithN, "Log queue not fully flushed (%d remaining)"), n),
-					SkipNotify: true,
-				})
-			}
-			return
-		default:
-			if len(logWriteQueue) == 0 {
-				time.Sleep(10 * time.Millisecond)
-				if len(logWriteQueue) == 0 {
-					return
-				}
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
 	}
 }

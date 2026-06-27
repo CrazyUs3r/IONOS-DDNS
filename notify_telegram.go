@@ -762,7 +762,7 @@ func (t *telegramNotifier) triggerUpdate(chatID string) {
 		defer updateInProgress.Store(false)
 		debugLog("NOTIFY", "", phrases().NotifyTelegramManualUpdate)
 		forceNextUpdate.Store(true)
-		runUpdate(false)
+		runClaimedUpdate(false)
 		t.enqueue(chatID,
 			fmt.Sprintf(phrases().TgUpdateDone+"\n🕒 <i>%s</i>",
 				time.Now().Format(statusTimestampLayout)),
