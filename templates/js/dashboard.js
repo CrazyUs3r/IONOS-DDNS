@@ -111,6 +111,7 @@ function runDeclarativeAction(rawCommand, element, event) {
 		closeSidebar: () => closeSidebar(),
 		copyIP: () => copyIP(args[0]),
 		copyLogEntry: () => copyLogEntry(element),
+		deleteLogEntry: () => deleteLogEntry(element),
 		deleteDomain: () => deleteDomain(args[0], element),
 		deleteUser: () => deleteUser(args[0], args[1]),
 		editDomain: () => editDomain(Number(args[0])),
@@ -780,6 +781,44 @@ function initChartTooltips(root = document) {
 }
 
 let isSettingsOpen = false;
+let updateRequestPending = false;
+let updateStatusPollTimer = null;
+
+function shouldSkipDashboardWSUpdate(messageType) {
+	return isSettingsOpen && [
+		'initial',
+		'metrics',
+		'domain_update',
+		'ip_check_result',
+	].includes(messageType);
+}
+
+async function updateProviderStatusIndicators(providerStatus) {
+	const entries = Object.entries(providerStatus || {});
+	let matched = 0;
+
+	for (const [key, ok] of entries) {
+		const safeID = await makeSafeID(key);
+		const candidates = new Set([
+			document.getElementById('pstatus-' + key),
+			document.getElementById('pstatus-' + safeID),
+		]);
+
+		for (const element of candidates) {
+			if (!element) continue;
+			element.textContent = ok ? ' ✅' : ' ❌';
+			matched++;
+		}
+	}
+
+	// Preserve the old behavior only for one aggregate status value.
+	if (matched === 0 && entries.length === 1) {
+		const ok = Boolean(entries[0][1]);
+		document.querySelectorAll('.provider-status-dot').forEach(element => {
+			element.textContent = ok ? ' ✅' : ' ❌';
+		});
+	}
+}
 
 function connectWS() {
 	if (!shouldRunDashboardBoot()) return;
@@ -787,33 +826,37 @@ function connectWS() {
 
 	const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
 	ws = new WebSocket(proto + location.host + '/ws');
-	ws.onmessage = (e) => {
+	ws.onmessage = (event) => {
 		let msg;
-		try { msg = JSON.parse(e.data); } catch { return; }
-		if (isSettingsOpen) { return; }
-		if (msg.type === 'initial' || msg.type === 'metrics') {
-			updateMetrics(msg.data);
-			const theme = localStorage.getItem('theme') || 'dark';
-			currentLevel = calcLevelFromMetrics(msg.data);
-			applyFavicon(theme, currentLevel, false);
-			setBlinking(theme, currentLevel);
-		} else if (msg.type === 'domain_update') {
-			updateDomainDisplay(msg.data).catch(err =>
-				console.error('domain_update error:', err)
-			);
-		} else if (msg.type === 'notification') {
+		try { msg = JSON.parse(event.data); } catch { return; }
+
+		if (!shouldSkipDashboardWSUpdate(msg.type)) {
+			if (msg.type === 'initial' || msg.type === 'metrics') {
+				updateMetrics(msg.data);
+				const theme = localStorage.getItem('theme') || 'dark';
+				currentLevel = calcLevelFromMetrics(msg.data);
+				applyFavicon(theme, currentLevel, false);
+				setBlinking(theme, currentLevel);
+			} else if (msg.type === 'domain_update') {
+				updateDomainDisplay(msg.data).catch(err =>
+					console.error('domain_update error:', err)
+				);
+			} else if (msg.type === 'ip_check_result') {
+				updateEndpointStatus(msg.data);
+			}
+		}
+
+		// Notifications and debug logs must not be discarded while settings are open.
+		if (msg.type === 'notification') {
 			showToast(msg.data.message, msg.data.level || 'info');
 		} else if (msg.type === 'debug_log') {
 			appendDebugLog(msg.data);
-		} else if (msg.type === 'ip_check_result') {
-			updateEndpointStatus(msg.data);
 		}
-		if (msg.data && msg.data.provider_status) {
-			Object.entries(msg.data.provider_status).forEach(([p, ok]) => {
-				document.querySelectorAll('.provider-status-dot').forEach(el => {
-					el.textContent = ok ? ' ✅' : ' ❌';
-				});
-			});
+
+		if (!isSettingsOpen && msg.data && msg.data.provider_status) {
+			updateProviderStatusIndicators(msg.data.provider_status).catch(err =>
+				console.error('provider_status error:', err)
+			);
 		}
 	};
 	ws.onclose = () => {
@@ -823,7 +866,10 @@ function connectWS() {
 	ws.onerror = () => {
 		try { ws.close(); } catch { }
 	};
-	ws.onopen = () => { reconnectDelay = 1000; if (reconnectTimer) clearTimeout(reconnectTimer); };
+	ws.onopen = () => {
+		reconnectDelay = 1000;
+		if (reconnectTimer) clearTimeout(reconnectTimer);
+	};
 }
 
 function scheduleReconnect() {
@@ -888,28 +934,101 @@ function filterLogs(filter) {
 	});
 }
 
-function triggerUpdate() {
-	const btn = document.getElementById('update-button');
+function setUpdateButtonBusy(isBusy) {
+	const button = document.getElementById('update-button');
+	if (button) button.disabled = Boolean(isBusy);
+}
+
+async function readAPIResponse(response) {
+	const contentType = response.headers.get('content-type') || '';
+
+	if (contentType.includes('application/json')) {
+		try {
+			return await response.json();
+		} catch {
+			return {};
+		}
+	}
+
+	const text = await response.text();
+	return {
+		error: text.trim() || `HTTP ${response.status}`,
+	};
+}
+
+function stopUpdateStatusPolling() {
+	if (updateStatusPollTimer) {
+		clearTimeout(updateStatusPollTimer);
+		updateStatusPollTimer = null;
+	}
+}
+
+async function pollUpdateStatus() {
 	const token = sessionStorage.getItem('triggerToken') || '';
-	if (btn) btn.disabled = true;
-	showToast(tr('update_starting', '⏳ Update wird gestartet...'), 'info');
-	fetch('/api/trigger', {
-		method: 'POST',
-		headers: token ? { 'X-Trigger-Token': token } : {}
-	})
-		.then(r => r.json().then(j => {
-			if (j.error) {
-				showToast('⚠️ ' + j.error, 'warning');
-			} else {
-				showToast(tr('update_started', '✅ Update gestartet'), 'success');
-			}
-		}))
-		.catch(() => {
-			showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error');
-		})
-		.finally(() => {
-			if (btn) btn.disabled = false;
+
+	try {
+		const response = await fetch('/api/trigger/status', {
+			headers: token ? { 'X-Trigger-Token': token } : {},
 		});
+		const data = await readAPIResponse(response);
+
+		if (!response.ok) {
+			throw new Error(data.error || `HTTP ${response.status}`);
+		}
+
+		if (data.update_in_progress) {
+			setUpdateButtonBusy(true);
+			updateStatusPollTimer = setTimeout(pollUpdateStatus, 1500);
+			return;
+		}
+	} catch (error) {
+		console.warn('Update status check failed:', error);
+	}
+
+	stopUpdateStatusPolling();
+	setUpdateButtonBusy(false);
+}
+
+function monitorUpdateStatus() {
+	stopUpdateStatusPolling();
+	setUpdateButtonBusy(true);
+	updateStatusPollTimer = setTimeout(pollUpdateStatus, 750);
+}
+
+async function triggerUpdate() {
+	if (updateRequestPending) return;
+
+	updateRequestPending = true;
+	setUpdateButtonBusy(true);
+
+	const token = sessionStorage.getItem('triggerToken') || '';
+	showToast(tr('update_starting', '⏳ Update wird gestartet...'), 'info');
+
+	try {
+		const response = await fetch('/api/trigger', {
+			method: 'POST',
+			headers: token ? { 'X-Trigger-Token': token } : {},
+		});
+		const data = await readAPIResponse(response);
+
+		if (response.status === 409) {
+			showToast('⚠️ ' + (data.error || tr('update_running', 'Update läuft bereits')), 'warning');
+			monitorUpdateStatus();
+			return;
+		}
+
+		if (!response.ok) {
+			throw new Error(data.error || `HTTP ${response.status}`);
+		}
+
+		showToast(tr('update_started', '✅ Update gestartet'), 'success');
+		monitorUpdateStatus();
+	} catch (error) {
+		showToast('❌ ' + (error.message || tr('connection_error', 'Verbindungsfehler')), 'error');
+		setUpdateButtonBusy(false);
+	} finally {
+		updateRequestPending = false;
+	}
 }
 
 async function sendNotifyTest() {
@@ -1199,6 +1318,7 @@ function renderSettingsDomainList() {
 		IPV64: '#a855f7',
 		HETZNER: '#14b8a6',
 		HETZNERCLOUD: '#06b6d4',
+		FEBAS: '#22c55e',
 	};
 
 	for (const domain of sorted) {
@@ -1291,6 +1411,7 @@ function resetDomainForm() {
 	_setVal('new-ipv64-token', '');
 	_setVal('new-hetzner-token', '');
 	_setVal('new-hcloud-token', '');
+	_setVal('new-febas-update-url', '');
 	_setChk('new-cf-proxied', false);
 
 	const provSel = document.getElementById('new-domain-provider');
@@ -1331,6 +1452,8 @@ function editDomain(index) {
 		_setVal('new-hetzner-token', d.api_secret || d.api_prefix || '');
 	} else if (d.provider === 'HETZNERCLOUD') {
 		_setVal('new-hcloud-token', d.api_secret || d.api_prefix || '');
+	} else if (d.provider === 'FEBAS') {
+		_setVal('new-febas-update-url', d.febas_update_url || '');
 	}
 
 	renderSettingsDomainList();
@@ -1355,6 +1478,7 @@ function toggleProviderFields() {
 	show('fields-ipv64', p === 'IPV64');
 	show('fields-hetzner', p === 'HETZNER');
 	show('fields-hetznercloud', p === 'HETZNERCLOUD');
+	show('fields-febas', p === 'FEBAS');
 }
 
 function addDomainToList() {
@@ -1389,6 +1513,11 @@ function addDomainToList() {
 		entry.api_secret = _getVal('new-hetzner-token');
 	} else if (provider === 'HETZNERCLOUD') {
 		entry.api_secret = _getVal('new-hcloud-token');
+	} else if (provider === 'FEBAS') {
+		entry.febas_update_url = _getVal('new-febas-update-url').trim();
+		if (!entry.febas_update_url) {
+			return showToast('Febas DynDNS Update-URL fehlt', 'error');
+		}
 	}
 
 	if (editIndex !== null) {
@@ -1669,6 +1798,39 @@ function copyLogEntry(btn) {
 			.then(() => showToast(tr('copied', '✓ Kopiert: ') + text.slice(0, 60)))
 			.catch(() => fallback(text));
 	} else fallback(text);
+}
+
+function deleteLogEntry(btn) {
+	const row = btn.closest('.log-entry-row');
+	if (!row) return;
+	const id = row.dataset.logId;
+	if (!id) return;
+
+	fetch('/api/logs/delete', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ id }),
+	})
+		.then(async r => {
+			if (!r.ok) throw new Error(await r.text());
+			row.style.transition = 'opacity 0.2s ease, max-height 0.25s ease';
+			row.style.overflow = 'hidden';
+			row.style.opacity = '0';
+			row.style.maxHeight = row.offsetHeight + 'px';
+			requestAnimationFrame(() => {
+				row.style.maxHeight = '0';
+				row.style.paddingTop = '0';
+				row.style.paddingBottom = '0';
+				row.style.marginTop = '0';
+				row.style.marginBottom = '0';
+			});
+			setTimeout(() => row.remove(), 270);
+			showToast('🗑️ ' + tr('log_entry_deleted', 'Eintrag gelöscht'), 'success');
+		})
+		.catch(err => {
+			console.error('Log delete failed:', err);
+			showToast('❌ ' + (err.message || tr('log_delete_failed', 'Löschen fehlgeschlagen')), 'error');
+		});
 }
 
 function exportLogs(format) {
@@ -2443,10 +2605,22 @@ function initIPTimelines() {
 }
 
 function initKeyboardShortcuts() {
-	document.addEventListener('keydown', e => {
-		if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
-		switch (e.key.toLowerCase()) {
-			case 'r': triggerUpdate(); break;
+	document.addEventListener('keydown', event => {
+		if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+
+		const target = event.target;
+		if (
+			target instanceof HTMLElement &&
+			(target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+		) {
+			return;
+		}
+
+		switch (event.key.toLowerCase()) {
+			case 'r':
+				event.preventDefault();
+				triggerUpdate();
+				break;
 			case 's': navTo('settings'); break;
 			case 'd': navTo('dashboard'); break;
 			case 'm': navTo('metrics'); break;
@@ -2599,6 +2773,21 @@ function renderBoolBadge(label, value) {
 		'</span>';
 }
 
+function formatDiagnosisUptime(value) {
+	const uptime = String(value || '').trim();
+	const match = uptime.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+(?:\.\d+)?)s)?$/);
+	if (!match) return uptime || '-';
+
+	const totalHours = Number(match[1] || 0);
+	if (totalHours < 24) return uptime;
+
+	const days = Math.floor(totalHours / 24);
+	const hours = totalHours % 24;
+	const minutes = Number(match[2] || 0);
+
+	return `${days}d ${hours}h ${minutes}m`;
+}
+
 function renderDiagnosis(d) {
 	const box = document.getElementById('diagnose-content');
 	if (!box) return;
@@ -2644,7 +2833,7 @@ function renderDiagnosis(d) {
 		<div class="diag-grid">
 			<div class="diag-card">
 				<h3>${escHtml(tr('diagnose_system_title', 'System'))}</h3>
-				<div class="diag-row"><span>${escHtml(tr('diagnose_uptime', 'Uptime'))}</span><strong>${escHtml(d.uptime || '-')}</strong></div>
+				<div class="diag-row"><span>${escHtml(tr('diagnose_uptime', 'Uptime'))}</span><strong>${escHtml(formatDiagnosisUptime(d.uptime))}</strong></div>
 				<div class="diag-row"><span>${escHtml(tr('diagnose_scheduler_ran', 'Scheduler ran'))}</span><strong>${escHtml(yesNo(d.scheduler_ran_once))}</strong></div>
 				<div class="diag-row"><span>${escHtml(tr('diagnose_last_run_ok', 'Last run OK'))}</span><strong>${escHtml(yesNo(d.last_ok))}</strong></div>
 				<div class="diag-row"><span>${escHtml(tr('diagnose_update_running', 'Update running'))}</span><strong>${escHtml(yesNo(d.update_in_progress))}</strong></div>
