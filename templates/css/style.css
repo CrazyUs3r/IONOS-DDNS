@@ -2168,10 +2168,10 @@ body.auth-page .dashboard-footer {
 	}
 
 	.log-copy-btn,
-		.log-delete-btn {
-			opacity: 1;
-			padding: 8px 10px;
-		}
+	.log-delete-btn {
+		opacity: 1;
+		padding: 8px 10px;
+	}
 
 	.ip-timeline {
 		height: 40px;
