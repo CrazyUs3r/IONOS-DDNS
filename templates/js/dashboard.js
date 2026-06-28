@@ -1813,18 +1813,24 @@ function deleteLogEntry(btn) {
 	})
 		.then(async r => {
 			if (!r.ok) throw new Error(await r.text());
-			row.style.transition = 'opacity 0.2s ease, max-height 0.25s ease';
-			row.style.overflow = 'hidden';
-			row.style.opacity = '0';
-			row.style.maxHeight = row.offsetHeight + 'px';
-			requestAnimationFrame(() => {
-				row.style.maxHeight = '0';
-				row.style.paddingTop = '0';
-				row.style.paddingBottom = '0';
-				row.style.marginTop = '0';
-				row.style.marginBottom = '0';
-			});
-			setTimeout(() => row.remove(), 270);
+			const next = row.nextElementSibling;
+					if (next) next.classList.add('no-hover');
+
+					row.style.transition = 'opacity 0.2s ease, max-height 0.25s ease';
+					row.style.overflow = 'hidden';
+					row.style.opacity = '0';
+					row.style.maxHeight = row.offsetHeight + 'px';
+					requestAnimationFrame(() => {
+						row.style.maxHeight = '0';
+						row.style.paddingTop = '0';
+						row.style.paddingBottom = '0';
+						row.style.marginTop = '0';
+						row.style.marginBottom = '0';
+					});
+					setTimeout(() => {
+						row.remove();
+						if (next) next.classList.remove('no-hover');
+					}, 270);
 			showToast('🗑️ ' + tr('log_entry_deleted', 'Eintrag gelöscht'), 'success');
 		})
 		.catch(err => {
