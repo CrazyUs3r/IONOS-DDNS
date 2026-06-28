@@ -1124,10 +1124,11 @@ button:disabled {
 	color: white;
 }
 
-.log-entry-row:hover .log-copy-btn,
-.log-entry-row:hover .log-delete-btn {
+.log-entry-row:hover:not(.no-hover) .log-copy-btn,
+.log-entry-row:hover:not(.no-hover) .log-delete-btn {
 	opacity: 1;
 }
+
 .log-entry-row:hover .log-copy-btn {
 	opacity: 1;
 }
