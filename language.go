@@ -338,14 +338,16 @@ func validateTranslationKeys(translations map[string]string) {
 }
 
 var knownAcronyms = []string{
-	"IPv4", "IPv6", "HTML", "HTTP", "JSON", "FQDN", "TTFB", "MQTT",
+	"IPv4", "IPv6", "HTML", "HTTPS", "HTTP", "JSON", "FQDN", "TTFB", "MQTT",
 	"API", "CDN", "DNS", "TTL", "TLS", "URL", "URI", "CF",
 	"CA", "OK", "TG", "WS", "ID", "IP", "JS", "QR",
 }
 
 var (
-	snakeCaseOverrides = map[string]string{}
-	snakeCaseCache     sync.Map
+	snakeCaseOverrides = map[string]string{
+		"HTTPStatusLatency": "http_status_latency",
+	}
+	snakeCaseCache sync.Map
 )
 
 func toSnakeCase(s string) string {

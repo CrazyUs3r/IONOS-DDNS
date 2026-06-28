@@ -2817,9 +2817,9 @@ func writeLogsCard(w io.Writer, logs []LogEntry, logTimeRange string) {
 					<button class="copy-btn log-copy-btn" data-click="copyLogEntry(this)" title="Kopieren">📋</button>
 					<button class="copy-btn log-delete-btn" data-click="deleteLogEntry(this)" title="Eintrag löschen">🗑️</button>
 				</div>`,
-					actionUpper, e.Level, html.EscapeString(copyText), logEntryID(e),
-					icon, displayTime, domainHTML, html.EscapeString(e.Message),
-				)
+			actionUpper, e.Level, html.EscapeString(copyText), logEntryID(e),
+			icon, displayTime, domainHTML, html.EscapeString(e.Message),
+		)
 	}
 
 	if len(logs) == 0 {

@@ -58,7 +58,7 @@ func febasZoneID(fqdn string) string {
 func loadFebasZoneRecords(ctx context.Context, zone Zone) ([]Record, error) {
 	fqdn := normalizeProviderFQDN(zone.Name)
 	if fqdn == "" {
-		return nil, fmt.Errorf("Febas zone name is empty")
+		return nil, fmt.Errorf("%s", phrases().FebasZoneNameEmpty)
 	}
 
 	cfgMu.RLock()
@@ -68,7 +68,7 @@ func loadFebasZoneRecords(ctx context.Context, zone Zone) ([]Record, error) {
 	resolverCache := newDNSCacheWithServers(dnsServers, time.Minute)
 	addrs, err := resolverCache.getIPAddrs(ctx, fqdn)
 	if err != nil {
-		debugLog("FEBAS", fqdn, fmt.Sprintf("current DNS lookup failed; update will still be attempted: %v", err))
+		debugLog("FEBAS", fqdn, fmt.Sprintf(phrases().FebasDNSLookupFailed, err))
 		return []Record{}, nil
 	}
 
@@ -151,13 +151,13 @@ func updateFebasDNS(
 	cache *ZoneRecordCache,
 ) (bool, error) {
 	if dc == nil {
-		return false, fmt.Errorf("Febas domain configuration is nil")
+		return false, fmt.Errorf("%s", phrases().FebasDomainConfigNil)
 	}
 
 	needV4 := ipv4 != "" && !febasRecordContains(records, RecordTypeA, ipv4)
 	needV6 := ipv6 != "" && !febasRecordContains(records, RecordTypeAAAA, ipv6)
 	if !needV4 && !needV6 {
-		debugLog("FEBAS", fqdn, "published DNS records are already current")
+		debugLog("FEBAS", fqdn, phrases().FebasAlreadyCurrent)
 		return false, nil
 	}
 
@@ -170,7 +170,7 @@ func updateFebasDNS(
 			Level:   LogWarn,
 			Action:  ActionDryRun,
 			Domain:  fqdn,
-			Message: fmt.Sprintf("⚠️ Would call Febas DynDNS (IPv4=%s, IPv6=%s)", ipv4, ipv6),
+			Message: fmt.Sprintf(phrases().FebasWouldUpdate, ipv4, ipv6),
 		})
 		return true, nil
 	}
@@ -193,7 +193,7 @@ func updateFebasDNS(
 		Level:   LogInfo,
 		Action:  ActionUpdate,
 		Domain:  fqdn,
-		Message: fmt.Sprintf("🔄 Febas DynDNS update requested (IPv4=%s, IPv6=%s)", ipv4, ipv6),
+		Message: fmt.Sprintf(phrases().FebasUpdateRequested, ipv4, ipv6),
 	})
 
 	return changed, nil
@@ -258,7 +258,7 @@ func setFebasCachedAddress(
 }
 
 func febasAPI(ctx context.Context, requestURL string) ([]byte, error) {
-	return apiWithRetry(ctx, "FEBAS", "Febas API failed after %d attempts", func(attempt, maxRetries int) ([]byte, bool, error) {
+	return apiWithRetry(ctx, "FEBAS", phrases().FebasAPIFailed, func(attempt, maxRetries int) ([]byte, bool, error) {
 		return febasAPIAttempt(ctx, requestURL, attempt, maxRetries)
 	})
 }
@@ -269,11 +269,11 @@ func febasAPIAttempt(
 	attempt, maxRetries int,
 ) ([]byte, bool, error) {
 	redactedURL := redactFebasURL(requestURL)
-	debugLog("HTTP", "", fmt.Sprintf("Febas attempt %d/%d GET %s", attempt+1, maxRetries, redactedURL))
+	debugLog("HTTP", "", fmt.Sprintf(phrases().FebasAttempt, attempt+1, maxRetries, redactedURL))
 
 	req, err := http.NewRequestWithContext(ctx, MethodGET, requestURL, nil)
 	if err != nil {
-		return nil, false, fmt.Errorf("create Febas request: %w", err)
+		return nil, false, fmt.Errorf("%s: %w", phrases().FebasCreateRequest, err)
 	}
 	req.Header.Set("Accept", "text/plain, application/json;q=0.9, */*;q=0.8")
 	req.Header.Set("User-Agent", ManagedComment)
@@ -287,7 +287,7 @@ func febasAPIAttempt(
 	}
 	defer func() {
 		if closeErr := res.Body.Close(); closeErr != nil {
-			debugLog("HTTP", "", fmt.Sprintf("Febas response close failed: %v", closeErr))
+			debugLog("HTTP", "", fmt.Sprintf(phrases().FebasResponseClose, closeErr))
 		}
 	}()
 
@@ -308,7 +308,7 @@ func febasAPIAttempt(
 		retry, handledErr := handleProviderAPIError(
 			ctx,
 			"FEBAS",
-			"Febas maximum attempts reached",
+			phrases().FebasAPIFailed,
 			apiErr,
 			MethodNIC,
 			res.StatusCode,
@@ -324,7 +324,7 @@ func febasAPIAttempt(
 
 		if retryable && attempt < maxRetries-1 {
 			wait := calculateRetryDelay(attempt, true)
-			debugLog("HTTP", "", fmt.Sprintf("Febas temporary response; retrying in %v", wait))
+			debugLog("HTTP", "", fmt.Sprintf(phrases().FebasTemporaryRetry, wait))
 			if !sleepOrCancel(ctx, wait) {
 				return nil, false, fmt.Errorf("%s: %w", phrases().ErrContextCancelled, ctx.Err())
 			}
@@ -348,10 +348,10 @@ func febasHTTPClient() *http.Client {
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		host := strings.ToLower(req.URL.Hostname())
 		if host != "febas.de" && host != "www.febas.de" {
-			return fmt.Errorf("Febas redirect to untrusted host %q blocked", host)
+			return fmt.Errorf(phrases().FebasRedirectBlocked, host)
 		}
 		if len(via) >= 5 {
-			return fmt.Errorf("too many Febas redirects")
+			return fmt.Errorf("%s", phrases().FebasTooManyRedirects)
 		}
 		if baseRedirect != nil {
 			return baseRedirect(req, via)
@@ -378,7 +378,7 @@ func febasResponseError(body []byte) (bool, error) {
 	}
 	for _, marker := range temporaryMarkers {
 		if strings.Contains(response, marker) {
-			return true, fmt.Errorf("Febas temporary error: %s", sanitizeFebasText(strings.TrimSpace(string(body))))
+			return true, fmt.Errorf(phrases().FebasTemporaryError, sanitizeFebasText(strings.TrimSpace(string(body))))
 		}
 	}
 
@@ -397,7 +397,7 @@ func febasResponseError(body []byte) (bool, error) {
 	}
 	for _, marker := range permanentMarkers {
 		if strings.Contains(response, marker) {
-			return false, fmt.Errorf("Febas rejected update: %s", sanitizeFebasText(strings.TrimSpace(string(body))))
+			return false, fmt.Errorf(phrases().FebasRejectedUpdate, sanitizeFebasText(strings.TrimSpace(string(body))))
 		}
 	}
 
@@ -456,7 +456,7 @@ func renderFebasUpdateURL(rawURL, fqdn, ipv4, ipv6 string) (string, error) {
 	}
 
 	if _, err := url.ParseRequestURI(rendered); err != nil {
-		return "", fmt.Errorf("invalid rendered Febas update URL: %w", err)
+		return "", fmt.Errorf("%s: %w", phrases().FebasURLInvalid, err)
 	}
 
 	return rendered, nil
@@ -465,31 +465,31 @@ func renderFebasUpdateURL(rawURL, fqdn, ipv4, ipv6 string) (string, error) {
 func validateFebasUpdateURL(rawURL string) error {
 	rawURL = strings.TrimSpace(rawURL)
 	if rawURL == "" {
-		return fmt.Errorf("Febas update URL is required")
+		return fmt.Errorf("%s", phrases().FebasURLRequired)
 	}
 
 	u, err := url.ParseRequestURI(rawURL)
 	if err != nil {
-		return fmt.Errorf("invalid Febas update URL: %w", err)
+		return fmt.Errorf("%s: %w", phrases().FebasURLInvalid, err)
 	}
 	if !strings.EqualFold(u.Scheme, "https") {
-		return fmt.Errorf("Febas update URL must use HTTPS")
+		return fmt.Errorf("%s", phrases().FebasURLMustUseHTTPS)
 	}
 
 	host := strings.ToLower(u.Hostname())
 	if host != "febas.de" && host != "www.febas.de" {
-		return fmt.Errorf("Febas update URL must point to febas.de")
+		return fmt.Errorf("%s", phrases().FebasURLMustPointTo)
 	}
 	if !strings.EqualFold(strings.TrimRight(u.Path, "/"), "/api/dyndns.php") {
-		return fmt.Errorf("Febas update URL must use /api/dyndns.php")
+		return fmt.Errorf("%s", phrases().FebasURLInvalid)
 	}
 
 	query := u.Query()
 	if strings.TrimSpace(query.Get("kundenid")) == "" {
-		return fmt.Errorf("Febas update URL is missing kundenid")
+		return fmt.Errorf("%s", phrases().FebasURLMissingKundenID)
 	}
 	if strings.TrimSpace(query.Get("token")) == "" {
-		return fmt.Errorf("Febas update URL is missing token")
+		return fmt.Errorf("%s", phrases().FebasURLMissingToken)
 	}
 
 	return nil

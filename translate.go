@@ -33,7 +33,7 @@ type Phrases struct {
 	UserRoleViewer, UserRoleEditor, UserRoleAdmin, UserBtnCreate, NotifyTestDesc          string
 	IPv64DomainManagement, IPv64DomainFQDN, IPv64DomainPlaceholder, IPv64ActionAdd        string
 	ProviderStatusOK, ProviderStatusError, IPv64DomainPlaceholderToken                    string
-	IPv64DomainAPITokenOptional, LogDeleteFailedJS, LogEntryDeletedJS         string
+	IPv64DomainAPITokenOptional, LogDeleteFailedJS, LogEntryDeletedJS                     string
 
 	// Diagnose / Backup
 	NavOverview, NavMonitoring, NavTools, NavConfig, NavDiagnoseJS, NavBackupJS string
@@ -180,7 +180,7 @@ type Phrases struct {
 
 	// Provider-Hinweise / Config
 	IonosAPIRequired, Ipv64TokenRequired, CloudflareAuthRequired, UnknownProvider  string
-	HetznerAuthRequired, FebasUpdateURLRequired                                                            string
+	HetznerAuthRequired, FebasUpdateURLRequired                                    string
 	DomainParamMissing, DomainStillActiveInConfig, NicIPv64Updates                 string
 	NoStatusFileFound, DomainNotFoundInStatus                                      string
 	DomainDeletedFromStatusLog, DomainRemovedFromStatus                            string
@@ -205,6 +205,15 @@ type Phrases struct {
 	IonosZonesParseFailed, IonosZonesFiltered, IonosCacheMissingRealRecordID                   string
 	IonosCleanupInvalidCachedRecordID, IonosCreateReconciliationFailed                         string
 	UpdateFailedWithError                                                                      string
+
+	// Febas
+	FebasZoneNameEmpty, FebasDomainConfigNil, FebasCreateRequest       string
+	FebasRedirectBlocked, FebasTooManyRedirects, FebasTemporaryError   string
+	FebasRejectedUpdate, FebasURLRequired, FebasURLInvalid             string
+	FebasURLMustUseHTTPS, FebasURLMustPointTo, FebasURLMissingKundenID string
+	FebasURLMissingToken, FebasAlreadyCurrent, FebasWouldUpdate        string
+	FebasUpdateRequested, FebasAttempt, FebasAPIFailed                 string
+	FebasTemporaryRetry, FebasResponseClose, FebasDNSLookupFailed      string
 
 	// Printing
 	IonosInfrastructureLoadFailed, LoadHetznerCloudZoneLoadFailed, LoadHetznerDNSZoneLoadFailed string
