@@ -1108,15 +1108,7 @@ button:disabled {
 	display: contents;
 }
 
-.log-copy-btn {
-	opacity: 0;
-	transition: opacity 0.15s;
-	flex-shrink: 0;
-	align-self: center;
-	padding: 3px 6px;
-	font-size: 0.75rem;
-}
-
+.log-copy-btn,
 .log-delete-btn {
 	opacity: 0;
 	transition: opacity 0.15s;
@@ -1126,8 +1118,16 @@ button:disabled {
 	font-size: 0.75rem;
 }
 
-.log-delete-btn:hover { color: var(--color-err, #e55); }
+.log-delete-btn:hover {
+	background: var(--color-err, #c0392b);
+	border-color: var(--color-err, #c0392b);
+	color: white;
+}
 
+.log-entry-row:hover .log-copy-btn,
+.log-entry-row:hover .log-delete-btn {
+	opacity: 1;
+}
 .log-entry-row:hover .log-copy-btn {
 	opacity: 1;
 }
@@ -2167,15 +2167,11 @@ body.auth-page .dashboard-footer {
 		shape-rendering: crispEdges;
 	}
 
-	.log-copy-btn {
-		opacity: 1;
-		padding: 8px 10px;
-	}
-
-	.log-delete-btn {
-		opacity: 1;
-		padding: 8px 10px;
-	}
+	.log-copy-btn,
+		.log-delete-btn {
+			opacity: 1;
+			padding: 8px 10px;
+		}
 
 	.ip-timeline {
 		height: 40px;
