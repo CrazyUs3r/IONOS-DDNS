@@ -134,7 +134,12 @@ body {
 	padding: 9px 16px;
 	cursor: pointer;
 	color: #94a3b8;
+	font: inherit;
 	font-size: 0.875rem;
+	text-align: left;
+	width: 100%;
+	background: transparent;
+	border: 0;
 	border-radius: 0;
 	transition: background 0.15s, color 0.15s;
 	border-left: 3px solid transparent;
@@ -498,6 +503,17 @@ button:disabled {
 	cursor: not-allowed;
 }
 
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible {
+	outline: 2px solid var(--btn-border);
+	outline-offset: 2px;
+}
+
 .theme-toggle {
 	background: var(--border);
 	border: none;
@@ -839,6 +855,22 @@ button:disabled {
 	overscroll-behavior: contain;
 }
 
+.domain-history-summary {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 9px 12px;
+	font-size: 0.78rem;
+	font-weight: 600;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+	opacity: 0.72;
+}
+
+.domain-history-summary span {
+	font-weight: 400;
+	opacity: 0.75;
+}
 
 .domain-history-head {
 	background: rgba(255, 255, 255, 0.02);
@@ -2094,12 +2126,7 @@ body.auth-page .dashboard-footer {
 		transform: translateX(0);
 	}
 
-	.sidebar.sidebar-open~#sidebar-overlay,
 	#sidebar-overlay.visible {
-		display: block;
-	}
-
-	.sidebar.sidebar-open+.sidebar-overlay {
 		display: block;
 	}
 
@@ -2288,8 +2315,14 @@ body.auth-page .dashboard-footer {
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.auth-grid-floor {
-		animation: none;
+
+	*,
+	*::before,
+	*::after {
+		scroll-behavior: auto !important;
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
 	}
 }
 
@@ -3014,7 +3047,7 @@ body.auth-page .dashboard-footer {
 	position: absolute;
 	right: 0;
 	top: calc(100% + 8px);
-	width: 320px;
+	width: min(320px, calc(100vw - 20px));
 	background: var(--card);
 	border: 1px solid var(--border);
 	border-radius: 10px;
