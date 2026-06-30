@@ -21,6 +21,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // ============================================================================
@@ -36,7 +38,9 @@ const (
 	pbkdf2Iter              = 600_000
 	pbkdf2SaltLen           = 32
 	pbkdf2KeyLen            = 32
+	dummyPasswordHash       = "pbkdf2-sha256$600000$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA$iJ2gtxNOzRbKDl2b9Rs/8uLh+TzpRSvl/xFJIkTRrA4" // #nosec G101 -- intentionally fixed, non-secret hash used to equalize failed-login timing
 	setupTokenLength        = 32
+	maxAuthRequestBody      = 64 << 10
 )
 
 type UserRole string
@@ -80,7 +84,7 @@ var (
 	authEnabled    = true
 )
 
-func initAuth(logsDir string) {
+func initAuth(logsDir string) error {
 	usersFilePath = filepath.Join(filepath.Dir(logsDir), "users.json")
 
 	if v := strings.ToLower(strings.TrimSpace(os.Getenv("DASHBOARD_AUTH"))); v == "false" {
@@ -90,38 +94,47 @@ func initAuth(logsDir string) {
 			Action:  ActionConfig,
 			Message: phrases().AuthDisabled,
 		})
-		return
+		return nil
 	}
 
-	users := loadUsers()
-	if len(users) == 0 {
-		setupTokenOnce.Do(func() {
-			b := make([]byte, setupTokenLength)
-			_, _ = rand.Read(b)
-			setupToken = hex.EncodeToString(b)
-			ip := getLocalIP()
+	users, err := readUsersFile()
+	if err != nil {
+		return fmt.Errorf("load dashboard users: %w", err)
+	}
+	usersCacheMu.Lock()
+	usersCache = append([]DashboardUser{}, users...)
+	usersCacheMu.Unlock()
 
+	if len(users) == 0 {
+		var tokenErr error
+		setupTokenOnce.Do(func() {
+			setupToken, tokenErr = randomHexToken(setupTokenLength)
+			if tokenErr != nil {
+				return
+			}
+
+			ip := getLocalIP()
 			titleLine := phrases().SetupRequired
 			tokenLine := fmt.Sprintf("%s: %s", phrases().SetupTokenLabel, setupToken)
 			urlLine := fmt.Sprintf("%s: http://%s:%s/setup", phrases().SetupOpenURL, ip, cfg.HealthPort)
-
 			width := maxLen(titleLine, tokenLine, urlLine)
 
 			logBoxBorder := func(left, mid, right string) {
 				log(LogContext{
-					Level:      LogInfo,
-					Action:     ActionStart,
-					SkipNotify: true,
-					Message:    left + strings.Repeat(mid, width+4) + right,
+					Level:       LogInfo,
+					Action:      ActionStart,
+					SkipNotify:  true,
+					SkipPersist: true,
+					Message:     left + strings.Repeat(mid, width+4) + right,
 				})
 			}
-
 			logBoxLine := func(text string) {
 				log(LogContext{
-					Level:      LogInfo,
-					Action:     ActionStart,
-					SkipNotify: true,
-					Message:    fmt.Sprintf("║  %-*s  ║", width, text),
+					Level:       LogInfo,
+					Action:      ActionStart,
+					SkipNotify:  true,
+					SkipPersist: true,
+					Message:     fmt.Sprintf("║  %-*s  ║", width, text),
 				})
 			}
 
@@ -131,9 +144,13 @@ func initAuth(logsDir string) {
 			logBoxLine(urlLine)
 			logBoxBorder("╚", "═", "╝")
 		})
+		if tokenErr != nil {
+			return fmt.Errorf("generate dashboard setup token: %w", tokenErr)
+		}
 	}
 
 	go sessionStore.cleanupLoop()
+	return nil
 }
 
 func maxLen(values ...string) int {
@@ -243,13 +260,15 @@ func (s *SessionStore) cleanupLoop() {
 	for {
 		select {
 		case <-ticker.C:
+			now := time.Now()
 			s.mu.Lock()
 			for token, sess := range s.sessions {
-				if time.Now().After(sess.ExpiresAt) {
+				if now.After(sess.ExpiresAt) {
 					delete(s.sessions, token)
 				}
 			}
 			s.mu.Unlock()
+			cleanupTOTPStores(now)
 		case <-shutdownCtx.Done():
 			return
 		}
@@ -274,6 +293,27 @@ var (
 	errUsersExist    = errors.New("users already configured")
 )
 
+func readUsersFile() ([]DashboardUser, error) {
+	data, err := os.ReadFile(usersFilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []DashboardUser{}, nil
+		}
+		return nil, err
+	}
+	if len(strings.TrimSpace(string(data))) == 0 {
+		return nil, errors.New("users.json is empty")
+	}
+	users, err := unmarshalUsersWithTOTP(data)
+	if err != nil {
+		return nil, err
+	}
+	if users == nil {
+		return nil, errors.New("users.json must contain a JSON array")
+	}
+	return users, nil
+}
+
 func loadUsers() []DashboardUser {
 	usersCacheMu.RLock()
 	cached := usersCache
@@ -294,11 +334,7 @@ func loadUsers() []DashboardUser {
 		return out
 	}
 
-	data, err := os.ReadFile(usersFilePath)
-	if err != nil {
-		return nil
-	}
-	users, err := unmarshalUsersWithTOTP(data)
+	users, err := readUsersFile()
 	if err != nil {
 		return nil
 	}
@@ -383,10 +419,31 @@ func findUserByID(userID string) (*DashboardUser, bool) {
 	return nil, false
 }
 
-func generateUserID() string {
-	b := make([]byte, 8)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
+func generateUserID() (string, error) {
+	return randomHexToken(8)
+}
+
+func validDashboardUsername(username string) bool {
+	username = strings.TrimSpace(username)
+	runeCount := utf8.RuneCountInString(username)
+	if runeCount < 3 || runeCount > 64 {
+		return false
+	}
+	return strings.IndexFunc(username, unicode.IsControl) == -1
+}
+
+func safeAuthLogValue(value string) string {
+	value = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return '�'
+		}
+		return r
+	}, strings.TrimSpace(value))
+	if utf8.RuneCountInString(value) <= 128 {
+		return value
+	}
+	runes := []rune(value)
+	return string(runes[:128]) + "…"
 }
 
 func safeLocalRedirect(raw string) string {
@@ -457,15 +514,19 @@ func expireSessionCookie(w http.ResponseWriter, name string, secure bool) {
 }
 
 func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
-	expireSessionCookie(w, sessionCookieName(r), secureCookieEnabled(r))
-	expireSessionCookie(w, legacySessionCookieName, secureCookieEnabled(r))
+	secure := secureCookieEnabled(r)
+	expireSessionCookie(w, sessionCookieNameHTTP, false)
+	expireSessionCookie(w, legacySessionCookieName, secure)
+	if requestUsesHTTPS(r) {
+		expireSessionCookie(w, sessionCookieNameHTTPS, secure)
+	}
 }
 
 func isUnsafeMethod(method string) bool {
 	return method != http.MethodGet && method != http.MethodHead && method != http.MethodOptions
 }
 
-func validCSRFRequest(r *http.Request, sess *Session) bool {
+func validCSRFRequest(w http.ResponseWriter, r *http.Request, sess *Session) bool {
 	if sess == nil || sess.CSRFToken == "" {
 		return false
 	}
@@ -473,8 +534,11 @@ func validCSRFRequest(r *http.Request, sess *Session) bool {
 	provided := strings.TrimSpace(r.Header.Get("X-CSRF-Token"))
 	if provided == "" {
 		contentType := strings.ToLower(r.Header.Get("Content-Type"))
-		if !strings.HasPrefix(contentType, "application/x-www-form-urlencoded") || r.ContentLength > 64<<10 {
+		if !strings.HasPrefix(contentType, "application/x-www-form-urlencoded") || r.ContentLength > maxAuthRequestBody {
 			return false
+		}
+		if r.PostForm == nil {
+			r.Body = http.MaxBytesReader(w, r.Body, maxAuthRequestBody)
 		}
 		if err := r.ParseForm(); err != nil {
 			return false
@@ -485,7 +549,7 @@ func validCSRFRequest(r *http.Request, sess *Session) bool {
 }
 
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
-	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	r.Body = http.MaxBytesReader(w, r.Body, maxAuthRequestBody)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(dst); err != nil {
@@ -499,6 +563,19 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
 		return err
 	}
 	return nil
+}
+
+func parseLimitedAuthForm(w http.ResponseWriter, r *http.Request) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, maxAuthRequestBody)
+	if err := r.ParseForm(); err != nil {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+		} else {
+			http.Error(w, "invalid form data", http.StatusBadRequest)
+		}
+		return false
+	}
+	return true
 }
 
 // ============================================================================
@@ -615,7 +692,7 @@ func authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		if isUnsafeMethod(r.Method) && !validCSRFRequest(r, sess) {
+		if isUnsafeMethod(r.Method) && !validCSRFRequest(w, r, sess) {
 			rejectForbidden(
 				w,
 				r,
@@ -672,8 +749,12 @@ func hasPermission(role UserRole, method, path string) bool {
 // ============================================================================
 
 func handleLogin(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if r.Method == http.MethodPost && !parseLimitedAuthForm(w, r) {
 		return
 	}
 	if !authEnabled {
@@ -708,6 +789,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 				Message: fmt.Sprintf("🚫 Login rate limit exceeded for IP: %s", clientIP),
 			})
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusTooManyRequests)
 			_, _ = fmt.Fprintf(w, "%s", buildLoginPage(errMsg, redirect))
 			return
 		}
@@ -716,7 +798,12 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		password := r.FormValue("password")
 
 		user, found := findUserByUsername(username)
-		if found && checkPassword(password, user.PasswordHash) {
+		storedHash := dummyPasswordHash
+		if found {
+			storedHash = user.PasswordHash
+		}
+		passwordOK := checkPassword(password, storedHash)
+		if found && passwordOK {
 			handleLoginPost2FA(w, r, user, redirect)
 			return
 		}
@@ -725,7 +812,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		log(LogContext{
 			Level:   LogWarn,
 			Action:  ActionConfig,
-			Message: fmt.Sprintf(phrases().LoginFailedLog, username, getClientIP(r)),
+			Message: fmt.Sprintf(phrases().LoginFailedLog, safeAuthLogValue(username), getClientIP(r)),
 		})
 	}
 
@@ -754,84 +841,122 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 // HANDLER: /setup
 // ============================================================================
 
+type setupForm struct {
+	username string
+	password string
+}
+
 func handleSetup(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if r.Method == http.MethodPost && !parseLimitedAuthForm(w, r) {
 		return
 	}
 	if !authEnabled {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
-
-	users := loadUsers()
-	if len(users) > 0 {
+	if len(loadUsers()) > 0 {
 		http.Redirect(w, r, "/login", http.StatusFound)
 		return
 	}
 
-	var errMsg string
-
+	errMsg := ""
 	if r.Method == MethodPOST {
-		token := strings.TrimSpace(r.FormValue("setup_token"))
-		username := strings.TrimSpace(r.FormValue("username"))
-		password := r.FormValue("password")
-		password2 := r.FormValue("password2")
-
-		switch {
-		case token != setupToken:
-			errMsg = phrases().ErrInvalidSetupToken
-		case len(username) < 3:
-			errMsg = phrases().ErrUsernameTooShort
-		case len(password) < 8:
-			errMsg = phrases().ErrPasswordTooShort
-		case password != password2:
-			errMsg = phrases().ErrPasswordsMismatch
-		default:
-			hash, err := hashPassword(password)
-			if err != nil {
-				errMsg = phrases().ErrAccountCreate
-				break
-			}
-
-			newUser := DashboardUser{
-				ID:           generateUserID(),
-				Username:     username,
-				PasswordHash: hash,
-				Role:         RoleAdmin,
-				CreatedAt:    time.Now(),
-			}
-
-			if err := mutateUsers(func(users []DashboardUser) ([]DashboardUser, error) {
-				if len(users) > 0 {
-					return nil, errUsersExist
-				}
-				return []DashboardUser{newUser}, nil
-			}); err != nil {
-				errMsg = phrases().ErrAccountSave
-				break
-			}
-
-			setupToken = ""
-			log(LogContext{
-				Level:   LogInfo,
-				Action:  ActionStart,
-				Message: fmt.Sprintf(phrases().FirstAdminCreatedLog, username),
-			})
-
-			sess := sessionStore.Create(&newUser, DefaultSessionMaxAge)
-			if sess == nil {
-				errMsg = phrases().ErrAccountCreate
-				break
-			}
-			setSessionCookie(w, r, sess)
-			http.Redirect(w, r, "/", http.StatusSeeOther)
+		var completed bool
+		errMsg, completed = handleSetupPost(w, r)
+		if completed {
 			return
 		}
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = fmt.Fprintf(w, "%s", buildSetupPage(errMsg))
+}
+
+func handleSetupPost(w http.ResponseWriter, r *http.Request) (string, bool) {
+	form, errMsg := validateSetupForm(r)
+	if errMsg != "" {
+		return errMsg, false
+	}
+
+	newUser, errMsg := createInitialAdmin(form)
+	if errMsg != "" {
+		return errMsg, false
+	}
+
+	setupToken = ""
+	log(LogContext{
+		Level:   LogInfo,
+		Action:  ActionStart,
+		Message: fmt.Sprintf(phrases().FirstAdminCreatedLog, form.username),
+	})
+
+	sess := sessionStore.Create(&newUser, DefaultSessionMaxAge)
+	if sess == nil {
+		return phrases().ErrAccountCreate, false
+	}
+	setSessionCookie(w, r, sess)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+	return "", true
+}
+
+func validateSetupForm(r *http.Request) (setupForm, string) {
+	token := strings.TrimSpace(r.FormValue("setup_token"))
+	form := setupForm{
+		username: strings.TrimSpace(r.FormValue("username")),
+		password: r.FormValue("password"),
+	}
+	passwordConfirmation := r.FormValue("password2")
+
+	switch {
+	case subtle.ConstantTimeCompare([]byte(token), []byte(setupToken)) != 1:
+		return setupForm{}, phrases().ErrInvalidSetupToken
+	case !validDashboardUsername(form.username):
+		return setupForm{}, phrases().ErrUsernameTooShort
+	case len(form.password) < 8:
+		return setupForm{}, phrases().ErrPasswordTooShort
+	case form.password != passwordConfirmation:
+		return setupForm{}, phrases().ErrPasswordsMismatch
+	default:
+		return form, ""
+	}
+}
+
+func createInitialAdmin(form setupForm) (DashboardUser, string) {
+	hash, err := hashPassword(form.password)
+	if err != nil {
+		return DashboardUser{}, phrases().ErrAccountCreate
+	}
+
+	userID, err := generateUserID()
+	if err != nil {
+		return DashboardUser{}, phrases().ErrAccountCreate
+	}
+
+	newUser := DashboardUser{
+		ID:           userID,
+		Username:     form.username,
+		PasswordHash: hash,
+		Role:         RoleAdmin,
+		CreatedAt:    time.Now(),
+	}
+	if err := saveInitialAdmin(newUser); err != nil {
+		return DashboardUser{}, phrases().ErrAccountSave
+	}
+	return newUser, ""
+}
+
+func saveInitialAdmin(newUser DashboardUser) error {
+	return mutateUsers(func(users []DashboardUser) ([]DashboardUser, error) {
+		if len(users) > 0 {
+			return nil, errUsersExist
+		}
+		return []DashboardUser{newUser}, nil
+	})
 }
 
 // ============================================================================
@@ -937,7 +1062,7 @@ func decodeCreateUserRequest(
 
 	req.Username = strings.TrimSpace(req.Username)
 
-	if len(req.Username) < 3 || len(req.Password) < 8 {
+	if !validDashboardUsername(req.Username) || len(req.Password) < 8 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
 			"error": phrases().ErrUsernamePasswordMin,
 		})
@@ -958,13 +1083,18 @@ func createDashboardUser(
 	req createUserRequest,
 	passwordHash string,
 ) error {
+	userID, err := generateUserID()
+	if err != nil {
+		return err
+	}
+
 	return mutateUsers(func(users []DashboardUser) ([]DashboardUser, error) {
 		if usernameExists(users, req.Username) {
 			return nil, errUsernameTaken
 		}
 
 		return append(users, DashboardUser{
-			ID:           generateUserID(),
+			ID:           userID,
 			Username:     req.Username,
 			PasswordHash: passwordHash,
 			Role:         req.Role,
@@ -1258,7 +1388,7 @@ func checkPassword(password, stored string) bool {
 	}
 
 	iter, err := strconv.Atoi(parts[1])
-	if err != nil {
+	if err != nil || iter < 10_000 || iter > 10_000_000 {
 		return false
 	}
 
@@ -1268,7 +1398,7 @@ func checkPassword(password, stored string) bool {
 	}
 
 	want, err := base64.RawStdEncoding.DecodeString(parts[3])
-	if err != nil {
+	if err != nil || len(salt) < 16 || len(salt) > 128 || len(want) < 16 || len(want) > 128 {
 		return false
 	}
 

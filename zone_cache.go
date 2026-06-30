@@ -349,14 +349,24 @@ func loadZoneRecordsForProvider(
 	switch provider {
 	case ProviderCloudflare:
 		return loadCloudflareRecords(ctx, domainConfig, zone.ID)
+
 	case ProviderHetzner:
 		return loadHetznerDNSZoneRecords(ctx, domainConfig, zone.ID)
+
 	case ProviderHetznerCloud:
 		return loadHetznerCloudZoneRecords(ctx, domainConfig, zone.ID)
+
 	case ProviderFebas:
 		return loadFebasZoneRecords(ctx, zone)
-	default:
+
+	case ProviderDNScale:
+		return loadDNScaleInfrastructureRecords(ctx, domainConfig, zone.ID)
+
+	case ProviderIONOS:
 		return loadIonosZoneRecords(ctx, domainConfig, zone.ID)
+
+	default:
+		return nil, fmt.Errorf("unknown provider: %s", provider)
 	}
 }
 

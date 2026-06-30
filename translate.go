@@ -215,6 +215,41 @@ type Phrases struct {
 	FebasUpdateRequested, FebasAttempt, FebasAPIFailed                 string
 	FebasTemporaryRetry, FebasResponseClose, FebasDNSLookupFailed      string
 
+	// DNScale
+	DNScaleAPIKeyRequired      string
+	DNScaleCacheSaveFailed     string
+	DNScaleZonesLoadedFromDisk string
+	// DNScale API
+	DNScaleAPIFailed           string
+	DNScaleAttempt             string
+	DNScaleNetworkErrorNoRetry string
+	DNScaleMaxAttempts         string
+
+	// DNScale Zones
+	DNScaleZonesLoadFailed  string
+	DNScaleEmptyAPIResponse string
+	DNScaleZonesParseFailed string
+	DNScaleZonesFiltered    string
+
+	// DNScale Records
+	DNScaleRecordsLoadFailed          string
+	DNScaleRecordsParseFailed         string
+	DNScaleRecordArrow                string
+	DNScaleSuccessResponseParseFailed string
+
+	// DNScale Errors
+	DNScaleAPIError       string
+	DNScaleAPIErrorWithIP string
+
+	// DNScale Cache
+	DNScaleCacheZoneNotFound string
+	DNScaleCacheRecordAdded  string
+	DNScaleCacheUpdated      string
+
+	// DNScale Cleanup
+	CleanupStartDNScale    string
+	CleanupOrphanedDNScale string
+
 	// Printing
 	IonosInfrastructureLoadFailed, LoadHetznerCloudZoneLoadFailed, LoadHetznerDNSZoneLoadFailed string
 	LoadCloudflareLoadFailed, LoadIPv64InfrastructureLoadFailed, MissingDomainConfigForProvider string

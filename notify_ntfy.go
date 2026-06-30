@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -18,10 +19,18 @@ type ntfyNotifier struct {
 	topic     string
 	token     string
 	sendQueue chan ntfyQueuedMsg
+	ctx       context.Context
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
 }
 
 func (n *ntfyNotifier) Name() string {
 	return "ntfy"
+}
+
+func (n *ntfyNotifier) Close() {
+	n.cancel()
+	n.wg.Wait()
 }
 
 type ntfyQueuedMsg struct {
@@ -36,18 +45,29 @@ type ntfyQueuedMsg struct {
 // NTFY NOTIFIER
 // ============================================================================
 func newNtfyNotifier(url, topic, token string) *ntfyNotifier {
+	ctx, cancel := context.WithCancel(notificationParentContext())
 	n := &ntfyNotifier{
 		url:       strings.TrimRight(strings.TrimSpace(url), "/"),
 		topic:     strings.Trim(strings.TrimSpace(topic), "/"),
 		token:     strings.TrimSpace(token),
 		sendQueue: make(chan ntfyQueuedMsg, ntfyQueueSize),
+		ctx:       ctx,
+		cancel:    cancel,
 	}
 
-	go n.drainQueue()
+	n.wg.Go(func() {
+		n.drainQueue()
+	})
 	return n
 }
 
 func (n *ntfyNotifier) Send(msg NotifyMessage) error {
+	select {
+	case <-n.ctx.Done():
+		return n.ctx.Err()
+	default:
+	}
+
 	icon := notifyIcon(msg)
 	qm := ntfyQueuedMsg{
 		title:    fmt.Sprintf("%s Go-DynDNS · %s", icon, msg.Action),
@@ -90,7 +110,7 @@ func (n *ntfyNotifier) drainQueue() {
 
 	for {
 		select {
-		case <-shutdownCtx.Done():
+		case <-n.ctx.Done():
 			return
 		case <-ticker.C:
 			select {
@@ -144,8 +164,8 @@ func (n *ntfyNotifier) sendWithRetry(msg ntfyQueuedMsg) error {
 
 		timer := time.NewTimer(wait)
 		select {
-		case <-shutdownCtx.Done():
-			timer.Stop()
+		case <-n.ctx.Done():
+			stopNotifyTimer(timer)
 			return lastErr
 		case <-timer.C:
 		}
@@ -159,7 +179,7 @@ func (n *ntfyNotifier) sendWithRetry(msg ntfyQueuedMsg) error {
 func (n *ntfyNotifier) doSend(msg ntfyQueuedMsg) error {
 	endpoint := fmt.Sprintf("%s/%s", n.url, n.topic)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(

@@ -36,6 +36,7 @@ var (
 	atomicDebugEnabled atomic.Bool
 	atomicDebugHTTPRaw atomic.Bool
 	cfgMu              sync.RWMutex
+	configUpdateMu     sync.Mutex
 	logMutex           sync.Mutex
 	metricsPersistMu   sync.Mutex
 	logFile            *os.File
@@ -236,6 +237,10 @@ const (
 	IconSuccess  = "✅"
 	HTMLChecked  = " checked"
 	HTMLSelected = " selected"
+
+	emailTLSModeStartTLS = "starttls"
+	emailTLSModeTLS      = "tls"
+	emailTLSModePlain    = "plain"
 )
 
 var actionIcons = map[string]string{
@@ -400,6 +405,7 @@ const (
 	ProviderHetzner      ProviderType = "HETZNER"
 	ProviderHetznerCloud ProviderType = "HETZNERCLOUD"
 	ProviderFebas        ProviderType = "FEBAS"
+	ProviderDNScale      ProviderType = "DNSCALE"
 
 	ionosBaseURL        = "https://api.hosting.ionos.com/dns/v1/zones"
 	cloudflareAPIBase   = "https://api.cloudflare.com/client/v4"
@@ -407,6 +413,7 @@ const (
 	ipv64APINIC         = "https://ipv64.net/nic/update?"
 	hetznerDNSBaseURL   = "https://dns.hetzner.com/api/v1"
 	hetznerCloudBaseURL = "https://api.hetzner.cloud/v1"
+	dnscaleBaseURL      = "https://api.dnscale.eu/v1/zones"
 )
 
 type ProviderType string
@@ -424,13 +431,14 @@ const (
 )
 
 type LogContext struct {
-	Level      LogLevel
-	Action     string
-	Domain     string
-	Category   string
-	Message    string
-	Error      error
-	SkipNotify bool
+	Level       LogLevel
+	Action      string
+	Domain      string
+	Category    string
+	Message     string
+	Error       error
+	SkipNotify  bool
+	SkipPersist bool
 }
 
 type LogEntry struct {
@@ -464,6 +472,7 @@ type DomainConfig struct {
 	CFZoneID       string       `json:"cf_zone_id,omitempty"`
 	IPv64Token     string       `json:"ipv64_token,omitempty"`
 	FebasUpdateURL string       `json:"febas_update_url,omitempty"`
+	APIKey         string       `json:"api_key,omitempty"`
 	TTL            int          `json:"ttl,omitempty"`
 	CFProxied      bool         `json:"cf_proxied,omitempty"`
 	IPMode         string       `json:"ip_mode,omitempty"`
@@ -495,6 +504,10 @@ type rawEntry struct {
 	// Febas DynDNS
 	FebasUpdateURL  string `json:"febas_update_url"`
 	FebasUpdateURL2 string `json:"FEBAS_UPDATE_URL"`
+
+	// DNScale DynDNS
+	APIKey  string `json:"api_key"`
+	APIKey2 string `json:"DNSCALE_API_KEY"`
 
 	// Hetzner DNS / Hetzner Cloud DNS aliases
 	HetznerToken       string `json:"hetzner_token"`
@@ -712,9 +725,11 @@ type WSMessage struct {
 }
 
 type WSClient struct {
-	conn      *websocket.Conn
-	send      chan WSMessage
-	closeOnce sync.Once
+	conn       *websocket.Conn
+	send       chan WSMessage
+	closeOnce  sync.Once
+	sendMu     sync.RWMutex
+	sendClosed bool
 }
 
 type WSHub struct {

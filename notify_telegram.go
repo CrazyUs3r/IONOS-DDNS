@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"math/big"
 	"net"
@@ -136,6 +137,12 @@ func (t *telegramNotifier) Name() string { return "Telegram" }
 // SEND (outbound notifications) — uses shared getHTTPClient()
 // ============================================================================
 func (t *telegramNotifier) Send(msg NotifyMessage) error {
+	select {
+	case <-t.pollCtx.Done():
+		return t.pollCtx.Err()
+	default:
+	}
+
 	text := formatTelegramMessage(msg, t.instanceTag)
 	t.enqueue(t.chatID, text, nil)
 	return nil
@@ -147,6 +154,12 @@ func (t *telegramNotifier) SendSync(msg NotifyMessage) error {
 }
 
 func (t *telegramNotifier) enqueue(chatID, text string, kb *tgInlineKeyboard) {
+	select {
+	case <-t.pollCtx.Done():
+		return
+	default:
+	}
+
 	msg := tgQueuedMsg{
 		chatID:   chatID,
 		text:     text,
@@ -179,19 +192,9 @@ func (t *telegramNotifier) drainQueue() {
 	for {
 		select {
 		case <-t.pollCtx.Done():
-			deadline := time.After(10 * time.Second)
-			for {
-				select {
-				case msg := <-t.sendQueue:
-					if time.Since(msg.enqueued) < tgQueueMaxAge {
-						_ = t.sendTextWithRetry(msg.chatID, msg.text, msg.kb)
-					}
-				case <-deadline:
-					return
-				default:
-					return
-				}
-			}
+			// All outbound requests use pollCtx. Once it is cancelled, trying to
+			// flush the queue can no longer succeed and only delays shutdown.
+			return
 
 		case <-ticker.C:
 			select {
@@ -214,28 +217,35 @@ func (t *telegramNotifier) drainQueue() {
 }
 
 func (t *telegramNotifier) sendTextWithRetry(chatID, text string, kb *tgInlineKeyboard) error {
-	const maxRetries = 3
+	const maxAttempts = 3
 	wait := 5 * time.Second
 
-	for attempt := range maxRetries {
-		err := t.sendText(chatID, text, kb)
-		if err == nil {
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		lastErr = t.sendText(chatID, text, kb)
+		if lastErr == nil {
 			return nil
 		}
-		if strings.Contains(err.Error(), "429") {
-			debugLog("NOTIFY", "", fmt.Sprintf(
-				phrases().TgRateLimit,
-				wait, attempt+1, maxRetries,
-			))
-			select {
-			case <-t.pollCtx.Done():
-				return err
-			case <-time.After(wait):
-			}
-			wait *= 2
-			continue
+		if !strings.Contains(lastErr.Error(), "429") || attempt == maxAttempts {
+			break
 		}
-		return err
+
+		debugLog("NOTIFY", "", fmt.Sprintf(
+			phrases().TgRateLimit,
+			wait, attempt, maxAttempts-1,
+		))
+		timer := time.NewTimer(wait)
+		select {
+		case <-t.pollCtx.Done():
+			stopNotifyTimer(timer)
+			return lastErr
+		case <-timer.C:
+		}
+		wait *= 2
+	}
+
+	if lastErr != nil {
+		return fmt.Errorf("%s: %w", phrases().TgMaxRetries, lastErr)
 	}
 	return errors.New(phrases().TgMaxRetries)
 }
@@ -298,7 +308,7 @@ func (t *telegramNotifier) deleteMessage(chatID int64, messageID int) {
 	}
 	body, _ := json.Marshal(payload)
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/deleteMessage", t.token)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.pollCtx, 5*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, MethodPOST, url, bytes.NewReader(body))
 	if err != nil {
@@ -317,7 +327,7 @@ func (t *telegramNotifier) answerCallback(callbackID string) {
 	payload := map[string]any{"callback_query_id": callbackID}
 	body, _ := json.Marshal(payload)
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/answerCallbackQuery", t.token)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.pollCtx, 5*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, MethodPOST, url, bytes.NewReader(body))
 	if err != nil {
@@ -345,7 +355,12 @@ func (t *telegramNotifier) StartPolling() {
 func (t *telegramNotifier) StopPolling() {
 	t.pollCancel()
 	t.wg.Wait()
+	if t.pollClient != nil {
+		t.pollClient.CloseIdleConnections()
+	}
 }
+
+func (t *telegramNotifier) Close() { t.StopPolling() }
 
 func (t *telegramNotifier) pollingLoop() {
 	debugLog("NOTIFY", "", phrases().TgPollingStarted)
@@ -449,7 +464,7 @@ func (t *telegramNotifier) registerCommands() {
 	payload := map[string]any{"commands": commands}
 	body, _ := json.Marshal(payload)
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/setMyCommands", t.token)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.pollCtx, 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, MethodPOST, url, bytes.NewReader(body))
 	if err != nil {
@@ -468,7 +483,7 @@ func (t *telegramNotifier) registerCommands() {
 
 func (t *telegramNotifier) deleteWebhook() {
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/deleteWebhook?drop_pending_updates=false", t.token)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.pollCtx, 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, MethodGET, url, nil)
 	if err != nil {
@@ -693,7 +708,7 @@ func (t *telegramNotifier) sendDomains(chatID string) {
 		sb.WriteString(phrases().NoDomainsConfigured)
 	} else {
 		for _, dc := range domainConfigs {
-			fmt.Fprintf(&sb, "🔹 <code>%s</code>  <i>(%s)</i>\n", dc.FQDN, dc.Provider)
+			fmt.Fprintf(&sb, "🔹 <code>%s</code>  <i>(%s)</i>\n", html.EscapeString(dc.FQDN), html.EscapeString(string(dc.Provider)))
 		}
 	}
 
@@ -711,14 +726,14 @@ func (t *telegramNotifier) sendDomains(chatID string) {
 				continue
 			}
 			latest := h.IPs[len(h.IPs)-1]
-			fmt.Fprintf(&sb, "\n🌐 <code>%s</code>\n", domain)
+			fmt.Fprintf(&sb, "\n🌐 <code>%s</code>\n", html.EscapeString(domain))
 			if latest.IPv4 != "" {
-				fmt.Fprintf(&sb, "  v4: <code>%s</code>\n", latest.IPv4)
+				fmt.Fprintf(&sb, "  v4: <code>%s</code>\n", html.EscapeString(latest.IPv4))
 			}
 			if latest.IPv6 != "" {
-				fmt.Fprintf(&sb, "  v6: <code>%s</code>\n", latest.IPv6)
+				fmt.Fprintf(&sb, "  v6: <code>%s</code>\n", html.EscapeString(latest.IPv6))
 			}
-			fmt.Fprintf(&sb, "  🕒 <i>%s</i>\n", latest.Time)
+			fmt.Fprintf(&sb, "  🕒 <i>%s</i>\n", html.EscapeString(latest.Time))
 		}
 	}
 
@@ -739,7 +754,7 @@ func (t *telegramNotifier) sendHealth(chatID string) {
 	default:
 		fmt.Fprintf(&sb, "%s\n", phrases().TgHealthUnhealthy)
 		if lastErr := lastErrorMsg.Get(); lastErr != "" {
-			fmt.Fprintf(&sb, "%s <code>%s</code>\n", phrases().TgHealthErrorLabel, lastErr)
+			fmt.Fprintf(&sb, "%s <code>%s</code>\n", phrases().TgHealthErrorLabel, html.EscapeString(lastErr))
 		}
 	}
 
@@ -817,12 +832,12 @@ func formatTelegramMessage(msg NotifyMessage, instanceTag string) string {
 	icon := notifyIcon(msg)
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "<b>%s Go-DynDNS</b>  <code>%s</code>\n", icon, instanceTag)
+	fmt.Fprintf(&sb, "<b>%s Go-DynDNS</b>  <code>%s</code>\n", icon, html.EscapeString(instanceTag))
 	if msg.Domain != "" {
-		fmt.Fprintf(&sb, "🌐 <code>%s</code>\n", msg.Domain)
+		fmt.Fprintf(&sb, "🌐 <code>%s</code>\n", html.EscapeString(msg.Domain))
 	}
-	fmt.Fprintf(&sb, "📋 <b>%s</b>\n", msg.Action)
-	fmt.Fprintf(&sb, "💬 %s\n", msg.Message)
+	fmt.Fprintf(&sb, "📋 <b>%s</b>\n", html.EscapeString(msg.Action))
+	fmt.Fprintf(&sb, "💬 %s\n", html.EscapeString(msg.Message))
 	fmt.Fprintf(&sb, "🕒 <i>%s</i>", time.Now().Format(statusTimestampLayout))
 	return sb.String()
 }

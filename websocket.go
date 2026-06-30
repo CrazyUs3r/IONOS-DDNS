@@ -69,15 +69,15 @@ func (h *WSHub) run() {
 
 func (h *WSHub) broadcastToClients(clients []*WSClient, msg WSMessage) {
 	for _, client := range clients {
+		if client.enqueue(msg) {
+			continue
+		}
+
+		debugLog("WS", "", "client send queue full or closed - disconnecting")
 		select {
-		case client.send <- msg:
+		case h.unregister <- client:
 		default:
-			debugLog("WS", "", "client send queue full - disconnecting")
-			select {
-			case h.unregister <- client:
-			default:
-				h.forceRemoveClient(client)
-			}
+			h.forceRemoveClient(client)
 		}
 	}
 }
@@ -85,6 +85,7 @@ func (h *WSHub) broadcastToClients(clients []*WSClient, msg WSMessage) {
 func (c *WSClient) writePump() {
 	ticker := time.NewTicker(WSPingInterval)
 	defer ticker.Stop()
+	defer func() { _ = c.conn.Close() }()
 
 	for {
 		select {
@@ -132,9 +133,28 @@ func (c *WSClient) readPump(h *WSHub) {
 	}
 }
 
+func (c *WSClient) enqueue(msg WSMessage) bool {
+	c.sendMu.RLock()
+	defer c.sendMu.RUnlock()
+
+	if c.sendClosed {
+		return false
+	}
+
+	select {
+	case c.send <- msg:
+		return true
+	default:
+		return false
+	}
+}
+
 func (c *WSClient) closeSend() {
 	c.closeOnce.Do(func() {
+		c.sendMu.Lock()
+		c.sendClosed = true
 		close(c.send)
+		c.sendMu.Unlock()
 	})
 }
 

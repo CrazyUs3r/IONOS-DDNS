@@ -2,20 +2,23 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"mime"
 	"net"
 	"net/smtp"
 	"strings"
+	"sync"
 	"time"
 )
 
 const (
-	emailQueueSize    = 32
-	emailQueueMaxAge  = 10 * time.Minute
-	emailSendInterval = 1 * time.Second
-	emailDialTimeout  = 15 * time.Second
+	emailQueueSize        = 32
+	emailQueueMaxAge      = 10 * time.Minute
+	emailSendInterval     = 1 * time.Second
+	emailDialTimeout      = 15 * time.Second
+	emailOperationTimeout = 30 * time.Second
 )
 
 type emailNotifier struct {
@@ -28,6 +31,9 @@ type emailNotifier struct {
 	subjectPrefix string
 	tlsMode       string // "starttls" | "tls" | "plain"
 	sendQueue     chan emailMsg
+	ctx           context.Context
+	cancel        context.CancelFunc
+	wg            sync.WaitGroup
 }
 
 type emailMsg struct {
@@ -41,11 +47,26 @@ type emailMsg struct {
 // ============================================================================
 
 func newEmailNotifier(host string, port int, username, password, from, toRaw, subjectPrefix, tlsMode string) *emailNotifier {
+	host = strings.TrimSpace(host)
+	from = strings.TrimSpace(from)
+	subjectPrefix = sanitizeEmailHeader(subjectPrefix)
+	tlsMode = strings.ToLower(strings.TrimSpace(tlsMode))
+	if tlsMode != emailTLSModeTLS && tlsMode != emailTLSModePlain && tlsMode != emailTLSModeStartTLS {
+		tlsMode = emailTLSModeTLS
+	}
+	if port < 1 || port > 65535 {
+		if tlsMode == emailTLSModeTLS {
+			port = 465
+		} else {
+			port = 587
+		}
+	}
+
 	if subjectPrefix == "" {
 		subjectPrefix = "[DynDNS]"
 	}
 	if tlsMode == "" {
-		tlsMode = "starttls"
+		tlsMode = emailTLSModeStartTLS
 	}
 
 	recipients := make([]string, 0)
@@ -56,6 +77,7 @@ func newEmailNotifier(host string, port int, username, password, from, toRaw, su
 		}
 	}
 
+	ctx, cancel := context.WithCancel(notificationParentContext())
 	n := &emailNotifier{
 		host:          host,
 		port:          port,
@@ -66,18 +88,33 @@ func newEmailNotifier(host string, port int, username, password, from, toRaw, su
 		subjectPrefix: subjectPrefix,
 		tlsMode:       tlsMode,
 		sendQueue:     make(chan emailMsg, emailQueueSize),
+		ctx:           ctx,
+		cancel:        cancel,
 	}
-	go n.drainQueue()
+	n.wg.Go(func() {
+		n.drainQueue()
+	})
 	return n
 }
 
 func (e *emailNotifier) Name() string { return "Email" }
+
+func (e *emailNotifier) Close() {
+	e.cancel()
+	e.wg.Wait()
+}
 
 // ============================================================================
 // SEND
 // ============================================================================
 
 func (e *emailNotifier) Send(msg NotifyMessage) error {
+	select {
+	case <-e.ctx.Done():
+		return e.ctx.Err()
+	default:
+	}
+
 	subject, body := formatEmailMessage(msg, e.subjectPrefix)
 	em := emailMsg{subject: subject, body: body, enqueued: time.Now()}
 
@@ -115,20 +152,8 @@ func (e *emailNotifier) drainQueue() {
 
 	for {
 		select {
-		case <-shutdownCtx.Done():
-			deadline := time.After(15 * time.Second)
-			for {
-				select {
-				case msg := <-e.sendQueue:
-					if time.Since(msg.enqueued) < emailQueueMaxAge {
-						_ = e.doSend(msg)
-					}
-				case <-deadline:
-					return
-				default:
-					return
-				}
-			}
+		case <-e.ctx.Done():
+			return
 
 		case <-ticker.C:
 			select {
@@ -146,7 +171,7 @@ func (e *emailNotifier) drainQueue() {
 						Level:    LogError,
 						Category: "NOTIFY",
 						Action:   ActionError,
-						Message:  fmt.Sprintf("Email (SMTP) error: %v", err),
+						Message:  "Email (SMTP) error",
 						Error:    err,
 					})
 				}
@@ -170,9 +195,9 @@ func (e *emailNotifier) doSend(msg emailMsg) error {
 	addr := fmt.Sprintf("%s:%d", e.host, e.port)
 
 	switch e.tlsMode {
-	case "tls":
+	case emailTLSModeTLS:
 		return e.sendTLS(addr, rawMsg)
-	case "plain":
+	case emailTLSModePlain:
 		return e.sendPlain(addr, rawMsg)
 	default:
 		return e.sendStartTLS(addr, rawMsg)
@@ -184,9 +209,14 @@ func (e *emailNotifier) sendStartTLS(addr string, msg []byte) error {
 	if err != nil {
 		return fmt.Errorf("email dial: %w", err)
 	}
+	if err := conn.SetDeadline(time.Now().Add(emailOperationTimeout)); err != nil {
+		_ = conn.Close()
+		return fmt.Errorf("email deadline: %w", err)
+	}
 
 	client, err := smtp.NewClient(conn, e.host)
 	if err != nil {
+		_ = conn.Close()
 		return fmt.Errorf("email client: %w", err)
 	}
 	defer func() { _ = client.Quit() }()
@@ -215,9 +245,14 @@ func (e *emailNotifier) sendTLS(addr string, msg []byte) error {
 	if err != nil {
 		return fmt.Errorf("email tls dial: %w", err)
 	}
+	if err := conn.SetDeadline(time.Now().Add(emailOperationTimeout)); err != nil {
+		_ = conn.Close()
+		return fmt.Errorf("email tls deadline: %w", err)
+	}
 
 	client, err := smtp.NewClient(conn, e.host)
 	if err != nil {
+		_ = conn.Close()
 		return fmt.Errorf("email tls client: %w", err)
 	}
 	defer func() { _ = client.Quit() }()
@@ -233,11 +268,30 @@ func (e *emailNotifier) sendTLS(addr string, msg []byte) error {
 }
 
 func (e *emailNotifier) sendPlain(addr string, msg []byte) error {
-	var auth smtp.Auth
-	if e.username != "" {
-		auth = smtp.PlainAuth("", e.username, e.password, e.host)
+	conn, err := net.DialTimeout(ProtocolTCP, addr, emailDialTimeout)
+	if err != nil {
+		return fmt.Errorf("email plain dial: %w", err)
 	}
-	return smtp.SendMail(addr, auth, e.from, e.to, msg)
+	if err := conn.SetDeadline(time.Now().Add(emailOperationTimeout)); err != nil {
+		_ = conn.Close()
+		return fmt.Errorf("email plain deadline: %w", err)
+	}
+
+	client, err := smtp.NewClient(conn, e.host)
+	if err != nil {
+		_ = conn.Close()
+		return fmt.Errorf("email plain client: %w", err)
+	}
+	defer func() { _ = client.Quit() }()
+
+	if e.username != "" {
+		auth := smtp.PlainAuth("", e.username, e.password, e.host)
+		if err := client.Auth(auth); err != nil {
+			return fmt.Errorf("email plain auth: %w", err)
+		}
+	}
+
+	return e.smtpSend(client, msg)
 }
 
 func (e *emailNotifier) smtpSend(client *smtp.Client, msg []byte) error {
@@ -268,11 +322,13 @@ func (e *emailNotifier) smtpSend(client *smtp.Client, msg []byte) error {
 // ============================================================================
 
 func (e *emailNotifier) buildRawMessage(subject, body string) []byte {
-	toHeader := strings.Join(e.to, ", ")
+	toHeader := sanitizeEmailHeader(strings.Join(e.to, ", "))
+	fromHeader := sanitizeEmailHeader(e.from)
+	subject = sanitizeEmailHeader(subject)
 	now := time.Now().Format("Mon, 02 Jan 2006 15:04:05 -0700")
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "From: %s\r\n", e.from)
+	fmt.Fprintf(&sb, "From: %s\r\n", fromHeader)
 	fmt.Fprintf(&sb, "To: %s\r\n", toHeader)
 	fmt.Fprintf(&sb, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", subject))
 	fmt.Fprintf(&sb, "Date: %s\r\n", now)
@@ -281,6 +337,12 @@ func (e *emailNotifier) buildRawMessage(subject, body string) []byte {
 	fmt.Fprintf(&sb, "\r\n")
 	fmt.Fprintf(&sb, "%s\r\n", body)
 	return []byte(sb.String())
+}
+
+func sanitizeEmailHeader(value string) string {
+	value = strings.ReplaceAll(value, "\r", " ")
+	value = strings.ReplaceAll(value, "\n", " ")
+	return strings.TrimSpace(value)
 }
 
 func formatEmailMessage(msg NotifyMessage, prefix string) (subject, body string) {

@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -37,6 +38,7 @@ type mqttNotifier struct {
 
 	connected bool
 	mu        sync.RWMutex
+	closed    atomic.Bool
 }
 
 // ============================================================================
@@ -147,6 +149,10 @@ func newMQTTNotifier(
 	}
 
 	opts.OnConnect = func(c mqtt.Client) {
+		if n.closed.Load() {
+			c.Disconnect(0)
+			return
+		}
 		n.setConnected(true)
 		log(LogContext{
 			Level:   LogInfo,
@@ -158,6 +164,9 @@ func newMQTTNotifier(
 
 	opts.OnConnectionLost = func(_ mqtt.Client, err error) {
 		n.setConnected(false)
+		if n.closed.Load() {
+			return
+		}
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionError,
@@ -195,6 +204,10 @@ func newMQTTNotifier(
 }
 
 func (m *mqttNotifier) afterConnect(client mqtt.Client) {
+	if m.closed.Load() {
+		return
+	}
+
 	filters := map[string]byte{
 		m.commandPrefix + "/update":   1,
 		m.commandPrefix + "/refresh":  1,
@@ -213,8 +226,14 @@ func (m *mqttNotifier) afterConnect(client mqtt.Client) {
 		})
 	}
 
+	if m.closed.Load() {
+		return
+	}
 	_ = m.publishRawWithClient(client, m.availabilityTopic, 1, true, []byte("online"))
 
+	if m.closed.Load() {
+		return
+	}
 	if m.discovery {
 		if err := m.publishDiscovery(client); err != nil {
 			log(LogContext{
@@ -225,6 +244,9 @@ func (m *mqttNotifier) afterConnect(client mqtt.Client) {
 		}
 	}
 
+	if m.closed.Load() {
+		return
+	}
 	if err := m.publishSnapshot(client); err != nil {
 		debugLog("MQTT", "", fmt.Sprintf(phrases().MqttStatePublishFailed, err))
 	}
@@ -234,6 +256,9 @@ func (m *mqttNotifier) afterConnect(client mqtt.Client) {
 }
 
 func (m *mqttNotifier) handleInbound(client mqtt.Client, message mqtt.Message) {
+	if m.closed.Load() {
+		return
+	}
 	topic := message.Topic()
 	payload := append([]byte(nil), message.Payload()...)
 	retained := message.Retained()
@@ -257,6 +282,9 @@ func (m *mqttNotifier) handleInbound(client mqtt.Client, message mqtt.Message) {
 }
 
 func (m *mqttNotifier) Send(msg NotifyMessage) error {
+	if m.closed.Load() {
+		return errors.New(phrases().MqttNotConnected)
+	}
 	if !m.isConnected() {
 		return errors.New(phrases().MqttNotConnected)
 	}
@@ -291,11 +319,15 @@ func (m *mqttNotifier) Send(msg NotifyMessage) error {
 }
 
 func (m *mqttNotifier) Close() {
-	if m.client == nil || !m.client.IsConnectionOpen() {
+	if !m.closed.CompareAndSwap(false, true) {
 		return
 	}
-	_ = m.publishRawWithClient(m.client, m.availabilityTopic, 1, true, []byte("offline"))
-	m.client.Disconnect(500)
+	if m.client != nil {
+		if m.client.IsConnectionOpen() {
+			_ = m.publishRawWithClient(m.client, m.availabilityTopic, 1, true, []byte("offline"))
+		}
+		m.client.Disconnect(500)
+	}
 	m.setConnected(false)
 }
 

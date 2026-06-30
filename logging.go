@@ -9,8 +9,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
+
+var lastLogInfrastructureWarning atomic.Int64
 
 const (
 	LogTDbg  = "DBG"
@@ -34,7 +37,7 @@ func log(ctx LogContext) {
 
 	printLogLine(ts, levelStr, icon, ctx, msg)
 
-	if shouldPersistLevel(ctx.Level, ctx.Action) {
+	if !ctx.SkipPersist && shouldPersistLevel(ctx.Level, ctx.Action) {
 		persistLog(ctx)
 	}
 
@@ -69,10 +72,11 @@ func logLevelPresentation(ctx LogContext) (string, string) {
 }
 
 func buildLogMessage(ctx LogContext) string {
+	message := ctx.Message
 	if ctx.Error != nil {
-		return fmt.Sprintf("%s: %v", ctx.Message, ctx.Error)
+		message = fmt.Sprintf("%s: %v", ctx.Message, ctx.Error)
 	}
-	return ctx.Message
+	return sanitizeText(message)
 }
 
 func overrideLogIcon(icon string, ctx LogContext) string {
@@ -156,9 +160,7 @@ func persistLog(ctx LogContext) {
 	if ctx.Error != nil {
 		sanitizedMsg = fmt.Sprintf("%s: %v", ctx.Message, ctx.Error)
 	}
-	if replacer := getSecretReplacer(); replacer != nil {
-		sanitizedMsg = replacer.Replace(sanitizedMsg)
-	}
+	sanitizedMsg = sanitizeText(sanitizedMsg)
 
 	entry := LogEntry{
 		Timestamp: time.Now().Format(statusTimestampLayoutT),
@@ -171,18 +173,33 @@ func persistLog(ctx LogContext) {
 	select {
 	case logWriteQueue <- entry:
 	default:
-		log(LogContext{
-			Level:      LogWarn,
-			Category:   "SYSTEM",
-			Action:     ActionError,
-			Message:    fmt.Sprintf(t(phrases().LogQueueFull, "Log queue full, dropped: %s"), entry.Message),
-			SkipNotify: true,
-		})
+		reportLogInfrastructureError(
+			fmt.Sprintf(t(phrases().LogQueueFull, "Log queue full, dropped: %s"), entry.Message),
+			nil,
+		)
 	}
 
 	if !ctx.SkipNotify {
 		notify(ctx)
 	}
+}
+
+func reportLogInfrastructureError(message string, err error) {
+	now := time.Now().Unix()
+	last := lastLogInfrastructureWarning.Load()
+	if last != 0 && now-last < 30 {
+		return
+	}
+	if !lastLogInfrastructureWarning.CompareAndSwap(last, now) {
+		return
+	}
+
+	message = sanitizeText(message)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "log infrastructure error: %s: %v\n", message, err)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "log infrastructure warning: %s\n", message)
 }
 
 func levelToString(level LogLevel) string {
@@ -292,14 +309,10 @@ func handleLogWriterEntry(entry LogEntry, batchCount, maxBatchSize int) int {
 
 	if err := ensureLogWriterOpen(); err != nil {
 		logMutex.Unlock()
-		log(LogContext{
-			Level:      LogError,
-			Category:   "SYSTEM",
-			Action:     ActionError,
-			Message:    fmt.Sprintf(t(phrases().LogCannotOpenFile, "Cannot open log file %s"), logPath),
-			Error:      err,
-			SkipNotify: true,
-		})
+		reportLogInfrastructureError(
+			fmt.Sprintf(t(phrases().LogCannotOpenFile, "Cannot open log file %s"), logPath),
+			err,
+		)
 		return batchCount
 	}
 
@@ -313,14 +326,10 @@ func handleLogWriterEntry(entry LogEntry, batchCount, maxBatchSize int) int {
 		closeLogWriterUnsafe()
 		logMutex.Unlock()
 
-		log(LogContext{
-			Level:      LogError,
-			Category:   "SYSTEM",
-			Action:     ActionError,
-			Message:    t(phrases().LogWriteFailed, "Write failed"),
-			Error:      err,
-			SkipNotify: true,
-		})
+		reportLogInfrastructureError(
+			t(phrases().LogWriteFailed, "Write failed"),
+			err,
+		)
 		return batchCount
 	}
 
@@ -344,8 +353,13 @@ func ensureLogWriterOpen() error {
 		return err
 	}
 
-	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
+		return err
+	}
+
+	if err := f.Chmod(0o600); err != nil {
+		_ = f.Close()
 		return err
 	}
 

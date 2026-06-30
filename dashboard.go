@@ -27,6 +27,16 @@ var cssData string
 //go:embed templates/js/dashboard.js
 var jsData string
 
+var (
+	dashboardCSSETag = contentETag(cssData)
+	dashboardJSETag  = contentETag(jsData)
+)
+
+func contentETag(content string) string {
+	sum := sha256.Sum256([]byte(content))
+	return `"` + hex.EncodeToString(sum[:]) + `"`
+}
+
 // ============================================================================
 // SVG CHARTS
 // ============================================================================
@@ -488,8 +498,8 @@ func buildSettingsSystemSection(c Config) string {
 }
 
 func buildSettingsDomainsSection() string {
-	addDomainForm := `<div class="add-domain-box"><input type="text" id="new-domain-fqdn" class="s-input mb-8" placeholder="` + phrases().SettingsDomainPlaceholder + `"><input type="number" id="new-domain-ttl" class="s-input mb-8" placeholder="TTL (z. B. 60)" min="1" step="1"><select id="new-domain-ip-mode" class="s-input mb-8"><option value="">` + phrases().SettingsIPMode + ` (` + phrases().SettingsIPMode + ` global)</option><option value="BOTH">BOTH – IPv4 + IPv6</option><option value="IPV4">IPV4 – nur IPv4</option><option value="IPV6">IPV6 – nur IPv6</option></select><select id="new-domain-provider" class="s-input mb-8" data-change="toggleProviderFields()"><option value="IONOS">IONOS</option><option value="CLOUDFLARE">Cloudflare</option><option value="IPV64">IPv64</option><option value="HETZNER">Hetzner DNS</option><option value="HETZNERCLOUD">Hetzner Cloud DNS</option><option value="FEBAS">Febas DynDNS</option></select><div id="fields-ionos"><input type="text" id="new-ionos-prefix" class="s-input mb-8" placeholder="` + phrases().SettingsAPIPrefix + `"><div class="input-with-action mt-8"><input type="password" id="new-ionos-secret" class="s-input" placeholder="` + phrases().SettingsAPISecret + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-ionos-secret', this)">👁️</button></div></div><div id="fields-cloudflare" class="is-hidden"><input type="text" id="new-cf-token" class="s-input mb-8" placeholder="` + phrases().SettingsCFTokenHint + `"><div class="center-note">` + phrases().SettingsCFOr + `</div><input type="text" id="new-cf-email" class="s-input mb-8" placeholder="` + phrases().SettingsCFEmail + `"><div class="input-with-action mt-8"><input type="password" id="new-cf-secret" class="s-input" placeholder="` + phrases().SettingsCFGlobalKey + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-cf-secret', this)">👁️</button></div><label class="inline-check"><input type="checkbox" id="new-cf-proxied"> ` + phrases().SettingsCFProxyLabel +
-		`</label></div><div id="fields-ipv64" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-ipv64-token" class="s-input" placeholder="` + phrases().SettingsIPv64Token + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-ipv64-token', this)">👁️</button></div></div><div id="fields-hetzner" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-hetzner-token" class="s-input" placeholder="Hetzner DNS API Token"><button type="button" class="input-action-btn" data-click="togglePassword('new-hetzner-token', this)">👁️</button></div></div><div id="fields-hetznercloud" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-hcloud-token" class="s-input" placeholder="Hetzner Cloud/Console Token"><button type="button" class="input-action-btn" data-click="togglePassword('new-hcloud-token', this)">👁️</button></div></div><div id="fields-febas" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-febas-update-url" class="s-input" placeholder="Febas DynDNS Update-URL"><button type="button" class="input-action-btn" data-click="togglePassword('new-febas-update-url', this)">👁️</button></div><small class="s-label-hint-block">Komplette URL aus Febas Kundenbereich → Domains → DynDNS</small></div><div class="s-btn-row"><button class="s-btn s-btn-success-full" data-click="addDomainToList()">` +
+	addDomainForm := `<div class="add-domain-box"><input type="text" id="new-domain-fqdn" class="s-input mb-8" placeholder="` + phrases().SettingsDomainPlaceholder + `"><input type="number" id="new-domain-ttl" class="s-input mb-8" placeholder="TTL (z. B. 60)" min="1" step="1"><select id="new-domain-ip-mode" class="s-input mb-8"><option value="">` + phrases().SettingsIPMode + ` (` + phrases().SettingsIPMode + ` global)</option><option value="BOTH">BOTH – IPv4 + IPv6</option><option value="IPV4">IPV4 – nur IPv4</option><option value="IPV6">IPV6 – nur IPv6</option></select><select id="new-domain-provider" class="s-input mb-8" data-change="toggleProviderFields()"><option value="IONOS">IONOS</option><option value="CLOUDFLARE">Cloudflare</option><option value="IPV64">IPv64</option><option value="HETZNER">Hetzner DNS</option><option value="HETZNERCLOUD">Hetzner Cloud DNS</option><option value="FEBAS">Febas DynDNS</option><option value="DNSCALE">DNScale</option></select><div id="fields-ionos"><input type="text" id="new-ionos-prefix" class="s-input mb-8" placeholder="` + phrases().SettingsAPIPrefix + `"><div class="input-with-action mt-8"><input type="password" id="new-ionos-secret" class="s-input" placeholder="` + phrases().SettingsAPISecret + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-ionos-secret', this)">👁️</button></div></div><div id="fields-cloudflare" class="is-hidden"><input type="text" id="new-cf-token" class="s-input mb-8" placeholder="` + phrases().SettingsCFTokenHint + `"><div class="center-note">` + phrases().SettingsCFOr + `</div><input type="text" id="new-cf-email" class="s-input mb-8" placeholder="` + phrases().SettingsCFEmail + `"><div class="input-with-action mt-8"><input type="password" id="new-cf-secret" class="s-input" placeholder="` + phrases().SettingsCFGlobalKey + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-cf-secret', this)">👁️</button></div><label class="inline-check"><input type="checkbox" id="new-cf-proxied"> ` + phrases().SettingsCFProxyLabel +
+		`</label></div><div id="fields-ipv64" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-ipv64-token" class="s-input" placeholder="` + phrases().SettingsIPv64Token + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-ipv64-token', this)">👁️</button></div></div><div id="fields-hetzner" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-hetzner-token" class="s-input" placeholder="Hetzner DNS API Token"><button type="button" class="input-action-btn" data-click="togglePassword('new-hetzner-token', this)">👁️</button></div></div><div id="fields-hetznercloud" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-hcloud-token" class="s-input" placeholder="Hetzner Cloud/Console Token"><button type="button" class="input-action-btn" data-click="togglePassword('new-hcloud-token', this)">👁️</button></div></div><div id="fields-febas" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-febas-update-url" class="s-input" placeholder="Febas DynDNS Update-URL"><button type="button" class="input-action-btn" data-click="togglePassword('new-febas-update-url', this)">👁️</button></div><small class="s-label-hint-block">Komplette URL aus Febas Kundenbereich → Domains → DynDNS</small></div><div id="fields-dnscale" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-dnscale-api-key" class="s-input" placeholder="DNScale API Key"><button type="button" class="input-action-btn" data-click="togglePassword('new-dnscale-api-key', this)">👁️</button></div><small class="s-label-hint-block">Bearer Token aus dem DNScale Dashboard → API Keys (Scopes: zones:read, records:read, records:write)</small></div><div class="s-btn-row"><button class="s-btn s-btn-success-full" data-click="addDomainToList()">` +
 		phrases().SettingsAddBtn +
 		`</button><button type="button" class="s-btn s-btn--cancel" data-click="cancelEdit()">` +
 		phrases().SettingsCancelBtn +
@@ -579,9 +589,9 @@ func buildSettingsNotifySection(c Config) string {
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">Subjekt</span><input type="text" id="cfg-email-subject-prefix" class="s-input s-input-lg" placeholder="[DynDNS]" value="%s"></div>`,
 			html.EscapeString(c.Notifications.Email.SubjectPrefix)) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">TLS Modus</span><select id="cfg-email-tls-mode" class="s-input s-input-lg"><option value="starttls" %s>STARTTLS (Standard)</option><option value="tls" %s>Direct TLS (SSL)</option><option value="plain" %s>Plain (Unverschlüsselt)</option></select></div>`,
-			selected(c.Notifications.Email.TLSMode == "starttls" || c.Notifications.Email.TLSMode == ""),
-			selected(c.Notifications.Email.TLSMode == "tls"),
-			selected(c.Notifications.Email.TLSMode == "plain"),
+			selected(c.Notifications.Email.TLSMode == emailTLSModeStartTLS || c.Notifications.Email.TLSMode == ""),
+			selected(c.Notifications.Email.TLSMode == emailTLSModeTLS),
+			selected(c.Notifications.Email.TLSMode == emailTLSModePlain),
 		) +
 		`</div>`
 
@@ -616,6 +626,7 @@ type safeDomainConfig struct {
 	CFSecret       string `json:"cf_secret,omitempty"`
 	IPv64Token     string `json:"ipv64_token,omitempty"`
 	FebasUpdateURL string `json:"febas_update_url,omitempty"`
+	APIKey         string `json:"api_key,omitempty"`
 	TTL            int    `json:"ttl,omitempty"`
 	CFProxied      bool   `json:"cf_proxied,omitempty"`
 	IPMode         string `json:"ip_mode,omitempty"`
@@ -693,6 +704,7 @@ func safeDomainConfigs(dcs []DomainConfig) []safeDomainConfig {
 			CFSecret:       dc.CFSecret,
 			IPv64Token:     dc.IPv64Token,
 			FebasUpdateURL: dc.FebasUpdateURL,
+			APIKey:         dc.APIKey,
 			TTL:            dc.TTL,
 			CFProxied:      dc.CFProxied,
 			IPMode:         dc.IPMode,
@@ -871,16 +883,37 @@ func securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
-func handleDashboardCSS(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/css; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=3600")
-	_, _ = io.WriteString(w, cssData)
+func handleDashboardCSS(w http.ResponseWriter, r *http.Request) {
+	serveDashboardAsset(w, r, "text/css; charset=utf-8", dashboardCSSETag, cssData)
 }
 
-func handleDashboardJS(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=3600")
-	_, _ = io.WriteString(w, jsData)
+func handleDashboardJS(w http.ResponseWriter, r *http.Request) {
+	serveDashboardAsset(w, r, "application/javascript; charset=utf-8", dashboardJSETag, jsData)
+}
+
+func serveDashboardAsset(w http.ResponseWriter, r *http.Request, contentType, etag, content string) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "public, max-age=0, must-revalidate")
+	w.Header().Set("ETag", etag)
+
+	for candidate := range strings.SplitSeq(r.Header.Get("If-None-Match"), ",") {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == etag || candidate == "*" {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+	}
+
+	if r.Method == http.MethodHead {
+		return
+	}
+	_, _ = io.WriteString(w, content)
 }
 
 func handleDashboardI18NJS(w http.ResponseWriter, _ *http.Request) {
@@ -978,7 +1011,10 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	stats := apiMetrics.GetStats()
-	client.send <- WSMessage{Type: "initial", Data: stats}
+	if !client.enqueue(WSMessage{Type: "initial", Data: stats}) {
+		_ = conn.Close()
+		return
+	}
 
 	wsHub.register <- client
 }
@@ -1007,50 +1043,91 @@ func handleAPIConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sess, _ := sessionFromRequest(r)
-	isAdmin := !authEnabled || (sess != nil && sess.Role == RoleAdmin)
-
 	type fullConfigResponse struct {
 		DomainConfigs []safeDomainConfig `json:"domain_configs"`
 		System        safeSystemConfig   `json:"system"`
 	}
 
 	sys := currentSystemConfig()
-
-	if !isAdmin {
-		sys.TelegramToken = maskSecret(sys.TelegramToken)
-		sys.GotifyToken = maskSecret(sys.GotifyToken)
-		sys.NtfyToken = maskSecret(sys.NtfyToken)
-		sys.WebhookSecret = maskSecret(sys.WebhookSecret)
-		sys.MQTT.Password = maskSecret(sys.MQTT.Password)
-		sys.Email.Password = maskSecret(sys.Email.Password)
-	}
+	maskSafeSystemConfigSecrets(&sys)
 
 	config := snapshotConfig()
 	domains := safeDomainConfigs(config.DomainConfigs)
-	if !isAdmin {
-		for i := range domains {
-			domains[i].APISecret = maskSecret(domains[i].APISecret)
-			domains[i].CFToken = maskSecret(domains[i].CFToken)
-			domains[i].CFSecret = maskSecret(domains[i].CFSecret)
-			domains[i].IPv64Token = maskSecret(domains[i].IPv64Token)
-			domains[i].FebasUpdateURL = maskSecret(domains[i].FebasUpdateURL)
-		}
-	}
+	maskSafeDomainConfigSecrets(domains)
 
-	resp := fullConfigResponse{
+	writeJSON(w, http.StatusOK, fullConfigResponse{
 		DomainConfigs: domains,
 		System:        sys,
-	}
-
-	writeJSON(w, http.StatusOK, resp)
+	})
 }
+
+const dashboardSecretMask = "●●●●●●" // #nosec G101 -- UI placeholder only; never used as a credential
 
 func maskSecret(s string) string {
 	if s == "" {
 		return ""
 	}
-	return "●●●●●●"
+	return dashboardSecretMask
+}
+
+func isDashboardSecretMask(s string) bool {
+	return strings.TrimSpace(s) == dashboardSecretMask
+}
+
+func preserveDashboardSecret(incoming, current string) string {
+	if isDashboardSecretMask(incoming) {
+		return current
+	}
+	return incoming
+}
+
+func clearDashboardSecretMask(s string) string {
+	if isDashboardSecretMask(s) {
+		return ""
+	}
+	return s
+}
+
+func maskSafeSystemConfigSecrets(sys *safeSystemConfig) {
+	if sys == nil {
+		return
+	}
+	sys.TelegramToken = maskSecret(sys.TelegramToken)
+	sys.GotifyToken = maskSecret(sys.GotifyToken)
+	sys.NtfyToken = maskSecret(sys.NtfyToken)
+	sys.WebhookSecret = maskSecret(sys.WebhookSecret)
+	sys.MQTT.Password = maskSecret(sys.MQTT.Password)
+	sys.Email.Password = maskSecret(sys.Email.Password)
+}
+
+func maskSafeDomainConfigSecrets(domains []safeDomainConfig) {
+	for i := range domains {
+		domains[i].APISecret = maskSecret(domains[i].APISecret)
+		domains[i].CFToken = maskSecret(domains[i].CFToken)
+		domains[i].CFSecret = maskSecret(domains[i].CFSecret)
+		domains[i].IPv64Token = maskSecret(domains[i].IPv64Token)
+		domains[i].FebasUpdateURL = maskSecret(domains[i].FebasUpdateURL)
+		domains[i].APIKey = maskSecret(domains[i].APIKey)
+	}
+}
+
+func maskDashboardConfigSecrets(config Config) Config {
+	for i := range config.DomainConfigs {
+		config.DomainConfigs[i].APISecret = maskSecret(config.DomainConfigs[i].APISecret)
+		config.DomainConfigs[i].CFToken = maskSecret(config.DomainConfigs[i].CFToken)
+		config.DomainConfigs[i].CFSecret = maskSecret(config.DomainConfigs[i].CFSecret)
+		config.DomainConfigs[i].IPv64Token = maskSecret(config.DomainConfigs[i].IPv64Token)
+		config.DomainConfigs[i].FebasUpdateURL = maskSecret(config.DomainConfigs[i].FebasUpdateURL)
+		config.DomainConfigs[i].APIKey = maskSecret(config.DomainConfigs[i].APIKey)
+	}
+
+	config.Notifications.Telegram.Token = maskSecret(config.Notifications.Telegram.Token)
+	config.Notifications.Gotify.Token = maskSecret(config.Notifications.Gotify.Token)
+	config.Notifications.Ntfy.Token = maskSecret(config.Notifications.Ntfy.Token)
+	config.Notifications.Webhook.Secret = maskSecret(config.Notifications.Webhook.Secret)
+	config.Notifications.MQTTConfig.Password = maskSecret(config.Notifications.MQTTConfig.Password)
+	config.Notifications.Email.Password = maskSecret(config.Notifications.Email.Password)
+	return config
 }
 
 func handleAPILanguages(w http.ResponseWriter, r *http.Request) {
@@ -1105,6 +1182,9 @@ func handleAPISaveConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	configUpdateMu.Lock()
+	defer configUpdateMu.Unlock()
+
 	var validationErr error
 	cfgMu.Lock()
 	oldCfg := cfg
@@ -1119,16 +1199,25 @@ func handleAPISaveConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	newMaxConcurrent := cfg.MaxConcurrent
+	newDebugEnabled := cfg.DebugEnabled
+	newDebugHTTPRaw := cfg.DebugHTTPRaw
 	cfgMu.Unlock()
+
+	if err := saveConfigToFile(); err != nil {
+		cfgMu.Lock()
+		cfg = oldCfg
+		cfgMu.Unlock()
+		ResetHTTPClient()
+		invalidateSecretReplacer()
+
+		http.Error(w, phrases().SaveFailed, http.StatusInternalServerError)
+		return
+	}
 
 	if oldMaxConcurrent != newMaxConcurrent {
 		setWorkerConcurrencyLimit(newMaxConcurrent)
 	}
-
-	if err := saveConfigToFile(); err != nil {
-		http.Error(w, phrases().SaveFailed, http.StatusInternalServerError)
-		return
-	}
+	setAtomicDebugFlags(newDebugEnabled, newDebugHTTPRaw)
 
 	ResetHTTPClient()
 	invalidateSecretReplacer()
@@ -1144,7 +1233,6 @@ func applySystemConfigPayload(sys safeSystemConfig) {
 	applySystemCoreConfig(sys)
 	applySystemRuntimeConfig(sys)
 	applyNotificationConfig(sys)
-	ensureNotificationsEnabled()
 }
 
 func applySystemCoreConfig(sys safeSystemConfig) {
@@ -1185,7 +1273,6 @@ func applySystemRuntimeConfig(sys safeSystemConfig) {
 	cfg.DebugHTTPRaw = sys.DebugHTTPRaw
 	cfg.IPv4Endpoints = sys.IPv4Endpoints
 	cfg.IPv6Endpoints = sys.IPv6Endpoints
-	setAtomicDebugFlags(sys.DebugEnabled, sys.DebugHTTPRaw)
 }
 
 func applyNotificationConfig(sys safeSystemConfig) {
@@ -1195,23 +1282,23 @@ func applyNotificationConfig(sys safeSystemConfig) {
 		cfg.Notifications.Events = sys.NotifyEvents
 	}
 
-	cfg.Notifications.Telegram.Token = sys.TelegramToken
+	cfg.Notifications.Telegram.Token = preserveDashboardSecret(sys.TelegramToken, cfg.Notifications.Telegram.Token)
 	cfg.Notifications.Telegram.ChatID = sys.TelegramChatID
 
 	cfg.Notifications.Gotify.URL = sys.GotifyURL
-	cfg.Notifications.Gotify.Token = sys.GotifyToken
+	cfg.Notifications.Gotify.Token = preserveDashboardSecret(sys.GotifyToken, cfg.Notifications.Gotify.Token)
 
 	cfg.Notifications.Ntfy.URL = sys.NtfyURL
 	cfg.Notifications.Ntfy.Topic = sys.NtfyTopic
-	cfg.Notifications.Ntfy.Token = sys.NtfyToken
+	cfg.Notifications.Ntfy.Token = preserveDashboardSecret(sys.NtfyToken, cfg.Notifications.Ntfy.Token)
 
 	cfg.Notifications.Webhook.URL = sys.WebhookURL
-	cfg.Notifications.Webhook.Secret = sys.WebhookSecret
+	cfg.Notifications.Webhook.Secret = preserveDashboardSecret(sys.WebhookSecret, cfg.Notifications.Webhook.Secret)
 
 	cfg.Notifications.MQTTConfig.Broker = sys.MQTT.Broker
 	cfg.Notifications.MQTTConfig.ClientID = sys.MQTT.ClientID
 	cfg.Notifications.MQTTConfig.Username = sys.MQTT.Username
-	cfg.Notifications.MQTTConfig.Password = sys.MQTT.Password
+	cfg.Notifications.MQTTConfig.Password = preserveDashboardSecret(sys.MQTT.Password, cfg.Notifications.MQTTConfig.Password)
 	cfg.Notifications.MQTTConfig.Topic = sys.MQTT.Topic
 	cfg.Notifications.MQTTConfig.QoS = sys.MQTT.QoS
 	cfg.Notifications.MQTTConfig.Retain = sys.MQTT.Retain
@@ -1221,7 +1308,7 @@ func applyNotificationConfig(sys safeSystemConfig) {
 	cfg.Notifications.Email.Host = sys.Email.Host
 	cfg.Notifications.Email.Port = sys.Email.Port
 	cfg.Notifications.Email.Username = sys.Email.Username
-	cfg.Notifications.Email.Password = sys.Email.Password
+	cfg.Notifications.Email.Password = preserveDashboardSecret(sys.Email.Password, cfg.Notifications.Email.Password)
 	cfg.Notifications.Email.From = sys.Email.From
 	cfg.Notifications.Email.To = sys.Email.To
 	cfg.Notifications.Email.SubjectPrefix = sys.Email.SubjectPrefix
@@ -1233,19 +1320,6 @@ func applyIPMode(mode string) {
 	case IPModeV4, IPModeV6, IPModeBoth:
 		cfg.IPMode = strings.ToUpper(mode)
 	}
-}
-
-func ensureNotificationsEnabled() {
-	if cfg.Notifications.Enabled {
-		return
-	}
-
-	cfg.Notifications.Enabled = (cfg.Notifications.Telegram.Token != "" && cfg.Notifications.Telegram.ChatID != "") ||
-		(cfg.Notifications.Gotify.URL != "" && cfg.Notifications.Gotify.Token != "") ||
-		(cfg.Notifications.Ntfy.URL != "" && cfg.Notifications.Ntfy.Topic != "") ||
-		(cfg.Notifications.Webhook.URL != "") ||
-		(cfg.Notifications.MQTTConfig.Broker != "" && cfg.Notifications.MQTTConfig.Topic != "") ||
-		(cfg.Notifications.Email.Host != "" && cfg.Notifications.Email.To != "")
 }
 
 func cleanDNSServers(in []string) []string {
@@ -1261,75 +1335,91 @@ func cleanDNSServers(in []string) []string {
 }
 
 func mergeDomainConfigs(existingCfg []DomainConfig, incoming []safeDomainConfig) []DomainConfig {
-	existing := make(map[string]DomainConfig)
-	for _, dc := range existingCfg {
-		existing[strings.ToLower(dc.FQDN)] = dc
-	}
-
+	existing := indexDomainConfigs(existingCfg)
 	newConfigs := make([]DomainConfig, 0, len(incoming))
+
 	for _, sc := range incoming {
 		fqdn := strings.ToLower(strings.TrimSpace(sc.FQDN))
 		if fqdn == "" {
 			continue
 		}
 
-		if found, ok := existing[fqdn]; ok {
-			if strings.TrimSpace(sc.Provider) != "" {
-				found.Provider = normalizeProviderName(sc.Provider)
-			}
-			if sc.APIPrefix != "" {
-				found.APIPrefix = sc.APIPrefix
-			}
-			if sc.APISecret != "" {
-				found.APISecret = sc.APISecret
-			}
-			if sc.CFToken != "" {
-				found.CFToken = sc.CFToken
-			}
-			if sc.CFEmail != "" {
-				found.CFEmail = sc.CFEmail
-			}
-			if sc.CFSecret != "" {
-				found.CFSecret = sc.CFSecret
-			}
-			if sc.IPv64Token != "" {
-				found.IPv64Token = sc.IPv64Token
-			}
-			if sc.FebasUpdateURL != "" {
-				found.FebasUpdateURL = sc.FebasUpdateURL
-			}
-
-			found.TTL = sc.TTL
-			found.CFProxied = sc.CFProxied
-			found.IPMode = sc.IPMode
-			newConfigs = append(newConfigs, found)
+		found, ok := existing[fqdn]
+		if ok {
+			newConfigs = append(newConfigs, mergeExistingDomainConfig(found, sc))
 			continue
 		}
-
-		newConfigs = append(newConfigs, DomainConfig{
-			FQDN:           fqdn,
-			Provider:       normalizeProviderName(sc.Provider),
-			APIPrefix:      sc.APIPrefix,
-			APISecret:      sc.APISecret,
-			CFToken:        sc.CFToken,
-			CFEmail:        sc.CFEmail,
-			CFSecret:       sc.CFSecret,
-			IPv64Token:     sc.IPv64Token,
-			FebasUpdateURL: sc.FebasUpdateURL,
-			TTL:            sc.TTL,
-			CFProxied:      sc.CFProxied,
-			IPMode:         sc.IPMode,
-		})
+		newConfigs = append(newConfigs, newDomainConfig(fqdn, sc))
 	}
 
-	sort.Slice(newConfigs, func(i, j int) bool {
-		if newConfigs[i].Provider != newConfigs[j].Provider {
-			return string(newConfigs[i].Provider) < string(newConfigs[j].Provider)
-		}
-		return newConfigs[i].FQDN < newConfigs[j].FQDN
-	})
-
+	sortDomainConfigs(newConfigs)
 	return newConfigs
+}
+
+func indexDomainConfigs(configs []DomainConfig) map[string]DomainConfig {
+	indexed := make(map[string]DomainConfig, len(configs))
+	for _, config := range configs {
+		indexed[strings.ToLower(config.FQDN)] = config
+	}
+	return indexed
+}
+
+func mergeExistingDomainConfig(found DomainConfig, incoming safeDomainConfig) DomainConfig {
+	if strings.TrimSpace(incoming.Provider) != "" {
+		found.Provider = normalizeProviderName(incoming.Provider)
+	}
+	applyNonEmptyDashboardValue(&found.APIPrefix, incoming.APIPrefix)
+	applyDashboardSecret(&found.APISecret, incoming.APISecret)
+	applyDashboardSecret(&found.CFToken, incoming.CFToken)
+	applyNonEmptyDashboardValue(&found.CFEmail, incoming.CFEmail)
+	applyDashboardSecret(&found.CFSecret, incoming.CFSecret)
+	applyDashboardSecret(&found.IPv64Token, incoming.IPv64Token)
+	applyDashboardSecret(&found.FebasUpdateURL, incoming.FebasUpdateURL)
+	applyDashboardSecret(&found.APIKey, incoming.APIKey)
+
+	found.TTL = incoming.TTL
+	found.CFProxied = incoming.CFProxied
+	found.IPMode = incoming.IPMode
+	return found
+}
+
+func applyNonEmptyDashboardValue(destination *string, incoming string) {
+	if incoming != "" {
+		*destination = incoming
+	}
+}
+
+func applyDashboardSecret(destination *string, incoming string) {
+	if incoming != "" && !isDashboardSecretMask(incoming) {
+		*destination = incoming
+	}
+}
+
+func newDomainConfig(fqdn string, incoming safeDomainConfig) DomainConfig {
+	return DomainConfig{
+		FQDN:           fqdn,
+		Provider:       normalizeProviderName(incoming.Provider),
+		APIPrefix:      incoming.APIPrefix,
+		APISecret:      clearDashboardSecretMask(incoming.APISecret),
+		CFToken:        clearDashboardSecretMask(incoming.CFToken),
+		CFEmail:        incoming.CFEmail,
+		CFSecret:       clearDashboardSecretMask(incoming.CFSecret),
+		IPv64Token:     clearDashboardSecretMask(incoming.IPv64Token),
+		FebasUpdateURL: clearDashboardSecretMask(incoming.FebasUpdateURL),
+		APIKey:         clearDashboardSecretMask(incoming.APIKey),
+		TTL:            incoming.TTL,
+		CFProxied:      incoming.CFProxied,
+		IPMode:         incoming.IPMode,
+	}
+}
+
+func sortDomainConfigs(configs []DomainConfig) {
+	sort.Slice(configs, func(i, j int) bool {
+		if configs[i].Provider != configs[j].Provider {
+			return string(configs[i].Provider) < string(configs[j].Provider)
+		}
+		return configs[i].FQDN < configs[j].FQDN
+	})
 }
 
 func handleAPISetLanguage(w http.ResponseWriter, r *http.Request) {
@@ -1360,6 +1450,9 @@ func handleAPISetLanguage(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
+
+	configUpdateMu.Lock()
+	defer configUpdateMu.Unlock()
 
 	if err := loadLanguage(lang); err != nil {
 		http.Error(
@@ -1958,7 +2051,7 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Expires", "0")
 
 	writeDashboardHeader(w, sess)
-	writeDashboardTop(w, statusClass, statusText)
+	writeDashboardTop(w, statusClass, statusText, config)
 	writeDashboardMetricsCard(w, stats, nicHTML, chartSVG, latencySVG, isViewer)
 
 	writeDomainsCard(w, statusData)
@@ -1980,7 +2073,7 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 	</div>`)
 	}
 
-	writeSettingsSection(w, config)
+	writeSettingsSection(w, maskDashboardConfigSecrets(config))
 	writeTOTPSection(w, sess, authEnabled && sess != nil)
 	writeUsersSection(w, isAdmin)
 
@@ -2271,12 +2364,12 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 		}[sess.Role]
 		userInfo = fmt.Sprintf(`<span class="sidebar-user-info">%s %s</span>`, roleIcon, html.EscapeString(sess.Username))
 		logoutBtn = `<form method="POST" action="/logout" class="logout-form"><input type="hidden" name="csrf_token" value="` + html.EscapeString(sess.CSRFToken) + `"><button type="submit" class="action-btn topbar-action-btn logout-btn">🚪 Logout</button></form>`
-		totpPage = `<div class="nav-item" data-page="totp" data-click="navTo('totp')"><span class="nav-item-icon">🔐</span> 2FA / Konto-Sicherheit</div>`
+		totpPage = `<button type="button" class="nav-item" data-page="totp" data-click="navTo('totp')"><span class="nav-item-icon">🔐</span> 2FA / Konto-Sicherheit</button>`
 		if sess.Role == RoleAdmin {
-			userPage = `<div class="nav-item" data-page="users" data-click="navTo('users')">` + phrases().SettingsUserManagement + `</div>`
+			userPage = `<button type="button" class="nav-item" data-page="users" data-click="navTo('users')">` + phrases().SettingsUserManagement + `</button>`
 		}
 	} else if !authEnabled {
-		userPage = `<div class="nav-item" data-page="users" data-click="navTo('users')">` + phrases().SettingsUserManagement + `</div>`
+		userPage = `<button type="button" class="nav-item" data-page="users" data-click="navTo('users')">` + phrases().SettingsUserManagement + `</button>`
 	}
 
 	_, _ = fmt.Fprintf(w, `<!DOCTYPE html><html><head>
@@ -2313,36 +2406,36 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 			</div>
 
 			<div class="nav-section-label">`+t(phrases().NavOverview, "Overview")+`</div>
-			<div class="nav-item" data-page="dashboard" data-click="navTo('dashboard')">
+			<button type="button" class="nav-item" data-page="dashboard" data-click="navTo('dashboard')">
 				<span class="nav-item-icon">📊</span> `+phrases().NavDashboard+`
-			</div>
-			<div class="nav-item" data-page="domains" data-click="navTo('domains')">
+			</button>
+			<button type="button" class="nav-item" data-page="domains" data-click="navTo('domains')">
 				<span class="nav-item-icon">🌐</span> `+phrases().NavDomains+`
-			</div>
+			</button>
 
 			<div class="nav-section-label">`+t(phrases().NavMonitoring, "Monitoring")+`</div>
-			<div class="nav-item" data-page="metrics" data-click="navTo('metrics')">
+			<button type="button" class="nav-item" data-page="metrics" data-click="navTo('metrics')">
 				<span class="nav-item-icon">📈</span> `+phrases().APIPerformance+`
-			</div>
-			<div class="nav-item" data-page="diagnose" data-click="navTo('diagnose')">
+			</button>
+			<button type="button" class="nav-item" data-page="diagnose" data-click="navTo('diagnose')">
 				<span class="nav-item-icon">🩺</span> `+t(phrases().DiagnoseTitle, "Diagnose / Health Center")+`
-			</div>
-			<div class="nav-item" data-page="logs" data-click="navTo('logs')">
+			</button>
+			<button type="button" class="nav-item" data-page="logs" data-click="navTo('logs')">
 				<span class="nav-item-icon">🧾</span> `+phrases().SystemEvents+`
-			</div>
-			<div class="nav-item" data-page="debug" data-click="navTo('debug')">
+			</button>
+			<button type="button" class="nav-item" data-page="debug" data-click="navTo('debug')">
 				<span class="nav-item-icon">🐞</span> `+phrases().DebugLogTitle+`
-			</div>
+			</button>
 
 			<div class="nav-section-label">`+t(phrases().NavTools, "Tools")+`</div>
-			<div class="nav-item" data-page="backup" data-click="navTo('backup')">
+			<button type="button" class="nav-item" data-page="backup" data-click="navTo('backup')">
 				<span class="nav-item-icon">💾</span> `+t(phrases().BackupTitle, "Backup & Restore")+`
-			</div>
+			</button>
 
 			<div class="nav-section-label">`+t(phrases().NavConfig, "Config")+`</div>
-			<div class="nav-item" data-page="settings" data-click="navTo('settings')">
+			<button type="button" class="nav-item" data-page="settings" data-click="navTo('settings')">
 				<span class="nav-item-icon">⚙️</span> `+phrases().SettingsTitle+`
-			</div>
+			</button>
 			%s
 			%s
 
@@ -2359,7 +2452,7 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 
 			<!-- Topbar -->
 			<header class="topbar">
-				<button class="hamburger-btn" data-click="toggleSidebar()" aria-label="Menu">☰</button>
+				<button type="button" class="hamburger-btn" data-click="toggleSidebar()" aria-label="Menu" aria-controls="sidebar" aria-expanded="false">☰</button>
 				<span id="page-title" class="topbar-title">📊 Dashboard</span>
 				<div class="topbar-right">
 					<button class="action-btn topbar-action-btn is-hidden"
@@ -2383,7 +2476,9 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 						data-click="exportData()">📥 `+phrases().ExportBtn+`</button>
 
 					<div class="notif-wrap">
-						<button class="theme-toggle notif-toggle"
+						<button type="button" class="theme-toggle notif-toggle"
+							aria-controls="notif-panel"
+							aria-expanded="false"
 							data-tooltip="`+html.EscapeString(phrases().SettingsNotifierHint)+`"
 							data-mouseenter="showNotifierTooltip()"
 							data-focus="showNotifierTooltip()"
@@ -2470,7 +2565,7 @@ func buildNotifierStatusHTML() string {
 	return sb.String()
 }
 
-func writeDashboardTop(w http.ResponseWriter, statusClass, statusText string) {
+func writeDashboardTop(w http.ResponseWriter, statusClass, statusText string, config Config) {
 	_, _ = fmt.Fprintf(w, `
 	<div class="page-section" data-section="dashboard">
 		<div class="status-banner %s">
@@ -2528,10 +2623,10 @@ func writeDashboardTop(w http.ResponseWriter, statusClass, statusText string) {
 		phrases().LastUpdate,
 		time.Now().Format("15:04:05"),
 		buildNotifierStatusHTML(),
-		cfg.MaxLogLines,
-		cfg.MaxAPIRetries,
-		cfg.MaxConcurrent,
-		cfg.Interval,
+		config.MaxLogLines,
+		config.MaxAPIRetries,
+		config.MaxConcurrent,
+		config.Interval,
 	)
 }
 
@@ -2866,7 +2961,7 @@ func writeDomainsCard(w io.Writer, data map[string]any) {
 								placeholder="`+phrases().IPv64DomainPlaceholder+`">
 						</div>
 						<div class="ipv64-mgmt-input-wrap">
-							<label class="ipv64-mgmt-label">`+phrases().IPv64DomainAPITokenOptional+`</span></label>
+							<label class="ipv64-mgmt-label">`+phrases().IPv64DomainAPITokenOptional+`</label>
 							<div class="input-with-action">
 								<input type="password" id="ipv64-api-token-input" class="search-box ipv64-mgmt-input"
 									placeholder="`+phrases().IPv64DomainPlaceholderToken+`">
@@ -2981,7 +3076,7 @@ func newestDomainChange(data map[string]any, keys []string) time.Time {
 		if dh.LastChanged == "" {
 			continue
 		}
-		if t, err := time.Parse(statusTimestampLayout, dh.LastChanged); err == nil && t.After(newestChange) {
+		if t, err := time.ParseInLocation(statusTimestampLayout, dh.LastChanged, time.Local); err == nil && t.After(newestChange) {
 			newestChange = t
 		}
 	}
@@ -3004,6 +3099,11 @@ func writeSingleDomainCard(w io.Writer, domain string, h DomainHistory, configur
 	historyCount := 0
 	if len(h.IPs) > 1 {
 		historyCount = len(h.IPs) - 1
+	}
+
+	lastChangedUnixMS := int64(0)
+	if changedAt, err := time.ParseInLocation(statusTimestampLayout, h.LastChanged, time.Local); err == nil {
+		lastChangedUnixMS = changedAt.UnixMilli()
 	}
 
 	safeID := sanitizeIDWithHash(domain)
@@ -3043,14 +3143,14 @@ func writeSingleDomainCard(w io.Writer, domain string, h DomainHistory, configur
 							<button class="copy-btn" data-click="copyIP('%s')" title="Copy">📋</button>
 						</div>
 					</div>
-					<div class="domain-card-meta" data-last-changed="%s" data-uptime-id="%s">
-						<small>`+phrases().LastShort+` %s</small>
+					<div class="domain-card-meta" data-last-changed="%s" data-last-changed-unix="%d" data-uptime-id="%s">
+						<small>`+phrases().LastShort+` <span id="last-change-%s">%s</span></small>
 						<small class="domain-uptime-small">⏱️ <span id="uptime-%s">—</span></small>
 					</div>
 				</div>
 			</div>
 			<div class="domain-history-box">
-				<summary>`+phrases().DomainHistorySummary+`</summary>
+				<div class="domain-history-summary">`+phrases().DomainHistorySummary+`</div>
 				<table class="domain-history-table">
 					<thead class="domain-history-head">
 						<tr>
@@ -3064,7 +3164,7 @@ func writeSingleDomainCard(w io.Writer, domain string, h DomainHistory, configur
 		func() string { b, _ := json.Marshal(h.IPs); return html.EscapeString(string(b)) }(),
 		safeID,
 		dotClass,
-		dotTitle,
+		esc(dotTitle),
 		esc(domain),
 		esc(h.Provider+ipModeLabel),
 		safeID,
@@ -3077,7 +3177,9 @@ func writeSingleDomainCard(w io.Writer, domain string, h DomainHistory, configur
 		safeID,
 		esc(latest.IPv6),
 		jsString(latest.IPv6),
-		h.LastChanged,
+		esc(h.LastChanged),
+		lastChangedUnixMS,
+		safeID,
 		safeID,
 		esc(latest.Time),
 		safeID,
@@ -3104,7 +3206,7 @@ func buildDomainStatusVisuals(h DomainHistory, safeID string, newestChange time.
 		return dotClass, dotTitle, changedBadge
 	}
 
-	t, err := time.Parse(statusTimestampLayout, h.LastChanged)
+	t, err := time.ParseInLocation(statusTimestampLayout, h.LastChanged, time.Local)
 	if err != nil {
 		return dotClass, dotTitle, changedBadge
 	}
@@ -3113,7 +3215,7 @@ func buildDomainStatusVisuals(h DomainHistory, safeID string, newestChange time.
 	case time.Since(t) < 15*time.Minute:
 		dotClass = "domain-status-dot dot-ok dot-recent"
 		dotTitle = phrases().DotTitleChanged + h.LastChanged
-		changedBadge = `<span id="badge-` + safeID + `" class="changed-badge" data-changed-at="` + h.LastChanged + `">` + phrases().BadgeChanged + `</span>`
+		changedBadge = `<span id="badge-` + safeID + `" class="changed-badge" data-changed-at="` + esc(h.LastChanged) + `" data-changed-unix="` + strconv.FormatInt(t.UnixMilli(), 10) + `">` + phrases().BadgeChanged + `</span>`
 	case !newestChange.IsZero() && t.Before(newestChange.Add(-time.Minute)):
 		dotClass = "domain-status-dot dot-warn"
 		dotTitle = phrases().DotTitleLast + h.LastChanged + phrases().DotTitleOther
@@ -3428,6 +3530,11 @@ func providerCredentialWarning(dc DomainConfig) string {
 	case ProviderFebas:
 		if err := validateFebasUpdateURL(dc.FebasUpdateURL); err != nil {
 			return fmt.Sprintf("%s: %v", fqdn, err)
+		}
+
+	case ProviderDNScale:
+		if strings.TrimSpace(dc.APIKey) == "" {
+			return fmt.Sprintf("%s: DNScale API Key fehlt.", fqdn)
 		}
 	}
 
@@ -3819,6 +3926,9 @@ func restoreSelectedBackup(req backupRestoreRequest) ([]string, int, error) {
 }
 
 func restoreBackupConfig(backup dashboardBackup) (int, error) {
+	configUpdateMu.Lock()
+	defer configUpdateMu.Unlock()
+
 	if backup.Config == nil {
 		return http.StatusBadRequest, fmt.Errorf("%s", t(phrases().BackupContainsNoConfig, "backup contains no config"))
 	}
@@ -3830,6 +3940,8 @@ func restoreBackupConfig(backup dashboardBackup) (int, error) {
 
 	if err := saveConfigToFile(); err != nil {
 		restoreConfigInMemory(oldCfg)
+		ResetHTTPClient()
+		invalidateSecretReplacer()
 		return http.StatusInternalServerError, fmt.Errorf(
 			t(phrases().BackupConfigSaveFailedFormat, "config save failed: %w"),
 			err,
@@ -3864,6 +3976,12 @@ func restoreConfigInMemory(oldCfg Config) {
 }
 
 func afterConfigRestore() {
+	config := snapshotConfig()
+	setAtomicDebugFlags(config.DebugEnabled, config.DebugHTTPRaw)
+	if config.MaxConcurrent > 0 {
+		setWorkerConcurrencyLimit(config.MaxConcurrent)
+	}
+
 	ResetHTTPClient()
 	invalidateSecretReplacer()
 

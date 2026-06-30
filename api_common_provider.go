@@ -16,7 +16,11 @@ import (
 // ============================================================================
 
 func providerCachePath(filename string) string {
-	return filepath.Join(cfg.LogDir, filename)
+	cfgMu.RLock()
+	logDir := cfg.LogDir
+	cfgMu.RUnlock()
+
+	return filepath.Join(logDir, filename)
 }
 
 func saveProviderCacheToFile(providerLabel, filename string, zones []Zone, recordCache *ZoneRecordCache) error {
@@ -94,11 +98,16 @@ func handleProviderNetworkError(
 	providerName, method string,
 	err error,
 	duration time.Duration,
-	attempt int,
+	attempt, maxAttempts int,
 	serverBusy bool,
 ) (bool, error) {
 	debugLog("HTTP", "", fmt.Sprintf("❌ %s network error: %v | latency: %v", providerName, err, duration))
 	apiMetrics.RecordError(method, 0, err, duration)
+
+	handledErr := fmt.Errorf("%s: %w", phrases().ErrNetworkError, err)
+	if !canRetryAPIAttempt(attempt, maxAttempts) {
+		return false, handledErr
+	}
 
 	wait := calculateRetryDelay(attempt, serverBusy)
 	debugLog("HTTP", "", fmt.Sprintf("⏱️  %s %v", phrases().RetryIn, wait))
@@ -107,7 +116,7 @@ func handleProviderNetworkError(
 		return false, fmt.Errorf("%s: %w", phrases().ErrContextCancelled, ctx.Err())
 	}
 
-	return true, fmt.Errorf("%s: %w", phrases().ErrNetworkError, err)
+	return true, handledErr
 }
 
 func handleProviderReadError(
@@ -116,17 +125,22 @@ func handleProviderReadError(
 	statusCode int,
 	err error,
 	duration time.Duration,
-	attempt int,
+	attempt, maxAttempts int,
 ) (bool, error) {
 	debugLog("HTTP", "", fmt.Sprintf("❌ %s body read error: %v", providerName, err))
 	apiMetrics.RecordError(method, statusCode, err, duration)
+
+	handledErr := fmt.Errorf("%s: %w", phrases().ErrBodyRead, err)
+	if !canRetryAPIAttempt(attempt, maxAttempts) {
+		return false, handledErr
+	}
 
 	wait := calculateRetryDelay(attempt, false)
 	if !sleepOrCancel(ctx, wait) {
 		return false, fmt.Errorf("%s: %w", phrases().ErrContextCancelled, ctx.Err())
 	}
 
-	return true, fmt.Errorf("%s: %w", phrases().ErrBodyRead, err)
+	return true, handledErr
 }
 
 func handleProviderHTTPResponse(
@@ -136,11 +150,11 @@ func handleProviderHTTPResponse(
 	res *http.Response,
 	method, apiURL string,
 	duration time.Duration,
-	attempt int,
+	attempt, maxAttempts int,
 ) ([]byte, bool, error) {
 	respBody, readErr := readResponseBody(res)
 	if readErr != nil {
-		retry, handledErr := handleProviderReadError(ctx, providerName, method, res.StatusCode, readErr, duration, attempt)
+		retry, handledErr := handleProviderReadError(ctx, providerName, method, res.StatusCode, readErr, duration, attempt, maxAttempts)
 		return nil, retry, handledErr
 	}
 
@@ -152,7 +166,7 @@ func handleProviderHTTPResponse(
 	}
 
 	apiErr := classifyAPIErrorWithHeaders(res.StatusCode, method, apiURL, string(respBody), res.Header)
-	retry, handledErr := handleProviderAPIError(ctx, providerName, maxAttemptsPrefix, apiErr, method, res.StatusCode, duration, attempt)
+	retry, handledErr := handleProviderAPIError(ctx, providerName, maxAttemptsPrefix, apiErr, method, res.StatusCode, duration, attempt, maxAttempts)
 	return nil, retry, handledErr
 }
 
@@ -164,7 +178,7 @@ func handleProviderAPIError(
 	method string,
 	statusCode int,
 	duration time.Duration,
-	attempt int,
+	attempt, maxAttempts int,
 ) (bool, error) {
 	apiMetrics.RecordError(method, statusCode, apiErr, duration)
 	lastErrorMsg.Set(sanitizeError(apiErr))
@@ -183,7 +197,7 @@ func handleProviderAPIError(
 		return false, apiErr
 	}
 
-	if attempt >= cfg.MaxAPIRetries-1 {
+	if !canRetryAPIAttempt(attempt, maxAttempts) {
 		if maxAttemptsPrefix != "" {
 			return false, fmt.Errorf("%s: %w", maxAttemptsPrefix, apiErr)
 		}

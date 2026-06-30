@@ -85,7 +85,15 @@ func run() (exitCode int) {
 	initShutdownContext()
 	defer shutdownCancel()
 
-	initAuth(paths.logsDir)
+	if err := initAuth(paths.logsDir); err != nil {
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: "Dashboard authentication initialization failed",
+			Error:   err,
+		})
+		return 1
+	}
 
 	workerLimiter = NewDynamicWorkerLimiter(cfg.MaxConcurrent)
 
@@ -372,9 +380,9 @@ func loadConfigFromFile() bool {
 	if err != nil {
 		return false
 	}
-	var loaded Config
 
-	if err := json.Unmarshal(data, &loaded); err != nil {
+	loaded, err := parseConfig(data)
+	if err != nil {
 		log(LogContext{
 			Level:   LogWarn,
 			Action:  ActionConfig,
@@ -383,6 +391,30 @@ func loadConfigFromFile() bool {
 		return false
 	}
 
+	applyLegacyNotificationDefault(data, &loaded)
+	applyConfigDefaults(&loaded)
+	normalizeLoadedConfig(&loaded)
+	storeLoadedConfig(loaded)
+
+	return true
+}
+
+func parseConfig(data []byte) (Config, error) {
+	var loaded Config
+	err := json.Unmarshal(data, &loaded)
+	return loaded, err
+}
+
+func applyLegacyNotificationDefault(data []byte, loaded *Config) {
+	if configFieldPresent(data, "notifications", "enabled") {
+		return
+	}
+	if notificationCredentialsConfigured(*loaded) {
+		loaded.Notifications.Enabled = true
+	}
+}
+
+func applyConfigDefaults(loaded *Config) {
 	if loaded.Interval <= 0 {
 		loaded.Interval = DefaultInterval
 	}
@@ -393,7 +425,7 @@ func loadConfigFromFile() bool {
 		loaded.IPMode = "BOTH"
 	}
 	if loaded.LogDir == "" {
-		loaded.LogDir = cfg.LogDir
+		loaded.LogDir = configuredLogDir()
 	}
 	if loaded.MaxConcurrent <= 0 || loaded.MaxConcurrent > 20 {
 		loaded.MaxConcurrent = DefaultMaxConcurrent
@@ -407,22 +439,49 @@ func loadConfigFromFile() bool {
 	if loaded.HourlyRateLimit <= 0 {
 		loaded.HourlyRateLimit = DefaultHourlyRateLimit
 	}
+}
 
+func configuredLogDir() string {
+	cfgMu.RLock()
+	defer cfgMu.RUnlock()
+	return cfg.LogDir
+}
+
+func normalizeLoadedConfig(loaded *Config) {
 	loaded.IPMode = strings.ToUpper(strings.TrimSpace(loaded.IPMode))
-
 	for i := range loaded.DomainConfigs {
-		dc := &loaded.DomainConfigs[i]
-
-		dc.FQDN = normalizeDomain(dc.FQDN)
-		dc.Provider = normalizeProviderName(string(dc.Provider))
-		dc.IPMode = strings.ToUpper(strings.TrimSpace(dc.IPMode))
+		normalizeDomainConfig(&loaded.DomainConfigs[i])
 	}
+}
 
+func normalizeDomainConfig(domainConfig *DomainConfig) {
+	domainConfig.FQDN = normalizeDomain(domainConfig.FQDN)
+	domainConfig.Provider = normalizeProviderName(string(domainConfig.Provider))
+	domainConfig.IPMode = strings.ToUpper(strings.TrimSpace(domainConfig.IPMode))
+}
+
+func storeLoadedConfig(loaded Config) {
 	cfgMu.Lock()
 	cfg = loaded
 	cfgMu.Unlock()
+	invalidateSecretReplacer()
+}
 
-	return true
+func configFieldPresent(data []byte, objectKey, fieldKey string) bool {
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(data, &root); err != nil {
+		return false
+	}
+	rawObject, ok := root[objectKey]
+	if !ok {
+		return false
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(rawObject, &object); err != nil {
+		return false
+	}
+	_, ok = object[fieldKey]
+	return ok
 }
 
 func applyDebugOverrides() {
@@ -472,6 +531,7 @@ func initializeProvidersAndNotifiers() error {
 		return err
 	}
 
+	invalidateSecretReplacer()
 	initNotifiers()
 	return nil
 }
@@ -750,6 +810,7 @@ func handleContextShutdown(
 	servers *dashboardServers,
 ) int {
 	ticker.Stop()
+	closeNotifiers()
 
 	if httpClient != nil {
 		httpClient.CloseIdleConnections()
@@ -833,6 +894,7 @@ func handleShutdownSignal(sig os.Signal, ticker *time.Ticker, servers *dashboard
 
 	stopCtx.SkipNotify = true
 	log(stopCtx)
+	closeNotifiers()
 
 	ticker.Stop()
 

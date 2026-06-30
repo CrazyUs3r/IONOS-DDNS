@@ -91,21 +91,22 @@ func classifyAPIErrorWithHeaders(statusCode int, method, url, responseBody strin
 		return nil
 	}
 
+	safeURL := sanitizeURLStringForLogging(url)
 	apiErr := &APIError{
 		StatusCode: statusCode,
 		Method:     method,
-		URL:        url,
+		URL:        safeURL,
 		Message:    responseBody,
 	}
 
 	if spec, ok := apiErrorSpecs[statusCode]; ok {
 		applyAPIErrorSpec(apiErr, spec, responseBody, headers)
-		logAPIError(spec.logLevel, spec.action, method, url, apiErr.Message)
+		logAPIError(spec.logLevel, spec.action, method, safeURL, apiErr.Message)
 		return apiErr
 	}
 
 	applyDefaultAPIErrorSpec(apiErr, statusCode, responseBody)
-	logAPIError(LogError, defaultAction(statusCode), method, url, apiErr.Message)
+	logAPIError(LogError, defaultAction(statusCode), method, safeURL, apiErr.Message)
 
 	return apiErr
 }

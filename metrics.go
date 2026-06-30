@@ -23,8 +23,12 @@ type apiMetricsSnapshot struct {
 	ServerErrors         int64       `json:"server_errors"`
 	ClientErrors         int64       `json:"client_errors"`
 	AverageLatencyMs     int64       `json:"avg_latency_ms"`
+	LatencySumMs         int64       `json:"latency_sum_ms,omitempty"`
+	LatencyCount         int64       `json:"latency_count,omitempty"`
 	HourlyStats          [24]int     `json:"hourly_stats"`
 	HourlyLatencyMs      [24]int64   `json:"hourly_latency_ms"`
+	HourlyLatencySumMs   [24]int64   `json:"hourly_latency_sum_ms,omitempty"`
+	HourlyLatencyCount   [24]int64   `json:"hourly_latency_count,omitempty"`
 	RequestTimestamps    []time.Time `json:"request_timestamps"`
 	LastSuccessTime      time.Time   `json:"last_success_at"`
 	LastError            string      `json:"last_error"`
@@ -165,7 +169,11 @@ func (m *APIMetrics) RecordError(
 
 	m.TotalRequests++
 	m.FailedRequests++
-	m.LastError = err.Error()
+	if err != nil {
+		m.LastError = err.Error()
+	} else {
+		m.LastError = ""
+	}
 	m.LastErrorTimestamp = now
 
 	m.cleanupOldTimestamps(now)
@@ -202,10 +210,7 @@ func (m *APIMetrics) RecordError(
 }
 
 func (m *APIMetrics) incrementDailyMethod(method string, now time.Time) {
-	if !m.DailyReset.IsZero() &&
-		(now.Year() != m.DailyReset.Year() ||
-			now.Month() != m.DailyReset.Month() ||
-			now.Day() != m.DailyReset.Day()) {
+	if !m.DailyReset.IsZero() && !sameLocalDate(now, m.DailyReset) {
 
 		m.DailyGET = 0
 		m.DailyPOST = 0
@@ -336,6 +341,21 @@ func (m *APIMetrics) cleanupOldTimestamps(now time.Time) {
 	}
 }
 
+func (m *APIMetrics) refreshTimeWindows(now time.Time) {
+	m.cleanupOldTimestamps(now)
+
+	if !m.DailyReset.IsZero() && !sameLocalDate(now, m.DailyReset) {
+		m.DailyGET = 0
+		m.DailyPOST = 0
+		m.DailyPUT = 0
+		m.DailyDELETE = 0
+		m.DailyNIC = 0
+		m.DailyReset = now
+	}
+
+	m.resetHourlyMetricsIfNeeded(now)
+}
+
 func (m *APIMetrics) GetStats() map[string]any {
 	m.Lock()
 	defer m.Unlock()
@@ -373,6 +393,7 @@ func reorderHourlyLatencyToChronological(hourlyData [24]time.Duration) [24]time.
 }
 
 func (m *APIMetrics) getStatsUnsafe() map[string]any {
+	m.refreshTimeWindows(time.Now())
 	currentCount := len(m.RequestTimestamps)
 
 	cfgMu.RLock()
@@ -486,44 +507,85 @@ func (m *APIMetrics) SaveToFile(path string) error {
 	return writeFileAtomic(path, data)
 }
 
+func normalizeRingIndex(index, size int) int {
+	if size <= 0 {
+		return 0
+	}
+	index %= size
+	if index < 0 {
+		index += size
+	}
+	return index
+}
+
 func (m *APIMetrics) LoadFromFile(path string) error {
-	if err := ensureMetricsFile(path); err != nil {
+	snap, err := readAPIMetricsSnapshot(path)
+	if err != nil {
 		return err
+	}
+	if snap == nil {
+		return nil
+	}
+
+	now := time.Now()
+	m.Lock()
+	defer m.Unlock()
+	m.restoreSnapshot(*snap, now)
+	return nil
+}
+
+func readAPIMetricsSnapshot(path string) (*apiMetricsSnapshot, error) {
+	if err := ensureMetricsFile(path); err != nil {
+		return nil, err
 	}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
-
 	if len(data) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	var snap apiMetricsSnapshot
 	if err := json.Unmarshal(data, &snap); err != nil {
-		return errors.New(
-			"metrics.json konnte nicht gelesen werden (invalid JSON)",
-		)
+		return nil, errors.New("metrics.json konnte nicht gelesen werden (invalid JSON)")
 	}
+	return &snap, nil
+}
 
-	now := time.Now()
+func (m *APIMetrics) restoreSnapshot(snap apiMetricsSnapshot, now time.Time) {
+	m.restoreRequestTotals(snap)
+	m.restoreDailyMetrics(snap, now)
+	m.restoreHourlyMetrics(snap, now)
+	m.restoreLatencySamples(snap)
+	m.restoreIPLatency(snap)
+	m.restoreRequestTimestamps(snap.RequestTimestamps, now)
+	m.lastHour = now.Unix() / 3600
+}
 
-	m.Lock()
-	defer m.Unlock()
-
+func (m *APIMetrics) restoreRequestTotals(snap apiMetricsSnapshot) {
 	m.TotalRequests = snap.TotalRequests
 	m.SuccessRequests = snap.SuccessRequests
 	m.FailedRequests = snap.FailedRequests
 	m.RateLimitHits = snap.RateLimitHits
 	m.ServerErrors = snap.ServerErrors
 	m.ClientErrors = snap.ClientErrors
-	m.AverageLatency = time.Duration(snap.AverageLatencyMs) * time.Millisecond
+	m.AverageLatency = time.Duration(max(snap.AverageLatencyMs, 0)) * time.Millisecond
+	if snap.LatencyCount > 0 && snap.LatencySumMs >= 0 {
+		m.LatencyCount = snap.LatencyCount
+		m.LatencySum = time.Duration(snap.LatencySumMs) * time.Millisecond
+	} else if m.TotalRequests > 0 && m.AverageLatency > 0 {
+		m.LatencyCount = m.TotalRequests
+		m.LatencySum = m.AverageLatency * time.Duration(m.LatencyCount)
+	}
 
 	m.LastSuccessTimestamp = snap.LastSuccessTime
 	m.LastError = snap.LastError
 	m.LastErrorTimestamp = snap.LastErrorTime
+}
 
+func (m *APIMetrics) restoreDailyMetrics(snap apiMetricsSnapshot, now time.Time) {
 	m.DailyGET = 0
 	m.DailyPOST = 0
 	m.DailyPUT = 0
@@ -531,69 +593,72 @@ func (m *APIMetrics) LoadFromFile(path string) error {
 	m.DailyNIC = 0
 	m.DailyReset = time.Time{}
 
-	if !snap.DailyReset.IsZero() &&
-		sameLocalDate(snap.DailyReset, now) {
-
-		m.DailyGET = snap.DailyGET
-		m.DailyPOST = snap.DailyPOST
-		m.DailyPUT = snap.DailyPUT
-		m.DailyDELETE = snap.DailyDELETE
-		m.DailyNIC = snap.DailyNIC
-		m.DailyReset = snap.DailyReset
+	if snap.DailyReset.IsZero() || !sameLocalDate(snap.DailyReset, now) {
+		return
 	}
+	m.DailyGET = snap.DailyGET
+	m.DailyPOST = snap.DailyPOST
+	m.DailyPUT = snap.DailyPUT
+	m.DailyDELETE = snap.DailyDELETE
+	m.DailyNIC = snap.DailyNIC
+	m.DailyReset = snap.DailyReset
+}
 
+func (m *APIMetrics) restoreHourlyMetrics(snap apiMetricsSnapshot, now time.Time) {
 	m.HourlyStats = [24]int{}
 	m.HourlyLatency = [24]time.Duration{}
 	m.HourlyLatencySum = [24]time.Duration{}
 	m.HourlyLatencyCount = [24]int64{}
 	m.HourlyReset = time.Time{}
 
-	if !snap.HourlyReset.IsZero() &&
-		sameLocalDate(snap.HourlyReset, now) {
-
-		m.HourlyStats = snap.HourlyStats
-
-		for i := range len(m.HourlyLatency) {
-			m.HourlyLatency[i] = time.Duration(snap.HourlyLatencyMs[i]) *
-				time.Millisecond
-		}
-
-		m.HourlyReset = snap.HourlyReset
+	if snap.HourlyReset.IsZero() || !sameLocalDate(snap.HourlyReset, now) {
+		return
 	}
+	m.HourlyStats = snap.HourlyStats
+	for i := range len(m.HourlyLatency) {
+		m.restoreHourlyLatency(snap, i)
+	}
+	m.HourlyReset = snap.HourlyReset
+}
 
+func (m *APIMetrics) restoreHourlyLatency(snap apiMetricsSnapshot, hour int) {
+	m.HourlyLatency[hour] = time.Duration(max(snap.HourlyLatencyMs[hour], 0)) * time.Millisecond
+	if snap.HourlyLatencyCount[hour] > 0 && snap.HourlyLatencySumMs[hour] >= 0 {
+		m.HourlyLatencyCount[hour] = snap.HourlyLatencyCount[hour]
+		m.HourlyLatencySum[hour] = time.Duration(snap.HourlyLatencySumMs[hour]) * time.Millisecond
+		return
+	}
+	if snap.HourlyStats[hour] > 0 && m.HourlyLatency[hour] > 0 {
+		m.HourlyLatencyCount[hour] = int64(snap.HourlyStats[hour])
+		m.HourlyLatencySum[hour] = m.HourlyLatency[hour] * time.Duration(m.HourlyLatencyCount[hour])
+	}
+}
+
+func (m *APIMetrics) restoreLatencySamples(snap apiMetricsSnapshot) {
 	m.LatencySamples = snap.LatencySamples
-	m.LatencySampleIdx = snap.LatencySampleIdx
-	m.LatencySampleCount = snap.LatencySampleCount
+	m.LatencySampleIdx = normalizeRingIndex(snap.LatencySampleIdx, len(m.LatencySamples))
+	m.LatencySampleCount = min(max(snap.LatencySampleCount, 0), len(m.LatencySamples))
+}
 
-	m.IPLatencySum = time.Duration(snap.IPLatencySum) * time.Millisecond
-
-	m.IPLatencyCount = snap.IPLatencyCount
-
-	m.IPLatencyAvg = time.Duration(snap.IPLatencyAvgMs) * time.Millisecond
-
+func (m *APIMetrics) restoreIPLatency(snap apiMetricsSnapshot) {
+	m.IPLatencySum = time.Duration(max(snap.IPLatencySum, 0)) * time.Millisecond
+	m.IPLatencyCount = max(snap.IPLatencyCount, 0)
+	m.IPLatencyAvg = time.Duration(max(snap.IPLatencyAvgMs, 0)) * time.Millisecond
 	m.IPLatencySamples = snap.IPLatencySamples
-	m.IPLatencySampleIdx = snap.IPLatencySampleIdx
-	m.IPLatencySampleCount = snap.IPLatencySampleCount
+	m.IPLatencySampleIdx = normalizeRingIndex(snap.IPLatencySampleIdx, len(m.IPLatencySamples))
+	m.IPLatencySampleCount = min(max(snap.IPLatencySampleCount, 0), len(m.IPLatencySamples))
 	m.LastIPCheckTime = snap.LastIPCheckTime
-	m.RequestTimestamps = nil
+}
 
+func (m *APIMetrics) restoreRequestTimestamps(timestamps []time.Time, now time.Time) {
+	m.RequestTimestamps = nil
 	threshold := now.Add(-1 * time.Hour)
 	futureLimit := now.Add(5 * time.Minute)
-
-	for _, timestamp := range snap.RequestTimestamps {
-		if timestamp.After(threshold) &&
-			timestamp.Before(futureLimit) {
-
-			m.RequestTimestamps = append(
-				m.RequestTimestamps,
-				timestamp,
-			)
+	for _, timestamp := range timestamps {
+		if timestamp.After(threshold) && timestamp.Before(futureLimit) {
+			m.RequestTimestamps = append(m.RequestTimestamps, timestamp)
 		}
 	}
-
-	m.lastHour = now.Unix() / 3600
-
-	return nil
 }
 
 func (m *APIMetrics) snapshotForPersistence() apiMetricsSnapshot {
@@ -608,6 +673,8 @@ func (m *APIMetrics) snapshotForPersistence() apiMetricsSnapshot {
 		ServerErrors:         m.ServerErrors,
 		ClientErrors:         m.ClientErrors,
 		AverageLatencyMs:     m.AverageLatency.Milliseconds(),
+		LatencySumMs:         m.LatencySum.Milliseconds(),
+		LatencyCount:         m.LatencyCount,
 		HourlyStats:          m.HourlyStats,
 		LastError:            m.LastError,
 		LastSuccessTime:      m.LastSuccessTimestamp,
@@ -635,17 +702,27 @@ func (m *APIMetrics) snapshotForPersistence() apiMetricsSnapshot {
 
 	for i := range len(m.HourlyLatency) {
 		snap.HourlyLatencyMs[i] = m.HourlyLatency[i].Milliseconds()
+		snap.HourlyLatencySumMs[i] = m.HourlyLatencySum[i].Milliseconds()
+		snap.HourlyLatencyCount[i] = m.HourlyLatencyCount[i]
 	}
 
 	return snap
 }
 
 func startMetricsAutosave(interval time.Duration) {
+	if interval <= 0 {
+		return
+	}
 	go func() {
-		t := time.NewTicker(interval)
-		defer t.Stop()
-		for range t.C {
-			_ = apiMetrics.SaveToFile(metricsPersistPath)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				_ = apiMetrics.SaveToFile(metricsPersistPath)
+			case <-shutdownCtx.Done():
+				return
+			}
 		}
 	}()
 }
@@ -662,14 +739,19 @@ func setLatestMetrics(stats map[string]any) {
 
 func metricsBroadcasterLoop() {
 	go func() {
-		for range metricsSignal {
-			stats := apiMetrics.GetStats()
+		for {
+			select {
+			case <-metricsSignal:
+				stats := apiMetrics.GetStats()
 
-			latestMetricsMu.Lock()
-			latestMetrics = stats
-			latestMetricsMu.Unlock()
+				latestMetricsMu.Lock()
+				latestMetrics = stats
+				latestMetricsMu.Unlock()
 
-			broadcastUpdate("metrics", stats)
+				broadcastUpdate("metrics", stats)
+			case <-shutdownCtx.Done():
+				return
+			}
 		}
 	}()
 }
@@ -681,10 +763,7 @@ func handleMetricsReset(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !validateTriggerToken(r) {
-		w.WriteHeader(http.StatusUnauthorized)
-		if err := json.NewEncoder(w).Encode(map[string]string{"error": "invalid token"}); err != nil {
-			debugLog("API", "", fmt.Sprintf("Failed to encode error response: %v", err))
-		}
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
 		return
 	}
 
@@ -716,6 +795,15 @@ func handleMetricsReset(w http.ResponseWriter, r *http.Request) {
 	apiMetrics.IPLatencySampleIdx = 0
 	apiMetrics.IPLatencySampleCount = 0
 	apiMetrics.LastIPCheckTime = time.Time{}
+	apiMetrics.DailyGET = 0
+	apiMetrics.DailyPOST = 0
+	apiMetrics.DailyPUT = 0
+	apiMetrics.DailyDELETE = 0
+	apiMetrics.DailyNIC = 0
+	apiMetrics.DailyReset = time.Time{}
+	apiMetrics.HourlyReset = time.Time{}
+	apiMetrics.lastHour = 0
+	apiMetrics.providerAnyError.Store(false)
 	apiMetrics.Unlock()
 
 	if err := apiMetrics.SaveToFile(metricsPersistPath); err != nil {
@@ -726,10 +814,7 @@ func handleMetricsReset(w http.ResponseWriter, r *http.Request) {
 	setLatestMetrics(stats)
 	broadcastNotification("📊 "+phrases().MetricsResetNotification, "info")
 
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(map[string]string{"status": "reset_success"}); err != nil {
-		debugLog("API", "", fmt.Sprintf("Failed to encode reset response: %v", err))
-	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "reset_success"})
 }
 
 func handlePrometheusMetrics(w http.ResponseWriter, _ *http.Request) {

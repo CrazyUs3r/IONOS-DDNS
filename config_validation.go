@@ -138,43 +138,17 @@ func validateProviderCredentials(
 ) error {
 	switch dc.Provider {
 	case ProviderIONOS:
-		if dc.APIPrefix == "" || dc.APISecret == "" {
-			return fmt.Errorf(
-				phrases().IonosAPIRequired,
-				fqdn,
-			)
-		}
-
+		return validateIONOSCredentials(dc, fqdn)
 	case ProviderIPv64:
-		if dc.IPv64Token == "" {
-			return fmt.Errorf(
-				phrases().Ipv64TokenRequired,
-				fqdn,
-			)
-		}
-
+		return validateIPv64Credentials(dc, fqdn)
 	case ProviderCloudflare:
-		if dc.CFToken == "" &&
-			(dc.CFEmail == "" || dc.CFSecret == "") {
-			return fmt.Errorf(
-				phrases().CloudflareAuthRequired,
-				fqdn,
-			)
-		}
-
+		return validateCloudflareCredentials(dc, fqdn)
 	case ProviderHetzner, ProviderHetznerCloud:
-		if hetznerToken(&dc) == "" {
-			return fmt.Errorf(
-				phrases().HetznerAuthRequired,
-				fqdn,
-			)
-		}
-
+		return validateHetznerCredentials(dc, fqdn)
 	case ProviderFebas:
-		if err := validateFebasUpdateURL(dc.FebasUpdateURL); err != nil {
-			return fmt.Errorf("%s: %w", fqdn, err)
-		}
-
+		return validateFebasCredentials(dc, fqdn)
+	case ProviderDNScale:
+		return validateDNScaleCredentials(dc, fqdn)
 	default:
 		return fmt.Errorf(
 			phrases().UnknownProvider,
@@ -182,8 +156,48 @@ func validateProviderCredentials(
 			dc.Provider,
 		)
 	}
+}
 
+func validateIONOSCredentials(dc DomainConfig, fqdn string) error {
+	if dc.APIPrefix != "" && dc.APISecret != "" {
+		return nil
+	}
+	return fmt.Errorf(phrases().IonosAPIRequired, fqdn)
+}
+
+func validateIPv64Credentials(dc DomainConfig, fqdn string) error {
+	if dc.IPv64Token != "" {
+		return nil
+	}
+	return fmt.Errorf(phrases().Ipv64TokenRequired, fqdn)
+}
+
+func validateCloudflareCredentials(dc DomainConfig, fqdn string) error {
+	if dc.CFToken != "" || (dc.CFEmail != "" && dc.CFSecret != "") {
+		return nil
+	}
+	return fmt.Errorf(phrases().CloudflareAuthRequired, fqdn)
+}
+
+func validateHetznerCredentials(dc DomainConfig, fqdn string) error {
+	if hetznerToken(&dc) != "" {
+		return nil
+	}
+	return fmt.Errorf(phrases().HetznerAuthRequired, fqdn)
+}
+
+func validateFebasCredentials(dc DomainConfig, fqdn string) error {
+	if err := validateFebasUpdateURL(dc.FebasUpdateURL); err != nil {
+		return fmt.Errorf("%s: %w", fqdn, err)
+	}
 	return nil
+}
+
+func validateDNScaleCredentials(dc DomainConfig, fqdn string) error {
+	if strings.TrimSpace(dc.APIKey) != "" {
+		return nil
+	}
+	return fmt.Errorf(phrases().DNScaleAPIKeyRequired, fqdn)
 }
 
 func validateProviderAccount(
@@ -231,6 +245,9 @@ func providerAuthFingerprint(dc DomainConfig) string {
 
 	case ProviderFebas:
 		return dc.FebasUpdateURL
+
+	case ProviderDNScale:
+		return dc.APIKey
 
 	default:
 		return ""

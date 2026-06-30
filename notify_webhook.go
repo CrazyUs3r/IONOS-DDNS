@@ -19,13 +19,18 @@ import (
 type webhookNotifier struct {
 	url    string
 	secret string
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 func newWebhookNotifier(url, secret string) *webhookNotifier {
-	return &webhookNotifier{url: url, secret: secret}
+	ctx, cancel := context.WithCancel(notificationParentContext())
+	return &webhookNotifier{url: url, secret: secret, ctx: ctx, cancel: cancel}
 }
 
 func (w *webhookNotifier) Name() string { return "Webhook" }
+
+func (w *webhookNotifier) Close() { w.cancel() }
 
 func (w *webhookNotifier) Send(msg NotifyMessage) error {
 	return w.doSend(msg)
@@ -69,10 +74,12 @@ func (w *webhookNotifier) doSend(msg NotifyMessage) error {
 		}
 
 		debugLog("NOTIFY", "", fmt.Sprintf("⌛ Webhook retry %d/%d: %v", attempt+1, maxAttempts, err))
+		timer := time.NewTimer(wait)
 		select {
-		case <-shutdownCtx.Done():
+		case <-w.ctx.Done():
+			stopNotifyTimer(timer)
 			return err
-		case <-time.After(wait):
+		case <-timer.C:
 		}
 		wait *= 2
 	}
@@ -80,7 +87,7 @@ func (w *webhookNotifier) doSend(msg NotifyMessage) error {
 }
 
 func (w *webhookNotifier) trySend(data []byte) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(w.ctx, 10*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, MethodPOST, w.url, bytes.NewReader(data))

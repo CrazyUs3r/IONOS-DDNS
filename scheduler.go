@@ -645,6 +645,13 @@ func saveProviderCacheJob(job cacheSaveJob, cache *ZoneRecordCache) bool {
 		// Febas zones are generated from config and records are resolved live.
 		return true
 
+	case ProviderDNScale:
+		if err := saveDNScaleCacheToFile(job.zones, cache); err != nil {
+			debugLog("CACHE", "", fmt.Sprintf(phrases().DNScaleCacheSaveFailed, err))
+			return false
+		}
+		return true
+
 	default:
 		return false
 	}
@@ -743,6 +750,8 @@ func runCleanupIfNeeded(
 				debugLog("MAINTENANCE", "", phrases().CheckingIPv64OrphanedRecords)
 				cleanupIPv64Records(ctx)
 			}
+		case ProviderDNScale:
+			cleanupDNScaleRecords(ctx, zones, cache)
 		}
 	}
 }
@@ -828,6 +837,9 @@ func loadProviderRecordCacheFromDisk(
 		}
 		return len(zones) > 0, nil
 
+	case ProviderDNScale:
+		return loadProviderRecordCache(cache, zones, loadDNScaleCacheFromFile)
+
 	default:
 		return false, nil
 	}
@@ -890,54 +902,71 @@ func loadIPv64RecordCacheFromDisk(cache *ZoneRecordCache, zones []Zone) bool {
 	return loadedAny
 }
 
+type providerZoneDiskSource struct {
+	loader        providerCacheLoader
+	loadedMessage string
+}
+
 func loadProviderZonesFromDisk(provider ProviderType) ([]Zone, bool) {
 	switch provider {
-	case ProviderIONOS:
-		zones, _, err := loadIONOSCacheFromFile()
-		if err == nil && len(zones) > 0 {
-			debugLog("CACHE", "", fmt.Sprintf(phrases().IonosZonesLoadedFromDisk, len(zones)))
-			return zones, true
-		}
-
-	case ProviderCloudflare:
-		zones, _, err := loadCloudflareCacheFromFile()
-		if err == nil && len(zones) > 0 {
-			debugLog("CACHE", "", fmt.Sprintf(phrases().CloudflareZonesLoadedFromDisk, len(zones)))
-			return zones, true
-		}
-
 	case ProviderIPv64:
-		zones, ok := loadIPv64ZonesFromDiskCache()
-		if ok {
-			debugLog("CACHE", "", fmt.Sprintf(phrases().IPv64ZonesLoadedFromDisk, len(zones)))
-			return zones, true
-		}
-
-	case ProviderHetzner:
-		zones, _, err := loadHetznerDNSCacheFromFile()
-		if err == nil && len(zones) > 0 {
-			debugLog("CACHE", "", fmt.Sprintf(phrases().HetznerDNSZonesLoadedFromDisk, len(zones)))
-			return zones, true
-		}
-
-	case ProviderHetznerCloud:
-		zones, _, err := loadHetznerCloudCacheFromFile()
-		if err == nil && len(zones) > 0 {
-			debugLog("CACHE", "", fmt.Sprintf(phrases().HetznerCloudZonesLoadedFromDisk, len(zones)))
-			return zones, true
-		}
-
+		return loadIPv64ProviderZonesFromDisk()
 	case ProviderFebas:
-		domainConfigs := snapshotDomainConfigs()
-		if dc := findProviderDomainConfig(domainConfigs, ProviderFebas); dc != nil {
-			zones, err := loadFebasZones(context.Background())
-			if err == nil && len(zones) > 0 {
-				return zones, true
-			}
+		return loadFebasProviderZonesFromDisk()
+	default:
+		source, ok := providerZoneDiskSourceFor(provider)
+		if !ok {
+			return nil, false
 		}
+		return loadFileBackedProviderZonesFromDisk(source)
+	}
+}
+
+func providerZoneDiskSourceFor(provider ProviderType) (providerZoneDiskSource, bool) {
+	switch provider {
+	case ProviderIONOS:
+		return providerZoneDiskSource{loadIONOSCacheFromFile, phrases().IonosZonesLoadedFromDisk}, true
+	case ProviderCloudflare:
+		return providerZoneDiskSource{loadCloudflareCacheFromFile, phrases().CloudflareZonesLoadedFromDisk}, true
+	case ProviderHetzner:
+		return providerZoneDiskSource{loadHetznerDNSCacheFromFile, phrases().HetznerDNSZonesLoadedFromDisk}, true
+	case ProviderHetznerCloud:
+		return providerZoneDiskSource{loadHetznerCloudCacheFromFile, phrases().HetznerCloudZonesLoadedFromDisk}, true
+	case ProviderDNScale:
+		return providerZoneDiskSource{loadDNScaleCacheFromFile, phrases().DNScaleZonesLoadedFromDisk}, true
+	default:
+		return providerZoneDiskSource{}, false
+	}
+}
+
+func loadFileBackedProviderZonesFromDisk(source providerZoneDiskSource) ([]Zone, bool) {
+	zones, _, err := source.loader()
+	if err != nil || len(zones) == 0 {
+		return nil, false
 	}
 
-	return nil, false
+	debugLog("CACHE", "", fmt.Sprintf(source.loadedMessage, len(zones)))
+	return zones, true
+}
+
+func loadIPv64ProviderZonesFromDisk() ([]Zone, bool) {
+	zones, ok := loadIPv64ZonesFromDiskCache()
+	if !ok {
+		return nil, false
+	}
+
+	debugLog("CACHE", "", fmt.Sprintf(phrases().IPv64ZonesLoadedFromDisk, len(zones)))
+	return zones, true
+}
+
+func loadFebasProviderZonesFromDisk() ([]Zone, bool) {
+	domainConfigs := snapshotDomainConfigs()
+	if findProviderDomainConfig(domainConfigs, ProviderFebas) == nil {
+		return nil, false
+	}
+
+	zones, err := loadFebasZones(context.Background())
+	return zones, err == nil && len(zones) > 0
 }
 
 func loadIPv64ZonesFromDiskCache() ([]Zone, bool) {

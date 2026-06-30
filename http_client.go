@@ -380,6 +380,14 @@ func sanitizeURLForLogging(u *url.URL) string {
 	return sanitizeHTTPDebugBody(copyURL.String())
 }
 
+func sanitizeURLStringForLogging(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return sanitizeHTTPDebugBody(rawURL)
+	}
+	return sanitizeURLForLogging(u)
+}
+
 func redactSensitiveRequestQuery(req *http.Request) {
 	if req.URL == nil {
 		return
@@ -395,7 +403,7 @@ func redactSensitiveRequestQuery(req *http.Request) {
 func redactSensitiveValues(values url.Values) {
 	for key := range values {
 		if isSensitiveFieldName(key) {
-			values.Set(key, "***MASKED***")
+			values.Set(key, "MASKED")
 		}
 	}
 }
@@ -405,10 +413,11 @@ func isSensitiveFieldName(name string) bool {
 	normalized = strings.NewReplacer("-", "", "_", "", ".", "").Replace(normalized)
 
 	switch normalized {
-	case "token", "accesstoken", "refreshtoken", "apitoken", "apikey",
+	case "token", "accesstoken", "refreshtoken", "apitoken", "apikey", "key",
 		"apisecret", "secret", "password", "passwd", "authorization",
 		"proxyauthorization", "auth", "credential", "credentials",
-		"cookie", "session", "sessionid", "triggertoken":
+		"cookie", "session", "sessionid", "triggertoken", "getdomains",
+		"domainupdatehash", "updatehash", "recordkey":
 		return true
 	default:
 		return false
@@ -1064,13 +1073,22 @@ func getSecretReplacer() *strings.Replacer {
 	secretReplacerMu.Lock()
 	defer secretReplacerMu.Unlock()
 	if secretReplacer == nil {
-		secretReplacer = buildSecretReplacer(snapshotDomainConfigs())
+		secretReplacer = buildSecretReplacer(snapshotSecretConfig())
 	}
 	return secretReplacer
 }
 
-func buildSecretReplacer(domainConfigs []DomainConfig) *strings.Replacer {
-	replacements := buildSecretReplacements(domainConfigs)
+func snapshotSecretConfig() Config {
+	cfgMu.RLock()
+	config := cfg
+	config.DomainConfigs = append([]DomainConfig(nil), cfg.DomainConfigs...)
+	cfgMu.RUnlock()
+	return config
+}
+
+func buildSecretReplacer(config Config) *strings.Replacer {
+	replacements := buildSecretReplacements(config.DomainConfigs)
+	replacements = appendNotificationReplacements(replacements, config)
 
 	if len(replacements) == 0 {
 		return strings.NewReplacer("dummy_secret_placeholder", "none")
@@ -1086,6 +1104,51 @@ func buildSecretReplacements(domainConfigs []DomainConfig) []string {
 		replacements = appendProviderReplacements(replacements, dc)
 	}
 
+	return replacements
+}
+
+func appendNotificationReplacements(replacements []string, config Config) []string {
+	replacements = appendIfNotEmpty(replacements, strings.TrimSpace(config.Notifications.Telegram.Token), "***TELEGRAM-TOKEN***")
+	replacements = appendIfNotEmpty(replacements, strings.TrimSpace(config.Notifications.Gotify.Token), "***GOTIFY-TOKEN***")
+	replacements = appendIfNotEmpty(replacements, strings.TrimSpace(config.Notifications.Ntfy.Token), "***NTFY-TOKEN***")
+	replacements = appendIfNotEmpty(replacements, strings.TrimSpace(config.Notifications.Webhook.Secret), "***WEBHOOK-SECRET***")
+	replacements = appendIfNotEmpty(replacements, config.Notifications.MQTTConfig.Password, "***MQTT-PASSWORD***")
+	replacements = appendIfNotEmpty(replacements, config.Notifications.Email.Password, "***SMTP-PASSWORD***")
+
+	for _, rawURL := range []string{
+		config.Notifications.Gotify.URL,
+		config.Notifications.Ntfy.URL,
+		config.Notifications.Webhook.URL,
+	} {
+		replacements = appendURLCredentialReplacements(replacements, rawURL)
+	}
+	return replacements
+}
+
+func appendURLCredentialReplacements(replacements []string, rawURL string) []string {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return replacements
+	}
+	if parsed.User != nil {
+		if password, ok := parsed.User.Password(); ok {
+			replacements = appendIfNotEmpty(replacements, password, "***URL-PASSWORD***")
+		}
+	}
+	for key, values := range parsed.Query() {
+		normalizedKey := strings.ToLower(key)
+		if !strings.Contains(normalizedKey, "token") &&
+			!strings.Contains(normalizedKey, "secret") &&
+			!strings.Contains(normalizedKey, "password") &&
+			!strings.Contains(normalizedKey, "signature") &&
+			!strings.Contains(normalizedKey, "api_key") &&
+			normalizedKey != "key" {
+			continue
+		}
+		for _, value := range values {
+			replacements = appendIfNotEmpty(replacements, value, "***URL-SECRET***")
+		}
+	}
 	return replacements
 }
 
@@ -1105,6 +1168,13 @@ func appendProviderReplacements(replacements []string, dc DomainConfig) []string
 
 	case ProviderFebas:
 		return appendFebasReplacements(replacements, dc)
+
+	case ProviderDNScale:
+		return appendIfNotEmpty(
+			replacements,
+			strings.TrimSpace(dc.APIKey),
+			"***DNSCALE-API-KEY***",
+		)
 
 	default:
 		return replacements
@@ -1160,7 +1230,25 @@ func appendIfNotEmpty(replacements []string, value, replacement string) []string
 		return replacements
 	}
 
-	return append(replacements, value, replacement)
+	seen := make(map[string]struct{}, 3)
+	for _, variant := range []string{value, url.QueryEscape(value), url.PathEscape(value)} {
+		if variant == "" {
+			continue
+		}
+		if _, exists := seen[variant]; exists {
+			continue
+		}
+		seen[variant] = struct{}{}
+		replacements = append(replacements, variant, replacement)
+	}
+	return replacements
+}
+
+func sanitizeText(message string) string {
+	if replacer := getSecretReplacer(); replacer != nil {
+		return replacer.Replace(message)
+	}
+	return message
 }
 
 func sanitizeError(err error) string {
@@ -1168,13 +1256,7 @@ func sanitizeError(err error) string {
 		return ""
 	}
 
-	msg := err.Error()
-
-	if replacer := getSecretReplacer(); replacer != nil {
-		msg = replacer.Replace(msg)
-	}
-
-	return msg
+	return sanitizeText(err.Error())
 }
 
 func sanitizeID(s string) string {

@@ -630,6 +630,13 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+func dryRunEnabled() bool {
+	cfgMu.RLock()
+	enabled := cfg.DryRun
+	cfgMu.RUnlock()
+	return enabled
+}
+
 func writeFileAtomic(path string, data []byte) (err error) {
 	dir := filepath.Dir(path)
 
@@ -707,6 +714,8 @@ func loadZonesForDomainConfig(ctx context.Context, dc *DomainConfig) ([]Zone, er
 		return loadHetznerCloudZones(ctx, dc)
 	case ProviderFebas:
 		return loadFebasZones(ctx)
+	case ProviderDNScale:
+		return loadDNScaleZones(ctx, dc)
 	default:
 		return nil, fmt.Errorf("unknown provider: %s", dc.Provider)
 	}

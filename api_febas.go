@@ -15,6 +15,9 @@ import (
 
 const febasResponseBodyLimit = 64 << 10
 
+// ============================================================================
+// LOADZONE
+// ============================================================================
 func loadFebasZones(ctx context.Context) ([]Zone, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -282,7 +285,7 @@ func febasAPIAttempt(
 	res, err := febasHTTPClient().Do(req)
 	duration := time.Since(start)
 	if err != nil {
-		retry, handledErr := handleProviderNetworkError(ctx, "FEBAS", MethodNIC, err, duration, attempt, false)
+		retry, handledErr := handleProviderNetworkError(ctx, "FEBAS", MethodNIC, err, duration, attempt, maxRetries, false)
 		return nil, retry, handledErr
 	}
 	defer func() {
@@ -293,7 +296,7 @@ func febasAPIAttempt(
 
 	respBody, readErr := io.ReadAll(io.LimitReader(res.Body, febasResponseBodyLimit))
 	if readErr != nil {
-		retry, handledErr := handleProviderReadError(ctx, "FEBAS", MethodNIC, res.StatusCode, readErr, duration, attempt)
+		retry, handledErr := handleProviderReadError(ctx, "FEBAS", MethodNIC, res.StatusCode, readErr, duration, attempt, maxRetries)
 		return nil, retry, handledErr
 	}
 
@@ -314,6 +317,7 @@ func febasAPIAttempt(
 			res.StatusCode,
 			duration,
 			attempt,
+			maxRetries,
 		)
 		return nil, retry, handledErr
 	}

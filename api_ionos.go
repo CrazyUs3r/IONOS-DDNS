@@ -63,7 +63,7 @@ func ionosAPIAttempt(
 			return nil, false, fmt.Errorf("%s: %w", phrases().ErrNetworkError, err)
 		}
 
-		retry, handledErr := handleProviderNetworkError(ctx, "IONOS", method, err, duration, attempt, false)
+		retry, handledErr := handleProviderNetworkError(ctx, "IONOS", method, err, duration, attempt, maxRetries, false)
 		return nil, retry, handledErr
 	}
 
@@ -80,7 +80,7 @@ func ionosAPIAttempt(
 		responseAttempt = maxRetries - 1
 	}
 
-	return handleIonosResponse(ctx, res, method, url, duration, responseAttempt)
+	return handleIonosResponse(ctx, res, method, url, duration, responseAttempt, maxRetries)
 }
 
 func marshalIonosBody(body any) ([]byte, error) {
@@ -131,9 +131,9 @@ func handleIonosResponse(
 	res *http.Response,
 	method, url string,
 	duration time.Duration,
-	attempt int,
+	attempt, maxAttempts int,
 ) ([]byte, bool, error) {
-	return handleProviderHTTPResponse(ctx, "IONOS", phrases().IonosMaxAttempts, res, method, url, duration, attempt)
+	return handleProviderHTTPResponse(ctx, "IONOS", phrases().IonosMaxAttempts, res, method, url, duration, attempt, maxAttempts)
 }
 
 func loadIonosInfrastructureRecords(ctx context.Context, dc *DomainConfig, zoneID string) ([]Record, error) {
@@ -190,7 +190,7 @@ func updateIonosDNS(
 		return false, fmt.Errorf(phrases().ErrZoneNameEmpty, fqdn)
 	}
 
-	if cfg.DryRun {
+	if dryRunEnabled() {
 		log(LogContext{
 			Level:   LogWarn,
 			Action:  ActionDryRun,
@@ -779,7 +779,7 @@ func cleanupSingleIONOSRecord(
 
 	debugLog("MAINTENANCE", fqdn, fmt.Sprintf(phrases().CleanupOrphanedIonos, rec.Type, rec.ID))
 
-	if cfg.DryRun {
+	if dryRunEnabled() {
 		log(LogContext{
 			Level:   LogInfo,
 			Action:  ActionCleanup,

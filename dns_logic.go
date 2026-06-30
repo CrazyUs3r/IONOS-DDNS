@@ -212,15 +212,25 @@ func buildDomainUpdateJob(
 
 func findMatchedZoneForDomain(fqdn string, zones []Zone) *Zone {
 	dn := normalizeDomainName(fqdn)
+	bestIndex := -1
+	bestNameLength := -1
 
 	for i := range zones {
 		zn := normalizeDomainName(zones[i].Name)
-		if dn == zn || strings.HasSuffix(dn, "."+zn) {
-			return &zones[i]
+		if zn == "" || (dn != zn && !strings.HasSuffix(dn, "."+zn)) {
+			continue
+		}
+
+		if len(zn) > bestNameLength {
+			bestIndex = i
+			bestNameLength = len(zn)
 		}
 	}
 
-	return nil
+	if bestIndex < 0 {
+		return nil
+	}
+	return &zones[bestIndex]
 }
 
 func normalizeDomainName(name string) string {
@@ -406,6 +416,8 @@ func updateDomainRecord(
 		return updateHetznerDNS(ctx, dc, job.Domain, recordType, ip, job.Records, job.ZoneID, job.ZoneName, cache)
 	case ProviderHetznerCloud:
 		return updateHetznerCloudDNS(ctx, dc, job.Domain, recordType, ip, job.Records, job.ZoneID, job.ZoneName, cache)
+	case ProviderDNScale:
+		return updateDNScaleDNS(ctx, dc, job.Domain, recordType, ip, job.Records, job.ZoneID, job.ZoneName, cache)
 	default:
 		return false, fmt.Errorf("unknown provider: %s", dc.Provider)
 	}

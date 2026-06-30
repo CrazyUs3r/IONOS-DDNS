@@ -111,7 +111,7 @@ func ipv64APIAttempt(
 	attempt, maxRetries int,
 ) ([]byte, bool, error) {
 	debugLog("HTTP", "", fmt.Sprintf(phrases().IPv64Attempt,
-		phrases().Attempt, attempt+1, maxRetries, method, apiURL))
+		phrases().Attempt, attempt+1, maxRetries, method, sanitizeURLStringForLogging(apiURL)))
 
 	req, err := buildIPv64Request(ctx, dc, method, apiURL, bodyData)
 	if err != nil {
@@ -123,7 +123,7 @@ func ipv64APIAttempt(
 	duration := time.Since(start)
 
 	if err != nil {
-		retry, handledErr := handleProviderNetworkError(ctx, "IPv64", method, err, duration, attempt, false)
+		retry, handledErr := handleProviderNetworkError(ctx, "IPv64", method, err, duration, attempt, maxRetries, false)
 		return nil, retry, handledErr
 	}
 
@@ -133,7 +133,7 @@ func ipv64APIAttempt(
 		}
 	}()
 
-	return handleIPv64Response(ctx, res, method, apiURL, duration, attempt)
+	return handleIPv64Response(ctx, res, method, apiURL, duration, attempt, maxRetries)
 }
 
 func buildIPv64Request(
@@ -172,22 +172,24 @@ func handleIPv64Response(
 	res *http.Response,
 	method, apiURL string,
 	duration time.Duration,
-	attempt int,
+	attempt, maxAttempts int,
 ) ([]byte, bool, error) {
 	respBody, readErr := io.ReadAll(res.Body)
 
 	if readErr != nil {
-		retry, handledErr := handleIPv64ReadError(method, res.StatusCode, readErr, duration)
+		retry, handledErr := handleIPv64ReadError(
+			ctx, method, res.StatusCode, readErr, duration, attempt, maxAttempts,
+		)
 		return nil, retry, handledErr
 	}
 
 	if res.StatusCode == http.StatusTooManyRequests {
-		retry, handledErr := handleIPv64RateLimit(ctx, res, method, duration, attempt)
+		retry, handledErr := handleIPv64RateLimit(ctx, res, method, duration, attempt, maxAttempts)
 		return nil, retry, handledErr
 	}
 
 	if apiErr := classifyAPIErrorWithHeaders(res.StatusCode, method, apiURL, string(respBody), res.Header); apiErr != nil {
-		retry, handledErr := handleIPv64APIError(ctx, apiErr, method, res.StatusCode, duration, attempt)
+		retry, handledErr := handleIPv64APIError(ctx, apiErr, method, res.StatusCode, duration, attempt, maxAttempts)
 		return nil, retry, handledErr
 	}
 
@@ -200,13 +202,29 @@ func handleIPv64Response(
 }
 
 func handleIPv64ReadError(
+	ctx context.Context,
 	method string,
 	statusCode int,
 	readErr error,
 	duration time.Duration,
+	attempt, maxAttempts int,
 ) (bool, error) {
 	apiMetrics.RecordError(method, statusCode, readErr, duration)
-	return false, fmt.Errorf("failed to read response: %w", readErr)
+
+	handledErr := fmt.Errorf("%s: %w", phrases().ErrBodyRead, readErr)
+	if !canRetryAPIAttempt(attempt, maxAttempts) {
+		return false, handledErr
+	}
+
+	serverBusy := statusCode == http.StatusTooManyRequests || statusCode >= 500
+	wait := calculateRetryDelay(attempt, serverBusy)
+	debugLog("HTTP", "", fmt.Sprintf(phrases().IPv64RetriableWait, wait))
+
+	if !sleepOrCancel(ctx, wait) {
+		return false, fmt.Errorf("%s: %w", phrases().ErrContextCancelled, ctx.Err())
+	}
+
+	return true, handledErr
 }
 
 func handleIPv64RateLimit(
@@ -214,14 +232,14 @@ func handleIPv64RateLimit(
 	res *http.Response,
 	method string,
 	duration time.Duration,
-	attempt int,
+	attempt, maxAttempts int,
 ) (bool, error) {
 	apiMetrics.RecordError(method, res.StatusCode, fmt.Errorf("%s", phrases().ErrRateLimit), duration)
 
 	waitDuration := ipv64RateLimitWait(res.Header, attempt)
 	lastErr := fmt.Errorf("%s", phrases().ErrRateLimit)
 
-	if attempt < cfg.MaxAPIRetries-1 {
+	if canRetryAPIAttempt(attempt, maxAttempts) {
 		debugLog("HTTP", "", fmt.Sprintf(phrases().IPv64RetriableWait, waitDuration))
 		if !sleepOrCancel(ctx, waitDuration) {
 			return false, fmt.Errorf("%s: %w", phrases().ErrContextCancelled, ctx.Err())
@@ -249,11 +267,11 @@ func handleIPv64APIError(
 	method string,
 	statusCode int,
 	duration time.Duration,
-	attempt int,
+	attempt, maxAttempts int,
 ) (bool, error) {
 	apiMetrics.RecordError(method, statusCode, apiErr, duration)
 
-	if apiErr.Retryable && attempt < cfg.MaxAPIRetries-1 {
+	if apiErr.Retryable && canRetryAPIAttempt(attempt, maxAttempts) {
 		wait := apiErr.RetryAfter
 		if wait <= 0 {
 			wait = calculateRetryDelay(attempt, statusCode >= 500)
@@ -280,7 +298,7 @@ func validateIPv64ResponseBody(
 		apiMetrics.RecordError(method, statusCode, err, duration)
 
 		if len(respBody) > 0 && respBody[0] == '<' {
-			preview := string(respBody)
+			preview := sanitizeHTTPDebugBody(string(respBody))
 			if len(preview) > 200 {
 				preview = preview[:200] + "..."
 			}
@@ -622,7 +640,7 @@ func loadAllIPv64Domains(ctx context.Context, dc *DomainConfig) error {
 		debugLog("CACHE", "", fmt.Sprintf(phrases().IPv64ParseHTMLCache, err))
 
 		if len(data) > 0 && data[0] == '<' {
-			preview := string(data)
+			preview := sanitizeHTTPDebugBody(string(data))
 			if len(preview) > 200 {
 				preview = preview[:200] + "..."
 			}
@@ -632,16 +650,17 @@ func loadAllIPv64Domains(ctx context.Context, dc *DomainConfig) error {
 		return fmt.Errorf("%s: %w", phrases().IPv64ParseError, err)
 	}
 
-	providerCache.Lock()
-	for domainName, subdomain := range resp.Subdomains {
-		domain := IPv64Domain{
-			Domain:           domainName,
-			DomainUpdateHash: subdomain.DomainUpdateHash,
-			Records:          make([]IPv64Record, 0),
-		}
+	freshDomains := buildIPv64DomainSnapshot(resp)
 
-		domain.Records = append(domain.Records, subdomain.Records...)
-		providerCache.ipv64Records[domainName] = domain
+	providerCache.Lock()
+	providerCache.ipv64Records = freshDomains
+	providerCache.Unlock()
+
+	for domainName, domain := range freshDomains {
+		hashState := ""
+		if domain.DomainUpdateHash != "" {
+			hashState = "***"
+		}
 
 		debugLog(
 			"CACHE",
@@ -649,17 +668,10 @@ func loadAllIPv64Domains(ctx context.Context, dc *DomainConfig) error {
 			fmt.Sprintf(
 				phrases().IPv64CachedDomain,
 				len(domain.Records),
-				func() string {
-					h := subdomain.DomainUpdateHash
-					if len(h) < 8 {
-						return h
-					}
-					return h[:8]
-				}(),
+				hashState,
 			),
 		)
 	}
-	providerCache.Unlock()
 
 	if err := saveIPv64Cache(); err != nil {
 		debugLog("CACHE", "", fmt.Sprintf(phrases().IPv64CacheSaveError, err))
@@ -667,6 +679,23 @@ func loadAllIPv64Domains(ctx context.Context, dc *DomainConfig) error {
 
 	lastIPv64DomainsLoadNano.Store(time.Now().UnixNano())
 	return nil
+}
+
+func buildIPv64DomainSnapshot(resp IPv64Response) map[string]IPv64Domain {
+	domains := make(map[string]IPv64Domain, len(resp.Subdomains))
+
+	for domainName, subdomain := range resp.Subdomains {
+		domains[domainName] = IPv64Domain{
+			Domain:           domainName,
+			DomainUpdateHash: subdomain.DomainUpdateHash,
+			Updates:          subdomain.Updates,
+			Wildcard:         subdomain.Wildcard,
+			Deactivated:      subdomain.Deactivated,
+			Records:          slices.Clone(subdomain.Records),
+		}
+	}
+
+	return domains
 }
 
 func loadIPv64InfrastructureRecords(z Zone) ([]Record, error) {
@@ -747,7 +776,7 @@ func updateIPv64DNS(ctx context.Context, dc *DomainConfig, fqdn, ipv4, ipv6 stri
 		return false, err
 	}
 
-	if cfg.DryRun {
+	if dryRunEnabled() {
 		logIPv64DryRun(fqdn, ipv4, ipv6, needV4, needV6)
 		return true, nil
 	}
@@ -864,7 +893,7 @@ func performIPv64NICUpdate(
 ) error {
 	updateURL := buildIPv64UpdateURL(fqdn, updateHash, ipv4, ipv6, needV4, needV6)
 
-	debugLog("DNS-LOGIC", fqdn, fmt.Sprintf(phrases().IPv64UpdateURL, updateURL))
+	debugLog("DNS-LOGIC", fqdn, fmt.Sprintf(phrases().IPv64UpdateURL, sanitizeURLStringForLogging(updateURL)))
 
 	req, err := http.NewRequestWithContext(ctx, MethodGET, updateURL, nil)
 	if err != nil {
@@ -1009,19 +1038,15 @@ func cleanupIPv64Records(ctx context.Context) {
 	debugLog("MAINTENANCE", "", phrases().CleanupStartIPv64)
 
 	configuredFQDNs, ourBaseDomains := collectIPv64ConfiguredDomains()
-
-	providerCache.RLock()
-	defer providerCache.RUnlock()
-
-	for baseDomain, domain := range providerCache.ipv64Records {
+	for baseDomain, domain := range snapshotIPv64ProviderDomains() {
 		cleanupIPv64DomainRecords(ctx, ipv64DC, baseDomain, domain, configuredFQDNs, ourBaseDomains)
 	}
 }
 
 func findIPv64DomainConfig() *DomainConfig {
-	for i := range cfg.DomainConfigs {
-		if cfg.DomainConfigs[i].Provider == ProviderIPv64 {
-			return &cfg.DomainConfigs[i]
+	for _, dc := range snapshotDomainConfigs() {
+		if dc.Provider == ProviderIPv64 {
+			return &dc
 		}
 	}
 	return nil
@@ -1031,7 +1056,7 @@ func collectIPv64ConfiguredDomains() (map[string]struct{}, map[string]struct{}) 
 	configuredFQDNs := make(map[string]struct{})
 	ourBaseDomains := make(map[string]struct{})
 
-	for _, dc := range cfg.DomainConfigs {
+	for _, dc := range snapshotDomainConfigs() {
 		if dc.Provider != ProviderIPv64 {
 			continue
 		}
@@ -1039,7 +1064,7 @@ func collectIPv64ConfiguredDomains() (map[string]struct{}, map[string]struct{}) 
 		fqdn := normalizeIPv64FQDN(dc.FQDN)
 		configuredFQDNs[fqdn] = struct{}{}
 
-		_, base := splitIPv64FQDN(fqdn)
+		base, _ := splitIPv64FQDN(fqdn)
 		if base == "" {
 			base = fqdn
 		}
@@ -1048,6 +1073,19 @@ func collectIPv64ConfiguredDomains() (map[string]struct{}, map[string]struct{}) 
 	}
 
 	return configuredFQDNs, ourBaseDomains
+}
+
+func snapshotIPv64ProviderDomains() map[string]IPv64Domain {
+	providerCache.RLock()
+	defer providerCache.RUnlock()
+
+	domains := make(map[string]IPv64Domain, len(providerCache.ipv64Records))
+	for baseDomain, domain := range providerCache.ipv64Records {
+		domain.Records = slices.Clone(domain.Records)
+		domains[baseDomain] = domain
+	}
+
+	return domains
 }
 
 func cleanupIPv64DomainRecords(
@@ -1081,7 +1119,7 @@ func cleanupSingleIPv64Record(
 
 	debugLog("MAINTENANCE", fqdn, fmt.Sprintf(phrases().CleanupSkipOrphaned, rec.Type, rec.RecordID))
 
-	if cfg.DryRun {
+	if dryRunEnabled() {
 		log(LogContext{
 			Level:   LogInfo,
 			Action:  ActionCleanup,

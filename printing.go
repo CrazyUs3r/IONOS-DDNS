@@ -201,6 +201,9 @@ func loadInfrastructureRecordsFromProvider(
 	case ProviderFebas:
 		return loadFebasZoneRecords(ctx, Zone{ID: zoneID, Name: dc.FQDN})
 
+	case ProviderDNScale:
+		return loadDNScaleInfrastructureRecords(ctx, dc, zoneID)
+
 	default:
 		return nil, fmt.Errorf(phrases().UnsupportedInfrastructureProviderFormat, provider)
 	}

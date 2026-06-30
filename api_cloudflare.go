@@ -53,7 +53,7 @@ func cloudflareAPIAttempt(
 	duration := time.Since(start)
 
 	if err != nil {
-		retry, handledErr := handleProviderNetworkError(ctx, "Cloudflare", method, err, duration, attempt, true)
+		retry, handledErr := handleProviderNetworkError(ctx, "Cloudflare", method, err, duration, attempt, maxRetries, true)
 		return nil, retry, handledErr
 	}
 
@@ -63,7 +63,7 @@ func cloudflareAPIAttempt(
 		}
 	}()
 
-	return handleCloudflareResponse(ctx, res, method, fullURL, duration, attempt)
+	return handleCloudflareResponse(ctx, res, method, fullURL, duration, attempt, maxRetries)
 }
 
 func buildCloudflareRequest(
@@ -131,7 +131,9 @@ func applyCloudflareAuthHeaders(req *http.Request, dc *DomainConfig) error {
 func normalizeCloudflareToken(token string) string {
 	token = strings.TrimSpace(token)
 	token = strings.Trim(token, `"'`)
-	token = strings.TrimPrefix(token, "Bearer ")
+	if len(token) >= len("Bearer ") && strings.EqualFold(token[:len("Bearer ")], "Bearer ") {
+		token = token[len("Bearer "):]
+	}
 	token = strings.TrimSpace(token)
 
 	token = strings.Map(func(r rune) rune {
@@ -149,28 +151,28 @@ func handleCloudflareResponse(
 	res *http.Response,
 	method, fullURL string,
 	duration time.Duration,
-	attempt int,
+	attempt, maxAttempts int,
 ) ([]byte, bool, error) {
 	respBody, readErr := io.ReadAll(res.Body)
 
 	if readErr != nil {
-		retry, handledErr := handleCloudflareReadError(ctx, res, method, readErr, duration, attempt)
+		retry, handledErr := handleCloudflareReadError(ctx, res, method, readErr, duration, attempt, maxAttempts)
 		return nil, retry, handledErr
 	}
 
 	if res.StatusCode == http.StatusTooManyRequests {
-		retry, handledErr := handleCloudflareRateLimit(ctx, res, method, fullURL, respBody, duration, attempt)
+		retry, handledErr := handleCloudflareRateLimit(ctx, res, method, fullURL, respBody, duration, attempt, maxAttempts)
 		return nil, retry, handledErr
 	}
 
 	var cfResp CloudflareResponse
 	if err := json.Unmarshal(respBody, &cfResp); err != nil {
-		retry, handledErr := handleCloudflareInvalidJSON(ctx, res, method, fullURL, respBody, duration, attempt)
+		retry, handledErr := handleCloudflareInvalidJSON(ctx, res, method, fullURL, respBody, duration, attempt, maxAttempts)
 		return nil, retry, handledErr
 	}
 
 	if !cfResp.Success {
-		retry, handledErr := handleCloudflareAPIFailure(ctx, res, method, fullURL, respBody, &cfResp, duration, attempt)
+		retry, handledErr := handleCloudflareAPIFailure(ctx, res, method, fullURL, respBody, &cfResp, duration, attempt, maxAttempts)
 		return nil, retry, handledErr
 	}
 
@@ -184,11 +186,15 @@ func handleCloudflareReadError(
 	method string,
 	readErr error,
 	duration time.Duration,
-	attempt int,
+	attempt, maxAttempts int,
 ) (bool, error) {
 	apiMetrics.RecordError(method, res.StatusCode, readErr, duration)
 
 	lastErr := fmt.Errorf("%s: %w", phrases().ErrBodyRead, readErr)
+	if !canRetryAPIAttempt(attempt, maxAttempts) {
+		return false, lastErr
+	}
+
 	serverBusy := res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= 500
 
 	if !sleepOrCancel(ctx, calculateRetryDelay(attempt, serverBusy)) {
@@ -204,10 +210,13 @@ func handleCloudflareRateLimit(
 	method, fullURL string,
 	respBody []byte,
 	duration time.Duration,
-	attempt int,
+	attempt, maxAttempts int,
 ) (bool, error) {
 	apiErr := classifyCloudflareAPIError(res.StatusCode, method, fullURL, respBody, nil, res.Header)
 	apiMetrics.RecordError(method, res.StatusCode, apiErr, duration)
+	if !canRetryAPIAttempt(attempt, maxAttempts) {
+		return false, apiErr
+	}
 
 	wait := apiErr.RetryAfter
 	if wait <= 0 {
@@ -227,7 +236,7 @@ func handleCloudflareInvalidJSON(
 	method, fullURL string,
 	respBody []byte,
 	duration time.Duration,
-	attempt int,
+	attempt, maxAttempts int,
 ) (bool, error) {
 	if len(respBody) > 0 && respBody[0] == '<' {
 		preview := string(respBody)
@@ -254,7 +263,7 @@ func handleCloudflareInvalidJSON(
 		return false, apiErr
 	}
 
-	if !apiErr.IsRetryable() || attempt >= cfg.MaxAPIRetries-1 {
+	if !apiErr.IsRetryable() || !canRetryAPIAttempt(attempt, maxAttempts) {
 		return false, apiErr
 	}
 
@@ -278,12 +287,12 @@ func handleCloudflareAPIFailure(
 	respBody []byte,
 	cfResp *CloudflareResponse,
 	duration time.Duration,
-	attempt int,
+	attempt, maxAttempts int,
 ) (bool, error) {
 	apiErr := classifyCloudflareAPIError(res.StatusCode, method, fullURL, respBody, cfResp, res.Header)
 	apiMetrics.RecordError(method, res.StatusCode, apiErr, duration)
 
-	if !apiErr.IsRetryable() || attempt >= cfg.MaxAPIRetries-1 {
+	if !apiErr.IsRetryable() || !canRetryAPIAttempt(attempt, maxAttempts) {
 		return false, apiErr
 	}
 
@@ -394,7 +403,7 @@ func updateCloudflareDNS(
 		return false, nil
 	}
 
-	if cfg.DryRun {
+	if dryRunEnabled() {
 		log(LogContext{
 			Level:   LogWarn,
 			Action:  ActionDryRun,
@@ -644,7 +653,7 @@ func cleanupSingleCloudflareRecord(
 
 	debugLog("MAINTENANCE", fqdn, fmt.Sprintf(phrases().CleanupOrphanedCF, rec.Type, rec.ID, zone.Name))
 
-	if cfg.DryRun {
+	if dryRunEnabled() {
 		log(LogContext{
 			Level:   LogInfo,
 			Action:  ActionCleanup,

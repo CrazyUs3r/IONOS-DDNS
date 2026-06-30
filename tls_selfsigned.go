@@ -39,7 +39,7 @@ func resolveDashboardTLSFiles() (certFile, keyFile string, selfSigned bool, err 
 		return certFile, keyFile, false, nil
 	}
 
-	tlsDir := filepath.Join(configDir, "tls")
+	tlsDir := filepath.Join(configDir, emailTLSModeTLS)
 	certFile = filepath.Join(tlsDir, "dashboard.crt")
 	keyFile = filepath.Join(tlsDir, "dashboard.key")
 
@@ -94,6 +94,9 @@ func dashboardCertificateNames() ([]string, []net.IP) {
 
 func addCertificateHost(raw string, dnsSet map[string]struct{}, ipSet map[string]net.IP) {
 	host := strings.TrimSpace(raw)
+	if parsedHost, _, err := net.SplitHostPort(host); err == nil {
+		host = strings.Trim(parsedHost, "[]")
+	}
 	if host == "" {
 		return
 	}
@@ -130,6 +133,9 @@ func ensureSelfSignedCertificate(certFile, keyFile string, dnsNames []string, ip
 	if err != nil {
 		return fmt.Errorf("generate TLS certificate serial: %w", err)
 	}
+	if serialNumber.Sign() == 0 {
+		serialNumber.SetInt64(1)
+	}
 
 	hostname, _ := os.Hostname()
 	commonName := strings.TrimSpace(hostname)
@@ -146,7 +152,7 @@ func ensureSelfSignedCertificate(certFile, keyFile string, dnsNames []string, ip
 		},
 		NotBefore:             now.Add(-5 * time.Minute),
 		NotAfter:              now.Add(selfSignedCertificateLifetime),
-		KeyUsage:              x509.KeyUsageDigitalSignature,
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
 		DNSNames:              dnsNames,

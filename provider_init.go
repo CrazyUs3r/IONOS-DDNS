@@ -121,6 +121,7 @@ func (r rawEntry) toDomainConfig() DomainConfig {
 		CFZoneID:       r.CFZoneID,
 		IPv64Token:     pick(r.IPv64Token, r.IPv64Token2),
 		FebasUpdateURL: pick(r.FebasUpdateURL, r.FebasUpdateURL2),
+		APIKey:         pick(r.APIKey, r.APIKey2),
 		TTL:            r.TTL,
 		CFProxied:      r.CFProxied,
 	}
@@ -217,6 +218,8 @@ func buildLegacyDomainConfigs(providerEnv string, domains []string) ([]DomainCon
 		return buildLegacyHetznerCloudConfigs(domains)
 	case "FEBAS":
 		return buildLegacyFebasConfigs(domains)
+	case "DNSCALE":
+		return buildLegacyDNScaleConfigs(domains)
 	default:
 		return nil, fmt.Errorf(phrases().UnknownProviderFormat, providerEnv)
 	}
@@ -288,6 +291,20 @@ func buildLegacyFebasConfigs(domains []string) ([]DomainConfig, error) {
 	return buildLegacyConfigs(domains, DomainConfig{
 		Provider:       ProviderFebas,
 		FebasUpdateURL: updateURL,
+	}), nil
+}
+
+func buildLegacyDNScaleConfigs(domains []string) ([]DomainConfig, error) {
+	apiKey := strings.TrimSpace(
+		firstNonEmptyEnv("DNSCALE_API_KEY", "DNSCALE_TOKEN"),
+	)
+	if apiKey == "" {
+		return nil, fmt.Errorf("%s", phrases().DNScaleAPIKeyRequired)
+	}
+
+	return buildLegacyConfigs(domains, DomainConfig{
+		Provider: ProviderDNScale,
+		APIKey:   apiKey,
 	}), nil
 }
 

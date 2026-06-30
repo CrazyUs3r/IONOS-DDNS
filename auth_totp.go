@@ -48,6 +48,11 @@ func validateTOTPCode(secret, code string) bool {
 	if len(code) != totpDigits {
 		return false
 	}
+	for _, digit := range code {
+		if digit < '0' || digit > '9' {
+			return false
+		}
+	}
 
 	valid, err := pquernaTotp.ValidateCustom(
 		code,
@@ -66,8 +71,8 @@ func validateTOTPCode(secret, code string) bool {
 func totpProvisioningURI(secret, username, issuer string) string {
 	return fmt.Sprintf(
 		"otpauth://totp/%s:%s?secret=%s&issuer=%s&algorithm=SHA1&digits=%d&period=%d",
-		url.QueryEscape(issuer),
-		url.QueryEscape(username),
+		url.PathEscape(issuer),
+		url.PathEscape(username),
 		secret,
 		url.QueryEscape(issuer),
 		totpDigits,
@@ -211,13 +216,35 @@ func recordPendingTOTPFailure(token string) (remaining int, ok bool) {
 	return maxTOTPLoginAttempts - pending.Attempts, true
 }
 
+func cleanupTOTPStores(now time.Time) {
+	totpPendingMu.Lock()
+	for userID, pending := range totpPendingStore {
+		if now.After(pending.ExpiresAt) {
+			delete(totpPendingStore, userID)
+		}
+	}
+	totpPendingMu.Unlock()
+
+	pendingTOTPMu.Lock()
+	for token, pending := range pendingTOTPStore {
+		if now.After(pending.ExpiresAt) {
+			delete(pendingTOTPStore, token)
+		}
+	}
+	pendingTOTPMu.Unlock()
+}
+
 // ============================================================================
 // HANDLER: /login/totp  — second-factor verification step
 // ============================================================================
 
 func handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if r.Method == http.MethodPost && !parseLimitedAuthForm(w, r) {
 		return
 	}
 	if !authEnabled {
@@ -225,14 +252,7 @@ func handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var pendingToken string
-	for _, name := range []string{pendingTOTPCookieName(r), legacyPendingTOTPCookieName} {
-		cookie, err := r.Cookie(name)
-		if err == nil {
-			pendingToken = cookie.Value
-			break
-		}
-	}
+	pendingToken := pendingTOTPTokenFromRequest(r)
 	if pendingToken == "" {
 		http.Redirect(w, r, "/login", http.StatusFound)
 		return
@@ -245,60 +265,83 @@ func handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var errMsg string
-
+	errMsg := ""
 	if r.Method == MethodPOST {
-		code := strings.TrimSpace(r.FormValue("totp_code"))
-
-		users := loadUsers()
-		foundUser, found := findDashboardUser(users, pending.UserID)
-
-		if found &&
-			totpEnabledForUser(foundUser) &&
-			validateTOTPCode(foundUser.TOTPSecret, code) {
-			deletePendingTOTPSession(pendingToken)
-			clearPendingTOTPCookie(w, r)
-
-			sess := sessionStore.Create(foundUser, DefaultSessionMaxAge)
-			if sess == nil {
-				http.Error(w, "could not create session", http.StatusInternalServerError)
-				return
-			}
-			setSessionCookie(w, r, sess)
-
-			_ = updateUserLastLogin(foundUser.ID, time.Now())
-
-			log(LogContext{
-				Level:   LogInfo,
-				Action:  ActionConfig,
-				Message: fmt.Sprintf("🔐 2FA login OK: %s from %s", pending.Username, getClientIP(r)),
-			})
-
-			redirect := safeLocalRedirect(pending.Redirect)
-			http.Redirect(w, r, redirect, http.StatusSeeOther)
+		var handled bool
+		errMsg, handled = handleLoginTOTPPost(w, r, pendingToken, pending)
+		if handled {
 			return
 		}
-
-		remaining, retryAllowed := recordPendingTOTPFailure(pendingToken)
-		if !retryAllowed {
-			clearPendingTOTPCookie(w, r)
-			w.Header().Set("Retry-After", "60")
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.WriteHeader(http.StatusTooManyRequests)
-			_, _ = fmt.Fprint(w, buildTOTPLoginPage("Too many invalid codes. Please log in again."))
-			return
-		}
-		time.Sleep(300 * time.Millisecond)
-		errMsg = fmt.Sprintf("%s (%d attempts remaining)", t(phrases().TotpLoginInvalidCode, "Invalid code — please try again"), remaining)
-		log(LogContext{
-			Level:   LogWarn,
-			Action:  ActionConfig,
-			Message: fmt.Sprintf("🔐 2FA failed: %s from %s", pending.Username, getClientIP(r)),
-		})
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = fmt.Fprint(w, buildTOTPLoginPage(errMsg))
+}
+
+func pendingTOTPTokenFromRequest(r *http.Request) string {
+	for _, name := range []string{pendingTOTPCookieName(r), legacyPendingTOTPCookieName} {
+		cookie, err := r.Cookie(name)
+		if err == nil {
+			return cookie.Value
+		}
+	}
+	return ""
+}
+
+func handleLoginTOTPPost(w http.ResponseWriter, r *http.Request, pendingToken string, pending pendingTOTPSession) (string, bool) {
+	code := strings.TrimSpace(r.FormValue("totp_code"))
+	if foundUser, ok := validPendingTOTPUser(pending, code); ok {
+		completeTOTPLogin(w, r, pendingToken, pending, foundUser)
+		return "", true
+	}
+	return handleInvalidTOTPLogin(w, r, pendingToken, pending)
+}
+
+func validPendingTOTPUser(pending pendingTOTPSession, code string) (*DashboardUser, bool) {
+	foundUser, found := findDashboardUser(loadUsers(), pending.UserID)
+	valid := found && totpEnabledForUser(foundUser) && validateTOTPCode(foundUser.TOTPSecret, code)
+	return foundUser, valid
+}
+
+func completeTOTPLogin(w http.ResponseWriter, r *http.Request, pendingToken string, pending pendingTOTPSession, user *DashboardUser) {
+	deletePendingTOTPSession(pendingToken)
+	clearPendingTOTPCookie(w, r)
+
+	sess := sessionStore.Create(user, DefaultSessionMaxAge)
+	if sess == nil {
+		http.Error(w, "could not create session", http.StatusInternalServerError)
+		return
+	}
+	setSessionCookie(w, r, sess)
+	_ = updateUserLastLogin(user.ID, time.Now())
+
+	log(LogContext{
+		Level:   LogInfo,
+		Action:  ActionConfig,
+		Message: fmt.Sprintf("🔐 2FA login OK: %s from %s", pending.Username, getClientIP(r)),
+	})
+	http.Redirect(w, r, safeLocalRedirect(pending.Redirect), http.StatusSeeOther)
+}
+
+func handleInvalidTOTPLogin(w http.ResponseWriter, r *http.Request, pendingToken string, pending pendingTOTPSession) (string, bool) {
+	remaining, retryAllowed := recordPendingTOTPFailure(pendingToken)
+	if !retryAllowed {
+		clearPendingTOTPCookie(w, r)
+		w.Header().Set("Retry-After", "60")
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = fmt.Fprint(w, buildTOTPLoginPage("Too many invalid codes. Please log in again."))
+		return "", true
+	}
+
+	time.Sleep(300 * time.Millisecond)
+	log(LogContext{
+		Level:   LogWarn,
+		Action:  ActionConfig,
+		Message: fmt.Sprintf("🔐 2FA failed: %s from %s", pending.Username, getClientIP(r)),
+	})
+	errMsg := fmt.Sprintf("%s (%d attempts remaining)", t(phrases().TotpLoginInvalidCode, "Invalid code — please try again"), remaining)
+	return errMsg, false
 }
 
 func expirePendingTOTPCookie(w http.ResponseWriter, name string, secure bool) {
@@ -315,8 +358,12 @@ func expirePendingTOTPCookie(w http.ResponseWriter, name string, secure bool) {
 }
 
 func clearPendingTOTPCookie(w http.ResponseWriter, r *http.Request) {
-	expirePendingTOTPCookie(w, pendingTOTPCookieName(r), secureCookieEnabled(r))
-	expirePendingTOTPCookie(w, legacyPendingTOTPCookieName, secureCookieEnabled(r))
+	secure := secureCookieEnabled(r)
+	expirePendingTOTPCookie(w, pendingTOTPCookieNameHTTP, false)
+	expirePendingTOTPCookie(w, legacyPendingTOTPCookieName, secure)
+	if requestUsesHTTPS(r) {
+		expirePendingTOTPCookie(w, pendingTOTPCookieNameHTTPS, secure)
+	}
 }
 
 // ============================================================================
@@ -324,6 +371,11 @@ func clearPendingTOTPCookie(w http.ResponseWriter, r *http.Request) {
 // ============================================================================
 
 func handleSettings2FA(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	if r.Method != MethodGET && r.Method != MethodPOST {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	if !authEnabled {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
@@ -349,7 +401,7 @@ func handleSettings2FA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == MethodPOST {
-		if !validCSRFRequest(r, sess) {
+		if !validCSRFRequest(w, r, sess) {
 			writeJSON(w, http.StatusForbidden, map[string]string{
 				"error": "invalid csrf token",
 			})
@@ -435,7 +487,6 @@ func handle2FAConfirm(r *http.Request, currentUser *DashboardUser) totpFlash {
 		), Type: flashTypeError}
 	}
 
-	deleteTOTPPending(currentUser.ID)
 	err := mutateUsers(func(users []DashboardUser) ([]DashboardUser, error) {
 		for i := range users {
 			if users[i].ID == currentUser.ID {
@@ -452,6 +503,7 @@ func handle2FAConfirm(r *http.Request, currentUser *DashboardUser) totpFlash {
 			err.Error(),
 		), Type: flashTypeError}
 	}
+	deleteTOTPPending(currentUser.ID)
 	return totpFlash{Message: t(
 		phrases().TotpFlashEnabled,
 		"✅ Two-factor authentication is now active",
@@ -536,6 +588,10 @@ func handleAPI2FAStatus(w http.ResponseWriter, r *http.Request) {
 // ============================================================================
 
 func handleSettings2FAQRCode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != MethodGET {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	if !authEnabled {
 		http.Error(w, "auth disabled", http.StatusNotFound)
 		return

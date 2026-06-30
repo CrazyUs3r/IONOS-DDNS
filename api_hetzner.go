@@ -85,7 +85,7 @@ func hetznerAPIAttempt(
 	res, err := getHTTPClient().Do(req)
 	duration := time.Since(start)
 	if err != nil {
-		shouldRetry, retryErr := handleProviderNetworkError(ctx, providerName, method, err, duration, attempt, false)
+		shouldRetry, retryErr := handleProviderNetworkError(ctx, providerName, method, err, duration, attempt, maxRetries, false)
 		return nil, shouldRetry, retryErr
 	}
 
@@ -95,7 +95,7 @@ func hetznerAPIAttempt(
 		}
 	}()
 
-	return handleHetznerResponse(ctx, providerName, res, method, endpoint, duration, attempt)
+	return handleHetznerResponse(ctx, providerName, res, method, endpoint, duration, attempt, maxRetries)
 }
 
 func marshalHetznerBody(body any) ([]byte, error) {
@@ -164,9 +164,9 @@ func handleHetznerResponse(
 	res *http.Response,
 	method, endpoint string,
 	duration time.Duration,
-	attempt int,
+	attempt, maxAttempts int,
 ) ([]byte, bool, error) {
-	return handleProviderHTTPResponse(ctx, providerName, "", res, method, endpoint, duration, attempt)
+	return handleProviderHTTPResponse(ctx, providerName, "", res, method, endpoint, duration, attempt, maxAttempts)
 }
 
 // ============================================================================
@@ -356,7 +356,7 @@ func updateHetznerDNS(
 	if shouldSkipHetznerUpdate("HETZNER", fqdn, recordType, newIP, existing) {
 		return false, nil
 	}
-	if cfg.DryRun {
+	if dryRunEnabled() {
 		log(LogContext{Level: LogWarn, Action: ActionDryRun, Domain: fqdn, Message: fmt.Sprintf("⚠️ Would set %s %s", recordType, newIP)})
 		return true, nil
 	}
@@ -406,7 +406,7 @@ func updateHetznerCloudDNS(
 	if shouldSkipHetznerUpdate("HETZNERCLOUD", fqdn, recordType, newIP, existing) {
 		return false, nil
 	}
-	if cfg.DryRun {
+	if dryRunEnabled() {
 		log(LogContext{Level: LogWarn, Action: ActionDryRun, Domain: fqdn, Message: fmt.Sprintf("⚠️ Would set %s %s", recordType, newIP)})
 		return true, nil
 	}
@@ -547,7 +547,7 @@ func cleanupHetznerRecords(
 
 func cleanupSingleHetznerRecord(ctx context.Context, dc *DomainConfig, provider ProviderType, zone Zone, rec Record, fqdn string) {
 	debugLog("MAINTENANCE", fqdn, fmt.Sprintf("cleanup orphaned %s record", rec.Type))
-	if cfg.DryRun {
+	if dryRunEnabled() {
 		log(LogContext{Level: LogInfo, Action: ActionCleanup, Domain: fqdn, Message: "Cleanup dry-run"})
 		return
 	}
