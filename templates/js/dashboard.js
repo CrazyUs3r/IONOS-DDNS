@@ -289,20 +289,26 @@ function navTo(page) {
 		if (window.location.hash !== newHash) history.replaceState(null, '', newHash);
 	} catch { }
 
-	const sb = document.getElementById('sidebar');
-	if (sb && window.innerWidth < 768) sb.classList.remove('sidebar-open');
+	if (window.innerWidth < 768) closeSidebar();
+}
+
+function setSidebarOpen(open) {
+	const isOpen = Boolean(open);
+	const sidebar = document.getElementById('sidebar');
+	const overlay = document.getElementById('sidebar-overlay');
+	const toggle = document.querySelector('.hamburger-btn');
+	if (sidebar) sidebar.classList.toggle('sidebar-open', isOpen);
+	if (overlay) overlay.classList.toggle('visible', isOpen);
+	if (toggle) toggle.setAttribute('aria-expanded', String(isOpen));
 }
 
 function toggleSidebar() {
-	const sb = document.getElementById('sidebar');
-	if (sb) sb.classList.toggle('sidebar-open');
+	const sidebar = document.getElementById('sidebar');
+	setSidebarOpen(!(sidebar && sidebar.classList.contains('sidebar-open')));
 }
 
 function closeSidebar() {
-	const sb = document.getElementById('sidebar');
-	if (sb) sb.classList.remove('sidebar-open');
-	const overlay = document.getElementById('sidebar-overlay');
-	if (overlay) overlay.style.display = 'none';
+	setSidebarOpen(false);
 }
 
 
@@ -451,20 +457,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 	const savedPage = PAGES.includes(hashPage) ? hashPage : (localStorage.getItem('nav-page') || 'dashboard');
 	navTo(savedPage);
 
-	document.getElementById('sidebar-overlay')?.addEventListener('click', () => {
-		document.getElementById('sidebar')?.classList.remove('sidebar-open');
-	});
+	document.getElementById('sidebar-overlay')?.addEventListener('click', closeSidebar);
 
 	document.addEventListener('click', (event) => {
 		if (window.innerWidth < 768) {
 			const sidebar = document.getElementById('sidebar');
 			const hamburger = document.querySelector('.hamburger-btn');
 
-			if (sidebar && sidebar.classList.contains('sidebar-open')) {
-
-				if (!sidebar.contains(event.target) && (!hamburger || !hamburger.contains(event.target))) {
-					sidebar.classList.remove('sidebar-open');
-				}
+			if (
+				sidebar &&
+				sidebar.classList.contains('sidebar-open') &&
+				!sidebar.contains(event.target) &&
+				(!hamburger || !hamburger.contains(event.target))
+			) {
+				closeSidebar();
 			}
 		}
 	});
@@ -625,6 +631,19 @@ function updateMetrics(m) {
 	setTxt('uptime', uptime);
 }
 
+let _chartTooltip = null;
+
+function getChartTooltip() {
+	if (_chartTooltip && _chartTooltip.isConnected) return _chartTooltip;
+
+	_chartTooltip = document.querySelector('.chart-tooltip') || document.createElement('div');
+	_chartTooltip.className = 'chart-tooltip';
+	_chartTooltip.setAttribute('role', 'status');
+	_chartTooltip.setAttribute('aria-live', 'polite');
+	if (!_chartTooltip.isConnected) document.body.appendChild(_chartTooltip);
+	return _chartTooltip;
+}
+
 function initChartTooltips(root = document) {
 	root.querySelectorAll('svg.chart-svg').forEach(svg => {
 		if (svg.dataset.tooltipReady === '1') return;
@@ -649,11 +668,7 @@ function initChartTooltips(root = document) {
 
 		svg.dataset.tooltipReady = '1';
 
-		const tooltip = document.createElement('div');
-		tooltip.className = 'chart-tooltip';
-		tooltip.setAttribute('role', 'status');
-		tooltip.setAttribute('aria-live', 'polite');
-		document.body.appendChild(tooltip);
+		const tooltip = getChartTooltip();
 
 		const hoverLine = svg.querySelector('.chart-hover-line');
 		const hoverDot = svg.querySelector('.chart-hover-dot');
@@ -825,8 +840,9 @@ function connectWS() {
 	if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
 
 	const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
-	ws = new WebSocket(proto + location.host + '/ws');
-	ws.onmessage = (event) => {
+	const socket = new WebSocket(proto + location.host + '/ws');
+	ws = socket;
+	socket.onmessage = (event) => {
 		let msg;
 		try { msg = JSON.parse(event.data); } catch { return; }
 
@@ -859,16 +875,20 @@ function connectWS() {
 			);
 		}
 	};
-	ws.onclose = () => {
-		ws = null;
+	socket.onclose = () => {
+		if (ws === socket) ws = null;
 		scheduleReconnect();
 	};
-	ws.onerror = () => {
-		try { ws.close(); } catch { }
+	socket.onerror = () => {
+		try { socket.close(); } catch { }
 	};
-	ws.onopen = () => {
+	socket.onopen = () => {
+		if (ws !== socket) return;
 		reconnectDelay = 1000;
-		if (reconnectTimer) clearTimeout(reconnectTimer);
+		if (reconnectTimer) {
+			clearTimeout(reconnectTimer);
+			reconnectTimer = null;
+		}
 	};
 }
 
@@ -1175,13 +1195,22 @@ function sanitizeBase(s) {
 }
 
 async function shortHash8(str) {
-	if (!(window.crypto && crypto.subtle)) return '00000000';
-	const data = new TextEncoder().encode(str || '');
-	const buf = await crypto.subtle.digest('SHA-256', data);
-	return Array.from(new Uint8Array(buf))
-		.map(b => b.toString(16).padStart(2, '0'))
-		.join('')
-		.slice(0, 8);
+	const value = String(str || '');
+	if (window.crypto && crypto.subtle) {
+		const data = new TextEncoder().encode(value);
+		const buf = await crypto.subtle.digest('SHA-256', data);
+		return Array.from(new Uint8Array(buf))
+			.map(b => b.toString(16).padStart(2, '0'))
+			.join('')
+			.slice(0, 8);
+	}
+
+	let hash = 0x811c9dc5;
+	for (let i = 0; i < value.length; i++) {
+		hash ^= value.charCodeAt(i);
+		hash = Math.imul(hash, 0x01000193);
+	}
+	return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
 
@@ -1192,19 +1221,59 @@ async function makeSafeID(domain) {
 	return (base === 'x' ? 'd-' : base + '-') + sfx;
 }
 
+function declarativeStringArg(value) {
+	return `'${String(value ?? '')
+		.replaceAll('\\', '\\\\')
+		.replaceAll("'", "\\'")
+		.replaceAll('\n', '\\n')
+		.replaceAll('\r', '\\r')}'`;
+}
+
+function updateLiveIP(element, value) {
+	if (!element) return;
+	const text = String(value ?? '');
+	element.textContent = text;
+	const copyButton = element.parentElement?.querySelector('.copy-btn');
+	if (copyButton) copyButton.setAttribute('data-click', `copyIP(${declarativeStringArg(text)})`);
+}
+
 async function updateDomainDisplay(data) {
 	const safeID = await makeSafeID(data.domain);
-	const ip4El = document.getElementById('ip4-' + safeID);
-	const ip6El = document.getElementById('ip6-' + safeID);
-	if (ip4El && data.ipv4) ip4El.textContent = data.ipv4;
-	if (ip6El && data.ipv6) ip6El.textContent = data.ipv6;
+	if (Object.prototype.hasOwnProperty.call(data, 'ipv4')) {
+		updateLiveIP(document.getElementById('ip4-' + safeID), data.ipv4);
+	}
+	if (Object.prototype.hasOwnProperty.call(data, 'ipv6')) {
+		updateLiveIP(document.getElementById('ip6-' + safeID), data.ipv6);
+	}
+
+	const now = Date.now();
 	const dotEl = document.getElementById('dot-' + safeID);
 	if (dotEl) {
 		dotEl.className = 'domain-status-dot dot-ok dot-recent';
-		setTimeout(() => { if (dotEl) dotEl.classList.remove('dot-recent'); }, 3600000);
+		if (dotEl._recentTimer) clearTimeout(dotEl._recentTimer);
+		dotEl._recentTimer = setTimeout(() => {
+			if (dotEl.isConnected) dotEl.classList.remove('dot-recent');
+		}, 15 * 60 * 1000);
 	}
+
 	const uptimeEl = document.getElementById('uptime-' + safeID);
-	if (uptimeEl) uptimeEl.textContent = '0m';
+	const metaEl = uptimeEl?.closest('[data-last-changed]');
+	if (metaEl) {
+		metaEl.dataset.lastChanged = String(data.time || '');
+		metaEl.dataset.lastChangedUnix = String(now);
+	}
+	if (uptimeEl) uptimeEl.textContent = '0s';
+
+	const changedAtEl = document.getElementById('last-change-' + safeID);
+	if (changedAtEl && data.time) changedAtEl.textContent = String(data.time);
+
+	const badge = document.getElementById('badge-' + safeID);
+	if (badge) {
+		badge.dataset.changedAt = String(data.time || '');
+		badge.dataset.changedUnix = String(now);
+		badge.classList.remove('changed-badge--hidden');
+	}
+
 	showToast(trf('domain_updated', { domain: data.domain }, '✓ {domain} updated'));
 }
 
@@ -1319,6 +1388,7 @@ function renderSettingsDomainList() {
 		HETZNER: '#14b8a6',
 		HETZNERCLOUD: '#06b6d4',
 		FEBAS: '#22c55e',
+		DNSCALE: '#8b5cf6',
 	};
 
 	for (const domain of sorted) {
@@ -1412,6 +1482,7 @@ function resetDomainForm() {
 	_setVal('new-hetzner-token', '');
 	_setVal('new-hcloud-token', '');
 	_setVal('new-febas-update-url', '');
+	_setVal('new-dnscale-api-key', '');
 	_setChk('new-cf-proxied', false);
 
 	const provSel = document.getElementById('new-domain-provider');
@@ -1454,6 +1525,8 @@ function editDomain(index) {
 		_setVal('new-hcloud-token', d.api_secret || d.api_prefix || '');
 	} else if (d.provider === 'FEBAS') {
 		_setVal('new-febas-update-url', d.febas_update_url || '');
+	} else if (d.provider === 'DNSCALE') {
+		_setVal('new-dnscale-api-key', d.api_key || '');
 	}
 
 	renderSettingsDomainList();
@@ -1479,6 +1552,7 @@ function toggleProviderFields() {
 	show('fields-hetzner', p === 'HETZNER');
 	show('fields-hetznercloud', p === 'HETZNERCLOUD');
 	show('fields-febas', p === 'FEBAS');
+	show('fields-dnscale', p === 'DNSCALE');
 }
 
 function addDomainToList() {
@@ -1488,6 +1562,12 @@ function addDomainToList() {
 
 	const fqdn = fqdnInput.value.trim().toLowerCase();
 	const provider = providerSelect.value;
+	const supportedProviders = new Set([
+		'IONOS', 'CLOUDFLARE', 'IPV64', 'HETZNER', 'HETZNERCLOUD', 'FEBAS', 'DNSCALE'
+	]);
+	if (!supportedProviders.has(provider)) {
+		return showToast(tr('provider_invalid', 'Ungültiger Provider'), 'error');
+	}
 	const ttlRaw = _getVal('new-domain-ttl').trim();
 	const ipMode = _getVal('new-domain-ip-mode').trim();
 	const ttl = ttlRaw === '' ? 0 : parseInt(ttlRaw, 10);
@@ -1516,10 +1596,15 @@ function addDomainToList() {
 	} else if (provider === 'FEBAS') {
 		entry.febas_update_url = _getVal('new-febas-update-url').trim();
 		if (!entry.febas_update_url) {
-			return showToast('Febas DynDNS Update-URL fehlt', 'error');
+			return showToast('Febas DynDNS Update-URL fehlt', 'error')
+		};
+	} else if (provider === 'DNSCALE') {
+		entry.api_key = _getVal('new-dnscale-api-key').trim();
+		if (!entry.api_key) {
+			return showToast(tr('dnscale_api_key_missing', 'DNScale API Key fehlt'), 'error');
 		}
-	}
 
+	}
 	if (editIndex !== null) {
 		tempDomainConfigs[editIndex] = entry;
 		editIndex = null;
@@ -1541,6 +1626,7 @@ function addDomainToList() {
 		'new-ipv64-token',
 		'new-hetzner-token',
 		'new-hcloud-token',
+		'new-dnscale-api-key',
 	].forEach(id => _setVal(id, ''));
 
 	_setChk('new-cf-proxied', false);
@@ -1814,23 +1900,23 @@ function deleteLogEntry(btn) {
 		.then(async r => {
 			if (!r.ok) throw new Error(await r.text());
 			const next = row.nextElementSibling;
-					if (next) next.classList.add('no-hover');
+			if (next) next.classList.add('no-hover');
 
-					row.style.transition = 'opacity 0.2s ease, max-height 0.25s ease';
-					row.style.overflow = 'hidden';
-					row.style.opacity = '0';
-					row.style.maxHeight = row.offsetHeight + 'px';
-					requestAnimationFrame(() => {
-						row.style.maxHeight = '0';
-						row.style.paddingTop = '0';
-						row.style.paddingBottom = '0';
-						row.style.marginTop = '0';
-						row.style.marginBottom = '0';
-					});
-					setTimeout(() => {
-						row.remove();
-						if (next) next.classList.remove('no-hover');
-					}, 270);
+			row.style.transition = 'opacity 0.2s ease, max-height 0.25s ease';
+			row.style.overflow = 'hidden';
+			row.style.opacity = '0';
+			row.style.maxHeight = row.offsetHeight + 'px';
+			requestAnimationFrame(() => {
+				row.style.maxHeight = '0';
+				row.style.paddingTop = '0';
+				row.style.paddingBottom = '0';
+				row.style.marginTop = '0';
+				row.style.marginBottom = '0';
+			});
+			setTimeout(() => {
+				row.remove();
+				if (next) next.classList.remove('no-hover');
+			}, 270);
 			showToast('🗑️ ' + tr('log_entry_deleted', 'Eintrag gelöscht'), 'success');
 		})
 		.catch(err => {
@@ -2002,6 +2088,8 @@ function fallbackCopy(text) {
 	document.body.removeChild(ta);
 }
 
+let _clockTimer = null;
+
 function startClock() {
 	const el = document.getElementById('clock');
 	if (!el) return;
@@ -2010,7 +2098,9 @@ function startClock() {
 		el.textContent = [d.getHours(), d.getMinutes(), d.getSeconds()]
 			.map(n => String(n).padStart(2, '0')).join(':');
 	};
-	tick(); setInterval(tick, 1000);
+	if (_clockTimer) clearInterval(_clockTimer);
+	tick();
+	_clockTimer = setInterval(tick, 1000);
 }
 
 function togglePassword(id, btn) {
@@ -2366,6 +2456,7 @@ function showLoadingToast(text = '⏳ Speichere...') {
 		const textEl = document.getElementById('loading-text');
 		if (textEl) textEl.textContent = text;
 	}
+	if (el._timeout) clearTimeout(el._timeout);
 	el._timeout = setTimeout(() => {
 		const txt = document.getElementById('loading-text');
 		if (txt) txt.textContent = tr('loading_slow', '⚠️ Dauert länger als erwartet...');
@@ -2443,30 +2534,44 @@ function hideLoadingToast() {
 	root.style.setProperty('--sun-y', (30 - Math.sin(progress * Math.PI) * 24) + '%');
 })();
 
-function formatUptime(lastChangedStr) {
-	if (!lastChangedStr || lastChangedStr.trim() === '' || lastChangedStr === '0001-01-01 00:00:00') return '—';
-	const parts = lastChangedStr.match(/(\d+)\.(\d+)\.(\d+) (\d+):(\d+):(\d+)/);
-	if (!parts) return '—';
-	const d = new Date(+parts[3], +parts[2] - 1, +parts[1], +parts[4], +parts[5], +parts[6]);
-	if (isNaN(d.getTime()) || d.getFullYear() < 2020) return '—';
-	const diff = Math.floor((Date.now() - d) / 1000);
+function statusTimestampToMs(raw, unixValue) {
+	const unixMs = Number(unixValue);
+	if (Number.isFinite(unixMs) && unixMs > 0) return unixMs;
+
+	const value = String(raw || '').trim();
+	if (!value || value === '0001-01-01 00:00:00') return NaN;
+	const parts = value.match(/(\d+)\.(\d+)\.(\d+) (\d+):(\d+):(\d+)/);
+	if (!parts) return NaN;
+	return new Date(+parts[3], +parts[2] - 1, +parts[1], +parts[4], +parts[5], +parts[6]).getTime();
+}
+
+function formatUptime(lastChangedStr, unixValue) {
+	const changedAt = statusTimestampToMs(lastChangedStr, unixValue);
+	if (!Number.isFinite(changedAt) || new Date(changedAt).getFullYear() < 2020) return '—';
+	const diff = Math.max(0, Math.floor((Date.now() - changedAt) / 1000));
 	if (diff < 60) return diff + 's';
 	if (diff < 3600) return Math.floor(diff / 60) + 'm';
 	if (diff < 86400) return Math.floor(diff / 3600) + 'h ' + Math.floor((diff % 3600) / 60) + 'm';
 	return Math.floor(diff / 86400) + 'd ' + Math.floor((diff % 86400) / 3600) + 'h';
 }
 
-function startUptimeClocks() {
-	document.querySelectorAll('[data-last-changed]').forEach(el => {
-		if (el.dataset.uptimeReady === '1') return;
-		el.dataset.uptimeReady = '1';
-		const id = el.dataset.uptimeId;
-		const target = document.getElementById('uptime-' + id);
-		if (!target) return;
-		const update = () => target.textContent = formatUptime(el.dataset.lastChanged);
-		update();
-		setInterval(update, 30000);
+let _uptimeClockTimer = null;
+
+function updateUptimeClocks() {
+	document.querySelectorAll('[data-last-changed]').forEach(element => {
+		const target = document.getElementById('uptime-' + element.dataset.uptimeId);
+		if (target) {
+			target.textContent = formatUptime(
+				element.dataset.lastChanged,
+				element.dataset.lastChangedUnix,
+			);
+		}
 	});
+}
+
+function startUptimeClocks() {
+	updateUptimeClocks();
+	if (!_uptimeClockTimer) _uptimeClockTimer = setInterval(updateUptimeClocks, 30000);
 }
 
 let _dotTooltip = null;
@@ -2651,8 +2756,12 @@ function addToNotifCenter(message, type) {
 function toggleNotifCenter() {
 	const panel = document.getElementById('notif-panel');
 	if (!panel) return;
-	panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-	if (panel.style.display === 'block') renderNotifCenter();
+	const toggle = document.querySelector('.notif-toggle');
+	const isOpen = window.getComputedStyle(panel).display !== 'none';
+	const nextOpen = !isOpen;
+	panel.style.display = nextOpen ? 'block' : 'none';
+	if (toggle) toggle.setAttribute('aria-expanded', String(nextOpen));
+	if (nextOpen) renderNotifCenter();
 }
 
 function renderNotifCenter() {
@@ -2693,20 +2802,20 @@ function renderNotifCenter() {
 }
 
 
-function initChangedBadges() {
-	document.querySelectorAll('.changed-badge[data-changed-at]').forEach(badge => {
-		const raw = badge.dataset.changedAt;
-		const parts = raw.match(/(\d+)\.(\d+)\.(\d+) (\d+):(\d+):(\d+)/);
-		if (!parts) return;
-		const d = new Date(parts[3], parts[2] - 1, parts[1], parts[4], parts[5], parts[6]);
-		const ageMs = Date.now() - d.getTime();
-		if (ageMs < 15 * 60 * 1000) {
-			badge.classList.remove('changed-badge--hidden');
-			setTimeout(() => badge.classList.add('changed-badge--hidden'), 15 * 60 * 1000 - ageMs);
-		} else {
-			badge.classList.add('changed-badge--hidden');
-		}
+let _changedBadgeTimer = null;
+
+function updateChangedBadges() {
+	const now = Date.now();
+	document.querySelectorAll('.changed-badge[data-changed-at], .changed-badge[data-changed-unix]').forEach(badge => {
+		const changedAt = statusTimestampToMs(badge.dataset.changedAt, badge.dataset.changedUnix);
+		const ageMs = Number.isFinite(changedAt) ? Math.max(0, now - changedAt) : Infinity;
+		badge.classList.toggle('changed-badge--hidden', ageMs >= 15 * 60 * 1000);
 	});
+}
+
+function initChangedBadges() {
+	updateChangedBadges();
+	if (!_changedBadgeTimer) _changedBadgeTimer = setInterval(updateChangedBadges, 30000);
 }
 
 // ============================================================================
