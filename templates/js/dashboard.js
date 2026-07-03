@@ -76,6 +76,47 @@ function decodeDeclarativeString(raw) {
 	});
 }
 
+const DECLARATIVE_ACTIONS = Object.freeze({
+	addDomainToList: ({ element }) => addDomainToList(element),
+	addUser: () => addUser(),
+	cancelEdit: () => cancelEdit(),
+	clearDebugLog: () => clearDebugLog(),
+	closeSidebar: () => closeSidebar(),
+	copyIP: ({ args }) => copyIP(args[0]),
+	copyLogEntry: ({ element }) => copyLogEntry(element),
+	deleteLogEntry: ({ element }) => deleteLogEntry(element),
+	deleteDomain: ({ args, element }) => deleteDomain(args[0], element),
+	deleteUser: ({ args }) => deleteUser(args[0], args[1]),
+	editDomain: ({ args }) => editDomain(Number(args[0])),
+	downloadFullBackup: () => downloadFullBackup(),
+	exportData: () => exportData(),
+	exportLogs: ({ args }) => exportLogs(args[0]),
+	filterDebugLog: ({ element }) => filterDebugLog(element.value),
+	filterDomains: ({ element }) => filterDomains(element.value),
+	filterLogs: ({ args }) => filterLogs(args[0]),
+	changeUserRole: ({ args, element }) => changeUserRole(args[0], element.value),
+	ipv64AddDomain: () => ipv64AddDomain(),
+	ipv64DeleteDomain: () => ipv64DeleteDomain(),
+	navTo: ({ args }) => navTo(args[0]),
+	removeDomainFromList: ({ args }) => removeDomainFromList(Number(args[0])),
+	refreshDiagnosis: () => refreshDiagnosis(),
+	refreshAuditLog: () => refreshAuditLog(),
+	runDNSPropagation: () => runDNSPropagation(),
+	resetMetrics: () => resetMetrics(),
+	restoreFullBackup: () => restoreFullBackup(),
+	saveFullConfig: () => saveFullConfig(),
+	saveToken: () => saveToken(),
+	sendNotifyTest: () => sendNotifyTest(),
+	showNotifierTooltip: ({ args, element }) => showNotifierTooltip(element, element.dataset.tooltip || args[1] || args[0] || ''),
+	toggleNotifCenter: () => toggleNotifCenter(),
+	togglePassword: ({ args, element }) => togglePassword(args[0], element),
+	toggleProviderFields: () => toggleProviderFields(),
+	toggleSidebar: () => toggleSidebar(),
+	toggleTheme: () => toggleTheme(),
+	triggerUpdate: () => triggerUpdate(),
+	updateCheckboxLabel: ({ element }) => updateCheckboxLabel(element),
+});
+
 function runDeclarativeAction(rawCommand, element, event) {
 	let command = String(rawCommand || '').trim();
 	if (!command) return;
@@ -103,50 +144,12 @@ function runDeclarativeAction(rawCommand, element, event) {
 		return decodeDeclarativeString(arg);
 	});
 
-	const allowed = {
-		addDomainToList: () => addDomainToList(),
-		addUser: () => addUser(),
-		cancelEdit: () => cancelEdit(),
-		clearDebugLog: () => clearDebugLog(),
-		closeSidebar: () => closeSidebar(),
-		copyIP: () => copyIP(args[0]),
-		copyLogEntry: () => copyLogEntry(element),
-		deleteLogEntry: () => deleteLogEntry(element),
-		deleteDomain: () => deleteDomain(args[0], element),
-		deleteUser: () => deleteUser(args[0], args[1]),
-		editDomain: () => editDomain(Number(args[0])),
-		downloadFullBackup: () => downloadFullBackup(),
-		exportData: () => exportData(),
-		exportLogs: () => exportLogs(args[0]),
-		filterDebugLog: () => filterDebugLog(element.value),
-		filterDomains: () => filterDomains(element.value),
-		filterLogs: () => filterLogs(args[0]),
-		changeUserRole: () => changeUserRole(args[0], element.value),
-		ipv64AddDomain: () => ipv64AddDomain(),
-		ipv64DeleteDomain: () => ipv64DeleteDomain(),
-		navTo: () => navTo(args[0]),
-		removeDomainFromList: () => removeDomainFromList(Number(args[0])),
-		refreshDiagnosis: () => refreshDiagnosis(),
-		resetMetrics: () => resetMetrics(),
-		restoreFullBackup: () => restoreFullBackup(),
-		saveFullConfig: () => saveFullConfig(),
-		saveToken: () => saveToken(),
-		sendNotifyTest: () => sendNotifyTest(),
-		showNotifierTooltip: () => showNotifierTooltip(element, element.dataset.tooltip || args[1] || args[0] || ''),
-		toggleNotifCenter: () => toggleNotifCenter(),
-		togglePassword: () => togglePassword(args[0], element),
-		toggleProviderFields: () => toggleProviderFields(),
-		toggleSidebar: () => toggleSidebar(),
-		toggleTheme: () => toggleTheme(),
-		triggerUpdate: () => triggerUpdate(),
-		updateCheckboxLabel: () => updateCheckboxLabel(element),
-	};
-
-	if (!Object.prototype.hasOwnProperty.call(allowed, name)) {
+	const action = DECLARATIVE_ACTIONS[name];
+	if (!action) {
 		console.warn('Blocked non-allowlisted action:', name);
 		return;
 	}
-	allowed[name]();
+	action({ args, element, event });
 }
 
 function declarativeTarget(event, attribute) {
@@ -188,6 +191,8 @@ document.addEventListener('keydown', event => {
 });
 
 let blinkTimer = null;
+let faviconState = '';
+let blinkingState = '';
 let currentLevel = 'ok';
 let ws = null;
 let reconnectTimer = null;
@@ -220,13 +225,306 @@ function shouldRunDashboardBoot() {
 // ============================================================================
 // SIDEBAR NAVIGATION
 // ============================================================================
-const PAGES = ['dashboard', 'domains', 'metrics', 'diagnose', 'logs', 'debug', 'backup', 'settings', 'totp', 'users'];
+function onlyWhenPageChanges(handler) {
+	return context => {
+		if (context.changed) return handler(context);
+	};
+}
 
-let currentPage = 'dashboard';
+const PAGE_CACHE_TTL = Object.freeze({
+	dashboard: 15000,
+	domains: 15000,
+	metrics: 15000,
+	diagnose: 0,
+	audit: 5000,
+	logs: 5000,
+	debug: 30000,
+	backup: Infinity,
+	settings: Infinity,
+	totp: 30000,
+	users: 10000,
+});
+
+const PAGE_CONFIG = Object.freeze({
+	dashboard: Object.freeze({
+		title: () => tr('nav_dashboard', '🌐 Dashboard'),
+		onOpen: onlyWhenPageChanges(() => ensurePageLoaded('dashboard')),
+	}),
+	domains: Object.freeze({
+		title: () => tr('nav_domains', '🌐 Domains'),
+		onOpen: onlyWhenPageChanges(() => ensurePageLoaded('domains')),
+	}),
+	metrics: Object.freeze({
+		title: () => tr('nav_metrics', '📊 Metrics'),
+		onOpen: onlyWhenPageChanges(() => ensurePageLoaded('metrics')),
+	}),
+	diagnose: Object.freeze({
+		title: () => tr('nav_diagnose', '🩺 Diagnose'),
+		onOpen: onlyWhenPageChanges(() => ensurePageLoaded('diagnose', { force: true })),
+	}),
+	audit: Object.freeze({
+		title: () => '🛡️ Audit & DNS',
+		onOpen: onlyWhenPageChanges(() => ensurePageLoaded('audit')),
+	}),
+	logs: Object.freeze({
+		title: () => tr('nav_logs', '🧾 Logs'),
+		onOpen: onlyWhenPageChanges(() => ensurePageLoaded('logs')),
+	}),
+	debug: Object.freeze({
+		title: () => tr('nav_debug', '🐞 Debug'),
+		onOpen: onlyWhenPageChanges(() => ensurePageLoaded('debug')),
+	}),
+	backup: Object.freeze({
+		title: () => tr('nav_backup', '💾 Backup & Restore'),
+		onOpen: onlyWhenPageChanges(() => ensurePageLoaded('backup')),
+	}),
+	settings: Object.freeze({
+		title: () => tr('nav_settings', '⚙️ Settings'),
+		onOpen: () => openSettingsPage(),
+	}),
+	totp: Object.freeze({
+		title: () => tr('nav_totp', '🔐 2FA / Account Security'),
+		onOpen: onlyWhenPageChanges(() => ensurePageLoaded('totp')),
+	}),
+	users: Object.freeze({
+		title: () => tr('nav_users', '👥 User Management'),
+		onOpen: onlyWhenPageChanges(() => ensurePageLoaded('users')),
+	}),
+});
+
+const DEFAULT_PAGE = 'dashboard';
+const PAGES = Object.freeze(Object.keys(PAGE_CONFIG));
+
+let currentPage = DEFAULT_PAGE;
+const pageRefreshControllers = new Map();
+const pageLoadPromises = new Map();
+const pageLoadedAt = new Map([[DEFAULT_PAGE, Date.now()]]);
+
+function captureDashboardState(section) {
+	if (!section) return null;
+
+	return {
+		endpointHTML: section.querySelector('#endpoint-status')?.innerHTML ?? '',
+		lastUpdateText: section.querySelector('#lastUpdate')?.textContent ?? '',
+		clockText: section.querySelector('#clock')?.textContent ?? '',
+		uptimeText: section.querySelector('#uptime')?.textContent ?? '',
+	};
+}
+
+function restoreDashboardState(section, state) {
+	if (!section || !state) return;
+
+	const endpointStatusElement = section.querySelector('#endpoint-status');
+	if (endpointStatusElement && state.endpointHTML && Object.keys(endpointStatus).length === 0) {
+		endpointStatusElement.innerHTML = state.endpointHTML;
+	}
+
+	const lastUpdate = section.querySelector('#lastUpdate');
+	if (lastUpdate && state.lastUpdateText) lastUpdate.textContent = state.lastUpdateText;
+
+	const clock = section.querySelector('#clock');
+	if (clock && state.clockText) clock.textContent = state.clockText;
+
+	const uptime = section.querySelector('#uptime');
+	if (uptime && state.uptimeText) uptime.textContent = state.uptimeText;
+
+	startClock();
+	startStatusUptimeClock();
+}
+
+function capturePageState(page, section) {
+	if (!section) return null;
+	if (page === 'dashboard') return captureDashboardState(section);
+	if (page === 'domains') return { search: section.querySelector('#domainSearch')?.value || '' };
+	if (page === 'logs') {
+		return {
+			filter: section.querySelector('.filter-btn.active[data-filter]')?.dataset.filter || 'all',
+		};
+	}
+	return null;
+}
+
+function initializeLoadedPage(page, section, state) {
+	if (page === 'dashboard') {
+		restoreDashboardState(section, state);
+		renderEndpointStatus();
+		return;
+	}
+
+	if (page === 'metrics') {
+		initChartTooltips(section);
+		return;
+	}
+
+	if (page === 'domains') {
+		const searchInput = section.querySelector('#domainSearch');
+		if (searchInput && state?.search) {
+			searchInput.value = state.search;
+			filterDomains(state.search);
+		}
+		initDomainDetailsState();
+		initIPTimelines();
+		initChangedBadges();
+		initChartTooltips(section);
+		startUptimeClocks();
+		return;
+	}
+
+	if (page === 'logs') {
+		filterLogs(state?.filter || 'all');
+		return;
+	}
+
+	if (page === 'diagnose') {
+		refreshDiagnosis();
+		return;
+	}
+
+	if (page === 'audit') {
+		refreshAuditLog();
+		return;
+	}
+
+	if (page === 'totp') {
+		initTOTPSettings(false);
+		return;
+	}
+
+	if (page === 'users') loadUsers();
+}
+
+function isPageSectionLoaded(page) {
+	const section = document.querySelector(`.page-section[data-section="${page}"]`);
+	return Boolean(
+		section &&
+		section.dataset.loaded !== '0' &&
+		!section.classList.contains('page-section--placeholder')
+	);
+}
+
+async function refreshPageSection(page) {
+	const oldSection = document.querySelector(`.page-section[data-section="${page}"]`);
+	if (!oldSection) return false;
+
+	pageRefreshControllers.get(page)?.abort();
+	const controller = new AbortController();
+	pageRefreshControllers.set(page, controller);
+	oldSection.setAttribute('aria-busy', 'true');
+
+	const state = capturePageState(page, oldSection);
+
+	try {
+		const response = await fetch('/api/page?name=' + encodeURIComponent(page), {
+			method: 'GET',
+			cache: 'no-store',
+			headers: { Accept: 'application/json' },
+			signal: controller.signal,
+		});
+
+		if (!response.ok) throw new Error('HTTP ' + response.status);
+		const data = await response.json();
+		if (!data.html) throw new Error('Empty page fragment');
+
+		const template = document.createElement('template');
+		template.innerHTML = String(data.html).trim();
+		const newSection = template.content.firstElementChild;
+		if (!newSection || newSection.dataset.section !== page) {
+			throw new Error('Invalid page fragment');
+		}
+
+		newSection.dataset.loaded = '1';
+		newSection.classList.remove('page-section--placeholder');
+		oldSection.replaceWith(newSection);
+		newSection.style.display = currentPage === page ? '' : 'none';
+		pageLoadedAt.set(page, Date.now());
+		initializeLoadedPage(page, newSection, state);
+		return true;
+	} catch (error) {
+		if (error?.name === 'AbortError') return false;
+		console.error(`${page} reload failed:`, error);
+		showToast('❌ ' + tr('page_reload_failed', 'Seite konnte nicht aktualisiert werden'), 'error');
+		return false;
+	} finally {
+		oldSection.removeAttribute('aria-busy');
+		if (pageRefreshControllers.get(page) === controller) {
+			pageRefreshControllers.delete(page);
+		}
+	}
+}
+
+function ensurePageLoaded(page, { force = false } = {}) {
+	const existingPromise = pageLoadPromises.get(page);
+	if (existingPromise && !force) return existingPromise;
+
+	const loaded = isPageSectionLoaded(page);
+	if (loaded && !pageLoadedAt.has(page)) pageLoadedAt.set(page, Date.now());
+
+	const maxAge = PAGE_CACHE_TTL[page] ?? Infinity;
+	const age = Date.now() - (pageLoadedAt.get(page) || 0);
+	if (!force && loaded && age <= maxAge) return Promise.resolve(true);
+
+	const promise = refreshPageSection(page).finally(() => {
+		if (pageLoadPromises.get(page) === promise) pageLoadPromises.delete(page);
+	});
+	pageLoadPromises.set(page, promise);
+	return promise;
+}
+
+async function openSettingsPage() {
+	try {
+		await Promise.all([
+			ensurePageLoaded('settings'),
+			ensureInitialConfig(),
+		]);
+		if (currentPage === 'settings') _initSettingsFields();
+	} catch (error) {
+		console.error('Settings load failed:', error);
+		showToast('❌ ' + tr('settings_reload_failed', 'Einstellungen konnten nicht geladen werden'), 'error');
+	}
+}
+
+let initialConfigLoaded = false;
+let initialConfigPromise = null;
+
+function applyInitialConfig(data) {
+	tempDomainConfigs = (Array.isArray(data?.domain_configs) ? data.domain_configs : [])
+		.map(domain => ({ ...domain }));
+	window.initialSystem = data?.system ?? {};
+	initialConfigLoaded = true;
+}
+
+async function requestInitialConfig() {
+	const response = await fetch('/api/config', {
+		method: 'GET',
+		cache: 'no-store',
+		headers: { Accept: 'application/json' },
+	});
+	if (!response.ok) throw new Error('HTTP ' + response.status);
+	applyInitialConfig(await response.json());
+	return true;
+}
+
+function ensureInitialConfig({ force = false } = {}) {
+	if (!force && initialConfigLoaded) return Promise.resolve(true);
+	if (!force && initialConfigPromise) return initialConfigPromise;
+
+	const promise = requestInitialConfig()
+		.catch(error => {
+			initialConfigLoaded = false;
+			if (initialConfigPromise === promise) initialConfigPromise = null;
+			throw error;
+		});
+	initialConfigPromise = promise;
+	return promise;
+}
 
 function navTo(page) {
 	if (!isDashboardRuntime()) return;
-	if (!PAGES.includes(page)) page = 'dashboard';
+
+	page = Object.prototype.hasOwnProperty.call(PAGE_CONFIG, page) ? page : DEFAULT_PAGE;
+	const previousPage = currentPage;
+	const changed = previousPage !== page;
+	const pageConfig = PAGE_CONFIG[page];
 	currentPage = page;
 
 	isSettingsOpen = (page === 'settings');
@@ -244,44 +542,14 @@ function navTo(page) {
 		topbarSaveBtn.classList.toggle('is-hidden', page !== 'settings');
 	}
 
-	const titles = {
-		dashboard: tr('nav_dashboard', '🌐 Dashboard'),
-		domains: tr('nav_domains', '🌐 Domains'),
-		metrics: tr('nav_metrics', '📊 Metrics'),
-		diagnose: tr('nav_diagnose', '🩺 Diagnose'),
-		logs: tr('nav_logs', '🧾 Logs'),
-		debug: tr('nav_debug', '🐞 Debug'),
-		backup: tr('nav_backup', '💾 Backup & Restore'),
-		settings: tr('nav_settings', '⚙️ Settings'),
-		totp: tr('nav_totp', '🔐 2FA / Account Security'),
-		users: tr('nav_users', '👥 User Management'),
-	};
 	const titleEl = document.getElementById('page-title');
-	if (titleEl) titleEl.textContent = titles[page] || 'Dashboard';
+	if (titleEl) titleEl.textContent = pageConfig.title();
 
-	if (page === 'settings') {
-		_initSettingsFields();
-	}
-
-	if (page === 'totp') {
-		initTOTPSettings(false);
-	}
-
-	if (page === 'users') {
-		loadUsers();
-	}
-
-	if (page === 'logs') {
-		refreshDashboardLogs();
-	}
-
-	if (page === 'domains') {
-		refreshDashboardDomains();
-	}
-
-	if (page === 'diagnose') {
-		refreshDiagnosis();
-	}
+	pageConfig.onOpen?.({
+		page,
+		previousPage,
+		changed,
+	});
 
 	try { localStorage.setItem('nav-page', page); } catch { }
 	try {
@@ -416,22 +684,21 @@ function focusTOTPCodeInput() {
 	if (input) input.focus();
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
-	if (!shouldRunDashboardBoot()) {
-		const savedTheme = localStorage.getItem('theme');
-		if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
-		return;
-	}
-
-	await loadInitialConfig();
-	renderSettingsDomainList();
+function applySavedTheme() {
 	if (!localStorage.getItem('theme')) {
-		localStorage.setItem('theme',
-			window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+		localStorage.setItem(
+			'theme',
+			window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark',
 		);
 	}
-	const savedTheme = localStorage.getItem('theme');
-	document.documentElement.setAttribute('data-theme', savedTheme);
+	const theme = localStorage.getItem('theme') || 'dark';
+	document.documentElement.setAttribute('data-theme', theme);
+	return theme;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+	const savedTheme = applySavedTheme();
+	if (!shouldRunDashboardBoot()) return;
 
 	const initialMetrics = {
 		avg_latency: (document.getElementById('mLatency')?.textContent || '').trim(),
@@ -442,64 +709,74 @@ document.addEventListener('DOMContentLoaded', async () => {
 	applyFavicon(savedTheme, currentLevel, false);
 	setBlinking(savedTheme, currentLevel);
 
-	initDomainDetailsState();
-
 	document.addEventListener('visibilitychange', () => {
-		if (document.visibilityState === 'visible' && shouldRunDashboardBoot()) {
-			if (!ws || ws.readyState === WebSocket.CLOSED) {
-				reconnectDelay = 1000;
-				connectWS();
-			}
+		if (document.visibilityState !== 'visible' || !shouldRunDashboardBoot()) return;
+		dashboardTick();
+		if (!ws || ws.readyState === WebSocket.CLOSED) {
+			reconnectDelay = 1000;
+			connectWS();
 		}
 	});
 
 	const hashPage = (window.location.hash || '').replace(/^#/, '');
-	const savedPage = PAGES.includes(hashPage) ? hashPage : (localStorage.getItem('nav-page') || 'dashboard');
+	const savedPage = PAGES.includes(hashPage)
+		? hashPage
+		: (localStorage.getItem('nav-page') || DEFAULT_PAGE);
 	navTo(savedPage);
 
-	document.getElementById('sidebar-overlay')?.addEventListener('click', closeSidebar);
-
-	document.addEventListener('click', (event) => {
-		if (window.innerWidth < 768) {
-			const sidebar = document.getElementById('sidebar');
-			const hamburger = document.querySelector('.hamburger-btn');
-
-			if (
-				sidebar &&
-				sidebar.classList.contains('sidebar-open') &&
-				!sidebar.contains(event.target) &&
-				(!hamburger || !hamburger.contains(event.target))
-			) {
-				closeSidebar();
-			}
+	document.addEventListener('click', event => {
+		if (window.innerWidth >= 768) return;
+		const sidebar = document.getElementById('sidebar');
+		const hamburger = document.querySelector('.hamburger-btn');
+		if (
+			sidebar?.classList.contains('sidebar-open') &&
+			!sidebar.contains(event.target) &&
+			(!hamburger || !hamburger.contains(event.target))
+		) {
+			closeSidebar();
 		}
 	});
+
 	startUptimeClocks();
-	initIPTimelines();
+	startStatusUptimeClock();
 	initKeyboardShortcuts();
 	initChangedBadges();
-	initChartTooltips();
 	startClock();
 	connectWS();
-	document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSettings(); });
+
+
+	document.addEventListener('keydown', event => {
+		if (event.key === 'Escape') closeSettings();
+	});
 });
 
 function faviconHref(theme, level, blink) {
 	return '/favicon.svg?theme=' + encodeURIComponent(theme) +
 		'&level=' + encodeURIComponent(level) +
-		'&blink=' + (blink ? '1' : '0') +
-		'&v=' + Date.now();
+		'&blink=' + (blink ? '1' : '0');
 }
 
 function applyFavicon(theme, level, blink) {
-	const fav = document.getElementById('favicon');
-	if (!fav) return;
-	fav.href = faviconHref(theme, level, blink);
+	const nextState = `${theme}:${level}:${blink ? 1 : 0}`;
+	if (nextState === faviconState) return;
+
+	const favicon = document.getElementById('favicon');
+	if (!favicon) return;
+	faviconState = nextState;
+	favicon.href = faviconHref(theme, level, blink);
 }
 
 function setBlinking(theme, level) {
-	if (blinkTimer) { clearInterval(blinkTimer); blinkTimer = null; }
+	const nextState = level === 'err' ? `${theme}:err` : '';
+	if (nextState === blinkingState) return;
+	blinkingState = nextState;
+
+	if (blinkTimer) {
+		clearInterval(blinkTimer);
+		blinkTimer = null;
+	}
 	if (level !== 'err') return;
+
 	let on = false;
 	blinkTimer = setInterval(() => {
 		on = !on;
@@ -575,19 +852,68 @@ function calcLevelFromMetrics(m) {
 	return 'ok';
 }
 
-async function loadInitialConfig() {
-	if (!shouldRunDashboardBoot()) return;
-	try {
-		const r = await fetch('/api/config');
-		if (!r.ok) return;
-		const data = await r.json();
-		tempDomainConfigs = (Array.isArray(data.domain_configs) ? data.domain_configs : [])
-			.map(d => ({ ...d }));
-		window.initialSystem = data.system ?? {};
-	} catch {
-		tempDomainConfigs = [];
-		window.initialSystem = {};
+let _dashboardTickTimer = null;
+let _lastSlowTick = 0;
+let _statusUptimeBaseSeconds = null;
+let _statusUptimeReceivedAt = 0;
+
+function dashboardTick() {
+	if (document.hidden) return;
+
+	renderClock();
+	renderStatusUptime();
+
+	const now = Date.now();
+	if (now - _lastSlowTick >= 30000) {
+		_lastSlowTick = now;
+		updateUptimeClocks();
+		updateChangedBadges();
 	}
+}
+
+function ensureDashboardTicker() {
+	dashboardTick();
+	if (!_dashboardTickTimer) {
+		_dashboardTickTimer = setInterval(dashboardTick, 1000);
+	}
+}
+
+function formatStatusUptime(totalSeconds) {
+	const u = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+	const days = Math.floor(u / 86400);
+	const hours = Math.floor((u % 86400) / 3600);
+	const minutes = Math.floor((u % 3600) / 60);
+	const seconds = u % 60;
+
+	if (days > 0) return days + 'd ' + hours + 'h ' + minutes + 'm';
+	if (hours > 0) return hours + 'h ' + minutes + 'm';
+	if (minutes > 0) return minutes + 'm ' + seconds + 's';
+	return seconds + 's';
+}
+
+function renderStatusUptime() {
+	if (!Number.isFinite(_statusUptimeBaseSeconds)) return;
+
+	const uptime = document.getElementById('uptime');
+	if (!uptime) return;
+
+	const elapsedSeconds = Math.max(0, Math.floor((Date.now() - _statusUptimeReceivedAt) / 1000));
+	uptime.textContent = formatStatusUptime(_statusUptimeBaseSeconds + elapsedSeconds);
+}
+
+function setStatusUptime(value) {
+	const seconds = Number(value);
+	if (!Number.isFinite(seconds) || seconds < 0) return;
+
+	_statusUptimeBaseSeconds = Math.floor(seconds);
+	_statusUptimeReceivedAt = Date.now();
+	renderStatusUptime();
+	startStatusUptimeClock();
+}
+
+function startStatusUptimeClock() {
+	renderStatusUptime();
+	ensureDashboardTicker();
 }
 
 function updateMetrics(m) {
@@ -617,18 +943,7 @@ function updateMetrics(m) {
 	setTxt('mIPCount', m.ip_latency_count);
 	setTxt('mLastIPCheck', m.last_ip_check);
 
-	const u = m.uptime_secs || 0;
-	const days = Math.floor(u / 86400);
-	const h = Math.floor((u % 86400) / 3600);
-	const min = Math.floor((u % 3600) / 60);
-	const s = u % 60;
-
-	let uptime;
-	if (days > 0) uptime = days + 'd ' + h + 'h ' + min + 'm';
-	else if (h > 0) uptime = h + 'h ' + min + 'm';
-	else if (min > 0) uptime = min + 'm ' + s + 's';
-	else uptime = s + 's';
-	setTxt('uptime', uptime);
+	setStatusUptime(m.uptime_secs);
 }
 
 let _chartTooltip = null;
@@ -787,11 +1102,6 @@ function initChartTooltips(root = document) {
 		svg.addEventListener('touchcancel', hide, {
 			passive: true
 		});
-		svg.addEventListener('pointerleave', event => {
-			if (event.pointerType !== 'touch' && event.pointerType !== 'pen') {
-				hide();
-			}
-		});
 	});
 }
 
@@ -919,22 +1229,40 @@ function showToast(message, type = 'success') {
 	}, duration);
 }
 
+function legacyCopyText(text) {
+	const textarea = document.createElement('textarea');
+	textarea.value = text;
+	textarea.className = 'clipboard-helper';
+	document.body.appendChild(textarea);
+	textarea.focus();
+	textarea.select();
+	const copied = document.execCommand('copy');
+	textarea.remove();
+	if (!copied) throw new Error('Copy command failed');
+}
+
+async function copyText(text, preview = text) {
+	try {
+		if (!navigator.clipboard || !window.isSecureContext) {
+			legacyCopyText(text);
+		} else {
+			await navigator.clipboard.writeText(text);
+		}
+		showToast(tr('copied', '✓ Copied: ') + preview);
+		return true;
+	} catch (error) {
+		console.error('Copy failed:', error);
+		showToast(tr('copy_failed', '❌ Copy failed'), 'error');
+		return false;
+	}
+}
+
 function copyIP(text) {
 	if (!text || text === 'N/A' || text === '-') {
 		showToast(tr('no_ip_to_copy', '❌ No IP to copy'), 'error');
 		return;
 	}
-	const fallback = (t) => {
-		const ta = document.createElement("textarea"); ta.value = t;
-		ta.style.position = "fixed"; ta.style.left = "-9999px";
-		document.body.appendChild(ta); ta.focus(); ta.select();
-		try { document.execCommand('copy'); showToast(tr('copied', '✓ Copied: ') + text); }
-		catch (err) { showToast(tr('copy_error', '❌ Fehler'), 'error'); }
-		document.body.removeChild(ta);
-	};
-	if (navigator.clipboard && window.isSecureContext) {
-		navigator.clipboard.writeText(text).then(() => showToast(tr('copied', '✓ Copied: ') + text)).catch(() => fallback(text));
-	} else fallback(text);
+	copyText(text, text);
 }
 
 function filterLogs(filter) {
@@ -1214,11 +1542,18 @@ async function shortHash8(str) {
 }
 
 
+const safeIDCache = new Map();
+
 async function makeSafeID(domain) {
-	domain = (domain || '').trim();
-	const base = sanitizeBase(domain);
-	const sfx = await shortHash8(domain);
-	return (base === 'x' ? 'd-' : base + '-') + sfx;
+	const normalized = String(domain || '').trim();
+	if (!safeIDCache.has(normalized)) {
+		safeIDCache.set(normalized, (async () => {
+			const base = sanitizeBase(normalized);
+			const suffix = await shortHash8(normalized);
+			return (base === 'x' ? 'd-' : base + '-') + suffix;
+		})());
+	}
+	return safeIDCache.get(normalized);
 }
 
 function declarativeStringArg(value) {
@@ -1282,10 +1617,6 @@ function _isChecked(id) { const el = document.getElementById(id); return el ? el
 function _parseList(raw) { return (raw || '').split(',').map(s => s.trim()).filter(Boolean); }
 function _setVal(id, v) { const el = document.getElementById(id); if (!el || el === document.activeElement) return; el.value = v != null ? String(v) : ''; }
 function _setChk(id, v) { const el = document.getElementById(id); if (!el || el === document.activeElement) return; el.checked = !!v; updateCheckboxLabel(el); }
-
-function openSettings() {
-	navTo('settings');
-}
 
 function _initSettingsFields() {
 	isSettingsOpen = true;
@@ -1351,8 +1682,6 @@ function _initSettingsFields() {
 function closeSettings() {
 	isSettingsOpen = false;
 }
-
-function closeSettingsOutside(e) { /* noop - no modal */ }
 
 function saveToken() {
 	const input = document.getElementById('s-token');
@@ -1649,87 +1978,6 @@ function removeDomainFromList(index) {
 	renderSettingsDomainList();
 }
 
-async function refreshDashboardLogs() {
-	const oldSection = document.querySelector('.page-section[data-section="logs"]');
-	if (!oldSection) return;
-
-	const activeFilter =
-		oldSection.querySelector('.filter-btn.active[data-filter]')?.dataset.filter || 'all';
-
-	try {
-		const res = await fetch('/api/logs', {
-			method: 'GET',
-			cache: 'no-store',
-			headers: {
-				'Accept': 'application/json'
-			}
-		});
-
-		if (!res.ok) {
-			throw new Error('HTTP ' + res.status);
-		}
-
-		const data = await res.json();
-
-		if (!data.html) return;
-
-		oldSection.outerHTML = data.html;
-
-		if (typeof filterLogs === 'function') {
-			filterLogs(activeFilter);
-		}
-	} catch (err) {
-		console.error('Logs reload failed:', err);
-		if (typeof showToast === 'function') {
-			showToast('❌ Logs konnten nicht neu geladen werden');
-		}
-	}
-}
-
-async function refreshDashboardDomains() {
-	const oldSection = document.querySelector('.page-section[data-section="domains"]');
-	if (!oldSection) return;
-
-	const searchValue = document.getElementById('domainSearch')?.value || '';
-
-	try {
-		const res = await fetch('/api/domains/html', {
-			method: 'GET',
-			cache: 'no-store',
-			headers: {
-				'Accept': 'application/json'
-			}
-		});
-
-		if (!res.ok) {
-			throw new Error('HTTP ' + res.status);
-		}
-
-		const data = await res.json();
-
-		if (!data.html) return;
-
-		oldSection.outerHTML = data.html;
-
-		const searchInput = document.getElementById('domainSearch');
-		if (searchInput && searchValue) {
-			searchInput.value = searchValue;
-			filterDomains(searchValue);
-		}
-
-		initDomainDetailsState();
-		initIPTimelines();
-		initChangedBadges();
-		initChartTooltips();
-		startUptimeClocks();
-	} catch (err) {
-		console.error('Domains reload failed:', err);
-		if (typeof showToast === 'function') {
-			showToast('❌ Domains konnten nicht neu geladen werden');
-		}
-	}
-}
-
 async function saveFullConfig() {
 	if (!confirm(tr('save_config_confirm', 'Alle Einstellungen in config.json speichern?'))) return;
 
@@ -1867,23 +2115,9 @@ function showNotifierTooltip(el, text) {
 	setTimeout(() => tip.remove(), 2500);
 }
 
-function copyLogEntry(btn) {
-	const row = btn.closest('.log-entry-row');
-	const text = row ? (row.dataset.copy || '') : '';
-	if (!text) return;
-	const fallback = (t) => {
-		const ta = document.createElement('textarea');
-		ta.value = t; ta.style.position = 'fixed'; ta.style.left = '-9999px';
-		document.body.appendChild(ta); ta.focus(); ta.select();
-		try { document.execCommand('copy'); showToast(tr('copied', '✓ Kopiert: ') + t.slice(0, 60)); }
-		catch { showToast(tr('copy_failed', '❌ Copy failed'), 'error'); }
-		document.body.removeChild(ta);
-	};
-	if (navigator.clipboard && window.isSecureContext) {
-		navigator.clipboard.writeText(text)
-			.then(() => showToast(tr('copied', '✓ Kopiert: ') + text.slice(0, 60)))
-			.catch(() => fallback(text));
-	} else fallback(text);
+function copyLogEntry(button) {
+	const text = button.closest('.log-entry-row')?.dataset.copy || '';
+	if (text) copyText(text, text.slice(0, 60));
 }
 
 function deleteLogEntry(btn) {
@@ -2079,28 +2313,18 @@ function ipv64DeleteDomain() {
 	_ipv64DomainAction('delete');
 }
 
-function fallbackCopy(text) {
-	const ta = document.createElement('textarea');
-	ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px';
-	document.body.appendChild(ta); ta.focus(); ta.select();
-	try { document.execCommand('copy'); showToast('✓ Kopiert: ' + text, 'success'); }
-	catch { showToast(tr('copy_failed', '❌ Copy failed'), 'error'); }
-	document.body.removeChild(ta);
+function renderClock() {
+	const element = document.getElementById('clock');
+	if (!element) return;
+	const date = new Date();
+	element.textContent = [date.getHours(), date.getMinutes(), date.getSeconds()]
+		.map(value => String(value).padStart(2, '0'))
+		.join(':');
 }
 
-let _clockTimer = null;
-
 function startClock() {
-	const el = document.getElementById('clock');
-	if (!el) return;
-	const tick = () => {
-		const d = new Date();
-		el.textContent = [d.getHours(), d.getMinutes(), d.getSeconds()]
-			.map(n => String(n).padStart(2, '0')).join(':');
-	};
-	if (_clockTimer) clearInterval(_clockTimer);
-	tick();
-	_clockTimer = setInterval(tick, 1000);
+	renderClock();
+	ensureDashboardTicker();
 }
 
 function togglePassword(id, btn) {
@@ -2391,45 +2615,65 @@ function trf(key, vars = {}, fallback = '') {
 	return text;
 }
 
-const endpointStatus = {};
-function updateEndpointStatus(data) {
-	endpointStatus[data.url] = { ok: data.ok, ts: Date.now() };
-	renderEndpointStatus();
+const endpointStatus = Object.create(null);
+const endpointChipElements = new Map();
+
+function endpointHost(url) {
+	try {
+		return new URL(url).hostname;
+	} catch {
+		return url;
+	}
 }
 
-function renderEndpointStatus() {
+function endpointAge(timestamp) {
+	const difference = Math.max(0, Date.now() - timestamp);
+	if (difference < 1000) return `${difference}ms`;
+	if (difference < 60000) return `${(difference / 1000).toFixed(0)}s`;
+	return `${Math.round(difference / 60000)}m`;
+}
+
+function updateEndpointChip(container, url, status) {
+	let chip = endpointChipElements.get(url);
+	if (!chip?.isConnected || chip.parentElement !== container) {
+		chip = document.createElement('span');
+		chip.className = 'endpoint-chip';
+		chip.dataset.endpointUrl = url;
+		endpointChipElements.set(url, chip);
+		container.appendChild(chip);
+	}
+
+	const ageElement = document.createElement('span');
+	ageElement.className = 'endpoint-chip-age';
+	ageElement.textContent = endpointAge(status.ts);
+	chip.replaceChildren(
+		document.createTextNode(`${status.ok ? '✅' : '❌'} ${endpointHost(url)} `),
+		ageElement,
+	);
+}
+
+function updateEndpointStatus(data) {
+	const url = String(data?.url || '').trim();
+	if (!url) return;
+	endpointStatus[url] = { ok: Boolean(data.ok), ts: Date.now() };
+	renderEndpointStatus(url);
+}
+
+function renderEndpointStatus(changedURL = '') {
 	const container = document.getElementById('endpoint-status');
 	if (!container) return;
 
 	const entries = Object.entries(endpointStatus);
-	container.replaceChildren();
 	if (entries.length === 0) return;
+	container.querySelector('.endpoint-waiting')?.remove();
+
+	if (changedURL && endpointStatus[changedURL]) {
+		updateEndpointChip(container, changedURL, endpointStatus[changedURL]);
+		return;
+	}
 
 	for (const [url, status] of entries) {
-		let host;
-		try {
-			host = new URL(url).hostname;
-		} catch {
-			host = url;
-		}
-
-		const diff = Date.now() - status.ts;
-		const age = diff < 1000
-			? `${diff}ms`
-			: diff < 60000
-				? `${(diff / 1000).toFixed(0)}s`
-				: `${Math.round(diff / 60000)}m`;
-
-		const chip = document.createElement('span');
-		chip.className = 'endpoint-chip';
-		chip.appendChild(document.createTextNode(`${status.ok ? '✅' : '❌'} ${host} `));
-
-		const ageElement = document.createElement('span');
-		ageElement.className = 'endpoint-chip-age';
-		ageElement.textContent = age;
-		chip.appendChild(ageElement);
-
-		container.appendChild(chip);
+		updateEndpointChip(container, url, status);
 	}
 }
 
@@ -2555,8 +2799,6 @@ function formatUptime(lastChangedStr, unixValue) {
 	return Math.floor(diff / 86400) + 'd ' + Math.floor((diff % 86400) / 3600) + 'h';
 }
 
-let _uptimeClockTimer = null;
-
 function updateUptimeClocks() {
 	document.querySelectorAll('[data-last-changed]').forEach(element => {
 		const target = document.getElementById('uptime-' + element.dataset.uptimeId);
@@ -2571,7 +2813,7 @@ function updateUptimeClocks() {
 
 function startUptimeClocks() {
 	updateUptimeClocks();
-	if (!_uptimeClockTimer) _uptimeClockTimer = setInterval(updateUptimeClocks, 30000);
+	ensureDashboardTicker();
 }
 
 let _dotTooltip = null;
@@ -2802,8 +3044,6 @@ function renderNotifCenter() {
 }
 
 
-let _changedBadgeTimer = null;
-
 function updateChangedBadges() {
 	const now = Date.now();
 	document.querySelectorAll('.changed-badge[data-changed-at], .changed-badge[data-changed-unix]').forEach(badge => {
@@ -2815,7 +3055,7 @@ function updateChangedBadges() {
 
 function initChangedBadges() {
 	updateChangedBadges();
-	if (!_changedBadgeTimer) _changedBadgeTimer = setInterval(updateChangedBadges, 30000);
+	ensureDashboardTicker();
 }
 
 // ============================================================================
@@ -3006,6 +3246,120 @@ function renderDiagnosis(d) {
 			</div>
 		</div>
 	`;
+}
+
+// ============================================================================
+// AUDIT LOG & DNS PROPAGATION
+// ============================================================================
+
+function formatAuditTimestamp(value) {
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return String(value || '-');
+	return date.toLocaleString();
+}
+
+function renderAuditEntries(entries) {
+	const box = document.getElementById('audit-log-content');
+	if (!box) return;
+	if (!Array.isArray(entries) || entries.length === 0) {
+		box.innerHTML = '<div class="audit-empty">Noch keine Audit-Einträge vorhanden.</div>';
+		return;
+	}
+
+	const rows = entries.map(entry => {
+		const status = Number(entry.status || 0);
+		const resultClass = status >= 400 ? 'audit-result-error' : 'audit-result-ok';
+		return `<tr>
+			<td>${escHtml(formatAuditTimestamp(entry.timestamp))}</td>
+			<td><strong>${escHtml(entry.actor || '-')}</strong><small>${escHtml(entry.role || '')}</small></td>
+			<td><code>${escHtml(entry.method || '')}</code> ${escHtml(entry.path || '')}</td>
+			<td><span class="audit-result ${resultClass}">${escHtml(status || '-')}</span></td>
+			<td><code>${escHtml(entry.ip || '-')}</code></td>
+		</tr>`;
+	}).join('');
+
+	box.innerHTML = `<div class="audit-table-wrap"><table class="audit-table">
+		<thead><tr><th>Zeit</th><th>Benutzer</th><th>Aktion</th><th>Status</th><th>IP</th></tr></thead>
+		<tbody>${rows}</tbody>
+	</table></div>`;
+}
+
+async function refreshAuditLog() {
+	const box = document.getElementById('audit-log-content');
+	if (!box) return;
+	box.textContent = 'Audit-Einträge werden geladen…';
+	box.classList.add('audit-loading');
+	try {
+		const response = await fetch('/api/audit', { cache: 'no-store' });
+		const data = await response.json().catch(() => ({}));
+		if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+		box.classList.remove('audit-loading');
+		renderAuditEntries(data.entries || []);
+	} catch (error) {
+		box.classList.remove('audit-loading');
+		box.innerHTML = '<div class="diag-error-box">❌ ' + escHtml(error.message || 'Audit-Log konnte nicht geladen werden.') + '</div>';
+	}
+}
+
+function dnsValues(values) {
+	if (!Array.isArray(values) || values.length === 0) return '<span class="dns-empty">–</span>';
+	return values.map(value => '<code>' + escHtml(value) + '</code>').join('<br>');
+}
+
+function dnsMatchBadge(hasExpected, matches) {
+	if (!hasExpected) return '<span class="dns-match dns-match-muted">kein Sollwert</span>';
+	return matches
+		? '<span class="dns-match dns-match-ok">passt</span>'
+		: '<span class="dns-match dns-match-error">abweichend</span>';
+}
+
+function renderDNSPropagation(data) {
+	const box = document.getElementById('dns-propagation-result');
+	if (!box) return;
+	const expectedV4 = String(data.expected_ipv4 || '');
+	const expectedV6 = String(data.expected_ipv6 || '');
+	const rows = (data.results || []).map(result => `<tr>
+		<td><strong>${escHtml(result.resolver || '-')}</strong><small>${escHtml(result.address || '')}</small></td>
+		<td>${dnsValues(result.ipv4)} ${dnsMatchBadge(Boolean(expectedV4), Boolean(result.match_ipv4))}</td>
+		<td>${dnsValues(result.ipv6)} ${dnsMatchBadge(Boolean(expectedV6), Boolean(result.match_ipv6))}</td>
+		<td>${result.error ? '<span class="dns-error">' + escHtml(result.error) + '</span>' : escHtml((result.duration_ms ?? 0) + ' ms')}</td>
+	</tr>`).join('');
+
+	box.innerHTML = `<div class="dns-summary">
+		<strong>${escHtml(data.domain || '')}</strong>
+		<span>IPv4-Soll: <code>${escHtml(expectedV4 || '-')}</code></span>
+		<span>IPv6-Soll: <code>${escHtml(expectedV6 || '-')}</code></span>
+	</div>
+	<div class="audit-table-wrap"><table class="audit-table dns-table">
+		<thead><tr><th>Resolver</th><th>IPv4</th><th>IPv6</th><th>Dauer / Fehler</th></tr></thead>
+		<tbody>${rows || '<tr><td colspan="4">Keine Ergebnisse.</td></tr>'}</tbody>
+	</table></div>`;
+}
+
+async function runDNSPropagation() {
+	const input = document.getElementById('dns-propagation-domain');
+	const box = document.getElementById('dns-propagation-result');
+	const domain = String(input?.value || '').trim();
+	if (!domain) {
+		showToast('❌ Bitte eine Domain eingeben.', 'error');
+		input?.focus();
+		return;
+	}
+	if (box) box.innerHTML = '<div class="audit-loading">DNS-Resolver werden abgefragt…</div>';
+
+	try {
+		const response = await fetch('/api/dns/propagation', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+			body: JSON.stringify({ domain }),
+		});
+		const data = await response.json().catch(() => ({}));
+		if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+		renderDNSPropagation(data);
+		refreshAuditLog();
+	} catch (error) {
+		if (box) box.innerHTML = '<div class="diag-error-box">❌ ' + escHtml(error.message || 'DNS-Prüfung fehlgeschlagen.') + '</div>';
+	}
 }
 
 // ============================================================================
