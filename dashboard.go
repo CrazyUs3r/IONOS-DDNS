@@ -3,10 +3,15 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	_ "embed"
+	"encoding/base32"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -14,6 +19,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -27,9 +33,13 @@ var cssData string
 //go:embed templates/js/dashboard.js
 var jsData string
 
+//go:embed templates/js/auth.js
+var authJSData string
+
 var (
 	dashboardCSSETag = contentETag(cssData)
 	dashboardJSETag  = contentETag(jsData)
+	authJSETag       = contentETag(authJSData)
 )
 
 func contentETag(content string) string {
@@ -794,6 +804,7 @@ func createMux() *http.ServeMux {
 func registerStaticRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/assets/style.css", handleDashboardCSS)
 	mux.HandleFunc("/assets/dashboard.js", handleDashboardJS)
+	mux.HandleFunc("/assets/auth.js", handleAuthJS)
 	mux.HandleFunc("/assets/i18n.js", handleDashboardI18NJS)
 	mux.HandleFunc("/favicon.svg", handleFavicon)
 	mux.HandleFunc("/ws", handleWS)
@@ -807,6 +818,7 @@ func registerStaticRoutes(mux *http.ServeMux) {
 func registerAPIroutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/domains", handleAPIDomains)
 	mux.HandleFunc("/api/domains/html", handleAPIDomainsHTML)
+	mux.HandleFunc("/api/page", handleAPIPageSection)
 	mux.HandleFunc("/api/config", handleAPIConfig)
 	mux.HandleFunc("/api/languages", handleAPILanguages)
 	mux.HandleFunc("/api/save-config", handleAPISaveConfig)
@@ -824,6 +836,8 @@ func registerAPIroutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/logs/delete", handleAPILogDelete)
 
 	mux.HandleFunc("/api/diagnose", handleAPIDiagnose)
+	mux.HandleFunc("/api/audit", handleAPIAudit)
+	mux.HandleFunc("/api/dns/propagation", handleAPIDNSPropagation)
 	mux.HandleFunc("/api/backup/download", handleAPIBackupDownload)
 	mux.HandleFunc("/api/backup/restore", handleAPIBackupRestore)
 }
@@ -871,7 +885,7 @@ func setSecurityHeaders(w http.ResponseWriter, r *http.Request) {
 	h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 	h.Set("Cross-Origin-Opener-Policy", "same-origin")
 
-	if r != nil && r.TLS != nil && dashboardHSTSEnabled() {
+	if requestUsesHTTPS(r) && dashboardHSTSEnabled() {
 		h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 	}
 }
@@ -891,6 +905,10 @@ func handleDashboardJS(w http.ResponseWriter, r *http.Request) {
 	serveDashboardAsset(w, r, "application/javascript; charset=utf-8", dashboardJSETag, jsData)
 }
 
+func handleAuthJS(w http.ResponseWriter, r *http.Request) {
+	serveDashboardAsset(w, r, "application/javascript; charset=utf-8", authJSETag, authJSData)
+}
+
 func serveDashboardAsset(w http.ResponseWriter, r *http.Request, contentType, etag, content string) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
@@ -899,7 +917,7 @@ func serveDashboardAsset(w http.ResponseWriter, r *http.Request, contentType, et
 	}
 
 	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Cache-Control", "public, max-age=0, must-revalidate")
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	w.Header().Set("ETag", etag)
 
 	for candidate := range strings.SplitSeq(r.Header.Get("If-None-Match"), ",") {
@@ -969,9 +987,7 @@ func handleFavicon(w http.ResponseWriter, r *http.Request) {
 		</svg>`, bg, badgeOpacity, statusColor, symbol, textColor)
 
 	w.Header().Set("Content-Type", "image/svg+xml; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-	w.Header().Set("Pragma", "no-cache")
-	w.Header().Set("Expires", "0")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
 	_, _ = w.Write([]byte(svg))
 }
 
@@ -984,7 +1000,7 @@ func validWebSocketOrigin(r *http.Request) bool {
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
 		return false
 	}
-	return strings.EqualFold(u.Host, r.Host)
+	return strings.EqualFold(u.Host, externalRequestHost(r))
 }
 
 func handleWS(w http.ResponseWriter, r *http.Request) {
@@ -1037,6 +1053,95 @@ func handleAPIDomainsHTML(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func handleAPIPageSection(w http.ResponseWriter, r *http.Request) {
+	if r.Method != MethodGET {
+		http.Error(
+			w,
+			phrases().APIErrorMethodNotAllowed,
+			http.StatusMethodNotAllowed,
+		)
+		return
+	}
+
+	page := strings.TrimSpace(r.URL.Query().Get("name"))
+
+	sess, _ := sessionFromRequest(r)
+	isAdmin := !authEnabled || (sess != nil && sess.Role == RoleAdmin)
+	isViewer := authEnabled && sess != nil && sess.Role == RoleViewer
+
+	var fragment strings.Builder
+
+	renderers := map[string]func(){
+		"dashboard": func() {
+			statusClass, statusText := dashboardStatus()
+			writeDashboardTop(
+				&fragment,
+				statusClass,
+				statusText,
+				snapshotConfig(),
+			)
+		},
+		"metrics": func() {
+			stats := getDashboardStats()
+			chartSVG, latencySVG, nicHTML := buildDashboardMetricsParts(stats)
+
+			writeDashboardMetricsCard(
+				&fragment,
+				stats,
+				nicHTML,
+				chartSVG,
+				latencySVG,
+				isViewer,
+			)
+		},
+		"domains": func() {
+			writeDomainsCard(&fragment, loadStatusData())
+		},
+		"diagnose": func() {
+			writeDiagnoseSection(&fragment)
+		},
+		"audit": func() {
+			writeAuditDNSSection(&fragment, isAdmin)
+		},
+		"logs": func() {
+			logs, logTimeRange := loadDashboardLogs()
+			writeLogsCard(&fragment, logs, logTimeRange)
+		},
+		"backup": func() {
+			writeBackupSection(&fragment, isAdmin)
+		},
+		"debug": func() {
+			writeDebugSection(&fragment, snapshotConfig())
+		},
+		"settings": func() {
+			config := maskDashboardConfigSecrets(snapshotConfig())
+			writeSettingsSection(&fragment, config)
+		},
+		"totp": func() {
+			isAuthenticated := authEnabled && sess != nil
+			writeTOTPSection(&fragment, sess, isAuthenticated)
+		},
+		"users": func() {
+			writeUsersSection(&fragment, isAdmin)
+		},
+	}
+
+	render, found := renderers[page]
+	if !found {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "unsupported page",
+		})
+		return
+	}
+
+	render()
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"page": page,
+		"html": fragment.String(),
+	})
+}
+
 func handleAPIConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodGET {
 		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
@@ -1061,17 +1166,17 @@ func handleAPIConfig(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-const dashboardSecretMask = "●●●●●●" // #nosec G101 -- UI placeholder only; never used as a credential
+const dashboardSecPlaceholderMask = "●●●●●●"
 
 func maskSecret(s string) string {
 	if s == "" {
 		return ""
 	}
-	return dashboardSecretMask
+	return dashboardSecPlaceholderMask
 }
 
 func isDashboardSecretMask(s string) bool {
-	return strings.TrimSpace(s) == dashboardSecretMask
+	return strings.TrimSpace(s) == dashboardSecPlaceholderMask
 }
 
 func preserveDashboardSecret(incoming, current string) string {
@@ -1226,7 +1331,7 @@ func handleAPISaveConfig(w http.ResponseWriter, r *http.Request) {
 	lastCleanupNano.Store(0)
 
 	debugLog("API", getClientIP(r), phrases().ConfigHeading)
-	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+	writeJSON(w, http.StatusOK, map[string]string{status: "saved"})
 }
 
 func applySystemConfigPayload(sys safeSystemConfig) {
@@ -1883,68 +1988,87 @@ func handleMetrics(w http.ResponseWriter, r *http.Request) {
 	serveCachedJSON(w, r, metricsCache)
 }
 
+func healthDetailAuthorized(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+
+	if authEnabled {
+		if sess, ok := sessionFromRequest(r); ok && sess.Role == RoleAdmin {
+			return true
+		}
+	}
+
+	expected := strings.TrimSpace(os.Getenv("DASHBOARD_HEALTH_TOKEN"))
+	if expected == "" {
+		return !authEnabled && envBool("DASHBOARD_ALLOW_PUBLIC_DETAILED_HEALTH")
+	}
+
+	provided := strings.TrimSpace(r.Header.Get("X-Health-Token"))
+	if auth := strings.TrimSpace(r.Header.Get("Authorization")); strings.HasPrefix(strings.ToLower(auth), "bearer ") {
+		provided = strings.TrimSpace(auth[len("Bearer "):])
+	}
+	return subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) == 1
+}
+
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	isHealthy := lastOk.Load()
 	hasRun := schedulerRanOnce.Load()
 	stats := apiMetrics.GetStats()
-
 	total := getTotalRequests(stats)
 
-	healthReason := ""
-	degradedMode := false
+	status := healthy
+	reason := ""
+	statusCode := http.StatusOK
 
 	if !hasRun {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"status": "starting",
-			"reason": phrases().WaitingForFirstSchedulerRun,
-		})
-		return
-	}
-
-	if total > 10 {
+		status = starting
+		reason = phrases().WaitingForFirstSchedulerRun
+	} else if total > 10 {
 		if successRateStr, ok := stats["success_rate"].(string); ok {
 			var rate float64
 			if _, err := fmt.Sscanf(successRateStr, "%f%%", &rate); err == nil {
-				if rate < 20.0 {
+				switch {
+				case rate < 20.0:
 					isHealthy = false
-					healthReason = phrases().HealthCriticalSuccessRate
-				} else if rate < 50.0 {
-					degradedMode = true
-					healthReason = phrases().HealthDegradedSuccessRate
+					status = unhealthy
+					reason = phrases().HealthCriticalSuccessRate
+					statusCode = http.StatusServiceUnavailable
+				case rate < 50.0:
+					status = "degraded"
+					reason = phrases().HealthDegradedSuccessRate
 				}
 			}
 		}
 	}
 
-	if !isHealthy && healthReason == "" {
-		healthReason = phrases().HealthLastSchedulerFailed
-	}
-
-	if degradedMode && isHealthy {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"status":      "degraded",
-			"reason":      healthReason,
-			"api_metrics": stats,
-		})
-		return
-	}
-
-	if !isHealthy {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
-			"status":      "unhealthy",
-			"reason":      healthReason,
-			"api_metrics": stats,
-		})
-		return
+	if hasRun && !isHealthy && status != unhealthy {
+		status = unhealthy
+		statusCode = http.StatusServiceUnavailable
+		if reason == "" {
+			reason = phrases().HealthLastSchedulerFailed
+		}
 	}
 
 	if r.URL.Query().Get("detailed") == constTrue {
-		handleDetailedHealth(w, stats)
+		if !healthDetailAuthorized(r) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "detailed health access denied"})
+			return
+		}
+		handleDetailedHealth(w, statusCode, status, reason, stats)
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte("OK"))
+	if status == healthy {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("OK"))
+		return
+	}
+
+	writeJSON(w, statusCode, map[string]any{
+		"status": status,
+		"reason": reason,
+	})
 }
 
 func handleLiveness(w http.ResponseWriter, _ *http.Request) {
@@ -1975,15 +2099,17 @@ func getTotalRequests(stats map[string]any) int64 {
 	}
 }
 
-func handleDetailedHealth(w http.ResponseWriter, stats map[string]any) {
+func handleDetailedHealth(w http.ResponseWriter, statusCode int, status, reason string, stats map[string]any) {
 	lastV4, lastV6 := loadLastKnownIPs()
 
 	statusMutex.Lock()
 	lastUpdateTime := readLastUpdateTimeFromStatusFile()
 	statusMutex.Unlock()
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"status":           "healthy",
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, statusCode, map[string]any{
+		"status":           status,
+		"reason":           reason,
 		"version":          Version,
 		"built":            BuildDate,
 		"api_metrics":      stats,
@@ -2030,19 +2156,10 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sess, _ := sessionFromRequest(r)
-	isAdmin := !authEnabled || (sess != nil && sess.Role == RoleAdmin)
-	isViewer := authEnabled && sess != nil && sess.Role == RoleViewer
-
-	statusData := loadStatusData()
 	statusClass, statusText := dashboardStatus()
-	logs, logTimeRange := loadDashboardLogs()
-
-	stats := getDashboardStats()
-	chartSVG, latencySVG, nicHTML := buildDashboardMetricsParts(stats)
 	config := snapshotConfig()
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-
 	w.Header().Set(
 		"Cache-Control",
 		"no-store, no-cache, must-revalidate, max-age=0",
@@ -2052,17 +2169,41 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 
 	writeDashboardHeader(w, sess)
 	writeDashboardTop(w, statusClass, statusText, config)
-	writeDashboardMetricsCard(w, stats, nicHTML, chartSVG, latencySVG, isViewer)
 
-	writeDomainsCard(w, statusData)
-	writeDiagnoseSection(w)
-	writeLogsCard(w, logs, logTimeRange)
-	writeBackupSection(w, isAdmin)
+	for _, page := range []string{
+		"domains",
+		"metrics",
+		"diagnose",
+		"audit",
+		"logs",
+		"debug",
+		"backup",
+		"settings",
+		"totp",
+		"users",
+	} {
+		writePagePlaceholder(w, page)
+	}
 
+	_, _ = fmt.Fprint(w, `<div id="settingsOverlay" class="modal-overlay"></div>`)
+	writeDashboardFooter(w)
+}
+
+func writePagePlaceholder(w io.Writer, page string) {
+	_, _ = fmt.Fprintf(w, `<div class="page-section page-section--placeholder" data-section="%s" data-loaded="0">
+		<div class="card lazy-page-card">
+			<div class="card-content page-loading">⏳ %s</div>
+		</div>
+	</div>`, html.EscapeString(page), "Loading...")
+}
+
+func writeDebugSection(w io.Writer, config Config) {
 	if config.DebugEnabled || config.DebugHTTPRaw {
 		writeDebugCard(w)
-	} else {
-		_, _ = fmt.Fprint(w, `
+		return
+	}
+
+	_, _ = fmt.Fprint(w, `
 	<div class="page-section" data-section="debug">
 		<div class="card">
 			<div class="card-header">🐞 `+phrases().DebugLogTitle+`</div>
@@ -2071,16 +2212,6 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 			</div>
 		</div>
 	</div>`)
-	}
-
-	writeSettingsSection(w, maskDashboardConfigSecrets(config))
-	writeTOTPSection(w, sess, authEnabled && sess != nil)
-	writeUsersSection(w, isAdmin)
-
-	_, _ = fmt.Fprint(w, `<div id="settingsOverlay" class="modal-overlay"></div>`)
-
-	writeDashboardFooter(w)
-	_ = r
 }
 
 func loadStatusData() map[string]any {
@@ -2355,6 +2486,7 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 	csrfMeta := ""
 	userPage := ""
 	totpPage := ""
+	auditPage := ""
 	if authEnabled && sess != nil {
 		csrfMeta = `<meta name="csrf-token" content="` + html.EscapeString(sess.CSRFToken) + `">`
 		roleIcon := map[UserRole]string{
@@ -2367,9 +2499,11 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 		totpPage = `<button type="button" class="nav-item" data-page="totp" data-click="navTo('totp')"><span class="nav-item-icon">🔐</span> 2FA / Konto-Sicherheit</button>`
 		if sess.Role == RoleAdmin {
 			userPage = `<button type="button" class="nav-item" data-page="users" data-click="navTo('users')">` + phrases().SettingsUserManagement + `</button>`
+			auditPage = `<button type="button" class="nav-item" data-page="audit" data-click="navTo('audit')"><span class="nav-item-icon">🛡️</span> Audit & DNS</button>`
 		}
 	} else if !authEnabled {
 		userPage = `<button type="button" class="nav-item" data-page="users" data-click="navTo('users')">` + phrases().SettingsUserManagement + `</button>`
+		auditPage = `<button type="button" class="nav-item" data-page="audit" data-click="navTo('audit')"><span class="nav-item-icon">🛡️</span> Audit & DNS</button>`
 	}
 
 	_, _ = fmt.Fprintf(w, `<!DOCTYPE html><html><head>
@@ -2431,6 +2565,7 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 			<button type="button" class="nav-item" data-page="backup" data-click="navTo('backup')">
 				<span class="nav-item-icon">💾</span> `+t(phrases().BackupTitle, "Backup & Restore")+`
 			</button>
+			`+auditPage+`
 
 			<div class="nav-section-label">`+t(phrases().NavConfig, "Config")+`</div>
 			<button type="button" class="nav-item" data-page="settings" data-click="navTo('settings')">
@@ -2529,7 +2664,7 @@ func buildNotifierStatusHTML() string {
 		"Gotify":   "📬",
 		"Ntfy":     "📝",
 		"Webhook":  "🔗",
-		"mqtt":     "📡",
+		"Mqtt":     "📡",
 		"Email":    "✉️",
 	}
 
@@ -2565,7 +2700,7 @@ func buildNotifierStatusHTML() string {
 	return sb.String()
 }
 
-func writeDashboardTop(w http.ResponseWriter, statusClass, statusText string, config Config) {
+func writeDashboardTop(w io.Writer, statusClass, statusText string, config Config) {
 	_, _ = fmt.Fprintf(w, `
 	<div class="page-section" data-section="dashboard">
 		<div class="status-banner %s">
@@ -2651,7 +2786,7 @@ func buildUsersSection() string {
 }
 
 func writeDashboardMetricsCard(
-	w http.ResponseWriter,
+	w io.Writer,
 	stats map[string]any,
 	nicHTML, chartSVG, latencySVG string,
 	isViewer bool,
@@ -2818,7 +2953,7 @@ func writeDashboardMetricsCard(
 	)
 }
 
-func writeDebugCard(w http.ResponseWriter) {
+func writeDebugCard(w io.Writer) {
 	_, _ = fmt.Fprint(w, `
 	<div class="page-section" data-section="debug">
 		<div class="card">
@@ -2994,7 +3129,7 @@ func writeDomainsCard(w io.Writer, data map[string]any) {
 	`)
 }
 
-func writeSettingsSection(w http.ResponseWriter, c Config) {
+func writeSettingsSection(w io.Writer, c Config) {
 	securitySection := buildSettingsSecuritySection()
 	systemSection := buildSettingsSystemSection(c)
 	domainsSection := buildSettingsDomainsSection()
@@ -3015,7 +3150,7 @@ func writeSettingsSection(w http.ResponseWriter, c Config) {
 	`)
 }
 
-func writeTOTPSection(w http.ResponseWriter, sess *Session, enabled bool) {
+func writeTOTPSection(w io.Writer, sess *Session, enabled bool) {
 	if !enabled {
 		_, _ = fmt.Fprint(w, `<div class="page-section" data-section="totp"></div>`)
 		return
@@ -3033,7 +3168,7 @@ func writeTOTPSection(w http.ResponseWriter, sess *Session, enabled bool) {
 	`)
 }
 
-func writeUsersSection(w http.ResponseWriter, isAdmin bool) {
+func writeUsersSection(w io.Writer, isAdmin bool) {
 	if !isAdmin {
 		_, _ = fmt.Fprint(w, `<div class="page-section" data-section="users"></div>`)
 		return
@@ -3335,7 +3470,7 @@ func appFooterHTML() string {
 // DIAGNOSE / HEALTH CENTER
 // ============================================================================
 
-func writeDiagnoseSection(w http.ResponseWriter) {
+func writeDiagnoseSection(w io.Writer) {
 	_, _ = fmt.Fprint(w, `
 	<div class="page-section" data-section="diagnose">
 		<div class="card">
@@ -3589,18 +3724,18 @@ func diagnoseConfigInfo(cfg Config) map[string]any {
 
 func diagnosisMainStatus(warnings []string, logWarnings int) (string, string) {
 	if !schedulerRanOnce.Load() {
-		return "starting", t(phrases().DiagnoseReasonSchedulerNotRun, "Scheduler has not run yet.")
+		return starting, t(phrases().DiagnoseReasonSchedulerNotRun, "Scheduler has not run yet.")
 	}
 
 	if !lastOk.Load() {
-		return "unhealthy", t(phrases().DiagnoseReasonLastSchedulerFailed, "The last scheduler run failed.")
+		return unhealthy, t(phrases().DiagnoseReasonLastSchedulerFailed, "The last scheduler run failed.")
 	}
 
 	if len(warnings) > 0 || logWarnings > 0 {
 		return "degraded", t(phrases().DiagnoseReasonWarningsButRunning, "There are warnings, but the service is running.")
 	}
 
-	return "healthy", t(phrases().DiagnoseReasonAllGood, "Everything looks good.")
+	return healthy, t(phrases().DiagnoseReasonAllGood, "Everything looks good.")
 }
 
 func formatDiagnosisTime(t time.Time) string {
@@ -3644,8 +3779,418 @@ func diagnoseFileInfo(name, path string) map[string]any {
 }
 
 // ============================================================================
+// AUDIT LOG & DNS PROPAGATION
+// ============================================================================
+
+const (
+	auditLogMaxBytes = 5 << 20
+	auditReadLimit   = 200
+)
+
+var (
+	auditLogMu      sync.Mutex
+	backupRestoreMu sync.Mutex
+)
+
+type auditEntry struct {
+	ID        string `json:"id"`
+	Timestamp string `json:"timestamp"`
+	Actor     string `json:"actor"`
+	Role      string `json:"role"`
+	IP        string `json:"ip"`
+	Method    string `json:"method"`
+	Path      string `json:"path"`
+	Status    int    `json:"status"`
+	Result    string `json:"result"`
+}
+
+func auditLogFilePath() string {
+	basePath := strings.TrimSpace(logPath)
+	if basePath == "" {
+		basePath = strings.TrimSpace(usersFilePath)
+	}
+	if basePath == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(basePath), "audit.json")
+}
+
+func safeAuditField(value string, maxRunes int) string {
+	value = strings.Map(func(r rune) rune {
+		if r < 32 || r == 127 {
+			return ' '
+		}
+		return r
+	}, strings.TrimSpace(value))
+	runes := []rune(value)
+	if len(runes) > maxRunes {
+		return string(runes[:maxRunes]) + "…"
+	}
+	return value
+}
+
+func auditHTTPRequest(r *http.Request, sess *Session, status int) {
+	if r == nil {
+		return
+	}
+
+	actor := "anonymous"
+	role := ""
+	if sess != nil {
+		actor = sess.Username
+		role = string(sess.Role)
+	} else if !authEnabled {
+		actor = "auth-disabled"
+		role = string(RoleAdmin)
+	}
+
+	result := "success"
+	if status >= 400 {
+		result = "error"
+	}
+	id, err := randomHexToken(8)
+	if err != nil {
+		id = strconv.FormatInt(time.Now().UnixNano(), 36)
+	}
+
+	entry := auditEntry{
+		ID:        id,
+		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+		Actor:     safeAuditField(actor, 128),
+		Role:      safeAuditField(role, 32),
+		IP:        safeAuditField(getClientIP(r), 128),
+		Method:    safeAuditField(strings.ToUpper(r.Method), 16),
+		Path:      safeAuditField(r.URL.Path, 256),
+		Status:    status,
+		Result:    result,
+	}
+	if err := appendAuditEntry(entry); err != nil {
+		debugLog("AUDIT", "", fmt.Sprintf("audit write failed: %v", err))
+	}
+}
+
+func appendAuditEntry(entry auditEntry) error {
+	path := auditLogFilePath()
+	if path == "" {
+		return errors.New("audit path unavailable")
+	}
+
+	auditLogMu.Lock()
+	defer auditLogMu.Unlock()
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	if st, err := os.Stat(path); err == nil && st.Size() >= auditLogMaxBytes {
+		_ = os.Remove(path + ".1")
+		if err := os.Rename(path, path+".1"); err != nil {
+			return err
+		}
+	}
+
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	_, err = file.Write(data)
+	return err
+}
+
+func readAuditEntries(limit int) ([]auditEntry, error) {
+	if limit <= 0 || limit > auditReadLimit {
+		limit = auditReadLimit
+	}
+	path := auditLogFilePath()
+	if path == "" {
+		return []auditEntry{}, nil
+	}
+
+	auditLogMu.Lock()
+	defer auditLogMu.Unlock()
+
+	file, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []auditEntry{}, nil
+		}
+		return nil, err
+	}
+	defer file.Close()
+
+	ring := make([]auditEntry, limit)
+	total := 0
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 4096), 128<<10)
+	for scanner.Scan() {
+		var entry auditEntry
+		if json.Unmarshal(scanner.Bytes(), &entry) != nil {
+			continue
+		}
+		ring[total%limit] = entry
+		total++
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	count := total
+	if count > limit {
+		count = limit
+	}
+	entries := make([]auditEntry, 0, count)
+	for i := 0; i < count; i++ {
+		index := (total - 1 - i) % limit
+		entries = append(entries, ring[index])
+	}
+	return entries, nil
+}
+
+func handleAPIAudit(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		return
+	}
+	if !requireAdminAPI(w, r) {
+		return
+	}
+
+	entries, err := readAuditEntries(auditReadLimit)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
+}
+
+type dnsResolverTarget struct {
+	Name    string
+	Address string
+	System  bool
+}
+
+type dnsPropagationResult struct {
+	Resolver   string   `json:"resolver"`
+	Address    string   `json:"address,omitempty"`
+	IPv4       []string `json:"ipv4"`
+	IPv6       []string `json:"ipv6"`
+	CNAME      string   `json:"cname,omitempty"`
+	MatchIPv4  bool     `json:"match_ipv4"`
+	MatchIPv6  bool     `json:"match_ipv6"`
+	DurationMS int64    `json:"duration_ms"`
+	Error      string   `json:"error,omitempty"`
+}
+
+func normalizeDNSName(raw string) (string, error) {
+	name := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(raw)), ".")
+	if len(name) == 0 || len(name) > 253 {
+		return "", errors.New("invalid domain name")
+	}
+	for _, label := range strings.Split(name, ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return "", errors.New("invalid domain name")
+		}
+		for _, r := range label {
+			if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' && r != '_' {
+				return "", errors.New("invalid domain name")
+			}
+		}
+	}
+	return name, nil
+}
+
+func dnsResolverTargets() []dnsResolverTarget {
+	targets := []dnsResolverTarget{{Name: "System resolver", System: true}}
+	seen := map[string]struct{}{"system": {}}
+
+	add := func(name, raw string) {
+		address, err := normalizeDNSServer(raw)
+		if err != nil {
+			return
+		}
+		key := strings.ToLower(address)
+		if _, exists := seen[key]; exists {
+			return
+		}
+		seen[key] = struct{}{}
+		targets = append(targets, dnsResolverTarget{Name: name, Address: address})
+	}
+
+	for _, server := range snapshotConfig().DNSServers {
+		add("Configured: "+server, server)
+		if len(targets) >= 5 {
+			break
+		}
+	}
+	add("Cloudflare", "1.1.1.1:53")
+	add("Google", "8.8.8.8:53")
+	if len(targets) > 7 {
+		targets = targets[:7]
+	}
+	return targets
+}
+
+func stringSliceContains(values []string, wanted string) bool {
+	if wanted == "" {
+		return false
+	}
+	for _, value := range values {
+		if value == wanted {
+			return true
+		}
+	}
+	return false
+}
+
+func queryDNSResolver(ctx context.Context, target dnsResolverTarget, domain, expectedV4, expectedV6 string) dnsPropagationResult {
+	started := time.Now()
+	result := dnsPropagationResult{
+		Resolver: target.Name,
+		Address:  target.Address,
+		IPv4:     []string{},
+		IPv6:     []string{},
+	}
+
+	resolver := net.DefaultResolver
+	if !target.System {
+		resolver = &net.Resolver{
+			PreferGo: true,
+			Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+				dialer := net.Dialer{Timeout: 3 * time.Second}
+				return dialer.DialContext(ctx, network, target.Address)
+			},
+		}
+	}
+
+	ips, err := resolver.LookupIPAddr(ctx, domain)
+	if err != nil {
+		result.Error = err.Error()
+	} else {
+		for _, item := range ips {
+			if item.IP == nil {
+				continue
+			}
+			if item.IP.To4() != nil {
+				result.IPv4 = append(result.IPv4, item.IP.String())
+			} else {
+				result.IPv6 = append(result.IPv6, item.IP.String())
+			}
+		}
+		sort.Strings(result.IPv4)
+		sort.Strings(result.IPv6)
+	}
+	if cname, cnameErr := resolver.LookupCNAME(ctx, domain); cnameErr == nil {
+		result.CNAME = strings.TrimSuffix(cname, ".")
+	}
+	result.MatchIPv4 = stringSliceContains(result.IPv4, expectedV4)
+	result.MatchIPv6 = stringSliceContains(result.IPv6, expectedV6)
+	result.DurationMS = time.Since(started).Milliseconds()
+	return result
+}
+
+func canRunDNSPropagation(r *http.Request) bool {
+	if !authEnabled {
+		return true
+	}
+	sess, ok := sessionFromRequest(r)
+	return ok && (sess.Role == RoleAdmin || sess.Role == RoleEditor)
+}
+
+func handleAPIDNSPropagation(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		return
+	}
+	if !canRunDNSPropagation(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin or editor required"})
+		return
+	}
+
+	var req struct {
+		Domain string `json:"domain"`
+	}
+	if err := decodeJSONBody(w, r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	domain, err := normalizeDNSName(req.Domain)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	expectedV4, expectedV6 := loadLastKnownIPs()
+	targets := dnsResolverTargets()
+	results := make([]dnsPropagationResult, len(targets))
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	for i, target := range targets {
+		wg.Add(1)
+		go func(index int, target dnsResolverTarget) {
+			defer wg.Done()
+			results[index] = queryDNSResolver(ctx, target, domain, expectedV4, expectedV6)
+		}(i, target)
+	}
+	wg.Wait()
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"domain":        domain,
+		"expected_ipv4": expectedV4,
+		"expected_ipv6": expectedV6,
+		"checked_at":    time.Now().UTC().Format(time.RFC3339),
+		"results":       results,
+	})
+}
+
+func writeAuditDNSSection(w io.Writer, isAdmin bool) {
+	if !isAdmin {
+		_, _ = fmt.Fprint(w, `<div class="page-section" data-section="audit"><div class="card"><div class="card-header">🛡️ Audit & DNS</div><div class="card-content"><div class="backup-warning">🔒 Nur für Administratoren verfügbar.</div></div></div></div>`)
+		return
+	}
+
+	var options strings.Builder
+	for _, domain := range snapshotConfig().DomainConfigs {
+		fqdn := strings.TrimSpace(domain.FQDN)
+		if fqdn != "" {
+			fmt.Fprintf(&options, `<option value="%s"></option>`, html.EscapeString(fqdn))
+		}
+	}
+
+	_, _ = fmt.Fprintf(w, `<div class="page-section" data-section="audit">
+		<div class="audit-dns-grid">
+			<div class="card">
+				<div class="card-header card-header--space-between"><span>🛡️ Audit-Log</span><button class="action-btn topbar-action-btn" data-click="refreshAuditLog()">🔄 Aktualisieren</button></div>
+				<div class="card-content"><div id="audit-log-content" class="audit-loading">Audit-Einträge werden geladen…</div></div>
+			</div>
+			<div class="card">
+				<div class="card-header">🌍 DNS-Propagation prüfen</div>
+				<div class="card-content">
+					<p class="audit-help">Vergleicht A- und AAAA-Records über System-, konfigurierte und öffentliche Resolver.</p>
+					<div class="dns-check-controls"><input id="dns-propagation-domain" class="search-box" list="dns-domain-list" placeholder="host.example.com"><datalist id="dns-domain-list">%s</datalist><button class="action-btn" data-click="runDNSPropagation()">Prüfen</button></div>
+					<div id="dns-propagation-result" class="dns-propagation-result"></div>
+				</div>
+			</div>
+		</div>
+	</div>`, options.String())
+}
+
+// ============================================================================
 // BACKUP & RESTORE
 // ============================================================================
+
+const (
+	dashboardBackupApp     = "dyndns-dashboard"
+	dashboardBackupVersion = 1
+)
 
 type dashboardBackup struct {
 	Version   int                      `json:"version"`
@@ -3658,7 +4203,7 @@ type dashboardBackup struct {
 	Metrics   map[string]any           `json:"metrics,omitempty"`
 }
 
-func writeBackupSection(w http.ResponseWriter, isAdmin bool) {
+func writeBackupSection(w io.Writer, isAdmin bool) {
 	if !isAdmin {
 		_, _ = fmt.Fprint(w, `
 		<div class="page-section" data-section="backup">
@@ -3772,8 +4317,8 @@ func handleAPIBackupDownload(w http.ResponseWriter, r *http.Request) {
 	logs, _ := loadDashboardLogsFresh()
 
 	backup := dashboardBackup{
-		Version:   1,
-		App:       "dyndns-dashboard",
+		Version:   dashboardBackupVersion,
+		App:       dashboardBackupApp,
 		CreatedAt: time.Now().Format(time.RFC3339),
 		Config:    &cfgCopy,
 		Status:    readStatusBackup(),
@@ -3786,6 +4331,8 @@ func handleAPIBackupDownload(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+	w.Header().Set("Cache-Control", "no-store, private")
+	w.Header().Set("Pragma", "no-cache")
 
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
@@ -3884,42 +4431,246 @@ func (s backupRestoreSelection) any() bool {
 func decodeDashboardBackup(file io.Reader) (dashboardBackup, error) {
 	var backup dashboardBackup
 
-	err := json.NewDecoder(io.LimitReader(file, 16<<20)).Decode(&backup)
-	if err != nil {
+	decoder := json.NewDecoder(io.LimitReader(file, 16<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&backup); err != nil {
+		return dashboardBackup{}, fmt.Errorf(
+			t(phrases().BackupInvalidJSONFormat, "invalid backup json: %w"),
+			err,
+		)
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err == nil {
+			err = errors.New("multiple JSON values")
+		}
 		return dashboardBackup{}, fmt.Errorf(
 			t(phrases().BackupInvalidJSONFormat, "invalid backup json: %w"),
 			err,
 		)
 	}
 
+	if err := validateBackupEnvelope(backup); err != nil {
+		return dashboardBackup{}, err
+	}
 	return backup, nil
 }
 
+func validateBackupEnvelope(backup dashboardBackup) error {
+	if backup.App != dashboardBackupApp {
+		return fmt.Errorf("backup belongs to unsupported app %q", backup.App)
+	}
+	if backup.Version != dashboardBackupVersion {
+		return fmt.Errorf("unsupported backup version %d", backup.Version)
+	}
+	if strings.TrimSpace(backup.CreatedAt) == "" {
+		return errors.New("backup creation time is missing")
+	}
+	if _, err := time.Parse(time.RFC3339, backup.CreatedAt); err != nil {
+		return fmt.Errorf("invalid backup creation time: %w", err)
+	}
+	return nil
+}
+
+func validBackupPasswordHash(stored string) bool {
+	parts := strings.Split(stored, "$")
+	if len(parts) != 4 || parts[0] != "pbkdf2-sha256" {
+		return false
+	}
+	iterations, err := strconv.Atoi(parts[1])
+	if err != nil || iterations < 10_000 || iterations > 10_000_000 {
+		return false
+	}
+	salt, err := base64.RawStdEncoding.DecodeString(parts[2])
+	if err != nil || len(salt) < 16 {
+		return false
+	}
+	key, err := base64.RawStdEncoding.DecodeString(parts[3])
+	return err == nil && len(key) >= 16
+}
+
+func validBackupTOTPSecret(secret string) bool {
+	secret = strings.ToUpper(strings.TrimSpace(secret))
+	if secret == "" {
+		return false
+	}
+	decoded, err := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(secret)
+	return err == nil && len(decoded) >= 10
+}
+
+func validateBackupUsers(users []DashboardUser) error {
+	if len(users) == 0 {
+		return errors.New("backup contains no users")
+	}
+	if len(users) > 10_000 {
+		return errors.New("backup contains too many users")
+	}
+
+	ids := make(map[string]struct{}, len(users))
+	usernames := make(map[string]struct{}, len(users))
+	admins := 0
+	for index, user := range users {
+		id := strings.TrimSpace(user.ID)
+		username := strings.TrimSpace(user.Username)
+		if id == "" {
+			return fmt.Errorf("user %d has no id", index+1)
+		}
+		if _, exists := ids[id]; exists {
+			return fmt.Errorf("duplicate user id %q", id)
+		}
+		ids[id] = struct{}{}
+
+		if !validDashboardUsername(username) {
+			return fmt.Errorf("invalid username %q", username)
+		}
+		usernameKey := strings.ToLower(username)
+		if _, exists := usernames[usernameKey]; exists {
+			return fmt.Errorf("duplicate username %q", username)
+		}
+		usernames[usernameKey] = struct{}{}
+
+		if !isValidRole(user.Role) {
+			return fmt.Errorf("invalid role for user %q", username)
+		}
+		if user.Role == RoleAdmin {
+			admins++
+		}
+		if !validBackupPasswordHash(user.PasswordHash) {
+			return fmt.Errorf("invalid password hash for user %q", username)
+		}
+		if user.TOTPEnabled && !validBackupTOTPSecret(user.TOTPSecret) {
+			return fmt.Errorf("invalid TOTP secret for user %q", username)
+		}
+	}
+	if admins == 0 {
+		return errors.New("backup must contain at least one administrator")
+	}
+	return nil
+}
+
+func validateBackupStatus(status map[string]DomainHistory) error {
+	if status == nil {
+		return errors.New("backup contains no status")
+	}
+	if len(status) > 100_000 {
+		return errors.New("backup status contains too many domains")
+	}
+	for domain := range status {
+		if _, err := normalizeDNSName(domain); err != nil {
+			return fmt.Errorf("invalid status domain %q", domain)
+		}
+	}
+	return nil
+}
+
+func validateBackupRestoreRequest(req backupRestoreRequest) error {
+	if err := validateBackupEnvelope(req.Backup); err != nil {
+		return err
+	}
+	if req.Selection.Config {
+		if req.Backup.Config == nil {
+			return errors.New("backup contains no config")
+		}
+		if err := validateDomainConfigList(req.Backup.Config.DomainConfigs); err != nil {
+			return fmt.Errorf("invalid backup config: %w", err)
+		}
+	}
+	if req.Selection.Status {
+		if err := validateBackupStatus(req.Backup.Status); err != nil {
+			return err
+		}
+	}
+	if req.Selection.Users {
+		if err := validateBackupUsers(req.Backup.Users); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type backupRestoreSnapshot struct {
+	Backup dashboardBackup
+}
+
+func captureBackupRestoreSnapshot(selection backupRestoreSelection) backupRestoreSnapshot {
+	snapshot := dashboardBackup{
+		Version:   dashboardBackupVersion,
+		App:       dashboardBackupApp,
+		CreatedAt: time.Now().Format(time.RFC3339),
+	}
+	if selection.Config {
+		config := cloneConfigForBackup()
+		snapshot.Config = &config
+	}
+	if selection.Status {
+		snapshot.Status = readStatusBackup()
+	}
+	if selection.Users {
+		snapshot.Users = loadUsers()
+	}
+	return backupRestoreSnapshot{Backup: snapshot}
+}
+
+func rollbackBackupRestore(snapshot backupRestoreSnapshot, restored []string) error {
+	var rollbackErrors []string
+	for i := len(restored) - 1; i >= 0; i-- {
+		var err error
+		switch restored[i] {
+		case "users":
+			err = saveUsers(snapshot.Backup.Users)
+			sessionStore.DeleteAll()
+		case status:
+			_, err = restoreBackupStatus(snapshot.Backup)
+		case "config":
+			_, err = restoreBackupConfig(snapshot.Backup)
+		}
+		if err != nil {
+			rollbackErrors = append(rollbackErrors, restored[i]+": "+err.Error())
+		}
+	}
+	if len(rollbackErrors) > 0 {
+		return errors.New(strings.Join(rollbackErrors, "; "))
+	}
+	return nil
+}
+
 func restoreSelectedBackup(req backupRestoreRequest) ([]string, int, error) {
+	backupRestoreMu.Lock()
+	defer backupRestoreMu.Unlock()
+
+	if err := validateBackupRestoreRequest(req); err != nil {
+		return nil, http.StatusUnprocessableEntity, err
+	}
+
+	snapshot := captureBackupRestoreSnapshot(req.Selection)
 	restored := make([]string, 0, 3)
 
+	apply := func(name string, fn func() (int, error)) (int, error) {
+		status, err := fn()
+		if err == nil {
+			restored = append(restored, name)
+			return status, nil
+		}
+		if rollbackErr := rollbackBackupRestore(snapshot, restored); rollbackErr != nil {
+			return http.StatusInternalServerError, fmt.Errorf("%w; rollback failed: %v", err, rollbackErr)
+		}
+		return status, err
+	}
+
 	if req.Selection.Config {
-		status, err := restoreBackupConfig(req.Backup)
-		if err != nil {
+		if status, err := apply("config", func() (int, error) { return restoreBackupConfig(req.Backup) }); err != nil {
 			return nil, status, err
 		}
-		restored = append(restored, "config")
 	}
-
 	if req.Selection.Status {
-		status, err := restoreBackupStatus(req.Backup)
-		if err != nil {
+		if status, err := apply("status", func() (int, error) { return restoreBackupStatus(req.Backup) }); err != nil {
 			return nil, status, err
 		}
-		restored = append(restored, "status")
 	}
-
 	if req.Selection.Users {
-		status, err := restoreBackupUsers(req.Backup)
-		if err != nil {
+		if status, err := apply("users", func() (int, error) { return restoreBackupUsers(req.Backup) }); err != nil {
 			return nil, status, err
 		}
-		restored = append(restored, "users")
 	}
 
 	return restored, http.StatusOK, nil
@@ -4014,8 +4765,8 @@ func restoreBackupStatus(backup dashboardBackup) (int, error) {
 }
 
 func restoreBackupUsers(backup dashboardBackup) (int, error) {
-	if len(backup.Users) == 0 {
-		return http.StatusBadRequest, fmt.Errorf("%s", t(phrases().BackupContainsNoUsers, "backup contains no users"))
+	if err := validateBackupUsers(backup.Users); err != nil {
+		return http.StatusBadRequest, err
 	}
 
 	if err := saveUsers(backup.Users); err != nil {

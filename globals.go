@@ -215,32 +215,26 @@ var persistOnOtherLevels = map[string]struct{}{
 // Dashboard
 // ============================================================================
 const (
-	IconDefault  = "🔹"
-	IconDBG      = "🐞"
-	IconInfo     = "ℹ️"
-	IconWarn     = "⚠️"
-	IconError    = "❌"
-	IconStart    = "🚀"
-	IconStop     = "🛑"
-	IconUpdate   = "🔄"
-	IconCreate   = "🆕"
-	IconCurrent  = "✓"
-	IconRetry    = "🔁"
-	IconConfig   = "⚙️"
-	IconZone     = "🌐"
-	IconNetwork  = "📡"
-	IconDryRun   = "🔍"
-	IconCleanup  = "🧹"
-	IconSkip     = "⏭️"
-	IconAPI      = "🔌"
-	IconServer   = "🖥️"
-	IconSuccess  = "✅"
-	HTMLChecked  = " checked"
-	HTMLSelected = " selected"
-
-	emailTLSModeStartTLS = "starttls"
-	emailTLSModeTLS      = "tls"
-	emailTLSModePlain    = "plain"
+	IconDefault = "🔹"
+	IconDBG     = "🐞"
+	IconInfo    = "ℹ️"
+	IconWarn    = "⚠️"
+	IconError   = "❌"
+	IconStart   = "🚀"
+	IconStop    = "🛑"
+	IconUpdate  = "🔄"
+	IconCreate  = "🆕"
+	IconCurrent = "✓"
+	IconRetry   = "🔁"
+	IconConfig  = "⚙️"
+	IconZone    = "🌐"
+	IconNetwork = "📡"
+	IconDryRun  = "🔍"
+	IconCleanup = "🧹"
+	IconSkip    = "⏭️"
+	IconAPI     = "🔌"
+	IconServer  = "🖥️"
+	IconSuccess = "✅"
 )
 
 var actionIcons = map[string]string{
@@ -359,6 +353,20 @@ const (
 // ============================================================================
 // MISC
 // ============================================================================
+const (
+	HTMLChecked  = " checked"
+	HTMLSelected = " selected"
+
+	emailTLSModeStartTLS = "starttls"
+	emailTLSModeTLS      = "tls"
+	emailTLSModePlain    = "plain"
+
+	unhealthy = "unhealthy"
+	status    = "status"
+	healthy   = "healthy"
+	starting  = "starting"
+)
+
 const (
 	IPCheckBodyMaxBytes   = 1024
 	MaxStatusHistoryItems = 20

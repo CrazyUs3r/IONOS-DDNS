@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -38,7 +39,7 @@ const (
 	pbkdf2Iter              = 600_000
 	pbkdf2SaltLen           = 32
 	pbkdf2KeyLen            = 32
-	dummyPasswordHash       = "pbkdf2-sha256$600000$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA$iJ2gtxNOzRbKDl2b9Rs/8uLh+TzpRSvl/xFJIkTRrA4" // #nosec G101 -- intentionally fixed, non-secret hash used to equalize failed-login timing
+	dummyPbkd2Hash          = "pbkdf2-sha256$600000$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA$iJ2gtxNOzRbKDl2b9Rs/8uLh+TzpRSvl/xFJIkTRrA4"
 	setupTokenLength        = 32
 	maxAuthRequestBody      = 64 << 10
 )
@@ -463,8 +464,108 @@ func safeLocalRedirect(raw string) string {
 	return u.RequestURI()
 }
 
+func envBool(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(name))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+func remoteRequestIP(r *http.Request) net.IP {
+	if r == nil {
+		return nil
+	}
+
+	host := strings.TrimSpace(r.RemoteAddr)
+	if parsedHost, _, err := net.SplitHostPort(host); err == nil {
+		host = parsedHost
+	}
+	host = strings.Trim(host, "[]")
+	return net.ParseIP(host)
+}
+
+func requestFromTrustedProxy(r *http.Request) bool {
+	remoteIP := remoteRequestIP(r)
+	if remoteIP == nil {
+		return false
+	}
+
+	for _, raw := range strings.Split(os.Getenv("DASHBOARD_TRUSTED_PROXIES"), ",") {
+		entry := strings.TrimSpace(raw)
+		if entry == "" {
+			continue
+		}
+
+		if ip := net.ParseIP(strings.Trim(entry, "[]")); ip != nil {
+			if ip.Equal(remoteIP) {
+				return true
+			}
+			continue
+		}
+
+		_, network, err := net.ParseCIDR(entry)
+		if err == nil && network.Contains(remoteIP) {
+			return true
+		}
+	}
+	return false
+}
+
+func forwardedRequestProto(r *http.Request) string {
+	if r == nil || !requestFromTrustedProxy(r) {
+		return ""
+	}
+
+	if forwarded := r.Header.Get("Forwarded"); forwarded != "" {
+		first := strings.Split(forwarded, ",")[0]
+		for _, part := range strings.Split(first, ";") {
+			key, value, ok := strings.Cut(strings.TrimSpace(part), "=")
+			if ok && strings.EqualFold(strings.TrimSpace(key), "proto") {
+				return strings.ToLower(strings.Trim(strings.TrimSpace(value), `"`))
+			}
+		}
+	}
+
+	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+		return strings.ToLower(strings.TrimSpace(strings.Split(proto, ",")[0]))
+	}
+	return ""
+}
+
 func requestUsesHTTPS(r *http.Request) bool {
-	return r != nil && r.TLS != nil
+	if r == nil {
+		return false
+	}
+	if r.TLS != nil || envBool("DASHBOARD_EXTERNAL_HTTPS") {
+		return true
+	}
+	return forwardedRequestProto(r) == "https"
+}
+
+func externalRequestHost(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	if requestFromTrustedProxy(r) {
+		if forwarded := r.Header.Get("Forwarded"); forwarded != "" {
+			first := strings.Split(forwarded, ",")[0]
+			for _, part := range strings.Split(first, ";") {
+				key, value, ok := strings.Cut(strings.TrimSpace(part), "=")
+				if ok && strings.EqualFold(strings.TrimSpace(key), "host") {
+					host := strings.Trim(strings.TrimSpace(value), `"`)
+					if host != "" {
+						return host
+					}
+				}
+			}
+		}
+		if host := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Host"), ",")[0]); host != "" {
+			return host
+		}
+	}
+	return r.Host
 }
 
 func sessionCookieName(r *http.Request) string {
@@ -603,6 +704,7 @@ func isPublicAuthPath(path string) bool {
 		"/favicon.svg",
 		"/assets/style.css",
 		"/assets/dashboard.js",
+		"/assets/auth.js",
 		"/assets/i18n.js",
 		"/login",
 		"/setup",
@@ -667,11 +769,57 @@ func rejectForbidden(
 	http.Error(w, pageError, http.StatusForbidden)
 }
 
+type auditResponseWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *auditResponseWriter) WriteHeader(status int) {
+	if w.status != 0 {
+		return
+	}
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *auditResponseWriter) Write(data []byte) (int, error) {
+	if w.status == 0 {
+		w.status = http.StatusOK
+	}
+	return w.ResponseWriter.Write(data)
+}
+
+func shouldAuditRequest(method, path string) bool {
+	if !isUnsafeMethod(method) {
+		return false
+	}
+	switch path {
+	case "/logout", "/settings/2fa", "/api/set-language":
+		return true
+	default:
+		return strings.HasPrefix(path, "/api/")
+	}
+}
+
 func authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 
-		if isPublicAuthPath(path) || !authEnabled {
+		if isPublicAuthPath(path) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if !authEnabled {
+			if shouldAuditRequest(r.Method, path) {
+				recorder := &auditResponseWriter{ResponseWriter: w}
+				next.ServeHTTP(recorder, r)
+				status := recorder.status
+				if status == 0 {
+					status = http.StatusOK
+				}
+				auditHTTPRequest(r, nil, status)
+				return
+			}
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -693,6 +841,7 @@ func authMiddleware(next http.Handler) http.Handler {
 		}
 
 		if isUnsafeMethod(r.Method) && !validCSRFRequest(w, r, sess) {
+			auditHTTPRequest(r, sess, http.StatusForbidden)
 			rejectForbidden(
 				w,
 				r,
@@ -703,7 +852,19 @@ func authMiddleware(next http.Handler) http.Handler {
 		}
 
 		if !hasPermission(sess.Role, r.Method, path) {
+			auditHTTPRequest(r, sess, http.StatusForbidden)
 			rejectForbidden(w, r, "forbidden", "Forbidden")
+			return
+		}
+
+		if shouldAuditRequest(r.Method, path) {
+			recorder := &auditResponseWriter{ResponseWriter: w}
+			next.ServeHTTP(recorder, r)
+			status := recorder.status
+			if status == 0 {
+				status = http.StatusOK
+			}
+			auditHTTPRequest(r, sess, status)
 			return
 		}
 
@@ -719,26 +880,62 @@ func isAPIPath(path string) bool {
 	return ok
 }
 
+var sharedReadRoutes = map[string]struct{}{
+	"/":                   {},
+	"/ws":                 {},
+	"/metrics":            {},
+	"/metrics/prometheus": {},
+	"/api/domains":        {},
+	"/api/domains/html":   {},
+	"/api/page":           {},
+	"/api/config":         {},
+	"/api/languages":      {},
+	"/api/trigger/status": {},
+	"/api/export":         {},
+	"/api/logs":           {},
+	"/api/diagnose":       {},
+	"/api/2fa/status":     {},
+	"/settings/2fa":       {},
+	"/settings/2fa/qr":    {},
+}
+
+var editorWriteRoutes = map[string]struct{}{
+	"/logout":              {},
+	"/settings/2fa":        {},
+	"/api/set-language":    {},
+	"/api/domain/delete":   {},
+	"/api/ipv64/domain":    {},
+	"/api/trigger":         {},
+	"/api/notify/test":     {},
+	"/api/metrics/reset":   {},
+	"/api/dns/propagation": {},
+}
+
+var viewerWriteRoutes = map[string]struct{}{
+	"/logout":       {},
+	"/settings/2fa": {},
+}
+
 func hasPermission(role UserRole, method, path string) bool {
+	method = strings.ToUpper(strings.TrimSpace(method))
+	path = strings.TrimSpace(path)
+
+	if role == RoleAdmin {
+		return true
+	}
+
+	if method == http.MethodGet || method == http.MethodHead {
+		_, allowed := sharedReadRoutes[path]
+		return allowed
+	}
+
 	switch role {
-	case RoleAdmin:
-		return true
-
 	case RoleEditor:
-		blocked := []string{"/api/users", "/api/save-config", "/api/backup"}
-		for _, b := range blocked {
-			if strings.HasPrefix(path, b) {
-				return false
-			}
-		}
-		return true
-
+		_, allowed := editorWriteRoutes[path]
+		return allowed
 	case RoleViewer:
-		if method == MethodGET || path == "/ws" || path == "/metrics" {
-			return true
-		}
-		return false
-
+		_, allowed := viewerWriteRoutes[path]
+		return allowed
 	default:
 		return false
 	}
@@ -798,7 +995,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		password := r.FormValue("password")
 
 		user, found := findUserByUsername(username)
-		storedHash := dummyPasswordHash
+		storedHash := dummyPbkd2Hash
 		if found {
 			storedHash = user.PasswordHash
 		}
@@ -1173,7 +1370,7 @@ func handleUpdateUser(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": phrases().StatusUpdated})
+	writeJSON(w, http.StatusOK, map[string]string{status: phrases().StatusUpdated})
 }
 
 type userUpdate struct {
@@ -1329,7 +1526,7 @@ func handleDeleteUser(w http.ResponseWriter, id, currentUserID string) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": phrases().StatusDeleted})
+	writeJSON(w, http.StatusOK, map[string]string{status: phrases().StatusDeleted})
 }
 
 func removeUserByID(id string) (bool, error) {
@@ -1440,8 +1637,7 @@ func authPageShell(title, body string) string {
 
 ` + appFooterHTML() + `
 
-<script src="/assets/i18n.js" defer></script>
-<script src="/assets/dashboard.js" defer></script>
+<script src="/assets/auth.js" defer></script>
 </body>
 </html>`
 }

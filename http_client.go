@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -847,7 +848,11 @@ func normalizeDNSServers(servers []string) []string {
 	seen := make(map[string]struct{}, len(servers))
 	for _, serverList := range servers {
 		for _, server := range splitDNSServerList(serverList) {
-			server = normalizeDNSServer(server)
+			normalizedServer, err := normalizeDNSServer(server)
+			if err != nil {
+				continue
+			}
+			server = normalizedServer
 			if server == "" {
 				continue
 			}
@@ -885,29 +890,24 @@ func splitDNSServerList(serverList string) []string {
 	return out
 }
 
-func normalizeDNSServer(server string) string {
-	server = strings.TrimSpace(server)
+func normalizeDNSServer(raw string) (string, error) {
+	server := strings.TrimSpace(raw)
 	if server == "" {
-		return ""
+		return "", errors.New("empty DNS server")
 	}
-
+	if ip := net.ParseIP(strings.Trim(server, "[]")); ip != nil {
+		return net.JoinHostPort(ip.String(), "53"), nil
+	}
 	if host, port, err := net.SplitHostPort(server); err == nil {
-		if port == "" {
-			port = "53"
+		if strings.TrimSpace(host) == "" || strings.TrimSpace(port) == "" {
+			return "", errors.New("invalid DNS server")
 		}
-		return net.JoinHostPort(strings.Trim(host, "[]"), port)
+		return net.JoinHostPort(strings.Trim(host, "[]"), port), nil
 	}
-
-	trimmed := strings.Trim(server, "[]")
-	if ip := net.ParseIP(trimmed); ip != nil {
-		return net.JoinHostPort(ip.String(), "53")
+	if strings.Contains(server, ":") {
+		return "", errors.New("invalid DNS server")
 	}
-
-	if !strings.Contains(server, ":") {
-		return net.JoinHostPort(server, "53")
-	}
-
-	return server
+	return net.JoinHostPort(server, "53"), nil
 }
 
 func newResolverForDNSServer(server string) *net.Resolver {

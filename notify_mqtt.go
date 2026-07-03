@@ -344,7 +344,7 @@ func (m *mqttNotifier) publishSnapshot(client mqtt.Client) error {
 
 	serviceStatus := "online"
 	if !schedulerRanOnce.Load() {
-		serviceStatus = "starting"
+		serviceStatus = starting
 	} else if !lastOk.Load() {
 		serviceStatus = "error"
 	}
