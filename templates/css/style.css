@@ -2094,6 +2094,7 @@ body.auth-page .dashboard-footer {
 .page-section[data-section="overview"],
 .page-section[data-section="dashboard"],
 .page-section[data-section="metrics"],
+.page-section[data-section="audit"],
 .page-section[data-section="domains"],
 .page-section[data-section="diagnose"],
 .page-section[data-section="backup"],
@@ -3666,4 +3667,199 @@ body.auth-page .dashboard-footer {
 
 .logout-form .logout-btn {
 	width: 100%;
+}
+
+/* ============================================================================
+   LAZY PAGE LOADING / CLIPBOARD HELPERS
+   ============================================================================ */
+.page-section--placeholder {
+	min-height: 160px;
+}
+
+.lazy-page-card {
+	min-height: 100px;
+}
+
+.page-loading {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 100px;
+	opacity: 0.65;
+}
+
+.page-section[aria-busy="true"] {
+	cursor: progress;
+}
+
+.clipboard-helper {
+	position: fixed;
+	left: -10000px;
+	top: 0;
+	width: 1px;
+	height: 1px;
+	opacity: 0;
+	pointer-events: none;
+}
+
+/* ============================================================================
+   AUDIT LOG & DNS PROPAGATION
+   ============================================================================ */
+.audit-dns-grid {
+	display: grid;
+	grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+	gap: 16px;
+}
+
+.audit-dns-grid>.card {
+	min-width: 0;
+}
+
+.audit-help {
+	margin: 0 0 12px;
+	font-size: 0.85rem;
+	opacity: 0.7;
+}
+
+.audit-loading,
+.audit-empty {
+	padding: 18px;
+	text-align: center;
+	opacity: 0.65;
+}
+
+.audit-table-wrap {
+	max-width: 100%;
+	overflow: auto;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	overscroll-behavior: contain;
+}
+
+.audit-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.78rem;
+	min-width: 680px;
+}
+
+.audit-table th,
+.audit-table td {
+	padding: 9px 10px;
+	text-align: left;
+	vertical-align: top;
+	border-bottom: 1px solid var(--border);
+}
+
+.audit-table th {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	background: var(--card);
+	font-size: 0.7rem;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	opacity: 0.75;
+}
+
+.audit-table tr:last-child td {
+	border-bottom: 0;
+}
+
+.audit-table td small {
+	display: block;
+	margin-top: 2px;
+	opacity: 0.55;
+}
+
+.audit-result,
+.dns-match {
+	display: inline-flex;
+	align-items: center;
+	padding: 2px 7px;
+	border-radius: 999px;
+	font-size: 0.68rem;
+	font-weight: 700;
+	white-space: nowrap;
+}
+
+.audit-result-ok,
+.dns-match-ok {
+	color: var(--success);
+	background: rgba(74, 222, 128, 0.12);
+	border: 1px solid rgba(74, 222, 128, 0.35);
+}
+
+.audit-result-error,
+.dns-match-error {
+	color: var(--error);
+	background: rgba(248, 113, 113, 0.12);
+	border: 1px solid rgba(248, 113, 113, 0.35);
+}
+
+.dns-match-muted {
+	color: #94a3b8;
+	background: rgba(148, 163, 184, 0.12);
+	border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.dns-check-controls {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 10px;
+	align-items: start;
+}
+
+.dns-check-controls .search-box {
+	margin-bottom: 0;
+}
+
+.dns-propagation-result {
+	margin-top: 14px;
+}
+
+.dns-summary {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 14px;
+	padding: 10px 12px;
+	margin-bottom: 10px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	background: rgba(255, 255, 255, 0.03);
+	font-size: 0.8rem;
+}
+
+.dns-table {
+	min-width: 760px;
+}
+
+.dns-table code {
+	word-break: break-all;
+}
+
+.dns-empty {
+	opacity: 0.45;
+}
+
+.dns-error {
+	color: var(--error);
+	word-break: break-word;
+}
+
+@media (max-width: 1050px) {
+	.audit-dns-grid {
+		grid-template-columns: 1fr;
+	}
+}
+
+@media (max-width: 600px) {
+	.dns-check-controls {
+		grid-template-columns: 1fr;
+	}
+
+	.dns-check-controls .action-btn {
+		width: 100%;
+	}
 }
