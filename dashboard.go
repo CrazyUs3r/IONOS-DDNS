@@ -3752,6 +3752,7 @@ func diagnosisFileInfos() []map[string]any {
 		diagnoseFileInfo("status/update.json", updatePath),
 		diagnoseFileInfo("logs", logPath),
 		diagnoseFileInfo("users.json", usersFilePath),
+		diagnoseFileInfo("audit.json", auditFilePath),
 	}
 }
 
@@ -3790,6 +3791,7 @@ const (
 var (
 	auditLogMu      sync.Mutex
 	backupRestoreMu sync.Mutex
+	auditFilePath  string
 )
 
 type auditEntry struct {
@@ -3812,7 +3814,10 @@ func auditLogFilePath() string {
 	if basePath == "" {
 		return ""
 	}
-	return filepath.Join(filepath.Dir(basePath), "audit.json")
+
+	auditFilePath = filepath.Join(filepath.Dir(basePath), "audit.json")
+	
+	return auditFilePath
 }
 
 func safeAuditField(value string, maxRunes int) string {
@@ -4058,15 +4063,12 @@ func queryDNSResolver(ctx context.Context, target dnsResolverTarget, domain, exp
 		IPv6:     []string{},
 	}
 
-	resolver := net.DefaultResolver
-	if !target.System {
-		resolver = &net.Resolver{
-			PreferGo: true,
-			Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
-				dialer := net.Dialer{Timeout: 3 * time.Second}
-				return dialer.DialContext(ctx, network, target.Address)
-			},
-		}
+	var resolver *net.Resolver
+	
+	if target.System {
+		resolver = net.DefaultResolver
+	} else {
+		resolver = newResolverForDNSServer(target.Address)
 	}
 
 	ips, err := resolver.LookupIPAddr(ctx, domain)
@@ -4086,12 +4088,15 @@ func queryDNSResolver(ctx context.Context, target dnsResolverTarget, domain, exp
 		sort.Strings(result.IPv4)
 		sort.Strings(result.IPv6)
 	}
+
 	if cname, cnameErr := resolver.LookupCNAME(ctx, domain); cnameErr == nil {
 		result.CNAME = strings.TrimSuffix(cname, ".")
 	}
+
 	result.MatchIPv4 = stringSliceContains(result.IPv4, expectedV4)
 	result.MatchIPv6 = stringSliceContains(result.IPv6, expectedV6)
 	result.DurationMS = time.Since(started).Milliseconds()
+	
 	return result
 }
 

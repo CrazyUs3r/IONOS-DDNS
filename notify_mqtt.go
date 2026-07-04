@@ -44,7 +44,7 @@ type mqttNotifier struct {
 // ============================================================================
 // MQTT NOTIFIER
 // ============================================================================
-func (m *mqttNotifier) Name() string { return "mqtt" }
+func (m *mqttNotifier) Name() string { return "Mqtt" }
 
 func (m *mqttNotifier) isConnected() bool {
 	m.mu.RLock()
