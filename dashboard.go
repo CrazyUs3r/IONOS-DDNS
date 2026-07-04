@@ -4019,9 +4019,46 @@ func normalizeDNSName(raw string) (string, error) {
 	return name, nil
 }
 
+func firstSystemNameserver() (string, error) {
+	data, err := os.ReadFile("/etc/resolv.conf")
+	if err != nil {
+		return "", err
+	}
+
+	scanner := bufio.NewScanner(strings.NewReader(string(data)))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, "nameserver") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		return normalizeDNSServer(fields[1])
+	}
+	if err := scanner.Err(); err != nil {
+		return "", err
+	}
+
+	return "", errors.New("no nameserver found in /etc/resolv.conf")
+}
+
 func dnsResolverTargets() []dnsResolverTarget {
-	targets := []dnsResolverTarget{{Name: "System resolver", System: true}}
-	seen := map[string]struct{}{"system": {}}
+	var targets []dnsResolverTarget
+	seen := map[string]struct{}{}
+
+	if addr, err := firstSystemNameserver(); err == nil {
+		key := strings.ToLower(addr)
+		seen[key] = struct{}{}
+		targets = append(targets, dnsResolverTarget{
+			Name:    "System resolver (" + addr + ")",
+			Address: addr,
+		})
+	} else {
+		seen["system"] = struct{}{}
+		targets = append(targets, dnsResolverTarget{Name: "System resolver", System: true})
+	}
 
 	add := func(name, raw string) {
 		address, err := normalizeDNSServer(raw)
@@ -4073,10 +4110,10 @@ func queryDNSResolver(ctx context.Context, target dnsResolverTarget, domain, exp
 
 	var resolver *net.Resolver
 	
-	if target.System {
-		resolver = net.DefaultResolver
-	} else {
+	if target.Address != "" {
 		resolver = newResolverForDNSServer(target.Address)
+	} else {
+		resolver = net.DefaultResolver
 	}
 
 	ips, err := resolver.LookupIPAddr(ctx, domain)
