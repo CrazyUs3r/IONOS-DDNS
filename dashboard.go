@@ -3897,7 +3897,11 @@ func appendAuditEntry(entry auditEntry) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			debugLog("DASHBOARD", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
+		}
+	}()
 
 	data, err := json.Marshal(entry)
 	if err != nil {
@@ -3927,7 +3931,11 @@ func readAuditEntries(limit int) ([]auditEntry, error) {
 		}
 		return nil, err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			debugLog("DASHBOARD", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
+		}
+	}()
 
 	ring := make([]auditEntry, limit)
 	total := 0
