@@ -3138,7 +3138,7 @@ func writeSettingsSection(w io.Writer, c Config) {
 
 	_, _ = fmt.Fprint(w, `
 	<div class="page-section" data-section="settings">
-		<div class="card">
+		<div class="card card--no-cv">
 			<div class="card-header">⚙️ `+phrases().SettingsTitle+`</div>
 			<div class="card-content">
 				`+buildSettingsInlineSection(phrases().SettingsSecurity, securitySection)+`
