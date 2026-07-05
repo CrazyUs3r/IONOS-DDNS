@@ -18,6 +18,9 @@
 	--status-error-bg: #7f1d1d;
 	--status-ok-text: #4ade80;
 	--status-error-text: #f87171;
+	--text-success: #4ade80;
+	--text-error: #f87171;
+	--text-warning: #facc15;
 	--sidebar-width: 220px;
 	--topbar-height: 52px;
 	font-size: clamp(13px, 0.8vw + 0.5rem, 17px);
@@ -37,6 +40,9 @@
 	--status-error-bg: #fee2e2;
 	--status-ok-text: #166534;
 	--status-error-text: #991b1b;
+	--text-success: #166534;
+	--text-error: #991b1b;
+	--text-warning: #854d0e;
 }
 
 /* ============================================================================
@@ -793,7 +799,7 @@ summary:focus-visible {
 	border-radius: 999px;
 	background: rgba(74, 222, 128, 0.15);
 	border: 1px solid rgba(74, 222, 128, 0.4);
-	color: #4ade80;
+	color: var(--text-success);
 	margin-left: 8px;
 	vertical-align: middle;
 	font-weight: 600;
@@ -806,14 +812,14 @@ summary:focus-visible {
 	border-radius: 999px;
 	background: rgba(248, 113, 113, 0.15);
 	border: 1px solid rgba(248, 113, 113, 0.4);
-	color: #f87171;
+	color: var(--text-error);
 	margin-left: 8px;
 	font-weight: 600;
 }
 
 .btn-danger-soft {
 	background: rgba(248, 113, 113, 0.15);
-	color: #f87171;
+	color: var(--text-error);
 	border-color: #f87171;
 	font-size: 0.7rem;
 	padding: 3px 10px;
@@ -1245,7 +1251,7 @@ summary:focus-visible {
 	border-radius: 999px;
 	background: rgba(250, 204, 21, 0.15);
 	border: 1px solid rgba(250, 204, 21, 0.4);
-	color: #facc15;
+	color: var(--text-warning);
 	margin-left: 8px;
 }
 
@@ -2037,7 +2043,7 @@ body.auth-page .dashboard-footer {
 .auth-error {
 	background: rgba(248, 113, 113, 0.12);
 	border: 1px solid rgba(248, 113, 113, 0.4);
-	color: #f87171;
+	color: var(--text-error);
 	border-radius: 8px;
 	padding: 10px 14px;
 	font-size: 0.85rem;
@@ -2066,7 +2072,8 @@ body.auth-page .dashboard-footer {
    FLEXIBLE HEIGHT FOR LOGS & DEBUG SECTIONS
    ============================================================================ */
 .page-section[data-section="logs"],
-.page-section[data-section="debug"] {
+.page-section[data-section="debug"],
+.page-section[data-section="audit"] {
 	display: flex;
 	flex-direction: column;
 	flex: 1;
@@ -2074,9 +2081,16 @@ body.auth-page .dashboard-footer {
 }
 
 .page-section[data-section="logs"] .card,
-.page-section[data-section="debug"] .card {
+.page-section[data-section="debug"] .card,
+.page-section[data-section="audit"] > .card {
 	display: flex;
 	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+	margin-bottom: 15px;
+}
+
+.page-section[data-section="audit"] .audit-dns-grid {
 	flex: 1;
 	min-height: 0;
 	margin-bottom: 15px;
@@ -2094,7 +2108,6 @@ body.auth-page .dashboard-footer {
 .page-section[data-section="overview"],
 .page-section[data-section="dashboard"],
 .page-section[data-section="metrics"],
-.page-section[data-section="audit"],
 .page-section[data-section="domains"],
 .page-section[data-section="diagnose"],
 .page-section[data-section="backup"],
@@ -2269,6 +2282,18 @@ body.auth-page .dashboard-footer {
 }
 
 @media (max-width: 480px) {
+	.log-container {
+		font-size: 0.72rem;
+	}
+
+	.log-entry-row {
+		padding: 5px 6px;
+	}
+
+	.log-entry {
+		padding: 8px;
+	}
+
 	.debug-log-box {
 		font-size: 0.72rem;
 		padding: 6px;
@@ -2417,7 +2442,7 @@ body.auth-page .dashboard-footer {
 .domain-pill-remove-btn {
 	background: none;
 	border: none;
-	color: var(--error);
+	color: var(--text-error);
 	cursor: pointer;
 	font-weight: bold;
 	font-size: 1rem;
@@ -2486,15 +2511,15 @@ body.auth-page .dashboard-footer {
 
 /* inline result spans */
 .notify-result--error {
-	color: var(--error);
+	color: var(--text-error);
 }
 
 .notify-result--warn {
-	color: #facc15;
+	color: var(--text-warning);
 }
 
 .notify-result--ok {
-	color: var(--success);
+	color: var(--text-success);
 }
 
 .notify-result--detail {
@@ -2566,7 +2591,7 @@ body.auth-page .dashboard-footer {
 }
 
 .metric-success {
-	color: var(--success);
+	color: var(--text-success);
 }
 
 /* ============================================================================
@@ -2629,15 +2654,15 @@ body.auth-page .dashboard-footer {
 }
 
 .latency-cell--p50 .latency-cell-value {
-	color: #4ade80;
+	color: var(--text-success);
 }
 
 .latency-cell--p85 .latency-cell-value {
-	color: #facc15;
+	color: var(--text-warning);
 }
 
 .latency-cell--p99 .latency-cell-value {
-	color: #f87171;
+	color: var(--text-error);
 }
 
 /* ============================================================================
@@ -2747,7 +2772,7 @@ body.auth-page .dashboard-footer {
 }
 
 .http-method-row--get .http-method-val {
-	color: #4ade80;
+	color: var(--text-success);
 }
 
 .http-method-row--post .http-method-val {
@@ -2755,11 +2780,11 @@ body.auth-page .dashboard-footer {
 }
 
 .http-method-row--put .http-method-val {
-	color: #facc15;
+	color: var(--text-warning);
 }
 
 .http-method-row--del .http-method-val {
-	color: #f87171;
+	color: var(--text-error);
 }
 
 /* ============================================================================
@@ -2866,14 +2891,14 @@ body.auth-page .dashboard-footer {
 
 .btn--add-domain {
 	background: rgba(74, 222, 128, 0.15);
-	color: #4ade80;
+	color: var(--text-success);
 	border-color: #4ade8080;
 	white-space: nowrap;
 }
 
 .btn--del-domain {
 	background: rgba(248, 113, 113, 0.15);
-	color: #f87171;
+	color: var(--text-error);
 	border-color: #f8717180;
 	white-space: nowrap;
 }
@@ -2936,7 +2961,7 @@ body.auth-page .dashboard-footer {
 .user-2fa-badge-on {
 	margin-left: 6px;
 	background: rgba(34, 197, 94, 0.15);
-	color: #4ade80;
+	color: var(--text-success);
 	border: 1px solid rgba(34, 197, 94, 0.3);
 }
 
@@ -2976,11 +3001,21 @@ body.auth-page .dashboard-footer {
 .user-delete-btn {
 	background: none;
 	border: none;
-	color: var(--error);
+	color: var(--text-error);
 	cursor: pointer;
 	font-weight: bold;
 	font-size: 1rem;
 	padding: 0 4px;
+}
+
+.user-reset-btn {
+	background: none;
+	border: none;
+	color: var(--text);
+	cursor: pointer;
+	font-size: 0.9rem;
+	padding: 0 4px;
+	opacity: 0.8;
 }
 
 /* ============================================================================
@@ -3326,7 +3361,7 @@ body.auth-page .dashboard-footer {
 }
 
 .diag-badge.diag-ok {
-	color: #4ade80;
+	color: var(--text-success);
 	border-color: #4ade8059;
 	background: #4ade8014;
 }
@@ -3341,7 +3376,7 @@ body.auth-page .dashboard-footer {
 	margin-bottom: 6px;
 	background: #facc1514;
 	border: 1px solid #facc1540;
-	color: #facc15;
+	color: var(--text-warning);
 	font-size: 0.85rem;
 }
 
@@ -3350,7 +3385,7 @@ body.auth-page .dashboard-footer {
 	border-radius: 8px;
 	background: #4ade8014;
 	border: 1px solid #4ade8040;
-	color: #4ade80;
+	color: var(--text-success);
 	font-size: 0.85rem;
 }
 
@@ -3362,7 +3397,7 @@ body.auth-page .dashboard-footer {
 .diag-error-box {
 	padding: 14px;
 	border-radius: 8px;
-	color: var(--error);
+	color: var(--text-error);
 	background: rgba(248, 113, 113, 0.08);
 	border: 1px solid rgba(248, 113, 113, 0.3);
 }
@@ -3398,7 +3433,7 @@ body.auth-page .dashboard-footer {
 .backup-hint {
 	margin-top: 12px;
 	font-size: 0.75rem;
-	color: #facc15;
+	color: var(--text-warning);
 	opacity: 0.85;
 }
 
@@ -3407,7 +3442,7 @@ body.auth-page .dashboard-footer {
 	border-radius: 8px;
 	background: #facc1514;
 	border: 1px solid #facc154d;
-	color: #facc15;
+	color: var(--text-warning);
 }
 
 .backup-restore-btn {
@@ -3427,13 +3462,13 @@ body.auth-page .dashboard-footer {
 }
 
 .backup-result-ok {
-	color: #4ade80;
+	color: var(--text-success);
 	background: #4ade8014;
 	border-color: #4ade804d;
 }
 
 .backup-result-error {
-	color: #f87171;
+	color: var(--text-error);
 	background: #f8717114;
 	border-color: #f871714d;
 }
@@ -3479,13 +3514,13 @@ body.auth-page .dashboard-footer {
 }
 
 .totp-flash--success {
-	color: #4ade80;
+	color: var(--text-success);
 	border-color: #4ade8073;
 	background: #4ade801a;
 }
 
 .totp-flash--error {
-	color: #f87171;
+	color: var(--text-error);
 	border-color: #f8717173;
 	background: #f871711a;
 }
@@ -3544,7 +3579,7 @@ body.auth-page .dashboard-footer {
 }
 
 .totp-status-title--enabled {
-	color: #4ade80;
+	color: var(--text-success);
 }
 
 .totp-status-sub {
@@ -3576,13 +3611,13 @@ body.auth-page .dashboard-footer {
 .totp-btn-success {
 	background: #4ade8020;
 	border-color: #4ade80;
-	color: #4ade80;
+	color: var(--text-success);
 }
 
 .totp-btn-danger {
 	background: rgba(248, 113, 113, 0.12);
 	border-color: #f87171;
-	color: #f87171;
+	color: var(--text-error);
 }
 
 .totp-btn-muted {
@@ -3708,11 +3743,20 @@ body.auth-page .dashboard-footer {
 .audit-dns-grid {
 	display: grid;
 	grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+	grid-template-rows: 1fr;
 	gap: 16px;
+	align-items: start;
 }
 
 .audit-dns-grid>.card {
 	min-width: 0;
+}
+
+.audit-log-card {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	align-self: stretch;
 }
 
 .audit-help {
@@ -3736,30 +3780,58 @@ body.auth-page .dashboard-footer {
 	overscroll-behavior: contain;
 }
 
+.audit-log-card .card-content {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+	overflow: visible;
+}
+
+#audit-log-content.audit-log-container {
+	flex: initial;
+	max-height: none;
+	overflow: visible;
+	padding-right: 0;
+	font-family: 'Cascadia Code', 'Consolas', monospace;
+	font-size: 0.8125rem;
+}
+
+.audit-log-scroll {
+	flex: 1;
+	overflow: auto;
+	-webkit-overflow-scrolling: touch;
+	overscroll-behavior: contain;
+}
+
+.audit-log-scroll .audit-table {
+	min-width: 720px;
+}
+
 .audit-table {
 	width: 100%;
-	border-collapse: collapse;
+	border-collapse: separate;
+	border-spacing: 0;
 	font-size: 0.78rem;
-	min-width: 680px;
+	min-width: 720px;
 }
 
 .audit-table th,
 .audit-table td {
-	padding: 9px 10px;
-	text-align: left;
-	vertical-align: top;
-	border-bottom: 1px solid var(--border);
+	background: var(--card);
 }
 
 .audit-table th {
 	position: sticky;
 	top: 0;
-	z-index: 1;
+	z-index: 3;
 	background: var(--card);
+	color: #94a3b8;
 	font-size: 0.7rem;
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
-	opacity: 0.75;
+	opacity: 1;
+	box-shadow: 0 1px 0 var(--border);
 }
 
 .audit-table tr:last-child td {
@@ -3785,14 +3857,14 @@ body.auth-page .dashboard-footer {
 
 .audit-result-ok,
 .dns-match-ok {
-	color: var(--success);
+	color: var(--text-success);
 	background: rgba(74, 222, 128, 0.12);
 	border: 1px solid rgba(74, 222, 128, 0.35);
 }
 
 .audit-result-error,
 .dns-match-error {
-	color: var(--error);
+	color: var(--text-error);
 	background: rgba(248, 113, 113, 0.12);
 	border: 1px solid rgba(248, 113, 113, 0.35);
 }
@@ -3844,13 +3916,23 @@ body.auth-page .dashboard-footer {
 }
 
 .dns-error {
-	color: var(--error);
+	color: var(--text-error);
 	word-break: break-word;
 }
 
 @media (max-width: 1050px) {
 	.audit-dns-grid {
 		grid-template-columns: 1fr;
+		grid-template-rows: none;
+	}
+
+	.audit-log-card {
+		flex: none;
+	}
+
+	.audit-log-scroll {
+		flex: none;
+		max-height: 60vh;
 	}
 }
 
@@ -3861,5 +3943,13 @@ body.auth-page .dashboard-footer {
 
 	.dns-check-controls .action-btn {
 		width: 100%;
+	}
+
+	.audit-log-scroll {
+		max-height: 50vh;
+	}
+
+	.audit-log-scroll .audit-table {
+		min-width: 720px;
 	}
 }
