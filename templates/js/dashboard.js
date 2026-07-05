@@ -263,7 +263,7 @@ const PAGE_CONFIG = Object.freeze({
 		onOpen: onlyWhenPageChanges(() => ensurePageLoaded('diagnose', { force: true })),
 	}),
 	audit: Object.freeze({
-		title: () => '🛡️ Audit & DNS',
+		title: () => tr('nav_audit', '🛡️ Audit & DNS'),
 		onOpen: onlyWhenPageChanges(() => ensurePageLoaded('audit')),
 	}),
 	logs: Object.freeze({
@@ -1925,7 +1925,7 @@ function addDomainToList() {
 	} else if (provider === 'FEBAS') {
 		entry.febas_update_url = _getVal('new-febas-update-url').trim();
 		if (!entry.febas_update_url) {
-			return showToast('Febas DynDNS Update-URL fehlt', 'error')
+			return showToast(tr('febas_update_url_missing', 'Febas DynDNS Update-URL fehlt'), 'error')
 		};
 	} else if (provider === 'DNSCALE') {
 		entry.api_key = _getVal('new-dnscale-api-key').trim();
@@ -2251,15 +2251,19 @@ function _ipv64DomainAction(action) {
 	const apiToken = (apiTokenInput ? apiTokenInput.value : '').trim();
 
 	if (!fqdn) {
-		showToast('❌ FQDN fehlt', 'error');
+		showToast('❌ ' + tr('fqdn_missing', 'FQDN fehlt'), 'error');
 		return;
 	}
 
 	const token = sessionStorage.getItem('triggerToken') || '';
 	if (result) { result.style.display = 'none'; result.replaceChildren(); }
 
-	const label = action === 'add' ? 'Hinzufügen' : 'Löschen';
-	showToast(`⏳ IPv64 Domain wird ${action === 'add' ? 'hinzugefügt' : 'gelöscht'}...`, 'info');
+	showToast(
+		action === 'add'
+			? tr('ipv64_domain_add_running', '⏳ IPv64 Domain wird hinzugefügt...')
+			: tr('ipv64_domain_delete_running', '⏳ IPv64 Domain wird gelöscht...'),
+		'info',
+	);
 
 	fetch('/api/ipv64/domain', {
 		method: 'POST',
@@ -2272,7 +2276,7 @@ function _ipv64DomainAction(action) {
 		.then(r => r.json().then(j => ({ ok: r.ok, j })))
 		.then(({ ok, j }) => {
 			if (!ok) {
-				const msg = '❌ ' + (j.error || 'Fehler');
+				const msg = '❌ ' + (j.error || tr('generic_error', 'Fehler'));
 				showToast(msg, 'error');
 				if (result) {
 					result.style.display = 'block';
@@ -2281,20 +2285,17 @@ function _ipv64DomainAction(action) {
 				}
 				return;
 			}
-			const icon = action === 'add' ? '✅' : '🗑️';
-			const fqdnText = String(j.fqdn || '');
-			const statusText = String(j.status || '');
-			showToast(`${icon} IPv64 Domain ${statusText}: ${fqdnText}`, 'success');
+			const fqdnText = String(j.fqdn || fqdn);
+			const successText = trf(
+				action === 'add' ? 'ipv64_domain_add_success' : 'ipv64_domain_delete_success',
+				{ fqdn: fqdnText },
+				action === 'add' ? '✅ IPv64 Domain hinzugefügt: {fqdn}' : '🗑️ IPv64 Domain gelöscht: {fqdn}',
+			);
+			showToast(successText, 'success');
 			if (result) {
-				const strong = document.createElement('strong');
-				strong.textContent = fqdnText;
 				result.style.display = 'block';
 				result.className = 'ipv64-result notify-result--ok';
-				result.replaceChildren(
-					document.createTextNode(`${icon} Domain `),
-					strong,
-					document.createTextNode(` ${statusText}`),
-				);
+				result.textContent = successText;
 			}
 			if (input) input.value = '';
 			if (apiTokenInput) apiTokenInput.value = '';
@@ -2308,8 +2309,8 @@ function ipv64AddDomain() { _ipv64DomainAction('add'); }
 function ipv64DeleteDomain() {
 	const input = document.getElementById('ipv64-domain-input');
 	const fqdn = (input ? input.value : '').trim();
-	if (!fqdn) { showToast('❌ FQDN fehlt', 'error'); return; }
-	if (!confirm(`IPv64 Domain "${fqdn}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`)) return;
+	if (!fqdn) { showToast('❌ ' + tr('fqdn_missing', 'FQDN fehlt'), 'error'); return; }
+	if (!confirm(trf('ipv64_domain_delete_confirm', { fqdn }, 'IPv64 Domain "{fqdn}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.'))) return;
 	_ipv64DomainAction('delete');
 }
 
@@ -2343,8 +2344,8 @@ function togglePassword(id, btn) {
 function updateCheckboxLabel(cb) {
 	const labelSpan = cb.parentElement.querySelector('.s-checkbox-text');
 	if (!labelSpan) return;
-	const textOn = cb.getAttribute('data-label-on') || 'Aktiv';
-	const textOff = cb.getAttribute('data-label-off') || 'Inaktiv';
+	const textOn = cb.getAttribute('data-label-on') || tr('settings_checkbox_active', 'Aktiv');
+	const textOff = cb.getAttribute('data-label-off') || tr('settings_checkbox_inactive', 'Inaktiv');
 	labelSpan.textContent = cb.checked ? textOn : textOff;
 }
 
@@ -2499,7 +2500,8 @@ function renderUsersList(users) {
 
 		const roleBadge = document.createElement('span');
 		roleBadge.className = 'provider-badge user-role-badge';
-		roleBadge.textContent = `${roleIcons[role] || '?'} ${role}`;
+		const roleLabel = roles.find(item => item.value === role)?.label || role;
+		roleBadge.textContent = `${roleIcons[role] || '?'} ${roleLabel}`;
 
 		const totpBadge = document.createElement('span');
 		totpBadge.className = `provider-badge ${totpEnabled ? 'user-2fa-badge-on' : 'user-2fa-badge-off'}`;
@@ -2512,7 +2514,7 @@ function renderUsersList(users) {
 		if (user.last_login) {
 			const lastLogin = document.createElement('span');
 			lastLogin.className = 'user-last-login';
-			lastLogin.textContent = `Letzter Login: ${new Date(user.last_login).toLocaleString()}`;
+			lastLogin.textContent = trf('user_last_login', { time: new Date(user.last_login).toLocaleString() }, 'Letzter Login: {time}');
 			info.appendChild(lastLogin);
 		}
 
@@ -2530,13 +2532,20 @@ function renderUsersList(users) {
 		}
 		select.addEventListener('change', () => changeUserRole(userID, select.value));
 
+		const resetButton = document.createElement('button');
+		resetButton.type = 'button';
+		resetButton.className = 'user-reset-btn';
+		resetButton.textContent = '🔑';
+		resetButton.title = tr('reset_password', 'Passwort setzen');
+		resetButton.addEventListener('click', () => resetUserPassword(userID, username));
+
 		const deleteButton = document.createElement('button');
 		deleteButton.type = 'button';
 		deleteButton.className = 'user-delete-btn';
 		deleteButton.textContent = '✕';
 		deleteButton.addEventListener('click', () => deleteUser(userID, username));
 
-		actions.append(select, deleteButton);
+		actions.append(select, resetButton, deleteButton);
 		pill.append(info, actions);
 		container.appendChild(pill);
 	}
@@ -2558,7 +2567,7 @@ function addUser() {
 	})
 		.then(r => r.json().then(j => ({ ok: r.ok, j })))
 		.then(({ ok, j }) => {
-			if (!ok) return showToast('❌ ' + (j.error || 'Fehler'), 'error');
+			if (!ok) return showToast('❌ ' + (j.error || tr('generic_error', 'Fehler')), 'error');
 			showToast('✅ ' + tr('user_created', 'Benutzer erstellt'), 'success');
 			const nameInput = document.getElementById('new-user-name');
 			const passInput = document.getElementById('new-user-pass');
@@ -2585,8 +2594,27 @@ function changeUserRole(id, role) {
 		.catch(() => showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'));
 }
 
+function resetUserPassword(id, username) {
+	const password = prompt(trf('reset_password_prompt', { username }, `New password for "${username}":`));
+	if (password === null) return;
+	if (password.length < 8) return showToast(tr('auth_pass_min', 'Passwort min. 8 Zeichen'), 'error');
+
+	const token = sessionStorage.getItem('triggerToken') || '';
+	fetch('/api/users/' + id, {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json', ...(token ? { 'X-Trigger-Token': token } : {}) },
+		body: JSON.stringify({ password })
+	})
+		.then(r => r.json().then(j => ({ ok: r.ok, j })))
+		.then(({ ok, j }) => {
+			if (!ok) return showToast('❌ ' + (j.error || tr('generic_error', 'Fehler')), 'error');
+			showToast('✅ ' + tr('password_reset', 'Passwort geändert'), 'success');
+		})
+		.catch(() => showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error'));
+}
+
 function deleteUser(id, username) {
-	if (!confirm(`Benutzer "${username}" wirklich löschen?`)) return;
+	if (!confirm(trf('user_delete_confirm', { username }, 'Benutzer "{username}" wirklich löschen?'))) return;
 	const token = sessionStorage.getItem('triggerToken') || '';
 	fetch('/api/users/' + id, {
 		method: 'DELETE',
@@ -2980,7 +3008,7 @@ function initKeyboardShortcuts() {
 			case 'i': navTo('diagnose'); break;
 			case 'l': navTo('logs'); break;
 			case '?':
-				showToast('⌨️ R=Update  S=Settings  D=Dashboard  M=Metrics  L=Logs I=Diagnose', 'info');
+				showToast(tr('keyboard_shortcuts_help', '⌨️ R=Update  S=Settings  D=Dashboard  M=Metrics  L=Logs  I=Diagnose'), 'info');
 				break;
 		}
 	});
@@ -3014,7 +3042,7 @@ function renderNotifCenter() {
 	if (_notifHistory.length === 0) {
 		const empty = document.createElement('div');
 		empty.style.cssText = 'padding:10px;opacity:0.4;font-size:0.8rem;';
-		empty.textContent = 'Keine Ereignisse';
+		empty.textContent = tr('notif_empty', 'Keine Ereignisse');
 		list.appendChild(empty);
 		return;
 	}
@@ -3219,10 +3247,10 @@ function renderDiagnosis(d) {
 				<div class="diag-row"><span>${escHtml(tr('diagnose_ipv4_endpoints', 'IPv4 endpoints'))}</span><strong>${escHtml(cfg.ipv4_endpoints ?? 0)}</strong></div>
 				<div class="diag-row"><span>${escHtml(tr('diagnose_ipv6_endpoints', 'IPv6 endpoints'))}</span><strong>${escHtml(cfg.ipv6_endpoints ?? 0)}</strong></div>
 				<div class="diag-badge-row">
-					${renderBoolBadge('Dry Run', cfg.dry_run)}
-					${renderBoolBadge('Debug', cfg.debug)}
-					${renderBoolBadge('HTTP Raw', cfg.debug_http_raw)}
-				</div>
+					${renderBoolBadge(tr('diagnose_flag_dry_run', 'Dry Run'), cfg.dry_run)}
+					${renderBoolBadge(tr('diagnose_flag_debug', 'Debug'), cfg.debug)}
+					${renderBoolBadge(tr('diagnose_flag_http_raw', 'HTTP Raw'), cfg.debug_http_raw)}
+ 				</div>
 			</div>
 
 			<div class="diag-card">
@@ -3262,7 +3290,7 @@ function renderAuditEntries(entries) {
 	const box = document.getElementById('audit-log-content');
 	if (!box) return;
 	if (!Array.isArray(entries) || entries.length === 0) {
-		box.innerHTML = '<div class="audit-empty">Noch keine Audit-Einträge vorhanden.</div>';
+		box.innerHTML = '<div class="audit-empty">' + escHtml(tr('audit_empty', 'Noch keine Audit-Einträge vorhanden.')) + '</div>';
 		return;
 	}
 
@@ -3278,8 +3306,8 @@ function renderAuditEntries(entries) {
 		</tr>`;
 	}).join('');
 
-	box.innerHTML = `<div class="audit-table-wrap"><table class="audit-table">
-		<thead><tr><th>Zeit</th><th>Benutzer</th><th>Aktion</th><th>Status</th><th>IP</th></tr></thead>
+	box.innerHTML = `<div class="audit-table-wrap audit-log-scroll"><table class="audit-table">
+		<thead><tr><th>${escHtml(tr('audit_col_time', 'Zeit'))}</th><th>${escHtml(tr('audit_col_user', 'Benutzer'))}</th><th>${escHtml(tr('audit_col_action', 'Aktion'))}</th><th>${escHtml(tr('audit_col_status', 'Status'))}</th><th>${escHtml(tr('audit_col_ip', 'IP'))}</th></tr></thead>
 		<tbody>${rows}</tbody>
 	</table></div>`;
 }
@@ -3287,7 +3315,7 @@ function renderAuditEntries(entries) {
 async function refreshAuditLog() {
 	const box = document.getElementById('audit-log-content');
 	if (!box) return;
-	box.textContent = 'Audit-Einträge werden geladen…';
+	box.textContent = tr('audit_loading', 'Audit-Einträge werden geladen…');
 	box.classList.add('audit-loading');
 	try {
 		const response = await fetch('/api/audit', { cache: 'no-store' });
@@ -3297,7 +3325,7 @@ async function refreshAuditLog() {
 		renderAuditEntries(data.entries || []);
 	} catch (error) {
 		box.classList.remove('audit-loading');
-		box.innerHTML = '<div class="diag-error-box">❌ ' + escHtml(error.message || 'Audit-Log konnte nicht geladen werden.') + '</div>';
+		box.innerHTML = '<div class="diag-error-box">❌ ' + escHtml(error.message || tr('audit_load_failed', 'Audit-Log konnte nicht geladen werden.')) + '</div>';
 	}
 }
 
@@ -3307,10 +3335,10 @@ function dnsValues(values) {
 }
 
 function dnsMatchBadge(hasExpected, matches) {
-	if (!hasExpected) return '<span class="dns-match dns-match-muted">kein Sollwert</span>';
+	if (!hasExpected) return '<span class="dns-match dns-match-muted">' + escHtml(tr('dns_no_expected', 'kein Sollwert')) + '</span>';
 	return matches
-		? '<span class="dns-match dns-match-ok">passt</span>'
-		: '<span class="dns-match dns-match-error">abweichend</span>';
+		? '<span class="dns-match dns-match-ok">' + escHtml(tr('dns_match_ok', 'passt')) + '</span>'
+		: '<span class="dns-match dns-match-error">' + escHtml(tr('dns_match_mismatch', 'abweichend')) + '</span>';
 }
 
 function renderDNSPropagation(data) {
@@ -3327,13 +3355,13 @@ function renderDNSPropagation(data) {
 
 	box.innerHTML = `<div class="dns-summary">
 		<strong>${escHtml(data.domain || '')}</strong>
-		<span>IPv4-Soll: <code>${escHtml(expectedV4 || '-')}</code></span>
-		<span>IPv6-Soll: <code>${escHtml(expectedV6 || '-')}</code></span>
-	</div>
+		<span>${escHtml(tr('dns_expected_ipv4', 'IPv4-Soll'))}: <code>${escHtml(expectedV4 || '-')}</code></span>
+		<span>${escHtml(tr('dns_expected_ipv6', 'IPv6-Soll'))}: <code>${escHtml(expectedV6 || '-')}</code></span>
+ 	</div>
 	<div class="audit-table-wrap"><table class="audit-table dns-table">
-		<thead><tr><th>Resolver</th><th>IPv4</th><th>IPv6</th><th>Dauer / Fehler</th></tr></thead>
-		<tbody>${rows || '<tr><td colspan="4">Keine Ergebnisse.</td></tr>'}</tbody>
-	</table></div>`;
+		<thead><tr><th>${escHtml(tr('dns_col_resolver', 'Resolver'))}</th><th>${escHtml(tr('dns_col_ipv4', 'IPv4'))}</th><th>${escHtml(tr('dns_col_ipv6', 'IPv6'))}</th><th>${escHtml(tr('dns_col_duration_error', 'Dauer / Fehler'))}</th></tr></thead>
+		<tbody>${rows || '<tr><td colspan="4">' + escHtml(tr('dns_no_results', 'Keine Ergebnisse.')) + '</td></tr>'}</tbody>
+ 	</table></div>`;
 }
 
 async function runDNSPropagation() {
@@ -3341,11 +3369,11 @@ async function runDNSPropagation() {
 	const box = document.getElementById('dns-propagation-result');
 	const domain = String(input?.value || '').trim();
 	if (!domain) {
-		showToast('❌ Bitte eine Domain eingeben.', 'error');
+		showToast(tr('dns_domain_required', '❌ Bitte eine Domain eingeben.'), 'error');
 		input?.focus();
 		return;
 	}
-	if (box) box.innerHTML = '<div class="audit-loading">DNS-Resolver werden abgefragt…</div>';
+	if (box) box.innerHTML = '<div class="audit-loading">' + escHtml(tr('dns_loading', 'DNS-Resolver werden abgefragt…')) + '</div>';
 
 	try {
 		const response = await fetch('/api/dns/propagation', {
@@ -3358,7 +3386,7 @@ async function runDNSPropagation() {
 		renderDNSPropagation(data);
 		refreshAuditLog();
 	} catch (error) {
-		if (box) box.innerHTML = '<div class="diag-error-box">❌ ' + escHtml(error.message || 'DNS-Prüfung fehlgeschlagen.') + '</div>';
+		if (box) box.innerHTML = '<div class="diag-error-box">❌ ' + escHtml(error.message || tr('dns_check_failed', 'DNS-Prüfung fehlgeschlagen.')) + '</div>';
 	}
 }
 
