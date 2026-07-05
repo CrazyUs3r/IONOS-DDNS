@@ -380,6 +380,11 @@ body {
 	contain-intrinsic-size: 0 80px;
 }
 
+.card--no-cv {
+	content-visibility: visible;
+	contain-intrinsic-size: auto;
+}
+
 details.card {
 	padding: 0;
 	contain: content;
