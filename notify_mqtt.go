@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"maps"
 	"os"
 	"sort"
 	"strings"
@@ -755,9 +756,7 @@ func (m *mqttNotifier) discoveryEntity(name, uniqueID string, extra map[string]a
 			"sw_version": Version,
 		},
 	}
-	for key, value := range extra {
-		payload[key] = value
-	}
+	maps.Copy(payload, extra)
 	return payload
 }
 
@@ -810,8 +809,8 @@ func (m *mqttNotifier) publishRawWithClient(
 func deriveMQTTBaseTopic(eventTopic string) string {
 	base := strings.TrimRight(eventTopic, "/")
 	for _, suffix := range []string{"/events", "/event", "/notifications"} {
-		if strings.HasSuffix(base, suffix) {
-			base = strings.TrimSuffix(base, suffix)
+		if before, ok := strings.CutSuffix(base, suffix); ok {
+			base = before
 			break
 		}
 	}

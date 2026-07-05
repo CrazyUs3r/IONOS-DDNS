@@ -492,7 +492,7 @@ func requestFromTrustedProxy(r *http.Request) bool {
 		return false
 	}
 
-	for _, raw := range strings.Split(os.Getenv("DASHBOARD_TRUSTED_PROXIES"), ",") {
+	for raw := range strings.SplitSeq(os.Getenv("DASHBOARD_TRUSTED_PROXIES"), ",") {
 		entry := strings.TrimSpace(raw)
 		if entry == "" {
 			continue
@@ -519,8 +519,8 @@ func forwardedRequestProto(r *http.Request) string {
 	}
 
 	if forwarded := r.Header.Get("Forwarded"); forwarded != "" {
-		first := strings.Split(forwarded, ",")[0]
-		for _, part := range strings.Split(first, ";") {
+		first, _, _ := strings.Cut(forwarded, ",")
+		for part := range strings.SplitSeq(first, ";") {
 			key, value, ok := strings.Cut(strings.TrimSpace(part), "=")
 			if ok && strings.EqualFold(strings.TrimSpace(key), "proto") {
 				return strings.ToLower(strings.Trim(strings.TrimSpace(value), `"`))
@@ -550,8 +550,8 @@ func externalRequestHost(r *http.Request) string {
 	}
 	if requestFromTrustedProxy(r) {
 		if forwarded := r.Header.Get("Forwarded"); forwarded != "" {
-			first := strings.Split(forwarded, ",")[0]
-			for _, part := range strings.Split(first, ";") {
+			first, _, _ := strings.Cut(forwarded, ",")
+			for part := range strings.SplitSeq(first, ";") {
 				key, value, ok := strings.Cut(strings.TrimSpace(part), "=")
 				if ok && strings.EqualFold(strings.TrimSpace(key), "host") {
 					host := strings.Trim(strings.TrimSpace(value), `"`)

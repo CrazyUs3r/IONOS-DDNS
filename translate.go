@@ -28,12 +28,43 @@ type Phrases struct {
 	StatusCreated, ErrInvalidRole, ErrUsernameTaken, ErrMissingID                         string
 	ErrUserNotFound, StatusUpdated, ErrForbidden, ErrOwnAccountDelete, StatusDeleted      string
 	UserLoadFailedJS, NoUsersFoundJS, UserCreatedJS, RoleChangedJS, UserDeletedJS         string
+	ResetPasswordJS, ResetPasswordPromptJS, PasswordResetJS                               string
 	GenericErrorJS, RoleAdminJS, RoleEditorJS, RoleViewerJS, AuthUserMinJS, AuthPassMinJS string
 	UserLoading, UserNewTitle, UserPlaceholderName, UserPlaceholderPass                   string
 	UserRoleViewer, UserRoleEditor, UserRoleAdmin, UserBtnCreate, NotifyTestDesc          string
 	IPv64DomainManagement, IPv64DomainFQDN, IPv64DomainPlaceholder, IPv64ActionAdd        string
 	ProviderStatusOK, ProviderStatusError, IPv64DomainPlaceholderToken                    string
 	IPv64DomainAPITokenOptional, LogDeleteFailedJS, LogEntryDeletedJS                     string
+	NavAuditJS, PageReloadFailedJS, SettingsReloadFailedJS, ProviderInvalidJS             string
+	UpdateRunningJS, DNScaleAPIKeyMissingJS, FebasUpdateURLMissingJS                      string
+	SettingsCheckboxActiveJS, SettingsCheckboxInactiveJS                                  string
+	IPv64DomainAddRunningJS, IPv64DomainDeleteRunningJS                                   string
+	IPv64DomainAddSuccessJS, IPv64DomainDeleteSuccessJS, IPv64DomainDeleteConfirmJS       string
+	UserLastLoginJS, UserDeleteConfirmJS, KeyboardShortcutsHelpJS, NotifEmptyJS           string
+	DiagnoseFlagDryRunJS, DiagnoseFlagDebugJS, DiagnoseFlagHTTPRawJS                      string
+	AuditEmptyJS, AuditLoadingJS, AuditLoadFailedJS                                       string
+	AuditColTimeJS, AuditColUserJS, AuditColActionJS, AuditColStatusJS, AuditColIPJS      string
+	DNSNoExpectedJS, DNSMatchOKJS, DNSMatchMismatchJS                                     string
+	DNSExpectedIPv4JS, DNSExpectedIPv6JS                                                  string
+	DNSColResolverJS, DNSColIPv4JS, DNSColIPv6JS, DNSColDurationErrorJS                   string
+	DNSNoResultsJS, DNSDomainRequiredJS, DNSLoadingJS, DNSCheckFailedJS                   string
+	AuditAdminOnly, AuditLogTitle, AuditRefreshBtn                                        string
+	DNSPropagationTitle, DNSPropagationHelp, DNSCheckBtn                                  string
+	DNSInvalidDomainName, DNSAdminEditorRequired, DNSNoNameserverFound                    string
+	DNSSystemResolver, DNSSystemResolverFormat                                            string
+	SettingsDebugMode, SettingsDebugHTTPRaw, SettingsTTLPlaceholder                       string
+	SettingsIPModeGlobal, SettingsIPModeBoth, SettingsIPModeIPv4Only                      string
+	SettingsIPModeIPv6Only, SettingsHetznerDNSToken, SettingsHetznerCloudToken            string
+	SettingsWebhookURL, SettingsWebhookSecret, SettingsOptional                           string
+	SettingsMQTTBroker, SettingsMQTTClientID, SettingsMQTTUsername                        string
+	SettingsMQTTSecret, SettingsMQTTPassword, SettingsMQTTTopic                           string
+	SettingsMQTTQoS, SettingsMQTTRetain, SettingsMQTTDiscovery                            string
+	SettingsMQTTHomeAssistant, SettingsMQTTDiscoveryPrefix                                string
+	SettingsEmailSMTPHost, SettingsEmailPort, SettingsEmailUser                           string
+	SettingsEmailPassword, SettingsEmailSender, SettingsEmailRecipient                    string
+	SettingsEmailSubject, SettingsEmailTLSMode, SettingsEmailTLSStartTLS                  string
+	SettingsEmailTLSDirectTLS, SettingsEmailTLSPlain                                      string
+	DebugDisabledNote, LogoutLabel, PageLoading, UnsupportedPage                          string
 
 	// Diagnose / Backup
 	NavOverview, NavMonitoring, NavTools, NavConfig, NavDiagnoseJS, NavBackupJS string
@@ -47,6 +78,7 @@ type Phrases struct {
 	DiagnoseNoDomainsConfigured, DiagnoseDomainWithoutFQDN                         string
 	DiagnoseTTLTooLowFormat, DiagnoseIonosCredentialsIncompleteFormat              string
 	DiagnoseCloudflareCredentialsIncompleteFormat, DiagnoseIpv64TokenMissingFormat string
+	DiagnoseDNScaleAPIKeyMissingFormat                                             string
 	DiagnoseUnknownDomain, DiagnoseDryRunActive, DiagnoseDebugActive               string
 	DiagnoseHTTPRawDebugActive, DiagnoseIntervalLow, DiagnosePathEmpty             string
 
@@ -165,18 +197,19 @@ type Phrases struct {
 	WriteFailed, FileSaved, EmbeddedFileUnreadable, CannotReadEmbeddedDir string
 
 	// Dashboard UI
-	DomainSearchPlaceholder, NoMoreEntries, ChecksLabel, EntriesLabel     string
-	BadgeChanged, FilterAll, FilterErrors, FilterWarnings                 string
-	FilterUpdates, FilterStarts, FilterStop, FilterCreated, FilterCleanup string
-	FilterSkip, FilterConfig, FilterInfo, NoDomainsConfigured             string
-	DomainContext, ThemeLabelJS, NoIPToCopyJS, CopiedJS, CopyFailedJS     string
-	UpdateStartingJS, UpdateStartedJS, ConnectionErrorJS                  string
-	ExportStartedJS, ExportFailedJS, FQDNMissingJS                        string
-	SaveConfigConfirmJS, SavedReloadJS, ErrorPrefixJS                     string
-	ResetMetricsConfirmJS, MetricsResetOKJS, MetricsResetFailedJS         string
-	DeleteDomainConfirmJS, DomainRemovedJS, DeleteFailedJS                string
-	TokenSavedJS, TokenDeletedJS, TokenSavedMaskedJS, TokenEnterJS        string
-	DomainUpdatedJS, ClearedJS, DomainHistorySummary                      string
+	DomainSearchPlaceholder, NoMoreEntries, ChecksLabel, EntriesLabel        string
+	BadgeChanged, FilterAll, FilterErrors, FilterWarnings                    string
+	FilterUpdates, FilterStarts, FilterStop, FilterCreated, FilterCleanup    string
+	FilterSkip, FilterConfig, FilterInfo, NoDomainsConfigured                string
+	DomainContext, ThemeLabelJS, NoIPToCopyJS, CopiedJS, CopyFailedJS        string
+	UpdateStartingJS, UpdateStartedJS, ConnectionErrorJS                     string
+	ExportStartedJS, ExportFailedJS, FQDNMissingJS                           string
+	SaveConfigConfirmJS, SavedReloadJS, ErrorPrefixJS                        string
+	ResetMetricsConfirmJS, MetricsResetOKJS, MetricsResetFailedJS            string
+	DeleteDomainConfirmJS, DomainRemovedJS, DeleteFailedJS                   string
+	TokenSavedJS, TokenDeletedJS, TokenSavedMaskedJS, TokenEnterJS           string
+	DomainUpdatedJS, ClearedJS, DomainHistorySummary                         string
+	CopyTitle, DeleteEntryTitle, HiddenEntriesFormat, FooterMadeWithByFormat string
 
 	// Provider-Hinweise / Config
 	IonosAPIRequired, Ipv64TokenRequired, CloudflareAuthRequired, UnknownProvider  string
@@ -274,10 +307,11 @@ type Phrases struct {
 	MqttPublishTimeout                                                                            string
 
 	// Trigger / Rate Limit
-	InvalidOrMissingTriggerToken, TriggerBlockedInvalidToken                  string
-	GlobalRateLimitExceeded, TriggerBlockedGlobalRateLimit                    string
-	TooManyUpdateRequestsWait, IPRateLimitExceeded, TriggerBlockedIPRateLimit string
-	RateLimitGlobal                                                           string
+	InvalidOrMissingTriggerToken, TriggerBlockedInvalidToken                     string
+	GlobalRateLimitExceeded, TriggerBlockedGlobalRateLimit                       string
+	TriggerNoDomainsError, TriggerBlockedNoDomainsLog, UpdateAbortedNoDomainsLog string
+	TooManyUpdateRequestsWait, IPRateLimitExceeded, TriggerBlockedIPRateLimit    string
+	RateLimitGlobal                                                              string
 
 	// Notify event labels & descriptions
 	NotifyEventUpdateLabel, NotifyEventUpdateDesc                                      string
@@ -388,7 +422,7 @@ type Phrases struct {
 	SettingsDomains, SettingsAddBtn, SettingsCancelBtn, SettingsCFOr           string
 	SettingsNotify, SettingsNotifyEnabled, SettingsNotifyOn                    string
 	SettingsNotifyEvents, SettingsTGToken, SettingsTGChatID                    string
-	SettingsTokenUnchanged, SettingsDNSHint                                    string
+	SettingsTokenUnchanged, SettingsDNSHint, SettingsOptionalPlaceholder       string
 	SettingsSaveBtn, SettingsSaveHint, SettingsRestartHint                     string
 	SettingsThemeHint, SettingsNotifierHint, SettingsUpdateHint                string
 	SettingsExportHint, SettingsNotifyHint                                     string
@@ -397,6 +431,8 @@ type Phrases struct {
 	SettingsCFEmail, SettingsCFGlobalKey, NotifyMqttActive                     string
 	SettingsIPv64Token, SettingsTelegramHeading, SettingsMqttHeading           string
 	SettingsGotifyHeading, SettingsDomainPlaceholder, SettingsWebhookHeading   string
+	SettingsFebasUpdateURL, SettingsFebasUpdateURLHint                         string
+	SettingsDNScaleAPIKey, SettingsDNScaleAPIKeyHint                           string
 	SettingsCFTokenHint, SettingsGotifyURL, SettingsGotifyToken                string
 	SettingsNtfyURL, SettingsNtfyToken, SettingsNtfyTopic, SettingsNtfyHeading string
 	SettingsIPv4Endpoints, SettingsIPv6Endpoints                               string
