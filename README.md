@@ -11,8 +11,6 @@
 [![Docker Stars](https://img.shields.io/docker/stars/crazyus3r/ionos-ddns?style=flat-square&logo=docker)](https://hub.docker.com/r/crazyus3r/ionos-ddns)
 [![Docker Last Updated](https://img.shields.io/docker/last-updated/crazyus3r/ionos-ddns?style=flat-square)](https://hub.docker.com/r/crazyus3r/ionos-ddns/tags)
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/CrazyUs3r/IONOS-DDNS/v2)](https://goreportcard.com/report/github.com/CrazyUs3r/IONOS-DDNS/v2)
-
 Ein hochperformanter, in Go geschriebener **Multi-Provider Dynamic DNS Client** mit vollwertigem Web-Dashboard. Unterstützt IONOS, Cloudflare, IPv64, Hetzner DNS und Hetzner Cloud — gleichzeitig, pro Domain konfigurierbar.
 
 ---
