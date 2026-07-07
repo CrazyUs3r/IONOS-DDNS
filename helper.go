@@ -501,6 +501,10 @@ func dashboardI18NJSON() string {
 		"totp_badge_inactive":           t(phrases().TotpBadgeInactiveJS, "🔓 2FA inactive"),
 		"log_delete_failed":             t(phrases().LogDeleteFailedJS, "Löschen fehlgeschlagen"),
 		"log_entry_deleted":             t(phrases().LogEntryDeletedJS, "Eintrag gelöscht:"),
+		"copy_title":                    t(phrases().CopyTitle, "Kopieren"),
+		"delete_entry_title":            t(phrases().DeleteEntryTitle, "Eintrag löschen"),
+		"audit_entry_deleted":           t(phrases().AuditEntryDeleted, "Audit-Eintrag gelöscht"),
+		"audit_delete_failed":           t(phrases().AuditDeleteFailed, "Löschen fehlgeschlagen"),
 	}
 
 	b, err := json.Marshal(m)
