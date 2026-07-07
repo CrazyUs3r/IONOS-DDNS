@@ -85,6 +85,8 @@ const DECLARATIVE_ACTIONS = Object.freeze({
 	copyIP: ({ args }) => copyIP(args[0]),
 	copyLogEntry: ({ element }) => copyLogEntry(element),
 	deleteLogEntry: ({ element }) => deleteLogEntry(element),
+	copyAuditEntry: ({ element }) => copyAuditEntry(element),
+	deleteAuditEntry: ({ element }) => deleteAuditEntry(element),
 	deleteDomain: ({ args, element }) => deleteDomain(args[0], element),
 	deleteUser: ({ args }) => deleteUser(args[0], args[1]),
 	editDomain: ({ args }) => editDomain(Number(args[0])),
@@ -3294,22 +3296,78 @@ function renderAuditEntries(entries) {
 		return;
 	}
 
+	const labels = {
+		time: tr('audit_col_time', 'Zeit'),
+		user: tr('audit_col_user', 'Benutzer'),
+		action: tr('audit_col_action', 'Aktion'),
+		status: tr('audit_col_status', 'Status'),
+		ip: tr('audit_col_ip', 'IP'),
+	};
+
 	const rows = entries.map(entry => {
 		const status = Number(entry.status || 0);
 		const resultClass = status >= 400 ? 'audit-result-error' : 'audit-result-ok';
-		return `<tr>
-			<td>${escHtml(formatAuditTimestamp(entry.timestamp))}</td>
-			<td><strong>${escHtml(entry.actor || '-')}</strong><small>${escHtml(entry.role || '')}</small></td>
-			<td><code>${escHtml(entry.method || '')}</code> ${escHtml(entry.path || '')}</td>
+		const time = formatAuditTimestamp(entry.timestamp);
+		const actor = entry.actor || '-';
+		const role = entry.role || '';
+		const method = entry.method || '';
+		const path = entry.path || '';
+		const ip = entry.ip || '-';
+		const copyText = [time, actor, role, method, path, status, ip].filter(Boolean).join(' ');
+		const actionTitle = [method, path].filter(Boolean).join(' ');
+
+		return `<tr class="audit-entry-row" data-audit-id="${escHtml(entry.id || '')}" data-copy="${escHtml(copyText)}">
+			<td title="${escHtml(time)}">${escHtml(time)}</td>
+			<td><span class="audit-user-value"><strong>${escHtml(actor)}</strong>${role ? `<small>${escHtml(role)}</small>` : ''}</span></td>
+			<td title="${escHtml(actionTitle)}"><span class="audit-action-value"><code class="audit-method">${escHtml(method)}</code><span class="audit-path">${escHtml(path)}</span></span></td>
 			<td><span class="audit-result ${resultClass}">${escHtml(status || '-')}</span></td>
-			<td><code>${escHtml(entry.ip || '-')}</code></td>
+			<td><code class="audit-ip">${escHtml(ip)}</code></td>
+			<td class="audit-actions"><span class="audit-action-buttons">
+				<button class="copy-btn log-copy-btn" data-click="copyAuditEntry(this)" title="${escHtml(tr('copy_title', 'Kopieren'))}">📋</button>
+				<button class="copy-btn log-delete-btn" data-click="deleteAuditEntry(this)" title="${escHtml(tr('delete_entry_title', 'Eintrag löschen'))}">🗑️</button>
+			</span></td>
 		</tr>`;
 	}).join('');
 
 	box.innerHTML = `<div class="audit-table-wrap audit-log-scroll"><table class="audit-table">
-		<thead><tr><th>${escHtml(tr('audit_col_time', 'Zeit'))}</th><th>${escHtml(tr('audit_col_user', 'Benutzer'))}</th><th>${escHtml(tr('audit_col_action', 'Aktion'))}</th><th>${escHtml(tr('audit_col_status', 'Status'))}</th><th>${escHtml(tr('audit_col_ip', 'IP'))}</th></tr></thead>
-		<tbody>${rows}</tbody>
+		<thead><tr><th>${escHtml(labels.time)}</th><th>${escHtml(labels.user)}</th><th>${escHtml(labels.action)}</th><th>${escHtml(labels.status)}</th><th>${escHtml(labels.ip)}</th><th></th></tr></thead>
+ 		<tbody>${rows}</tbody>
 	</table></div>`;
+}
+
+function copyAuditEntry(button) {
+	const text = button.closest('.audit-entry-row')?.dataset.copy || '';
+	if (text) copyText(text, text.slice(0, 60));
+}
+
+function deleteAuditEntry(btn) {
+	const row = btn.closest('.audit-entry-row');
+	if (!row) return;
+	const id = row.dataset.auditId;
+	if (!id) return;
+
+	fetch('/api/audit/delete', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ id }),
+	})
+		.then(async r => {
+			if (!r.ok) throw new Error(await r.text());
+			const next = row.nextElementSibling;
+			if (next) next.classList.add('no-hover');
+
+			row.style.transition = 'opacity 0.2s ease';
+			row.style.opacity = '0';
+			setTimeout(() => {
+				row.remove();
+				if (next) next.classList.remove('no-hover');
+			}, 220);
+			showToast('🗑️ ' + tr('audit_entry_deleted', 'Audit-Eintrag gelöscht'), 'success');
+		})
+		.catch(err => {
+			console.error('Audit delete failed:', err);
+			showToast('❌ ' + (err.message || tr('audit_delete_failed', 'Löschen fehlgeschlagen')), 'error');
+		});
 }
 
 async function refreshAuditLog() {
