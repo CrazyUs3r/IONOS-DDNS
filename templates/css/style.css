@@ -3754,6 +3754,7 @@ body.auth-page .dashboard-footer {
 	grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
 	gap: 16px;
 	align-items: start;
+	align-content: start;
 	width: 100%;
 	max-width: 100%;
 	min-width: 0;
@@ -3766,6 +3767,7 @@ body.auth-page .dashboard-footer {
 }
 
 .audit-log-card {
+	align-self: stretch;
 	overflow: hidden;
 	content-visibility: visible;
 	contain-intrinsic-size: auto;
@@ -4000,6 +4002,24 @@ body.auth-page .dashboard-footer {
 
 .dns-table {
 	min-width: 760px;
+	table-layout: auto;
+	width: auto;
+}
+
+.dns-table th,
+.dns-table td {
+	width: auto;
+}
+
+.dns-table th:nth-child(1),
+.dns-table td:nth-child(1) {
+	width: auto;
+	white-space: nowrap;
+}
+
+.dns-table th:nth-child(2),
+.dns-table td:nth-child(2) {
+	width: auto;
 }
 
 .dns-table code {
@@ -4018,7 +4038,6 @@ body.auth-page .dashboard-footer {
 @media (max-width: 1050px) {
 	.page-section[data-section="audit"] {
 		display: block;
-		min-height: auto;
 	}
 
 	.audit-dns-grid {
@@ -4119,4 +4138,4 @@ body.auth-page .dashboard-footer {
 	.audit-table {
 		min-width: 700px;
 	}
-	}
+}
