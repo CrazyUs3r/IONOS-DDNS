@@ -210,6 +210,7 @@ type Phrases struct {
 	TokenSavedJS, TokenDeletedJS, TokenSavedMaskedJS, TokenEnterJS           string
 	DomainUpdatedJS, ClearedJS, DomainHistorySummary                         string
 	CopyTitle, DeleteEntryTitle, HiddenEntriesFormat, FooterMadeWithByFormat string
+	AuditEntryDeleted, AuditDeleteFailed                                     string
 
 	// Provider-Hinweise / Config
 	IonosAPIRequired, Ipv64TokenRequired, CloudflareAuthRequired, UnknownProvider  string
