@@ -838,6 +838,7 @@ func registerAPIroutes(mux *http.ServeMux) {
 
 	mux.HandleFunc("/api/diagnose", handleAPIDiagnose)
 	mux.HandleFunc("/api/audit", handleAPIAudit)
+	mux.HandleFunc("/api/audit/delete", handleAPIAuditDelete)
 	mux.HandleFunc("/api/dns/propagation", handleAPIDNSPropagation)
 	mux.HandleFunc("/api/backup/download", handleAPIBackupDownload)
 	mux.HandleFunc("/api/backup/restore", handleAPIBackupRestore)
@@ -3981,6 +3982,71 @@ func handleAPIAudit(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
+}
+
+func deleteAuditEntry(id string) error {
+	path := auditLogFilePath()
+	if path == "" {
+		return errors.New("audit path unavailable")
+	}
+
+	auditLogMu.Lock()
+	defer auditLogMu.Unlock()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	var kept []string
+	for line := range strings.SplitSeq(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var entry auditEntry
+		if json.Unmarshal([]byte(line), &entry) != nil {
+			kept = append(kept, line)
+			continue
+		}
+		if entry.ID != id {
+			kept = append(kept, line)
+		}
+	}
+
+	output := ""
+	if len(kept) > 0 {
+		output = strings.Join(kept, "\n") + "\n"
+	}
+	return os.WriteFile(path, []byte(output), 0o600)
+}
+
+func handleAPIAuditDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		return
+	}
+	if !requireAdminAPI(w, r) {
+		return
+	}
+
+	var body struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&body); err != nil || body.ID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing id"})
+		return
+	}
+
+	if err := deleteAuditEntry(body.ID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
 type dnsResolverTarget struct {
