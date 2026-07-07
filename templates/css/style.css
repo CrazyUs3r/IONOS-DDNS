@@ -2105,11 +2105,12 @@ body.auth-page .dashboard-footer {
 }
 
 .page-section[data-section="logs"] .card-content,
-.page-section[data-section="debug"] .card-content {
-	display: flex;
-	flex-direction: column;
-	flex: 1;
-	min-height: 0;
+.page-section[data-section="debug"] .card-content,
+.page-section[data-section="audit"] .card-content {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
 }
 
 .page-section[data-section="settings"],
@@ -3803,9 +3804,11 @@ body.auth-page .dashboard-footer {
 
 .audit-table-wrap,
 .audit-log-scroll {
+	flex: 1;
+	min-height: 0;
+	max-height: none;
 	width: 100%;
 	max-width: 100%;
-	max-height: min(62vh, 640px);
 	overflow: auto;
 	-webkit-overflow-scrolling: touch;
 	overscroll-behavior: contain;
@@ -4116,4 +4119,4 @@ body.auth-page .dashboard-footer {
 	.audit-table {
 		min-width: 700px;
 	}
-}
+	}
