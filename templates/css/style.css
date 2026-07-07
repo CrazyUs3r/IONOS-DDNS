@@ -1168,11 +1168,14 @@ summary:focus-visible {
 }
 
 .log-entry-row:hover:not(.no-hover) .log-copy-btn,
-.log-entry-row:hover:not(.no-hover) .log-delete-btn {
+.log-entry-row:hover:not(.no-hover) .log-delete-btn,
+.audit-entry-row:hover:not(.no-hover) .log-copy-btn,
+.audit-entry-row:hover:not(.no-hover) .log-delete-btn {
 	opacity: 1;
 }
 
-.log-entry-row:hover .log-copy-btn {
+.log-entry-row:hover .log-copy-btn,
+.audit-entry-row:hover .log-copy-btn {
 	opacity: 1;
 }
 
@@ -2087,7 +2090,7 @@ body.auth-page .dashboard-footer {
 
 .page-section[data-section="logs"] .card,
 .page-section[data-section="debug"] .card,
-.page-section[data-section="audit"] > .card {
+.page-section[data-section="audit"]>.card {
 	display: flex;
 	flex-direction: column;
 	flex: 1;
@@ -3748,20 +3751,32 @@ body.auth-page .dashboard-footer {
 .audit-dns-grid {
 	display: grid;
 	grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
-	grid-template-rows: 1fr;
 	gap: 16px;
 	align-items: start;
-}
-
-.audit-dns-grid>.card {
+	width: 100%;
+	max-width: 100%;
 	min-width: 0;
 }
 
+.audit-dns-grid>.card,
 .audit-log-card {
-	display: flex;
-	flex-direction: column;
-	min-height: 0;
-	align-self: stretch;
+	min-width: 0;
+	max-width: 100%;
+}
+
+.audit-log-card {
+	overflow: hidden;
+	content-visibility: visible;
+	contain-intrinsic-size: auto;
+}
+
+.audit-log-card .card-header--space-between {
+	gap: 12px;
+}
+
+.audit-log-card .card-content {
+	min-width: 0;
+	overflow: hidden;
 }
 
 .audit-help {
@@ -3777,76 +3792,144 @@ body.auth-page .dashboard-footer {
 	opacity: 0.65;
 }
 
-.audit-table-wrap {
-	max-width: 100%;
-	overflow: auto;
-	border: 1px solid var(--border);
-	border-radius: 8px;
-	overscroll-behavior: contain;
-}
-
-.audit-log-card .card-content {
-	display: flex;
-	flex-direction: column;
-	flex: 1;
-	min-height: 0;
-	overflow: visible;
-}
-
 #audit-log-content.audit-log-container {
-	flex: initial;
-	max-height: none;
-	overflow: visible;
+	min-width: 0;
+	max-width: 100%;
+	overflow: hidden;
 	padding-right: 0;
 	font-family: 'Cascadia Code', 'Consolas', monospace;
 	font-size: 0.8125rem;
 }
 
+.audit-table-wrap,
 .audit-log-scroll {
-	flex: 1;
+	width: 100%;
+	max-width: 100%;
+	max-height: min(62vh, 640px);
 	overflow: auto;
 	-webkit-overflow-scrolling: touch;
 	overscroll-behavior: contain;
-}
-
-.audit-log-scroll .audit-table {
-	min-width: 720px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	scrollbar-gutter: stable;
 }
 
 .audit-table {
 	width: 100%;
-	border-collapse: separate;
+	min-width: 760px;
+	border-collapse: collapse;
 	border-spacing: 0;
+	table-layout: fixed;
 	font-size: 0.78rem;
-	min-width: 720px;
 }
 
 .audit-table th,
 .audit-table td {
 	background: var(--card);
+	padding: 9px 10px;
+	vertical-align: middle;
+	border-bottom: 1px solid rgba(148, 163, 184, 0.14);
 }
 
 .audit-table th {
 	position: sticky;
 	top: 0;
 	z-index: 3;
-	background: var(--card);
 	color: #94a3b8;
 	font-size: 0.7rem;
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
-	opacity: 1;
 	box-shadow: 0 1px 0 var(--border);
+	white-space: nowrap;
 }
 
 .audit-table tr:last-child td {
 	border-bottom: 0;
 }
 
+.audit-table th:nth-child(1),
+.audit-table td:nth-child(1) {
+	width: 180px;
+	white-space: nowrap;
+}
+
+.audit-table th:nth-child(2),
+.audit-table td:nth-child(2) {
+	width: 120px;
+}
+
+.audit-table th:nth-child(4),
+.audit-table td:nth-child(4) {
+	width: 78px;
+	text-align: center;
+}
+
+.audit-table th:nth-child(5),
+.audit-table td:nth-child(5) {
+	width: 125px;
+}
+
+.audit-table th:nth-child(6),
+.audit-table td:nth-child(6) {
+	width: 82px;
+}
+
+.audit-user-value {
+	display: flex;
+	flex-direction: column;
+	line-height: 1.35;
+	min-width: 0;
+}
+
 .audit-table td small {
 	display: block;
 	margin-top: 2px;
 	opacity: 0.55;
+}
+
+.audit-action-value {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	max-width: 100%;
+	white-space: nowrap;
+}
+
+.audit-method {
+	flex: 0 0 auto;
+	white-space: nowrap;
+}
+
+.audit-path {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.audit-ip {
+	white-space: nowrap;
+}
+
+.audit-actions {
+	width: 82px;
+	min-width: 82px;
+	white-space: nowrap;
+	text-align: right;
+	vertical-align: middle;
+}
+
+.audit-action-buttons {
+	display: inline-flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 4px;
+	white-space: nowrap;
+}
+
+.audit-actions>.copy-btn+.copy-btn {
+	margin-left: 4px;
 }
 
 .audit-result,
@@ -3893,6 +3976,10 @@ body.auth-page .dashboard-footer {
 
 .dns-propagation-result {
 	margin-top: 14px;
+	min-width: 0;
+	max-width: 100%;
+	overflow-x: auto;
+	-webkit-overflow-scrolling: touch;
 }
 
 .dns-summary {
@@ -3926,18 +4013,34 @@ body.auth-page .dashboard-footer {
 }
 
 @media (max-width: 1050px) {
+	.page-section[data-section="audit"] {
+		display: block;
+		min-height: auto;
+	}
+
 	.audit-dns-grid {
-		grid-template-columns: 1fr;
-		grid-template-rows: none;
+		display: block;
+		width: 100%;
+	}
+
+	.audit-dns-grid>.card {
+		width: 100%;
+		max-width: 100%;
+		margin-bottom: 16px;
+	}
+
+	.audit-dns-grid>.card:last-child {
+		margin-bottom: 0;
 	}
 
 	.audit-log-card {
 		flex: none;
+		height: auto;
+		max-height: none;
 	}
 
 	.audit-log-scroll {
-		flex: none;
-		max-height: 60vh;
+		max-height: 52vh;
 	}
 }
 
@@ -3950,11 +4053,67 @@ body.auth-page .dashboard-footer {
 		width: 100%;
 	}
 
-	.audit-log-scroll {
-		max-height: 50vh;
+	.audit-log-card .card-header--space-between {
+		align-items: center;
 	}
 
-	.audit-log-scroll .audit-table {
-		min-width: 720px;
+	#audit-log-content.audit-log-container {
+		font-size: 0.74rem;
+	}
+
+	.audit-log-scroll {
+		max-height: 46vh;
+		overflow-x: auto;
+		overflow-y: auto;
+	}
+
+	.audit-table {
+		min-width: 700px;
+		font-size: 0.72rem;
+	}
+
+	.audit-table th,
+	.audit-table td {
+		padding: 8px 8px;
+	}
+
+	.audit-table th:nth-child(1),
+	.audit-table td:nth-child(1) {
+		width: 150px;
+	}
+
+	.audit-table th:nth-child(2),
+	.audit-table td:nth-child(2) {
+		width: 96px;
+	}
+
+	.audit-table th:nth-child(4),
+	.audit-table td:nth-child(4) {
+		width: 64px;
+	}
+
+	.audit-table th:nth-child(5),
+	.audit-table td:nth-child(5) {
+		width: 104px;
+	}
+
+	.audit-table th:nth-child(6),
+	.audit-table td:nth-child(6) {
+		width: 82px;
+	}
+
+	.audit-result {
+		padding: 1px 6px;
+		font-size: 0.64rem;
+	}
+
+	.audit-actions .copy-btn {
+		padding: 5px 6px;
+	}
+}
+
+@media (max-width: 400px) {
+	.audit-table {
+		min-width: 700px;
 	}
 }
