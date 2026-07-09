@@ -1,9 +1,26 @@
 // Lightweight bootstrap for login, setup and standalone 2FA pages.
+
+function setupPasswordToggles() {
+	document.addEventListener('click', event => {
+		const btn = event.target.closest('[data-toggle-password]');
+		if (!btn) return;
+
+		const input = document.getElementById(btn.dataset.togglePassword);
+		if (!input) return;
+
+		const show = input.type === 'password';
+		input.type = show ? 'text' : 'password';
+		btn.textContent = show ? '🙈' : '👁️';
+		btn.setAttribute('aria-pressed', String(show));
+		btn.setAttribute('aria-label', show ? 'Passwort ausblenden' : 'Passwort anzeigen');
+	});
+}
 (() => {
 	const root = document.documentElement;
 	const savedTheme = localStorage.getItem('theme');
 	const theme = savedTheme || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
 	root.setAttribute('data-theme', theme);
+	setupPasswordToggles();
 
 	const sun = document.querySelector('.auth-sun');
 	if (!sun) return;
