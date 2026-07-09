@@ -191,6 +191,27 @@ document.addEventListener('keydown', event => {
 		ipv64AddDomain();
 	}
 });
+document.addEventListener('pointerdown', (e) => {
+	const el = e.target.closest?.('[data-unlock-input]');
+	if (!el || !el.hasAttribute('readonly')) return;
+	window.setTimeout(() => {
+		if (el.isConnected && el.hasAttribute('readonly')) {
+			el.removeAttribute('readonly');
+		}
+	}, 200);
+}, true);
+document.addEventListener('keydown', (e) => {
+	const el = e.target.closest?.('[data-unlock-input]');
+	if (el && el.hasAttribute('readonly')) {
+		el.removeAttribute('readonly');
+	}
+}, true);
+document.addEventListener('paste', (e) => {
+	const el = e.target.closest?.('[data-unlock-input]');
+	if (el && el.hasAttribute('readonly')) {
+		el.removeAttribute('readonly');
+	}
+}, true);
 
 let blinkTimer = null;
 let faviconState = '';
@@ -1617,8 +1638,8 @@ async function updateDomainDisplay(data) {
 function _getVal(id) { const el = document.getElementById(id); return el ? el.value : ''; }
 function _isChecked(id) { const el = document.getElementById(id); return el ? el.checked : false; }
 function _parseList(raw) { return (raw || '').split(',').map(s => s.trim()).filter(Boolean); }
-function _setVal(id, v) { const el = document.getElementById(id); if (!el || el === document.activeElement) return; el.value = v != null ? String(v) : ''; }
-function _setChk(id, v) { const el = document.getElementById(id); if (!el || el === document.activeElement) return; el.checked = !!v; updateCheckboxLabel(el); }
+function _setVal(id, v) { const el = document.getElementById(id); if (!el || el === document.activeElement) return; const next = v != null ? String(v) : ''; if (el.value !== next) el.value = next; }
+function _setChk(id, v) { const el = document.getElementById(id); if (!el || el === document.activeElement) return; const next = !!v; if (el.checked !== next) el.checked = next; updateCheckboxLabel(el); }
 
 function _initSettingsFields() {
 	isSettingsOpen = true;
