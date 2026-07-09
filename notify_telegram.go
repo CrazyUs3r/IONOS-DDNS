@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html"
 	"io"
 	"math/big"
 	"net"
@@ -708,7 +707,7 @@ func (t *telegramNotifier) sendDomains(chatID string) {
 		sb.WriteString(phrases().NoDomainsConfigured)
 	} else {
 		for _, dc := range domainConfigs {
-			fmt.Fprintf(&sb, "🔹 <code>%s</code>  <i>(%s)</i>\n", html.EscapeString(dc.FQDN), html.EscapeString(string(dc.Provider)))
+			fmt.Fprintf(&sb, "🔹 <code>%s</code>  <i>(%s)</i>\n", esc(dc.FQDN), esc(string(dc.Provider)))
 		}
 	}
 
@@ -726,14 +725,14 @@ func (t *telegramNotifier) sendDomains(chatID string) {
 				continue
 			}
 			latest := h.IPs[len(h.IPs)-1]
-			fmt.Fprintf(&sb, "\n🌐 <code>%s</code>\n", html.EscapeString(domain))
+			fmt.Fprintf(&sb, "\n🌐 <code>%s</code>\n", esc(domain))
 			if latest.IPv4 != "" {
-				fmt.Fprintf(&sb, "  v4: <code>%s</code>\n", html.EscapeString(latest.IPv4))
+				fmt.Fprintf(&sb, "  v4: <code>%s</code>\n", esc(latest.IPv4))
 			}
 			if latest.IPv6 != "" {
-				fmt.Fprintf(&sb, "  v6: <code>%s</code>\n", html.EscapeString(latest.IPv6))
+				fmt.Fprintf(&sb, "  v6: <code>%s</code>\n", esc(latest.IPv6))
 			}
-			fmt.Fprintf(&sb, "  🕒 <i>%s</i>\n", html.EscapeString(latest.Time))
+			fmt.Fprintf(&sb, "  🕒 <i>%s</i>\n", esc(latest.Time))
 		}
 	}
 
@@ -754,7 +753,7 @@ func (t *telegramNotifier) sendHealth(chatID string) {
 	default:
 		fmt.Fprintf(&sb, "%s\n", phrases().TgHealthUnhealthy)
 		if lastErr := lastErrorMsg.Get(); lastErr != "" {
-			fmt.Fprintf(&sb, "%s <code>%s</code>\n", phrases().TgHealthErrorLabel, html.EscapeString(lastErr))
+			fmt.Fprintf(&sb, "%s <code>%s</code>\n", phrases().TgHealthErrorLabel, esc(lastErr))
 		}
 	}
 
@@ -832,12 +831,12 @@ func formatTelegramMessage(msg NotifyMessage, instanceTag string) string {
 	icon := notifyIcon(msg)
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "<b>%s Go-DynDNS</b>  <code>%s</code>\n", icon, html.EscapeString(instanceTag))
+	fmt.Fprintf(&sb, "<b>%s Go-DynDNS</b>  <code>%s</code>\n", icon, esc(instanceTag))
 	if msg.Domain != "" {
-		fmt.Fprintf(&sb, "🌐 <code>%s</code>\n", html.EscapeString(msg.Domain))
+		fmt.Fprintf(&sb, "🌐 <code>%s</code>\n", esc(msg.Domain))
 	}
-	fmt.Fprintf(&sb, "📋 <b>%s</b>\n", html.EscapeString(msg.Action))
-	fmt.Fprintf(&sb, "💬 %s\n", html.EscapeString(msg.Message))
+	fmt.Fprintf(&sb, "📋 <b>%s</b>\n", esc(msg.Action))
+	fmt.Fprintf(&sb, "💬 %s\n", esc(msg.Message))
 	fmt.Fprintf(&sb, "🕒 <i>%s</i>", time.Now().Format(statusTimestampLayout))
 	return sb.String()
 }

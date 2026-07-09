@@ -241,7 +241,7 @@ func cleanupTOTPStores(now time.Time) {
 func handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
 		return
 	}
 	if r.Method == http.MethodPost && !parseLimitedAuthForm(w, r) {
@@ -373,7 +373,7 @@ func clearPendingTOTPCookie(w http.ResponseWriter, r *http.Request) {
 func handleSettings2FA(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != MethodGET && r.Method != MethodPOST {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
 		return
 	}
 	if !authEnabled {
@@ -557,7 +557,7 @@ func render2FASettings(w http.ResponseWriter, fragment bool, currentUser *Dashbo
 
 func handleAPI2FAStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodGET {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -589,11 +589,11 @@ func handleAPI2FAStatus(w http.ResponseWriter, r *http.Request) {
 
 func handleSettings2FAQRCode(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodGET {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
 		return
 	}
 	if !authEnabled {
-		http.Error(w, "auth disabled", http.StatusNotFound)
+		http.Error(w, phrases().AuthDisabled, http.StatusNotFound)
 		return
 	}
 
@@ -612,7 +612,7 @@ func handleSettings2FAQRCode(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if currentUser == nil {
-		http.Error(w, "user not found", http.StatusInternalServerError)
+		http.Error(w, phrases().ErrUserNotFound, http.StatusInternalServerError)
 		return
 	}
 

@@ -149,8 +149,6 @@ func handleDNScaleResponse(
 // ============================================================================
 // ZONE HELPERS - DNSCALE
 // ============================================================================
-
-// dnscaleZonesResponse matches the DNScale collection envelope for zones.
 type dnscaleZonesResponse struct {
 	Status string `json:"status"`
 	Data   struct {
@@ -159,7 +157,6 @@ type dnscaleZonesResponse struct {
 	} `json:"data"`
 }
 
-// dnscaleRecordsResponse matches the DNScale collection envelope for records.
 type dnscaleRecordsResponse struct {
 	Status string `json:"status"`
 	Data   struct {
@@ -174,7 +171,6 @@ type dnscaleRecordsResponse struct {
 	} `json:"data"`
 }
 
-// dnscaleRecordResponse matches the DNScale single-record create/update envelope.
 type dnscaleRecordResponse struct {
 	Status string `json:"status"`
 	Data   struct {
@@ -186,7 +182,6 @@ type dnscaleRecordResponse struct {
 func loadDNScaleZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
 	domainConfigs := snapshotDomainConfigs()
 
-	// Paginate through all zones (default limit 10, max 100).
 	var allZones []Zone
 	offset := 0
 	const pageSize = 100
@@ -326,7 +321,6 @@ func findDNScaleExistingRecord(records []Record, fqdn, recordName, recordType st
 	wantedType := strings.ToUpper(strings.TrimSpace(recordType))
 
 	for i := range records {
-		// DNScale returns names as FQDNs with trailing dot; normalise.
 		actualName := normalizeProviderFQDN(records[i].Name)
 		actualType := strings.ToUpper(strings.TrimSpace(records[i].Type))
 
@@ -374,8 +368,6 @@ func effectiveDNScaleTTL(dc *DomainConfig) int {
 	return ttl
 }
 
-// executeDNScaleDNSUpdate chooses PUT (by-name) for existing records and POST
-// for new records. DNScale's "by-name" endpoint avoids ID tracking entirely.
 func executeDNScaleDNSUpdate(
 	ctx context.Context,
 	dc *DomainConfig,
@@ -385,7 +377,6 @@ func executeDNScaleDNSUpdate(
 	ttl := effectiveDNScaleTTL(dc)
 
 	if existing != nil {
-		// Update via by-name endpoint.
 		requestURL := fmt.Sprintf(
 			"%s/%s/records/by-name/%s/%s",
 			dnscaleBaseURL,
@@ -434,7 +425,6 @@ func executeDNScaleDNSUpdate(
 		return ActionUpdate, record, nil
 	}
 
-	// Create new record.
 	url := fmt.Sprintf("%s/%s/records", dnscaleBaseURL, zoneID)
 	debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("📡 %s: %s %s", phrases().APICall, MethodPOST, url))
 
@@ -455,8 +445,6 @@ func executeDNScaleDNSUpdate(
 	return ActionCreate, record, nil
 }
 
-// dnscaleRecordName returns the short record name (e.g. "www" or "@") suitable
-// for the DNScale POST body. The zone apex is expressed as "@".
 func dnscaleRecordName(recordName, fqdn string) string {
 	name := strings.TrimSpace(recordName)
 	if name == "" {
@@ -465,10 +453,8 @@ func dnscaleRecordName(recordName, fqdn string) string {
 	return name
 }
 
-// dnscalePathName returns the record name component used in the by-name URL
-// path. It falls back to the short recordName so that "@" is preserved.
 func dnscalePathName(recordName, fqdn, zoneID string) string {
-	_ = zoneID // reserved for future zone-name lookup if needed
+	_ = zoneID
 	return neturl.PathEscape(dnscaleRecordName(recordName, fqdn))
 }
 
@@ -661,9 +647,6 @@ func cleanupDNScaleRecords(ctx context.Context, zones []Zone, recordCache *ZoneR
 	}
 }
 
-// buildDNScaleManagedDomains returns only domains that have previously been
-// written by this application through DNScale. Cleanup must never infer
-// ownership merely from a record being A/AAAA inside a loaded zone.
 func buildDNScaleManagedDomains() map[string]struct{} {
 	managed := make(map[string]struct{})
 	domains, err := snapshotStatusDomains()
@@ -734,7 +717,6 @@ func cleanupSingleDNScaleRecord(
 		return
 	}
 
-	// Prefer by-name delete (ID-independent); fall back to ID-based if ID is present.
 	var url string
 	if strings.TrimSpace(rec.ID) != "" {
 		url = fmt.Sprintf("%s/%s/records/%s", dnscaleBaseURL, zone.ID, rec.ID)
@@ -781,7 +763,6 @@ func shouldCleanupDNScaleRecord(
 }
 
 func dnscaleRecordFQDN(zoneName, recordName string) string {
-	// DNScale returns names as "www.example.com." — strip trailing dot first.
 	name := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(recordName), "."))
 	zone := strings.ToLower(strings.TrimSuffix(zoneName, "."))
 

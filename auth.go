@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html"
 	"io"
 	"net"
 	"net/http"
@@ -948,7 +947,7 @@ func hasPermission(role UserRole, method, path string) bool {
 func handleLogin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
 		return
 	}
 	if r.Method == http.MethodPost && !parseLimitedAuthForm(w, r) {
@@ -1023,7 +1022,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 
 func handleLogout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -1046,7 +1045,7 @@ type setupForm struct {
 func handleSetup(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
 		return
 	}
 	if r.Method == http.MethodPost && !parseLimitedAuthForm(w, r) {
@@ -1157,7 +1156,7 @@ func saveInitialAdmin(newUser DashboardUser) error {
 }
 
 // ============================================================================
-// HANDLER: /api/users  (nur Admin)
+// HANDLER: /api/users  (only Admin)
 // ============================================================================
 
 type safeUser struct {
@@ -1187,7 +1186,7 @@ func handleAPIUsers(w http.ResponseWriter, r *http.Request) {
 	case MethodPOST:
 		handleCreateUser(w, r, sess)
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
 	}
 }
 
@@ -1341,7 +1340,7 @@ func handleAPIUsersID(w http.ResponseWriter, r *http.Request) {
 	case MethodDELETE:
 		handleDeleteUser(w, id, sess.UserID)
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
 	}
 }
 
@@ -1617,7 +1616,7 @@ func authPageShell(title, body string) string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>` + html.EscapeString(title) + ` · DynDNS</title>
+<title>` + esc((title)) + ` · DynDNS</title>
 <link rel="stylesheet" href="/assets/style.css">
 </head>
 
@@ -1645,7 +1644,7 @@ func authPageShell(title, body string) string {
 func buildLoginPage(errMsg, redirect string) string {
 	errHTML := ""
 	if errMsg != "" {
-		errHTML = `<div class="auth-error">⚠️ ` + html.EscapeString(errMsg) + `</div>`
+		errHTML = `<div class="auth-error">⚠️ ` + esc(errMsg) + `</div>`
 	}
 
 	action := "/login?redirect=" + url.QueryEscape(safeLocalRedirect(redirect))
@@ -1654,14 +1653,17 @@ func buildLoginPage(errMsg, redirect string) string {
 <div class="auth-title">` + phrases().DashboardTitle + `</div>
 <div class="auth-sub">` + phrases().LoginSubtitle + `</div>
 ` + errHTML + `
-<form method="POST" action="` + html.EscapeString(action) + `">
+<form method="POST" action="` + esc(action) + `">
 	<div class="auth-field">
 		<label class="auth-label">` + phrases().Username + `</label>
 		<input class="auth-input" type="text" name="username" autofocus autocomplete="username" required>
 	</div>
 	<div class="auth-field">
 		<label class="auth-label">` + phrases().Password + `</label>
-		<input class="auth-input" type="password" name="password" autocomplete="current-password" required>
+		<div class="input-with-action">
+			<input id="login-password" class="auth-input" type="password" name="password" autocomplete="current-password" required>
+			<button type="button" class="input-action-btn" data-toggle-password="login-password" aria-label="Passwort anzeigen" aria-pressed="false">👁️</button>
+		</div>
 	</div>
 	<button class="auth-btn" type="submit">🔐 ` + phrases().LoginButton + `</button>
 </form>
@@ -1673,7 +1675,7 @@ func buildLoginPage(errMsg, redirect string) string {
 func buildSetupPage(errMsg string) string {
 	errHTML := ""
 	if errMsg != "" {
-		errHTML = `<div class="auth-error">⚠️ ` + html.EscapeString(errMsg) + `</div>`
+		errHTML = `<div class="auth-error">⚠️ ` + esc(errMsg) + `</div>`
 	}
 
 	body := `
@@ -1693,11 +1695,17 @@ func buildSetupPage(errMsg string) string {
 	</div>
 	<div class="auth-field">
 		<label class="auth-label">` + phrases().Password + ` <small style="opacity:0.5">(` + phrases().PasswordMinHint + `)</small></label>
-		<input class="auth-input" type="password" name="password" autocomplete="new-password" required>
+		<div class="input-with-action">
+			<input id="setup-password" class="auth-input" type="password" name="password" autocomplete="new-password" required>
+			<button type="button" class="input-action-btn" data-toggle-password="setup-password" aria-label="Passwort anzeigen" aria-pressed="false">👁️</button>
+		</div>
 	</div>
 	<div class="auth-field">
 		<label class="auth-label">` + phrases().PasswordConfirm + `</label>
-		<input class="auth-input" type="password" name="password2" autocomplete="new-password" required>
+		<div class="input-with-action">
+			<input id="setup-password2" class="auth-input" type="password" name="password2" autocomplete="new-password" required>
+			<button type="button" class="input-action-btn" data-toggle-password="setup-password2" aria-label="Passwort anzeigen" aria-pressed="false">👁️</button>
+		</div>
 	</div>
 	<button class="auth-btn" type="submit">✅ ` + phrases().SetupButton + `</button>
 </form>
