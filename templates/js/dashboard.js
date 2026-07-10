@@ -1644,62 +1644,94 @@ function _setChk(id, v) { const el = document.getElementById(id); if (!el || el 
 function _initSettingsFields() {
 	isSettingsOpen = true;
 
+	// Token placeholder quick update (cheap DOM write)
 	const saved = sessionStorage.getItem('triggerToken') || '';
 	const inp = document.getElementById('s-token');
 	if (inp) inp.placeholder = saved ? tr('token_saved_masked', '●●●●●● (gespeichert)') : tr('token_enter', 'Token eingeben...');
 
+	// Collect system / notifier values first, apply in one rAF to batch DOM writes
 	const sys = (typeof initialSystem !== 'undefined' && initialSystem) ? initialSystem : {};
 	const mqtt = sys.mqtt || {};
 	const email = sys.email || {};
-	_setVal('cfg-ip-mode', sys.ip_mode || 'BOTH');
-	_setVal('cfg-interval', sys.interval || 300);
-	_setVal('cfg-health-port', sys.health_port || '8080');
-	_setVal('cfg-iface', sys.iface_name || '');
-	_setVal('cfg-dns', (sys.dns_servers || []).join(', '));
-	_setVal('cfg-max-log', sys.max_log_lines || 500);
-	_setVal('cfg-max-retries', sys.max_api_retries || 3);
-	_setVal('cfg-max-concurrent', sys.max_concurrent || 5);
-	_setVal('cfg-hourly-limit', sys.hourly_rate_limit || 1200);
-	_setVal('cfg-lang', sys.lang || 'de');
-	_setChk('cfg-dry-run', sys.dry_run || false);
-	_setChk('cfg-debug', sys.debug_enabled || false);
-	_setChk('cfg-debug-http', sys.debug_http_raw || false);
-	_setVal('cfg-ipv4_endpoints', (sys.ipv4_endpoints || []).join(', '));
-	_setVal('cfg-ipv6_endpoints', (sys.ipv6_endpoints || []).join(', '));
 
-	_setChk('cfg-notify-enabled', sys.notify_enabled || false);
+	const values = {
+		'cfg-ip-mode': sys.ip_mode || 'BOTH',
+		'cfg-interval': sys.interval || 300,
+		'cfg-health-port': sys.health_port || '8080',
+		'cfg-iface': sys.iface_name || '',
+		'cfg-dns': (sys.dns_servers || []).join(', '),
+		'cfg-max-log': sys.max_log_lines || 500,
+		'cfg-max-retries': sys.max_api_retries || 3,
+		'cfg-max-concurrent': sys.max_concurrent || 5,
+		'cfg-hourly-limit': sys.hourly_rate_limit || 1200,
+		'cfg-lang': sys.lang || 'de',
+		'cfg-ipv4_endpoints': (sys.ipv4_endpoints || []).join(', '),
+		'cfg-ipv6_endpoints': (sys.ipv6_endpoints || []).join(', '),
+		'cfg-tg-token': sys.telegram_token || '',
+		'cfg-tg-chat-id': sys.telegram_chat_id || '',
+		'cfg-gotify-url': sys.gotify_url || '',
+		'cfg-gotify-token': sys.gotify_token || '',
+		'cfg-ntfy-url': sys.ntfy_url || '',
+		'cfg-ntfy-topic': sys.ntfy_topic || '',
+		'cfg-ntfy-token': sys.ntfy_token || '',
+		'cfg-webhook-url': sys.webhook_url || '',
+		'cfg-webhook-secret': sys.webhook_secret || '',
+		'cfg-mqtt-broker': mqtt.broker || '',
+		'cfg-mqtt-clientid': mqtt.client_id || '',
+		'cfg-mqtt-username': mqtt.username || '',
+		'cfg-mqtt-password': mqtt.password || '',
+		'cfg-mqtt-topic': mqtt.topic || '',
+		'cfg-mqtt-qos': mqtt.qos ?? 0,
+		'cfg-mqtt-discovery-prefix': mqtt.discovery_prefix || 'homeassistant',
+		'cfg-email-host': email.host || '',
+		'cfg-email-port': email.port || '',
+		'cfg-email-user': email.username || '',
+		'cfg-email-pass': email.password || '',
+		'cfg-email-from': email.from || '',
+		'cfg-email-to': email.to || '',
+		'cfg-email-subject-prefix': email.subject_prefix || '',
+		'cfg-email-tls-mode': email.tls_mode || 'starttls'
+	};
+
+	const checks = {
+		'cfg-dry-run': !!sys.dry_run,
+		'cfg-debug': !!sys.debug_enabled,
+		'cfg-debug-http': !!sys.debug_http_raw,
+		'cfg-notify-enabled': !!sys.notify_enabled,
+		'cfg-mqtt-retain': !!(mqtt.retain || false),
+		'cfg-mqtt-discovery': !!(mqtt.discovery || false)
+	};
+
 	const activeEvents = new Set((sys.notify_events || []).map(e => e.toUpperCase()));
-	document.querySelectorAll('input[name="notify-event"]').forEach(cb => {
-		cb.checked = activeEvents.has(cb.value);
-	});
-	_setVal('cfg-tg-token', sys.telegram_token || '');
-	_setVal('cfg-tg-chat-id', sys.telegram_chat_id || '');
-	_setVal('cfg-gotify-url', sys.gotify_url || '');
-	_setVal('cfg-gotify-token', sys.gotify_token || '');
-	_setVal('cfg-ntfy-url', sys.ntfy_url || '');
-	_setVal('cfg-ntfy-topic', sys.ntfy_topic || '');
-	_setVal('cfg-ntfy-token', sys.ntfy_token || '');
-	_setVal('cfg-webhook-url', sys.webhook_url || '');
-	_setVal('cfg-webhook-secret', sys.webhook_secret || '');
-	_setVal('cfg-mqtt-broker', mqtt.broker || '');
-	_setVal('cfg-mqtt-clientid', mqtt.client_id || '');
-	_setVal('cfg-mqtt-username', mqtt.username || '');
-	_setVal('cfg-mqtt-password', mqtt.password || '');
-	_setVal('cfg-mqtt-topic', mqtt.topic || '');
-	_setVal('cfg-mqtt-qos', mqtt.qos ?? 0);
-	_setChk('cfg-mqtt-retain', mqtt.retain || false);
-	_setChk('cfg-mqtt-discovery', mqtt.discovery || false);
-	_setVal('cfg-mqtt-discovery-prefix', mqtt.discovery_prefix || 'homeassistant');
-	_setVal('cfg-email-host', email.host || '');
-	_setVal('cfg-email-port', email.port || '');
-	_setVal('cfg-email-user', email.username || '');
-	_setVal('cfg-email-pass', email.password || '');
-	_setVal('cfg-email-from', email.from || '');
-	_setVal('cfg-email-to', email.to || '');
-	_setVal('cfg-email-subject-prefix', email.subject_prefix || '');
-	_setVal('cfg-email-tls-mode', email.tls_mode || 'starttls');
+	const notifyEventElements = Array.from(document.querySelectorAll('input[name="notify-event"]'));
 
-	renderSettingsDomainList();
+	// Batch apply DOM writes in one rAF
+	requestAnimationFrame(() => {
+		for (const [id, v] of Object.entries(values)) {
+			const el = document.getElementById(id);
+			if (!el || el === document.activeElement) continue;
+			const next = v != null ? String(v) : '';
+			if (el.value !== next) el.value = next;
+		}
+		for (const [id, c] of Object.entries(checks)) {
+			const el = document.getElementById(id);
+			if (!el || el === document.activeElement) continue;
+			const next = !!c;
+			if (el.checked !== next) el.checked = next;
+			if (el instanceof HTMLInputElement) updateCheckboxLabel(el);
+		}
+		notifyEventElements.forEach(cb => {
+			const should = activeEvents.has(cb.value);
+			if (cb.checked !== should) cb.checked = should;
+		});
+	});
+
+	// Defer the heavier domain list rendering so the UI paints first
+	const deferRender = fn => {
+		if ('requestIdleCallback' in window) requestIdleCallback(fn, { timeout: 200 });
+		else setTimeout(fn, 50);
+	};
+	deferRender(renderSettingsDomainList);
 }
 
 function closeSettings() {
@@ -1740,12 +1772,16 @@ function renderSettingsDomainList() {
 		HETZNER: '#14b8a6',
 		HETZNERCLOUD: '#06b6d4',
 		FEBAS: '#22c55e',
-		DNSCALE: '#8b5cf6',
+		DNSCALE: '#8b5cf6'
 	};
+
+	// Build in a DocumentFragment to avoid multiple reflows
+	const frag = document.createDocumentFragment();
 
 	for (const domain of sorted) {
 		const originalIndex = tempDomainConfigs.indexOf(domain);
 		const providerColor = providerColors[domain.provider] || '#64748b';
+
 		const pill = document.createElement('div');
 		pill.className = 'domain-pill';
 
@@ -1757,7 +1793,7 @@ function renderSettingsDomainList() {
 		fqdn.textContent = String(domain.fqdn || '');
 		info.appendChild(fqdn);
 
-		const addBadge = (text, decorateProvider = false) => {
+		const addBadge = (infoEl, text, decorateProvider = false) => {
 			const badge = document.createElement('span');
 			badge.className = 'provider-badge';
 			badge.style.marginLeft = '6px';
@@ -1767,13 +1803,13 @@ function renderSettingsDomainList() {
 				badge.style.color = providerColor;
 				badge.style.border = `1px solid ${providerColor}40`;
 			}
-			info.appendChild(badge);
+			infoEl.appendChild(badge);
 		};
 
-		addBadge(domain.provider || '', true);
-		if (domain.ttl) addBadge(`TTL ${domain.ttl}`);
-		if (domain.ip_mode) addBadge(domain.ip_mode);
-		if (domain.provider === 'CLOUDFLARE' && domain.cf_proxied) addBadge('proxied');
+		addBadge(info, domain.provider || '', true);
+		if (domain.ttl) addBadge(info, `TTL ${domain.ttl}`);
+		if (domain.ip_mode) addBadge(info, domain.ip_mode);
+		if (domain.provider === 'CLOUDFLARE' && domain.cf_proxied) addBadge(info, 'proxied');
 
 		const actions = document.createElement('div');
 		actions.className = 'domain-pill-actions';
@@ -1792,8 +1828,11 @@ function renderSettingsDomainList() {
 
 		actions.append(editButton, removeButton);
 		pill.append(info, actions);
-		container.appendChild(pill);
+
+		frag.appendChild(pill);
 	}
+
+	container.appendChild(frag);
 }
 
 function replaceWithTextElement(container, tagName, className, text) {
