@@ -1580,7 +1580,7 @@ select.s-input option {
 	border-radius: 8px;
 	background: rgba(255, 255, 255, 0.02);
 	overflow: hidden;
-	contain: content;
+	contain: layout style paint;
 }
 
 .s-subsection-summary {
@@ -1602,6 +1602,8 @@ select.s-input option {
 .s-subsection-content {
 	padding: 12px;
 	border-top: 1px solid rgba(255, 255, 255, 0.06);
+	content-visibility: auto;
+	contain-intrinsic-size: 800px;
 }
 
 .s-subsection-chevron {
@@ -2082,7 +2084,7 @@ body.auth-page .dashboard-footer {
 }
 
 /* ============================================================================
-   FLEXIBLE HEIGHT FOR LOGS & DEBUG SECTIONS
+   FLEXIBLE HEIGHT
    ============================================================================ */
 .page-section[data-section="logs"],
 .page-section[data-section="debug"],
@@ -2103,15 +2105,9 @@ body.auth-page .dashboard-footer {
 	margin-bottom: 15px;
 }
 
-.page-section[data-section="audit"] .audit-dns-grid {
-	flex: 1;
-	min-height: 0;
-	margin-bottom: 15px;
-}
-
 .page-section[data-section="logs"] .card-content,
 .page-section[data-section="debug"] .card-content,
-.page-section[data-section="audit"] .card-content {
+.page-section[data-section="audit"] .audit-log-card .card-content {
 	display: flex;
 	flex-direction: column;
 	flex: 1;
@@ -3769,13 +3765,13 @@ body.auth-page .dashboard-footer {
 .audit-log-card {
 	min-width: 0;
 	max-width: 100%;
+	content-visibility: visible;
+	contain-intrinsic-size: auto;
 }
 
 .audit-log-card {
 	align-self: stretch;
 	overflow: hidden;
-	content-visibility: visible;
-	contain-intrinsic-size: auto;
 }
 
 .audit-log-card .card-header--space-between {
@@ -3811,9 +3807,6 @@ body.auth-page .dashboard-footer {
 
 .audit-table-wrap,
 .audit-log-scroll {
-	flex: 1;
-	min-height: 0;
-	max-height: none;
 	width: 100%;
 	max-width: 100%;
 	overflow: auto;
@@ -3823,6 +3816,13 @@ body.auth-page .dashboard-footer {
 	border-radius: 8px;
 	scrollbar-gutter: stable;
 }
+
+.audit-log-scroll {
+	flex: 1;
+	min-height: 0;
+	max-height: none;
+}
+
 
 .audit-table {
 	width: 100%;
@@ -4143,4 +4143,97 @@ body.auth-page .dashboard-footer {
 	.audit-table {
 		min-width: 700px;
 	}
+}
+
+/* ============================================================================
+   AUDIT / DNS PROPAGATION — dynamic height fix
+   Keep this block at the very end of the stylesheet so it wins over the
+   earlier flexible-height rules.
+   ============================================================================ */
+.page-section[data-section="audit"] {
+	display: block;
+	flex: 0 0 auto;
+	min-height: auto;
+	height: auto;
+	overflow: visible;
+}
+
+.page-section[data-section="audit"] .audit-dns-grid {
+	flex: none;
+	min-height: auto;
+	height: auto;
+	overflow: visible;
+	align-items: start;
+	align-content: start;
+}
+
+.page-section[data-section="audit"] .audit-dns-grid>.card {
+	flex: none;
+	min-height: 0;
+	height: auto;
+	content-visibility: visible;
+	contain-intrinsic-size: auto;
+}
+
+.page-section[data-section="audit"] .audit-dns-grid>.card .card-content {
+	display: block;
+	flex: none;
+	min-height: auto;
+	height: auto;
+}
+
+.page-section[data-section="audit"] .dns-propagation-result {
+	display: block;
+	min-height: 0;
+	height: auto;
+	overflow-x: auto;
+	overflow-y: visible;
+}
+
+@media (max-width: 1050px) {
+	.page-section[data-section="audit"] .audit-dns-grid {
+		display: block;
 	}
+
+	.page-section[data-section="audit"] .audit-dns-grid>.card {
+		width: 100%;
+		max-width: 100%;
+	}
+}
+
+/* DNS-Propagation muss im normalen Dokumentfluss wachsen */
+.dns-propagation-card {
+	display: block;
+	height: auto;
+	min-height: 0;
+	overflow: hidden;
+	content-visibility: visible;
+	contain: none;
+}
+
+.dns-propagation-card>.card-content {
+	display: block;
+	flex: none;
+	height: auto;
+	min-height: 0;
+	overflow: visible;
+}
+
+.dns-propagation-card .dns-propagation-result {
+	overflow: visible;
+}
+
+
+.dns-propagation-card .audit-table-wrap {
+	display: block;
+	flex: none;
+	height: auto;
+	min-height: 0;
+	overflow-x: auto;
+	overflow-y: visible;
+}
+
+.dns-propagation-card .audit-table {
+	display: table;
+	height: auto;
+}
