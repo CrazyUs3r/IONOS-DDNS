@@ -1204,5 +1204,10 @@
   "zone_singular": "Zone",
   "zones_loaded_from_api": "✅ Zonen erfolgreich von API geladen",
   "zones_loaded_from_disk": "✅ Zonen erfolgreich aus Disk-Cache geladen",
-  "zones_loaded_from_disk_no_api_call": "✅ Zonen aus Disk-Cache übernommen (kein API-Aufruf nötig)"
+  "zones_loaded_from_disk_no_api_call": "✅ Zonen aus Disk-Cache übernommen (kein API-Aufruf nötig)",
+"settings_cname_target_placeholder": "CNAME-Ziel (z. B. ziel.example.com)",
+"invalid_domain_record_mode_format": "%s: ungültiger Record-Modus '%s'",
+"cname_target_required_format": "%s: CNAME-Ziel erforderlich",
+"cname_unsupported_provider_format": "%s: Provider %s unterstützt kein CNAME",
+"cname_target_invalid_format": "%s: ungültiges CNAME-Ziel: %s"
 }
