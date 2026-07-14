@@ -164,44 +164,130 @@ func updateIonosDNS(
 	zoneName string,
 	cache *ZoneRecordCache,
 ) (bool, error) {
+	if strings.TrimSpace(zoneName) == "" {
+		return false, fmt.Errorf(phrases().ErrZoneNameEmpty, fqdn)
+	}
+
 	recordName := recordNameFromFQDN(fqdn, zoneName)
-	existing := findIonosExistingRecord(records, fqdn, recordName, recordType)
 
-	if existing != nil && isInvalidIonosRecordID(existing.ID) {
-		debugLog("CACHE", fqdn, fmt.Sprintf(phrases().IonosInvalidCachedRecordID, existing.ID))
+	conflictsRemoved, err := removeConflictingIonosRecords(
+		ctx,
+		dc,
+		fqdn,
+		recordName,
+		recordType,
+		zoneID,
+		records,
+	)
+	if err != nil {
+		return false, err
+	}
 
+	if conflictsRemoved && dryRunEnabled() {
+		return true, nil
+	}
+
+	if conflictsRemoved {
 		liveRecords, err := loadIonosInfrastructureRecords(ctx, dc, zoneID)
 		if err != nil {
-			return false, fmt.Errorf(phrases().IonosRefreshInvalidCachedRecordFailed, err)
+			return false, fmt.Errorf(
+				"IONOS-Records nach Typwechsel konnten nicht neu geladen werden: %w",
+				err,
+			)
 		}
 
 		records = liveRecords
+
 		if cache != nil {
 			cache.Set(zoneID, liveRecords)
 		}
-		existing = findIonosExistingRecord(records, fqdn, recordName, recordType)
 	}
 
-	if shouldSkipIonosUpdate(fqdn, recordType, newIP, existing) {
-		return false, nil
+	existing := findIonosExistingRecord(
+		records,
+		fqdn,
+		recordName,
+		recordType,
+	)
+
+	if existing != nil && isInvalidIonosRecordID(existing.ID) {
+		debugLog(
+			"CACHE",
+			fqdn,
+			fmt.Sprintf(
+				phrases().IonosInvalidCachedRecordID,
+				existing.ID,
+			),
+		)
+
+		liveRecords, err := loadIonosInfrastructureRecords(
+			ctx,
+			dc,
+			zoneID,
+		)
+		if err != nil {
+			return false, fmt.Errorf(
+				phrases().IonosRefreshInvalidCachedRecordFailed,
+				err,
+			)
+		}
+
+		records = liveRecords
+
+		if cache != nil {
+			cache.Set(zoneID, liveRecords)
+		}
+
+		existing = findIonosExistingRecord(
+			records,
+			fqdn,
+			recordName,
+			recordType,
+		)
 	}
 
-	if zoneName == "" {
-		return false, fmt.Errorf(phrases().ErrZoneNameEmpty, fqdn)
+	if shouldSkipIonosUpdate(
+		dc,
+		fqdn,
+		recordType,
+		newIP,
+		existing,
+	) {
+		return conflictsRemoved, nil
 	}
 
 	if dryRunEnabled() {
 		log(LogContext{
-			Level:   LogWarn,
-			Action:  ActionDryRun,
-			Domain:  fqdn,
-			Message: fmt.Sprintf("⚠️ %s %s %s", phrases().WouldSet, recordType, newIP),
+			Level:  LogWarn,
+			Action: ActionDryRun,
+			Domain: fqdn,
+			Message: fmt.Sprintf(
+				"⚠️ %s %s %s",
+				phrases().WouldSet,
+				recordType,
+				newIP,
+			),
 		})
+
 		return true, nil
 	}
 
-	method, url, actionType, payload := buildIonosUpdateRequest(dc, fqdn, recordType, newIP, zoneID, existing)
-	debugIonosUpdateRequest(fqdn, method, url, zoneName, recordType)
+	method, url, actionType, payload := buildIonosUpdateRequest(
+		dc,
+		fqdn,
+		recordType,
+		newIP,
+		zoneID,
+		existing,
+	)
+
+	debugIonosUpdateRequest(
+		fqdn,
+		method,
+		url,
+		zoneName,
+		recordType,
+	)
 
 	updatedRecord, err := executeIonosDNSUpdate(
 		ctx,
@@ -221,14 +307,138 @@ func updateIonosDNS(
 	}
 
 	log(LogContext{
-		Level:   LogInfo,
-		Action:  actionType,
-		Domain:  fqdn,
-		Message: fmt.Sprintf("🔄 %s -> %s %s", recordType, newIP, phrases().Update),
+		Level:  LogInfo,
+		Action: actionType,
+		Domain: fqdn,
+		Message: fmt.Sprintf(
+			"🔄 %s -> %s %s",
+			recordType,
+			newIP,
+			phrases().Update,
+		),
 	})
 
-	updateIONOSCache(cache, zoneID, recordName, fqdn, recordType, newIP, existing, updatedRecord)
+	updateIONOSCache(
+		cache,
+		zoneID,
+		recordName,
+		fqdn,
+		recordType,
+		newIP,
+		existing,
+		updatedRecord,
+	)
+
 	return true, nil
+}
+
+func removeConflictingIonosRecords(
+	ctx context.Context,
+	dc *DomainConfig,
+	fqdn, recordName, wantedRecordType, zoneID string,
+	records []Record,
+) (bool, error) {
+	wantedType := strings.ToUpper(strings.TrimSpace(wantedRecordType))
+	removed := false
+
+	for i := range records {
+		record := records[i]
+
+		if !isConflictingIonosRecord(
+			record,
+			fqdn,
+			recordName,
+			wantedType,
+		) {
+			continue
+		}
+
+		removed = true
+
+		if dryRunEnabled() {
+			log(LogContext{
+				Level:  LogWarn,
+				Action: ActionDryRun,
+				Domain: fqdn,
+				Message: fmt.Sprintf(
+					"⚠️ Würde inkompatiblen %s-Record vor Wechsel auf %s entfernen",
+					record.Type,
+					wantedType,
+				),
+			})
+
+			continue
+		}
+
+		if isInvalidIonosRecordID(record.ID) {
+			return false, fmt.Errorf(
+				"IONOS-%s-Record %s hat keine gültige Record-ID",
+				record.Type,
+				fqdn,
+			)
+		}
+
+		url := fmt.Sprintf(
+			"%s/%s/records/%s",
+			ionosBaseURL,
+			zoneID,
+			record.ID,
+		)
+
+		if _, err := ionosAPI(
+			ctx,
+			dc,
+			MethodDELETE,
+			url,
+			nil,
+		); err != nil {
+			return false, fmt.Errorf(
+				"inkompatibler IONOS-%s-Record für %s konnte nicht entfernt werden: %w",
+				record.Type,
+				fqdn,
+				err,
+			)
+		}
+
+		log(LogContext{
+			Level:  LogInfo,
+			Action: ActionUpdate,
+			Domain: fqdn,
+			Message: fmt.Sprintf(
+				"🗑️ %s-Record vor Wechsel auf %s entfernt",
+				record.Type,
+				wantedType,
+			),
+		})
+	}
+
+	return removed, nil
+}
+
+func isConflictingIonosRecord(
+	record Record,
+	fqdn, recordName, wantedRecordType string,
+) bool {
+	actualName := normalizeProviderFQDN(record.Name)
+	wantedFQDN := normalizeProviderFQDN(fqdn)
+	wantedName := normalizeProviderFQDN(recordName)
+
+	if actualName != wantedFQDN && actualName != wantedName {
+		return false
+	}
+
+	actualType := strings.ToUpper(strings.TrimSpace(record.Type))
+
+	switch wantedRecordType {
+	case "CNAME":
+		return actualType == "A" || actualType == "AAAA"
+
+	case "A", "AAAA":
+		return actualType == "CNAME"
+
+	default:
+		return false
+	}
 }
 
 func isInvalidIonosRecordID(id string) bool {
@@ -254,22 +464,33 @@ func findIonosExistingRecord(records []Record, fqdn, recordName, recordType stri
 	return nil
 }
 
-func shouldSkipIonosUpdate(fqdn, recordType, newIP string, existing *Record) bool {
-	if existing != nil && existing.Content == newIP {
-		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("✅ %s: %s = %s", phrases().RecordCurrent, recordType, newIP))
-		log(LogContext{
-			Level:   LogInfo,
-			Action:  ActionCurrent,
-			Domain:  fqdn,
-			Message: fmt.Sprintf("%-4s %s %s", recordType, newIP, phrases().Current),
-		})
-		return true
+func shouldSkipIonosUpdate(dc *DomainConfig, fqdn, recordType, newIP string, existing *Record) bool {
+	if existing != nil {
+		contentCurrent := dnsRecordContentEqual(
+			recordType,
+			existing.Content,
+			newIP,
+		)
+
+		ttlCurrent := existing.TTL == effectiveIonosTTL(dc)
+
+		if contentCurrent && ttlCurrent {
+			debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("✅ %s: %s = %s, TTL = %d", phrases().RecordCurrent, recordType, newIP, existing.TTL))
+			log(LogContext{
+				Level:   LogInfo,
+				Action:  ActionCurrent,
+				Domain:  fqdn,
+				Message: fmt.Sprintf("%-4s %s TTL=%d %s", recordType, newIP, existing.TTL, phrases().Current),
+			})
+
+			return true
+		}
 	}
 
 	if existing == nil {
 		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("🆕 %s: %s", phrases().NoRecordFound, recordType))
 	} else {
-		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("🔄 %s: %s -> %s", phrases().RecordUpdateNeeded, existing.Content, newIP))
+		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("🔄 %s: %s TTL=%d -> %s TTL=%d", phrases().RecordUpdateNeeded, existing.Content, existing.TTL, newIP, effectiveIonosTTL(dc)))
 	}
 
 	return false
@@ -545,15 +766,14 @@ func findMatchingIonosRecord(
 	wantedFQDN := normalizeProviderFQDN(fqdn)
 	wantedRecordName := normalizeProviderFQDN(recordName)
 	wantedType := strings.ToUpper(strings.TrimSpace(recordType))
-	wantedContent := strings.TrimSpace(content)
 
 	for i := range records {
 		actualName := normalizeProviderFQDN(records[i].Name)
 		actualType := strings.ToUpper(strings.TrimSpace(records[i].Type))
-		actualContent := strings.TrimSpace(records[i].Content)
 
 		if (actualName == wantedFQDN || actualName == wantedRecordName) &&
-			actualType == wantedType && actualContent == wantedContent {
+			actualType == wantedType &&
+			dnsRecordContentEqual(recordType, records[i].Content, content) {
 			return &records[i]
 		}
 	}
@@ -725,10 +945,11 @@ func cleanupIONOSRecords(ctx context.Context, zones []Zone, recordCache *ZoneRec
 	}
 
 	debugLog("MAINTENANCE", "", phrases().CleanupStartIonos)
-	configDomains := buildIONOSConfigDomains()
+	configRecords := buildIONOSConfigRecords()
+	managedDomains := buildProviderManagedDomains(ProviderIONOS)
 
 	for _, zone := range zones {
-		cleanupIONOSZoneRecords(ctx, ionosDC, zone, recordCache, configDomains)
+		cleanupIONOSZoneRecords(ctx, ionosDC, zone, recordCache, configRecords, managedDomains)
 	}
 }
 
@@ -736,8 +957,8 @@ func findIONOSConfigForCleanup() *DomainConfig {
 	return findProviderConfigForCleanup(ProviderIONOS)
 }
 
-func buildIONOSConfigDomains() map[string]struct{} {
-	return buildProviderConfigDomains(ProviderIONOS)
+func buildIONOSConfigRecords() map[string]struct{} {
+	return buildProviderConfigRecords(ProviderIONOS)
 }
 
 func cleanupIONOSZoneRecords(
@@ -745,7 +966,8 @@ func cleanupIONOSZoneRecords(
 	ionosDC *DomainConfig,
 	zone Zone,
 	recordCache *ZoneRecordCache,
-	configDomains map[string]struct{},
+	configRecords map[string]struct{},
+	managedDomains map[string]struct{},
 ) {
 	records, exists := recordCache.Get(zone.ID)
 	if !exists {
@@ -755,7 +977,7 @@ func cleanupIONOSZoneRecords(
 	zoneName := strings.ToLower(strings.TrimSuffix(zone.Name, "."))
 
 	for _, rec := range records {
-		cleanupSingleIONOSRecord(ctx, ionosDC, zone, zoneName, rec, configDomains)
+		cleanupSingleIONOSRecord(ctx, ionosDC, zone, zoneName, rec, configRecords, managedDomains)
 	}
 }
 
@@ -765,9 +987,10 @@ func cleanupSingleIONOSRecord(
 	zone Zone,
 	zoneName string,
 	rec Record,
-	configDomains map[string]struct{},
+	configRecords map[string]struct{},
+	managedDomains map[string]struct{},
 ) {
-	fqdn, shouldDelete := shouldCleanupIONOSRecord(zoneName, rec, configDomains)
+	fqdn, shouldDelete := shouldCleanupIONOSRecord(zoneName, rec, configRecords, managedDomains)
 	if !shouldDelete {
 		return
 	}
@@ -806,14 +1029,19 @@ func cleanupSingleIONOSRecord(
 func shouldCleanupIONOSRecord(
 	zoneName string,
 	rec Record,
-	configDomains map[string]struct{},
+	configRecords map[string]struct{},
+	managedDomains map[string]struct{},
 ) (string, bool) {
-	if !isAddressRecord(rec.Type) {
+	if !isCleanupEligibleRecordType(rec.Type) {
 		return "", false
 	}
 
 	fqdn := ionosRecordFQDN(zoneName, rec.Name)
-	if _, ok := configDomains[fqdn]; ok {
+	if _, ok := configRecords[managedRecordKey(fqdn, rec.Type)]; ok {
+		return "", false
+	}
+
+	if _, owned := managedDomains[fqdn]; !owned {
 		return "", false
 	}
 

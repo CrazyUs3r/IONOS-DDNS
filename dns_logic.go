@@ -39,13 +39,21 @@ func processDomains(
 }
 
 func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdateJob, cache *ZoneRecordCache) domainUpdateResult {
-	ipMode := domainIPMode(dc)
-
 	result := domainUpdateResult{
 		Domain: job.Domain,
 		IPv4:   job.IPv4,
 		IPv6:   job.IPv6,
 	}
+
+	if isCNAMEDomainConfig(dc) {
+		if !dc.CNAMEPending {
+			debugLog("DNS-LOGIC", job.Domain, "CNAME unchanged; automatic scheduler update skipped")
+			return result
+		}
+		return processCNAMEDomainUpdate(ctx, dc, job, result, cache)
+	}
+
+	ipMode := domainIPMode(dc)
 
 	if dc.Provider == ProviderIPv64 {
 		return processIPv64DomainUpdate(ctx, dc, job, result, ipMode)
@@ -69,6 +77,103 @@ func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdate
 
 	result.Changed = v4Changed || v6Changed
 	return result
+}
+
+// ============================================================================
+// CNAME SUPPORT
+// ============================================================================
+
+// isCNAMEDomainConfig reports whether a domain is configured to receive a
+// static CNAME record instead of the usual A/AAAA address records.
+func isCNAMEDomainConfig(dc *DomainConfig) bool {
+	if dc == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(dc.RecordMode), RecordModeCNAME) &&
+		strings.TrimSpace(dc.CNAMETarget) != ""
+}
+
+// cnameCapableProviders lists the providers whose update functions accept an
+// arbitrary record type/value pair. Febas and IPv64 speak classic
+// IP-only DynDNS update protocols and cannot represent a CNAME target.
+func cnameCapableProvider(provider ProviderType) bool {
+	switch provider {
+	case ProviderCloudflare, ProviderIONOS, ProviderHetzner, ProviderHetznerCloud, ProviderDNScale:
+		return true
+	default:
+		return false
+	}
+}
+
+func processCNAMEDomainUpdate(
+	ctx context.Context,
+	dc *DomainConfig,
+	job domainUpdateJob,
+	result domainUpdateResult,
+	cache *ZoneRecordCache,
+) domainUpdateResult {
+	if !cnameCapableProvider(dc.Provider) {
+		result.Error = fmt.Errorf("provider %s does not support CNAME records", dc.Provider)
+		return result
+	}
+
+	target := normalizeDomainName(strings.TrimSpace(dc.CNAMETarget))
+	if target == "" {
+		result.Error = fmt.Errorf("CNAME target is empty for %s", job.Domain)
+		return result
+	}
+
+	debugLog("DNS-LOGIC", job.Domain, fmt.Sprintf("CNAME mode: %s -> %s", job.Domain, target))
+
+	changed, err := updateDomainRecord(ctx, dc, job, cache, RecordTypeCNAME, target)
+	if err != nil {
+		if isNonRecoverableError(err) {
+			result.Error = fmt.Errorf("Non-recoverable CNAME error: %w", err)
+			return result
+		}
+		result.Error = fmt.Errorf("CNAME update failed: %w", err)
+		return result
+	}
+
+	result.Changed = changed
+
+	if err := markCNAMEApplied(job.Domain, dc.Provider, target); err != nil {
+		result.Error = fmt.Errorf("CNAME was applied, but its pending state could not be saved: %w", err)
+		return result
+	}
+
+	return result
+}
+
+// markCNAMEApplied clears the one-shot update flag only if the dashboard
+// configuration still points to the value that was just confirmed at the
+// provider. A concurrent dashboard change therefore remains pending.
+func markCNAMEApplied(fqdn string, provider ProviderType, target string) error {
+	wantedFQDN := normalizeDomainName(fqdn)
+	wantedTarget := normalizeDomainName(target)
+	found := false
+
+	cfgMu.Lock()
+	for i := range cfg.DomainConfigs {
+		dc := &cfg.DomainConfigs[i]
+		if normalizeDomainName(dc.FQDN) != wantedFQDN || dc.Provider != provider {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(dc.RecordMode), RecordModeCNAME) ||
+			normalizeDomainName(dc.CNAMETarget) != wantedTarget {
+			break
+		}
+
+		dc.CNAMEPending = false
+		found = true
+		break
+	}
+	cfgMu.Unlock()
+
+	if !found {
+		return nil
+	}
+	return saveConfigToFile()
 }
 
 func snapshotProcessDomainsConfig() ([]DomainConfig, bool) {

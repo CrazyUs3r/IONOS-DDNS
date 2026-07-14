@@ -307,11 +307,24 @@ const (
 	IPModeBoth      = "BOTH"
 	IPModeV4        = "IPV4"
 	IPModeV6        = "IPV6"
+	RecordModeAuto  = ""
+	RecordModeCNAME = "CNAME"
 	TCPIPv4         = "tcp4"
 	TCPIPv6         = "tcp6"
 	ProtocolTCP     = "tcp"
 	ProtocolUDP     = "udp"
 )
+
+// isCleanupEligibleRecordType reports whether automatic orphan cleanup may
+// delete a record managed by this application.
+func isCleanupEligibleRecordType(recordType string) bool {
+	switch strings.ToUpper(strings.TrimSpace(recordType)) {
+	case RecordTypeA, RecordTypeAAAA, RecordTypeCNAME:
+		return true
+	default:
+		return false
+	}
+}
 
 // ============================================================================
 // WEBSOCKET
@@ -484,6 +497,9 @@ type DomainConfig struct {
 	TTL            int          `json:"ttl,omitempty"`
 	CFProxied      bool         `json:"cf_proxied,omitempty"`
 	IPMode         string       `json:"ip_mode,omitempty"`
+	RecordMode     string       `json:"record_mode,omitempty"`
+	CNAMETarget    string       `json:"cname_target,omitempty"`
+	CNAMEPending   bool         `json:"cname_pending,omitempty"`
 }
 
 type rawEntry struct {
@@ -605,6 +621,7 @@ type Record struct {
 	Name    string `json:"name"`
 	Type    string `json:"type"`
 	Content string `json:"content"`
+	TTL     int    `json:"ttl"`
 	Comment string `json:"comment"`
 }
 

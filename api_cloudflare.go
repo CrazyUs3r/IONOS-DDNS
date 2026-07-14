@@ -465,7 +465,7 @@ func shouldSkipCloudflareUpdate(fqdn, recordType, newIP string, existing *Record
 		return false
 	}
 
-	if existing.Content == newIP {
+	if dnsRecordContentEqual(recordType, existing.Content, newIP) {
 		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("✅ %s: %s = %s", phrases().RecordCurrent, recordType, newIP))
 		log(LogContext{
 			Level:   LogInfo,
@@ -604,22 +604,24 @@ func cloudflareDCForZone(zoneName string) *DomainConfig {
 func cleanupCloudflareRecords(ctx context.Context, zones []Zone, recordCache *ZoneRecordCache) {
 	debugLog("MAINTENANCE", "", phrases().CleanupStartCF)
 
-	configDomains := buildCloudflareConfigDomains()
+	configRecords := buildCloudflareConfigRecords()
+	managedDomains := buildProviderManagedDomains(ProviderCloudflare)
 
 	for _, zone := range zones {
-		cleanupCloudflareZoneRecords(ctx, zone, recordCache, configDomains)
+		cleanupCloudflareZoneRecords(ctx, zone, recordCache, configRecords, managedDomains)
 	}
 }
 
-func buildCloudflareConfigDomains() map[string]struct{} {
-	return buildProviderConfigDomains(ProviderCloudflare)
+func buildCloudflareConfigRecords() map[string]struct{} {
+	return buildProviderConfigRecords(ProviderCloudflare)
 }
 
 func cleanupCloudflareZoneRecords(
 	ctx context.Context,
 	zone Zone,
 	recordCache *ZoneRecordCache,
-	configDomains map[string]struct{},
+	configRecords map[string]struct{},
+	managedDomains map[string]struct{},
 ) {
 	cfDC := cloudflareDCForZone(zone.Name)
 	if cfDC == nil {
@@ -634,7 +636,7 @@ func cleanupCloudflareZoneRecords(
 	zoneName := normalizeCloudflareName(zone.Name)
 
 	for _, rec := range records {
-		cleanupSingleCloudflareRecord(ctx, cfDC, zone, zoneName, rec, configDomains)
+		cleanupSingleCloudflareRecord(ctx, cfDC, zone, zoneName, rec, configRecords, managedDomains)
 	}
 }
 
@@ -644,9 +646,10 @@ func cleanupSingleCloudflareRecord(
 	zone Zone,
 	zoneName string,
 	rec Record,
-	configDomains map[string]struct{},
+	configRecords map[string]struct{},
+	managedDomains map[string]struct{},
 ) {
-	fqdn, shouldDelete := shouldCleanupCloudflareRecord(rec, zoneName, configDomains)
+	fqdn, shouldDelete := shouldCleanupCloudflareRecord(rec, zoneName, configRecords, managedDomains)
 	if !shouldDelete {
 		return
 	}
@@ -669,9 +672,10 @@ func cleanupSingleCloudflareRecord(
 func shouldCleanupCloudflareRecord(
 	rec Record,
 	zoneName string,
-	configDomains map[string]struct{},
+	configRecords map[string]struct{},
+	managedDomains map[string]struct{},
 ) (string, bool) {
-	if !isAddressRecord(rec.Type) {
+	if !isCleanupEligibleRecordType(rec.Type) {
 		return "", false
 	}
 
@@ -688,7 +692,10 @@ func shouldCleanupCloudflareRecord(
 		return "", false
 	}
 
-	if _, ok := configDomains[fqdn]; ok {
+	if _, ok := configRecords[managedRecordKey(fqdn, rec.Type)]; ok {
+		return "", false
+	}
+	if _, owned := managedDomains[fqdn]; !owned {
 		return "", false
 	}
 

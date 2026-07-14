@@ -508,7 +508,7 @@ func buildSettingsSystemSection(c Config) string {
 }
 
 func buildSettingsDomainsSection() string {
-	addDomainForm := `<div class="add-domain-box"><input type="text" id="new-domain-fqdn" class="s-input mb-8" placeholder="` + esc(phrases().SettingsDomainPlaceholder) + `"><input type="number" id="new-domain-ttl" class="s-input mb-8" placeholder="` + esc(phrases().SettingsTTLPlaceholder) + `" min="1" step="1"><select id="new-domain-ip-mode" class="s-input mb-8"><option value="">` + esc(phrases().SettingsIPMode) + ` (` + esc(phrases().SettingsIPModeGlobal) + `)</option><option value="BOTH">` + esc(phrases().SettingsIPModeBoth) + `</option><option value="IPV4">` + esc(phrases().SettingsIPModeIPv4Only) + `</option><option value="IPV6">` + esc(phrases().SettingsIPModeIPv6Only) + `</option></select><select id="new-domain-provider" class="s-input mb-8" data-change="toggleProviderFields()"><option value="IONOS">IONOS</option><option value="CLOUDFLARE">Cloudflare</option><option value="IPV64">IPv64</option><option value="HETZNER">Hetzner DNS</option><option value="HETZNERCLOUD">Hetzner Cloud DNS</option><option value="FEBAS">Febas DynDNS</option><option value="DNSCALE">DNScale</option></select><div id="fields-ionos"><input type="text" id="new-ionos-prefix" class="s-input mb-8" placeholder="` + esc(phrases().SettingsAPIPrefix) + `"><div class="input-with-action mt-8"><input type="password" id="new-ionos-secret" class="s-input" placeholder="` + esc(phrases().SettingsAPISecret) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-ionos-secret', this)">👁️</button></div></div><div id="fields-cloudflare" class="is-hidden"><input type="text" id="new-cf-token" class="s-input mb-8" placeholder="` + esc(phrases().SettingsCFTokenHint) + `"><div class="center-note">` + esc(phrases().SettingsCFOr) + `</div><input type="text" id="new-cf-email" class="s-input mb-8" placeholder="` + esc(phrases().SettingsCFEmail) + `"><div class="input-with-action mt-8"><input type="password" id="new-cf-secret" class="s-input" placeholder="` + esc(phrases().SettingsCFGlobalKey) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-cf-secret', this)">👁️</button></div><label class="inline-check"><input type="checkbox" id="new-cf-proxied"> ` + esc(phrases().SettingsCFProxyLabel) +
+	addDomainForm := `<div class="add-domain-box"><input type="text" id="new-domain-fqdn" class="s-input mb-8" placeholder="` + esc(phrases().SettingsDomainPlaceholder) + `"><input type="number" id="new-domain-ttl" class="s-input mb-8" placeholder="` + esc(phrases().SettingsTTLPlaceholder) + `" min="1" step="1"><select id="new-domain-ip-mode" class="s-input mb-8" data-change="toggleRecordModeFields()"><option value="">` + esc(phrases().SettingsIPMode) + ` (` + esc(phrases().SettingsIPModeGlobal) + `)</option><option value="BOTH">` + esc(phrases().SettingsIPModeBoth) + `</option><option value="IPV4">` + esc(phrases().SettingsIPModeIPv4Only) + `</option><option value="IPV6">` + esc(phrases().SettingsIPModeIPv6Only) + `</option><option id="opt-ip-mode-cname" value="CNAME">CNAME</option></select><div id="fields-cname-target" class="is-hidden"><input type="text" id="new-domain-cname-target" class="s-input mb-8" placeholder="` + esc(phrases().SettingsCNAMETargetPlaceholder) + `"></div><select id="new-domain-provider" class="s-input mb-8" data-change="toggleProviderFields()"><option value="IONOS">IONOS</option><option value="CLOUDFLARE">Cloudflare</option><option value="IPV64">IPv64</option><option value="HETZNER">Hetzner DNS</option><option value="HETZNERCLOUD">Hetzner Cloud DNS</option><option value="FEBAS">Febas DynDNS</option><option value="DNSCALE">DNScale</option></select><div id="fields-ionos"><input type="text" id="new-ionos-prefix" class="s-input mb-8" placeholder="` + esc(phrases().SettingsAPIPrefix) + `"><div class="input-with-action mt-8"><input type="password" id="new-ionos-secret" class="s-input" placeholder="` + esc(phrases().SettingsAPISecret) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-ionos-secret', this)">👁️</button></div></div><div id="fields-cloudflare" class="is-hidden"><input type="text" id="new-cf-token" class="s-input mb-8" placeholder="` + esc(phrases().SettingsCFTokenHint) + `"><div class="center-note">` + esc(phrases().SettingsCFOr) + `</div><input type="text" id="new-cf-email" class="s-input mb-8" placeholder="` + esc(phrases().SettingsCFEmail) + `"><div class="input-with-action mt-8"><input type="password" id="new-cf-secret" class="s-input" placeholder="` + esc(phrases().SettingsCFGlobalKey) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-cf-secret', this)">👁️</button></div><label class="inline-check"><input type="checkbox" id="new-cf-proxied"> ` + esc(phrases().SettingsCFProxyLabel) +
 		`</label></div><div id="fields-ipv64" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-ipv64-token" class="s-input" placeholder="` + esc(phrases().SettingsIPv64Token) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-ipv64-token', this)">👁️</button></div></div><div id="fields-hetzner" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-hetzner-token" class="s-input" placeholder="` + esc(phrases().SettingsHetznerDNSToken) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-hetzner-token', this)">👁️</button></div></div><div id="fields-hetznercloud" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-hcloud-token" class="s-input" placeholder="` + esc(phrases().SettingsHetznerCloudToken) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-hcloud-token', this)">👁️</button></div></div><div id="fields-febas" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-febas-update-url" class="s-input" placeholder="` + esc(phrases().SettingsFebasUpdateURL) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-febas-update-url', this)">👁️</button></div><small class="s-label-hint-block">` + esc(phrases().SettingsFebasUpdateURLHint) + `</small></div><div id="fields-dnscale" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-dnscale-api-key" class="s-input" placeholder="` + esc(phrases().SettingsDNScaleAPIKey) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-dnscale-api-key', this)">👁️</button></div><small class="s-label-hint-block">` + esc(phrases().SettingsDNScaleAPIKeyHint) + `</small></div><div class="s-btn-row"><button class="s-btn s-btn-success-full" data-click="addDomainToList()">` +
 		phrases().SettingsAddBtn +
 		`</button><button type="button" class="s-btn s-btn--cancel" data-click="cancelEdit()">` +
@@ -640,6 +640,8 @@ type safeDomainConfig struct {
 	TTL            int    `json:"ttl,omitempty"`
 	CFProxied      bool   `json:"cf_proxied,omitempty"`
 	IPMode         string `json:"ip_mode,omitempty"`
+	RecordMode     string `json:"record_mode,omitempty"`
+	CNAMETarget    string `json:"cname_target,omitempty"`
 }
 
 type safeMQTTConfig struct {
@@ -718,6 +720,8 @@ func safeDomainConfigs(dcs []DomainConfig) []safeDomainConfig {
 			TTL:            dc.TTL,
 			CFProxied:      dc.CFProxied,
 			IPMode:         dc.IPMode,
+			RecordMode:     dc.RecordMode,
+			CNAMETarget:    dc.CNAMETarget,
 		}
 	}
 	return out
@@ -1474,9 +1478,17 @@ func indexDomainConfigs(configs []DomainConfig) map[string]DomainConfig {
 }
 
 func mergeExistingDomainConfig(found DomainConfig, incoming safeDomainConfig) DomainConfig {
+	oldProvider := found.Provider
+	oldRecordMode := strings.ToUpper(strings.TrimSpace(found.RecordMode))
+	oldCNAMETarget := normalizeDomain(found.CNAMETarget)
+
+	newProvider := oldProvider
 	if strings.TrimSpace(incoming.Provider) != "" {
-		found.Provider = normalizeProviderName(incoming.Provider)
+		newProvider = normalizeProviderName(incoming.Provider)
 	}
+	newRecordMode := strings.ToUpper(strings.TrimSpace(incoming.RecordMode))
+	newCNAMETarget := normalizeDomain(incoming.CNAMETarget)
+
 	applyNonEmptyDashboardValue(&found.APIPrefix, incoming.APIPrefix)
 	applyDashboardSecret(&found.APISecret, incoming.APISecret)
 	applyDashboardSecret(&found.CFToken, incoming.CFToken)
@@ -1486,9 +1498,22 @@ func mergeExistingDomainConfig(found DomainConfig, incoming safeDomainConfig) Do
 	applyDashboardSecret(&found.FebasUpdateURL, incoming.FebasUpdateURL)
 	applyDashboardSecret(&found.APIKey, incoming.APIKey)
 
+	found.Provider = newProvider
 	found.TTL = incoming.TTL
 	found.CFProxied = incoming.CFProxied
 	found.IPMode = incoming.IPMode
+	found.RecordMode = newRecordMode
+	found.CNAMETarget = newCNAMETarget
+
+	if newRecordMode == RecordModeCNAME {
+		found.CNAMEPending = found.CNAMEPending ||
+			oldRecordMode != RecordModeCNAME ||
+			oldCNAMETarget != newCNAMETarget ||
+			oldProvider != newProvider
+	} else {
+		found.CNAMEPending = false
+	}
+
 	return found
 }
 
@@ -1505,20 +1530,25 @@ func applyDashboardSecret(destination *string, incoming string) {
 }
 
 func newDomainConfig(fqdn string, incoming safeDomainConfig) DomainConfig {
+	recordMode := strings.ToUpper(strings.TrimSpace(incoming.RecordMode))
+
 	return DomainConfig{
 		FQDN:           fqdn,
 		Provider:       normalizeProviderName(incoming.Provider),
 		APIPrefix:      incoming.APIPrefix,
-		APISecret:      clearDashboardSecretMask(incoming.APISecret),
-		CFToken:        clearDashboardSecretMask(incoming.CFToken),
+		APISecret:      incoming.APISecret,
+		CFToken:        incoming.CFToken,
 		CFEmail:        incoming.CFEmail,
 		CFSecret:       clearDashboardSecretMask(incoming.CFSecret),
-		IPv64Token:     clearDashboardSecretMask(incoming.IPv64Token),
+		IPv64Token:     incoming.IPv64Token,
 		FebasUpdateURL: clearDashboardSecretMask(incoming.FebasUpdateURL),
 		APIKey:         clearDashboardSecretMask(incoming.APIKey),
 		TTL:            incoming.TTL,
 		CFProxied:      incoming.CFProxied,
 		IPMode:         incoming.IPMode,
+		RecordMode:     recordMode,
+		CNAMETarget:    normalizeDomain(incoming.CNAMETarget),
+		CNAMEPending:   recordMode == RecordModeCNAME,
 	}
 }
 
@@ -1679,24 +1709,22 @@ func handleAPIDomainDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	statusMutex.Lock()
-	deleteKey, statusCode, errMsg := deleteDomainFromStatus(domain)
+	statusKey, statusCode, errMsg := findDomainInStatusLocked(domain)
 	statusMutex.Unlock()
 
 	if statusCode != http.StatusOK {
 		writeJSON(w, statusCode, map[string]string{"error": errMsg})
 		return
 	}
+	forceNextUpdate.Store(true)
+	lastCleanupNano.Store(0)
 
-	if err := updateDomainsCache(); err != nil {
-		debugLog("CACHE", "", fmt.Sprintf(t(phrases().ErrUpdateDomainsCache, "updateDomainsCache failed: %v"), err))
-	}
+	debugLog("API", getClientIP(r), fmt.Sprintf("Provider cleanup queued for %s; update.json ownership retained", statusKey))
+	broadcastNotification(fmt.Sprintf("Provider cleanup queued for %s", statusKey), "info")
 
-	debugLog("API", getClientIP(r), fmt.Sprintf(phrases().DomainDeletedFromStatusLog, deleteKey))
-	broadcastNotification(fmt.Sprintf(phrases().DomainRemovedFromStatus, deleteKey), "info")
-
-	writeJSON(w, http.StatusOK, map[string]string{
-		"status": "deleted",
-		"domain": deleteKey,
+	writeJSON(w, http.StatusAccepted, map[string]string{
+		"status": "cleanup_queued",
+		"domain": statusKey,
 	})
 }
 
@@ -1712,7 +1740,7 @@ func isDomainActiveInConfig(domain string) bool {
 	return false
 }
 
-func deleteDomainFromStatus(domain string) (string, int, string) {
+func findDomainInStatusLocked(domain string) (string, int, string) {
 	current, err := currentStatusDomainsLocked()
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -1721,24 +1749,12 @@ func deleteDomainFromStatus(domain string) (string, int, string) {
 		return "", http.StatusInternalServerError, err.Error()
 	}
 
-	next := cloneStatusDomains(current)
-	deleteKey := existingStatusDomainKey(next, domain)
-	if deleteKey == "" {
+	statusKey := existingStatusDomainKey(current, domain)
+	if statusKey == "" {
 		return "", http.StatusNotFound, esc(phrases().DomainNotFoundInStatus)
 	}
 
-	delete(next, deleteKey)
-	for key := range next {
-		if strings.EqualFold(key, domain) {
-			delete(next, key)
-		}
-	}
-
-	if err := replaceStatusDomainsLocked(next); err != nil {
-		return "", http.StatusInternalServerError, err.Error()
-	}
-
-	return deleteKey, http.StatusOK, ""
+	return statusKey, http.StatusOK, ""
 }
 
 func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
@@ -4284,7 +4300,7 @@ func writeAuditDNSSection(w io.Writer, isAdmin bool) {
 				<div class="card-header card-header--space-between"><span>`+phrases().AuditLogTitle+`</span><button class="action-btn topbar-action-btn" data-click="refreshAuditLog()">`+phrases().AuditRefreshBtn+`</button></div>
 				<div class="card-content"><div id="audit-log-content" class="audit-log-container audit-loading">`+phrases().AuditLoadingJS+`</div></div>
 			</div>
-			<div class="card">
+			<div class="card card--no-cv dns-propagation-card">
 				<div class="card-header">`+phrases().DNSPropagationTitle+`</div>
 				<div class="card-content">
 					<p class="audit-help">`+phrases().DNSPropagationHelp+`</p>

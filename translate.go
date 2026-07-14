@@ -290,6 +290,8 @@ type Phrases struct {
 	UnsupportedProvider, NoCachedIPv64InfrastructureRecords                                     string
 	DomainConfiguredMoreThanOnceFormat, InvalidDomainIPModeFormat, InvalidNegativeTTLFormat     string
 	MultipleProviderAccountsNotSupportedFormat, MissingDomainConfigurationFormat                string
+	InvalidDomainRecordModeFormat, CNAMETargetRequiredFormat                                    string
+	CNAMEUnsupportedProviderFormat, CNAMETargetInvalidFormat                                    string
 	UnsupportedInfrastructureProviderFormat, UpdateAlreadyRunning                               string
 	ProviderZonesFormat, ZoneFormat, NoRelevantRecordsFound                                     string
 	// MQTT
@@ -440,6 +442,7 @@ type Phrases struct {
 	SettingsAddBtnJS, NotifyEmailActive, SettingsEmailHeading                  string
 	EditDomainTitleJS, EditDomainSavedJS, EditDomainCancelledJS                string
 	SettingsUserManagement                                                     string
+	SettingsCNAMETargetPlaceholder                                             string
 
 	// Domain display
 	DotTitleNoUpdate, DotTitleChanged, DotTitleLast string

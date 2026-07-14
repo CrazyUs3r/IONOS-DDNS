@@ -1369,7 +1369,7 @@ func handleUpdateUser(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{status: phrases().StatusUpdated})
+	writeJSON(w, http.StatusOK, map[string]string{"status": phrases().StatusUpdated})
 }
 
 type userUpdate struct {
@@ -1525,7 +1525,7 @@ func handleDeleteUser(w http.ResponseWriter, id, currentUserID string) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{status: phrases().StatusDeleted})
+	writeJSON(w, http.StatusOK, map[string]string{"status": phrases().StatusDeleted})
 }
 
 func removeUserByID(id string) (bool, error) {

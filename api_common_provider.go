@@ -43,23 +43,54 @@ func isAddressRecord(recordType string) bool {
 	return recordType == RecordTypeA || recordType == RecordTypeAAAA
 }
 
-func buildProviderConfigDomains(provider ProviderType) map[string]struct{} {
+func managedRecordKey(fqdn, recordType string) string {
+	return normalizeProviderFQDN(fqdn) + "\x00" + strings.ToUpper(strings.TrimSpace(recordType))
+}
+
+func buildProviderConfigRecords(provider ProviderType) map[string]struct{} {
 	cfgMu.RLock()
 	defer cfgMu.RUnlock()
 
 	out := make(map[string]struct{})
-	for _, dc := range cfg.DomainConfigs {
+	for i := range cfg.DomainConfigs {
+		dc := &cfg.DomainConfigs[i]
 		if dc.Provider != provider {
 			continue
 		}
 
 		fqdn := normalizeProviderFQDN(dc.FQDN)
-		if fqdn != "" {
-			out[fqdn] = struct{}{}
+		if fqdn == "" {
+			continue
+		}
+
+		if isCNAMEDomainConfig(dc) {
+			out[managedRecordKey(fqdn, RecordTypeCNAME)] = struct{}{}
+			continue
+		}
+
+		switch domainIPMode(dc) {
+		case IPModeV4:
+			out[managedRecordKey(fqdn, RecordTypeA)] = struct{}{}
+		case IPModeV6:
+			out[managedRecordKey(fqdn, RecordTypeAAAA)] = struct{}{}
+		default:
+			out[managedRecordKey(fqdn, RecordTypeA)] = struct{}{}
+			out[managedRecordKey(fqdn, RecordTypeAAAA)] = struct{}{}
 		}
 	}
 
 	return out
+}
+
+func dnsRecordContentEqual(recordType, current, desired string) bool {
+	current = strings.TrimSpace(current)
+	desired = strings.TrimSpace(desired)
+
+	if strings.EqualFold(strings.TrimSpace(recordType), RecordTypeCNAME) {
+		return normalizeDomainName(current) == normalizeDomainName(desired)
+	}
+
+	return current == desired
 }
 
 func findProviderConfigForCleanup(provider ProviderType) *DomainConfig {
@@ -74,6 +105,24 @@ func findProviderConfigForCleanup(provider ProviderType) *DomainConfig {
 	}
 
 	return nil
+}
+
+func buildProviderManagedDomains(provider ProviderType) map[string]struct{} {
+	managed := make(map[string]struct{})
+
+	domains, err := snapshotStatusDomains()
+	if err != nil {
+		debugLog("MAINTENANCE", "", fmt.Sprintf("%s managed-domain snapshot failed: %v", provider, err))
+		return managed
+	}
+
+	for fqdn, history := range domains {
+		if strings.EqualFold(strings.TrimSpace(history.Provider), string(provider)) {
+			managed[normalizeDomainName(fqdn)] = struct{}{}
+		}
+	}
+
+	return managed
 }
 
 // ============================================================================

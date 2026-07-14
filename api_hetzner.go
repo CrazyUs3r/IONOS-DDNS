@@ -463,7 +463,7 @@ func findHetznerExistingRecord(records []Record, fqdn, zoneName, recordName, rec
 }
 
 func shouldSkipHetznerUpdate(providerName, fqdn, recordType, newIP string, existing *Record) bool {
-	if existing != nil && existing.Content == newIP {
+	if existing != nil && dnsRecordContentEqual(recordType, existing.Content, newIP) {
 		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("✅ %s current: %s = %s", providerName, recordType, newIP))
 		log(LogContext{Level: LogInfo, Action: ActionCurrent, Domain: fqdn, Message: fmt.Sprintf("%-4s %s Current", recordType, newIP)})
 		return true
@@ -528,7 +528,8 @@ func cleanupHetznerRecords(
 	zones []Zone,
 	recordCache *ZoneRecordCache,
 ) {
-	configDomains := buildProviderConfigDomains(provider)
+	configRecords := buildProviderConfigRecords(provider)
+	managedDomains := buildProviderManagedDomains(provider)
 	for _, zone := range zones {
 		records, ok := recordCache.Get(zone.ID)
 		if !ok {
@@ -536,7 +537,7 @@ func cleanupHetznerRecords(
 		}
 		zoneName := strings.ToLower(strings.TrimSuffix(zone.Name, "."))
 		for _, rec := range records {
-			fqdn, shouldDelete := shouldCleanupHetznerRecord(zoneName, rec, configDomains)
+			fqdn, shouldDelete := shouldCleanupHetznerRecord(zoneName, rec, configRecords, managedDomains)
 			if !shouldDelete {
 				continue
 			}
@@ -574,12 +575,15 @@ func cleanupSingleHetznerRecord(ctx context.Context, dc *DomainConfig, provider 
 	log(LogContext{Level: LogInfo, Action: ActionCleanup, Domain: fqdn, Message: fmt.Sprintf("%s record removed", rec.Type)})
 }
 
-func shouldCleanupHetznerRecord(zoneName string, rec Record, configDomains map[string]struct{}) (string, bool) {
-	if !isAddressRecord(rec.Type) {
+func shouldCleanupHetznerRecord(zoneName string, rec Record, configRecords, managedDomains map[string]struct{}) (string, bool) {
+	if !isCleanupEligibleRecordType(rec.Type) {
 		return "", false
 	}
 	fqdn := hetznerRecordFQDN(zoneName, normalizeHetznerRelativeName(rec.Name))
-	if _, ok := configDomains[fqdn]; ok {
+	if _, ok := configRecords[managedRecordKey(fqdn, rec.Type)]; ok {
+		return "", false
+	}
+	if _, owned := managedDomains[fqdn]; !owned {
 		return "", false
 	}
 	return fqdn, true

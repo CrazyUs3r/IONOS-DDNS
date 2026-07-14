@@ -1038,8 +1038,9 @@ func cleanupIPv64Records(ctx context.Context) {
 	debugLog("MAINTENANCE", "", phrases().CleanupStartIPv64)
 
 	configuredFQDNs, ourBaseDomains := collectIPv64ConfiguredDomains()
+	managedDomains := buildProviderManagedDomains(ProviderIPv64)
 	for baseDomain, domain := range snapshotIPv64ProviderDomains() {
-		cleanupIPv64DomainRecords(ctx, ipv64DC, baseDomain, domain, configuredFQDNs, ourBaseDomains)
+		cleanupIPv64DomainRecords(ctx, ipv64DC, baseDomain, domain, configuredFQDNs, ourBaseDomains, managedDomains)
 	}
 }
 
@@ -1094,6 +1095,7 @@ func cleanupIPv64DomainRecords(
 	baseDomain string,
 	domain IPv64Domain,
 	configuredFQDNs, ourBaseDomains map[string]struct{},
+	managedDomains map[string]struct{},
 ) {
 	if _, ours := ourBaseDomains[baseDomain]; !ours {
 		debugLog("MAINTENANCE", baseDomain, phrases().CleanupSkipForeignBase)
@@ -1101,7 +1103,7 @@ func cleanupIPv64DomainRecords(
 	}
 
 	for _, rec := range domain.Records {
-		cleanupSingleIPv64Record(ctx, ipv64DC, baseDomain, rec, configuredFQDNs)
+		cleanupSingleIPv64Record(ctx, ipv64DC, baseDomain, rec, configuredFQDNs, managedDomains)
 	}
 }
 
@@ -1111,8 +1113,9 @@ func cleanupSingleIPv64Record(
 	baseDomain string,
 	rec IPv64Record,
 	configuredFQDNs map[string]struct{},
+	managedDomains map[string]struct{},
 ) {
-	fqdn, shouldDelete := shouldCleanupIPv64Record(baseDomain, rec, configuredFQDNs)
+	fqdn, shouldDelete := shouldCleanupIPv64Record(baseDomain, rec, configuredFQDNs, managedDomains)
 	if !shouldDelete {
 		return
 	}
@@ -1146,6 +1149,7 @@ func shouldCleanupIPv64Record(
 	baseDomain string,
 	rec IPv64Record,
 	configuredFQDNs map[string]struct{},
+	managedDomains map[string]struct{},
 ) (string, bool) {
 	if !isAddressRecord(rec.Type) {
 		return "", false
@@ -1166,6 +1170,9 @@ func shouldCleanupIPv64Record(
 	fqdn := buildIPv64RecordFQDN(baseDomain, rec.Praefix)
 
 	if _, ok := configuredFQDNs[fqdn]; ok {
+		return "", false
+	}
+	if _, owned := managedDomains[fqdn]; !owned {
 		return "", false
 	}
 

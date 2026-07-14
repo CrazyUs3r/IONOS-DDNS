@@ -83,6 +83,10 @@ func validateDomainConfigEntry(
 		return err
 	}
 
+	if err := validateDomainRecordMode(fqdn, dc); err != nil {
+		return err
+	}
+
 	if dc.TTL < 0 {
 		return fmt.Errorf(
 			phrases().InvalidNegativeTTLFormat,
@@ -129,6 +133,28 @@ func validateDomainIPMode(fqdn, configuredMode string) error {
 			fqdn,
 			configuredMode,
 		)
+	}
+}
+
+func validateDomainRecordMode(fqdn string, dc DomainConfig) error {
+	mode := strings.ToUpper(strings.TrimSpace(dc.RecordMode))
+
+	switch mode {
+	case "":
+		return nil
+	case RecordModeCNAME:
+		if strings.TrimSpace(dc.CNAMETarget) == "" {
+			return fmt.Errorf(phrases().CNAMETargetRequiredFormat, fqdn)
+		}
+		if !cnameCapableProvider(dc.Provider) {
+			return fmt.Errorf(phrases().CNAMEUnsupportedProviderFormat, fqdn, dc.Provider)
+		}
+		if err := validateDomain(dc.CNAMETarget); err != nil {
+			return fmt.Errorf(phrases().CNAMETargetInvalidFormat, fqdn, err.Error())
+		}
+		return nil
+	default:
+		return fmt.Errorf(phrases().InvalidDomainRecordModeFormat, fqdn, dc.RecordMode)
 	}
 }
 

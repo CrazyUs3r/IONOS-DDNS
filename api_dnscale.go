@@ -334,7 +334,7 @@ func findDNScaleExistingRecord(records []Record, fqdn, recordName, recordType st
 }
 
 func shouldSkipDNScaleUpdate(fqdn, recordType, newIP string, existing *Record) bool {
-	if existing != nil && existing.Content == newIP {
+	if existing != nil && dnsRecordContentEqual(recordType, existing.Content, newIP) {
 		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("✅ %s: %s = %s", phrases().RecordCurrent, recordType, newIP))
 		log(LogContext{
 			Level:   LogInfo,
@@ -639,36 +639,24 @@ func cleanupDNScaleRecords(ctx context.Context, zones []Zone, recordCache *ZoneR
 	}
 
 	debugLog("MAINTENANCE", "", phrases().CleanupStartDNScale)
-	configDomains := buildDNScaleConfigDomains()
+	configRecords := buildDNScaleConfigRecords()
 	managedDomains := buildDNScaleManagedDomains()
 
 	for _, zone := range zones {
-		cleanupDNScaleZoneRecords(ctx, dnscaleDC, zone, recordCache, configDomains, managedDomains)
+		cleanupDNScaleZoneRecords(ctx, dnscaleDC, zone, recordCache, configRecords, managedDomains)
 	}
 }
 
 func buildDNScaleManagedDomains() map[string]struct{} {
-	managed := make(map[string]struct{})
-	domains, err := snapshotStatusDomains()
-	if err != nil {
-		debugLog("MAINTENANCE", "", fmt.Sprintf("DNScale managed-domain snapshot failed: %v", err))
-		return managed
-	}
-
-	for fqdn, history := range domains {
-		if strings.EqualFold(strings.TrimSpace(history.Provider), string(ProviderDNScale)) {
-			managed[normalizeDomainName(fqdn)] = struct{}{}
-		}
-	}
-	return managed
+	return buildProviderManagedDomains(ProviderDNScale)
 }
 
 func findDNScaleConfigForCleanup() *DomainConfig {
 	return findProviderConfigForCleanup(ProviderDNScale)
 }
 
-func buildDNScaleConfigDomains() map[string]struct{} {
-	return buildProviderConfigDomains(ProviderDNScale)
+func buildDNScaleConfigRecords() map[string]struct{} {
+	return buildProviderConfigRecords(ProviderDNScale)
 }
 
 func cleanupDNScaleZoneRecords(
@@ -676,7 +664,7 @@ func cleanupDNScaleZoneRecords(
 	dc *DomainConfig,
 	zone Zone,
 	recordCache *ZoneRecordCache,
-	configDomains map[string]struct{},
+	configRecords map[string]struct{},
 	managedDomains map[string]struct{},
 ) {
 	records, exists := recordCache.Get(zone.ID)
@@ -687,7 +675,7 @@ func cleanupDNScaleZoneRecords(
 	zoneName := strings.ToLower(strings.TrimSuffix(zone.Name, "."))
 
 	for _, rec := range records {
-		cleanupSingleDNScaleRecord(ctx, dc, zone, zoneName, rec, configDomains, managedDomains)
+		cleanupSingleDNScaleRecord(ctx, dc, zone, zoneName, rec, configRecords, managedDomains)
 	}
 }
 
@@ -697,10 +685,10 @@ func cleanupSingleDNScaleRecord(
 	zone Zone,
 	zoneName string,
 	rec Record,
-	configDomains map[string]struct{},
+	configRecords map[string]struct{},
 	managedDomains map[string]struct{},
 ) {
-	fqdn, shouldDelete := shouldCleanupDNScaleRecord(zoneName, rec, configDomains, managedDomains)
+	fqdn, shouldDelete := shouldCleanupDNScaleRecord(zoneName, rec, configRecords, managedDomains)
 	if !shouldDelete {
 		return
 	}
@@ -744,15 +732,15 @@ func cleanupSingleDNScaleRecord(
 func shouldCleanupDNScaleRecord(
 	zoneName string,
 	rec Record,
-	configDomains map[string]struct{},
+	configRecords map[string]struct{},
 	managedDomains map[string]struct{},
 ) (string, bool) {
-	if !isAddressRecord(rec.Type) {
+	if !isCleanupEligibleRecordType(rec.Type) {
 		return "", false
 	}
 
 	fqdn := dnscaleRecordFQDN(zoneName, rec.Name)
-	if _, ok := configDomains[fqdn]; ok {
+	if _, ok := configRecords[managedRecordKey(fqdn, rec.Type)]; ok {
 		return "", false
 	}
 	if _, owned := managedDomains[fqdn]; !owned {
