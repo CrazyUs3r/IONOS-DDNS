@@ -128,7 +128,7 @@ func processCNAMEDomainUpdate(
 	changed, err := updateDomainRecord(ctx, dc, job, cache, RecordTypeCNAME, target)
 	if err != nil {
 		if isNonRecoverableError(err) {
-			result.Error = fmt.Errorf("Non-recoverable CNAME error: %w", err)
+			result.Error = fmt.Errorf("non-recoverable CNAME error: %w", err)
 			return result
 		}
 		result.Error = fmt.Errorf("CNAME update failed: %w", err)
