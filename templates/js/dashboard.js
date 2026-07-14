@@ -113,6 +113,7 @@ const DECLARATIVE_ACTIONS = Object.freeze({
 	toggleNotifCenter: () => toggleNotifCenter(),
 	togglePassword: ({ args, element }) => togglePassword(args[0], element),
 	toggleProviderFields: () => toggleProviderFields(),
+	toggleRecordModeFields: () => toggleRecordModeFields(),
 	toggleSidebar: () => toggleSidebar(),
 	toggleTheme: () => toggleTheme(),
 	triggerUpdate: () => triggerUpdate(),
@@ -550,7 +551,12 @@ function navTo(page) {
 	const pageConfig = PAGE_CONFIG[page];
 	currentPage = page;
 
-	isSettingsOpen = (page === 'settings');
+	const mainContent = document.querySelector('.main-content');
+	if (mainContent) {
+		mainContent.dataset.activeSection = page;
+	}
+
+	isSettingsOpen = page === 'settings';
 
 	document.querySelectorAll('.nav-item[data-page]').forEach(el => {
 		el.classList.toggle('nav-active', el.dataset.page === page);
@@ -1292,17 +1298,6 @@ function filterLogs(filter) {
 	document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.filter === filter));
 	const entries = document.querySelectorAll('.log-entry');
 	const f = filter.toUpperCase();
-	requestAnimationFrame(() => {
-		entries.forEach(entry => {
-			if (f === 'ALL') { entry.style.display = ''; return; }
-			const action = (entry.dataset.action || '').toUpperCase();
-			const level = (entry.dataset.level || '').toUpperCase();
-			const show = (f === 'ERR' && level === 'ERR') ||
-				(f === 'WARN' && level === 'WARN') ||
-				(action === f);
-			entry.style.display = show ? '' : 'none';
-		});
-	});
 }
 
 function setUpdateButtonBusy(isBusy) {
@@ -1810,6 +1805,9 @@ function renderSettingsDomainList() {
 		if (domain.ttl) addBadge(info, `TTL ${domain.ttl}`);
 		if (domain.ip_mode) addBadge(info, domain.ip_mode);
 		if (domain.provider === 'CLOUDFLARE' && domain.cf_proxied) addBadge(info, 'proxied');
+		if (domain.record_mode === 'CNAME' && domain.cname_target) {
+			addBadge(info, `CNAME → ${domain.cname_target}`);
+		}
 
 		const actions = document.createElement('div');
 		actions.className = 'domain-pill-actions';
@@ -1864,6 +1862,7 @@ function resetDomainForm() {
 	_setVal('new-domain-fqdn', '');
 	_setVal('new-domain-ttl', '');
 	_setVal('new-domain-ip-mode', '');
+	_setVal('new-domain-cname-target', '');
 	_setVal('new-ionos-prefix', '');
 	_setVal('new-ionos-secret', '');
 	_setVal('new-cf-token', '');
@@ -1898,7 +1897,9 @@ function editDomain(index) {
 
 	_setVal('new-domain-ttl', d.ttl || '');
 
-	_setVal('new-domain-ip-mode', d.ip_mode || '');
+	_setVal('new-domain-ip-mode', d.record_mode === 'CNAME' ? 'CNAME' : (d.ip_mode || ''));
+	_setVal('new-domain-cname-target', d.cname_target || '');
+	toggleRecordModeFields();
 
 	if (d.provider === 'IONOS') {
 		_setVal('new-ionos-prefix', d.api_prefix || '');
@@ -1944,6 +1945,25 @@ function toggleProviderFields() {
 	show('fields-hetznercloud', p === 'HETZNERCLOUD');
 	show('fields-febas', p === 'FEBAS');
 	show('fields-dnscale', p === 'DNSCALE');
+
+	const cnameCapable = ['CLOUDFLARE', 'IONOS', 'HETZNER', 'HETZNERCLOUD', 'DNSCALE'].includes(p);
+	const cnameOpt = document.getElementById('opt-ip-mode-cname');
+	if (cnameOpt) {
+		cnameOpt.hidden = !cnameCapable;
+		cnameOpt.disabled = !cnameCapable;
+	}
+	const ipModeSel = document.getElementById('new-domain-ip-mode');
+	if (ipModeSel && !cnameCapable && ipModeSel.value === 'CNAME') {
+		ipModeSel.value = '';
+	}
+
+	toggleRecordModeFields();
+}
+
+function toggleRecordModeFields() {
+	const mode = _getVal('new-domain-ip-mode');
+	const el = document.getElementById('fields-cname-target');
+	if (el) el.style.display = mode === 'CNAME' ? 'block' : 'none';
 }
 
 function addDomainToList() {
@@ -1960,16 +1980,29 @@ function addDomainToList() {
 		return showToast(tr('provider_invalid', 'Ungültiger Provider'), 'error');
 	}
 	const ttlRaw = _getVal('new-domain-ttl').trim();
-	const ipMode = _getVal('new-domain-ip-mode').trim();
+	const ipModeRaw = _getVal('new-domain-ip-mode').trim().toUpperCase();
+	const isCNAME = ipModeRaw === 'CNAME';
 	const ttl = ttlRaw === '' ? 0 : parseInt(ttlRaw, 10);
 	if (!fqdn) return showToast(tr('fqdn_missing', 'FQDN fehlt'), 'error');
+
+	const cnameCapable = new Set(['IONOS', 'CLOUDFLARE', 'HETZNER', 'HETZNERCLOUD', 'DNSCALE']);
+	if (isCNAME && !cnameCapable.has(provider)) {
+		return showToast(tr('cname_provider_unsupported', 'CNAME wird von diesem Provider nicht unterstützt'), 'error');
+	}
 
 	let entry = {
 		fqdn: fqdn,
 		provider: provider,
 		ttl: Number.isFinite(ttl) && ttl > 0 ? ttl : 0,
-		ip_mode: ipMode || ''
+		ip_mode: isCNAME ? '' : (ipModeRaw || ''),
+		record_mode: isCNAME ? 'CNAME' : ''
 	};
+	if (isCNAME) {
+		entry.cname_target = _getVal('new-domain-cname-target').trim().toLowerCase();
+		if (!entry.cname_target) {
+			return showToast(tr('cname_target_missing', 'CNAME-Ziel fehlt'), 'error');
+		}
+	}
 	if (provider === 'IONOS') {
 		entry.api_prefix = _getVal('new-ionos-prefix');
 		entry.api_secret = _getVal('new-ionos-secret');
@@ -2009,6 +2042,7 @@ function addDomainToList() {
 	fqdnInput.value = '';
 	[
 		'new-domain-ttl',
+		'new-domain-cname-target',
 		'new-ionos-prefix',
 		'new-ionos-secret',
 		'new-cf-token',
@@ -3480,6 +3514,14 @@ function renderDNSPropagation(data) {
 		<thead><tr><th>${escHtml(tr('dns_col_resolver', 'Resolver'))}</th><th>${escHtml(tr('dns_col_ipv4', 'IPv4'))}</th><th>${escHtml(tr('dns_col_ipv6', 'IPv6'))}</th><th>${escHtml(tr('dns_col_duration_error', 'Dauer / Fehler'))}</th></tr></thead>
 		<tbody>${rows || '<tr><td colspan="4">' + escHtml(tr('dns_no_results', 'Keine Ergebnisse.')) + '</td></tr>'}</tbody>
  	</table></div>`;
+	requestAnimationFrame(() => {
+		const scrollEl = document.querySelector('.main-content');
+		if (!scrollEl) return;
+		scrollEl.style.opacity = '0.999';
+		requestAnimationFrame(() => {
+			scrollEl.style.opacity = '';
+		});
+	});
 }
 
 async function runDNSPropagation() {
