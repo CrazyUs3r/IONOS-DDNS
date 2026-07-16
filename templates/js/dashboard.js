@@ -1165,7 +1165,6 @@ async function updateProviderStatusIndicators(providerStatus) {
 		}
 	}
 
-	// Preserve the old behavior only for one aggregate status value.
 	if (matched === 0 && entries.length === 1) {
 		const ok = Boolean(entries[0][1]);
 		document.querySelectorAll('.provider-status-dot').forEach(element => {
@@ -1201,7 +1200,6 @@ function connectWS() {
 			}
 		}
 
-		// Notifications and debug logs must not be discarded while settings are open.
 		if (msg.type === 'notification') {
 			showToast(msg.data.message, msg.data.level || 'info');
 		} else if (msg.type === 'debug_log') {
@@ -1639,12 +1637,10 @@ function _setChk(id, v) { const el = document.getElementById(id); if (!el || el 
 function _initSettingsFields() {
 	isSettingsOpen = true;
 
-	// Token placeholder quick update (cheap DOM write)
 	const saved = sessionStorage.getItem('triggerToken') || '';
 	const inp = document.getElementById('s-token');
 	if (inp) inp.placeholder = saved ? tr('token_saved_masked', '●●●●●● (gespeichert)') : tr('token_enter', 'Token eingeben...');
 
-	// Collect system / notifier values first, apply in one rAF to batch DOM writes
 	const sys = (typeof initialSystem !== 'undefined' && initialSystem) ? initialSystem : {};
 	const mqtt = sys.mqtt || {};
 	const email = sys.email || {};
@@ -1700,7 +1696,6 @@ function _initSettingsFields() {
 	const activeEvents = new Set((sys.notify_events || []).map(e => e.toUpperCase()));
 	const notifyEventElements = Array.from(document.querySelectorAll('input[name="notify-event"]'));
 
-	// Batch apply DOM writes in one rAF
 	requestAnimationFrame(() => {
 		for (const [id, v] of Object.entries(values)) {
 			const el = document.getElementById(id);
@@ -1721,7 +1716,6 @@ function _initSettingsFields() {
 		});
 	});
 
-	// Defer the heavier domain list rendering so the UI paints first
 	const deferRender = fn => {
 		if ('requestIdleCallback' in window) requestIdleCallback(fn, { timeout: 200 });
 		else setTimeout(fn, 50);
@@ -1770,7 +1764,6 @@ function renderSettingsDomainList() {
 		DNSCALE: '#8b5cf6'
 	};
 
-	// Build in a DocumentFragment to avoid multiple reflows
 	const frag = document.createDocumentFragment();
 
 	for (const domain of sorted) {
@@ -3509,19 +3502,12 @@ function renderDNSPropagation(data) {
 		<strong>${escHtml(data.domain || '')}</strong>
 		<span>${escHtml(tr('dns_expected_ipv4', 'IPv4-Soll'))}: <code>${escHtml(expectedV4 || '-')}</code></span>
 		<span>${escHtml(tr('dns_expected_ipv6', 'IPv6-Soll'))}: <code>${escHtml(expectedV6 || '-')}</code></span>
- 	</div>
+	 </div>
 	<div class="audit-table-wrap"><table class="audit-table dns-table">
 		<thead><tr><th>${escHtml(tr('dns_col_resolver', 'Resolver'))}</th><th>${escHtml(tr('dns_col_ipv4', 'IPv4'))}</th><th>${escHtml(tr('dns_col_ipv6', 'IPv6'))}</th><th>${escHtml(tr('dns_col_duration_error', 'Dauer / Fehler'))}</th></tr></thead>
 		<tbody>${rows || '<tr><td colspan="4">' + escHtml(tr('dns_no_results', 'Keine Ergebnisse.')) + '</td></tr>'}</tbody>
- 	</table></div>`;
-	requestAnimationFrame(() => {
-		const scrollEl = document.querySelector('.main-content');
-		if (!scrollEl) return;
-		scrollEl.style.opacity = '0.999';
-		requestAnimationFrame(() => {
-			scrollEl.style.opacity = '';
-		});
-	});
+	 </table></div>`;
+	void box.offsetHeight;
 }
 
 async function runDNSPropagation() {
