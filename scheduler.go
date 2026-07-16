@@ -705,6 +705,15 @@ func saveCachesToDisk(
 // ============================================================================
 // CLEANUP
 // ============================================================================
+func isCleanupEligibleRecordType(recordType string) bool {
+	switch strings.ToUpper(strings.TrimSpace(recordType)) {
+	case RecordTypeA, RecordTypeAAAA, RecordTypeCNAME:
+		return true
+	default:
+		return false
+	}
+}
+
 func runCleanupIfNeeded(
 	ctx context.Context,
 	zonesByProvider map[string][]Zone,

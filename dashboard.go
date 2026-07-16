@@ -18,7 +18,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
@@ -1122,7 +1121,10 @@ func handleAPIPageSection(w http.ResponseWriter, r *http.Request) {
 			writeDebugSection(&fragment, snapshotConfig())
 		},
 		"settings": func() {
-			config := maskDashboardConfigSecrets(snapshotConfig())
+			config := snapshotConfig()
+			if !isAdmin {
+				config = maskDashboardConfigSecrets(config)
+			}
 			writeSettingsSection(&fragment, config)
 		},
 		"totp": func() {
@@ -1161,12 +1163,17 @@ func handleAPIConfig(w http.ResponseWriter, r *http.Request) {
 		System        safeSystemConfig   `json:"system"`
 	}
 
-	sys := currentSystemConfig()
-	maskSafeSystemConfigSecrets(&sys)
+	sess, _ := sessionFromRequest(r)
+	isAdmin := !authEnabled || (sess != nil && sess.Role == RoleAdmin)
 
+	sys := currentSystemConfig()
 	config := snapshotConfig()
 	domains := safeDomainConfigs(config.DomainConfigs)
-	maskSafeDomainConfigSecrets(domains)
+
+	if !isAdmin {
+		maskSafeSystemConfigSecrets(&sys)
+		maskSafeDomainConfigSecrets(domains)
+	}
 
 	writeJSON(w, http.StatusOK, fullConfigResponse{
 		DomainConfigs: domains,
@@ -1536,11 +1543,11 @@ func newDomainConfig(fqdn string, incoming safeDomainConfig) DomainConfig {
 		FQDN:           fqdn,
 		Provider:       normalizeProviderName(incoming.Provider),
 		APIPrefix:      incoming.APIPrefix,
-		APISecret:      incoming.APISecret,
-		CFToken:        incoming.CFToken,
+		APISecret:      clearDashboardSecretMask(incoming.APISecret),
+		CFToken:        clearDashboardSecretMask(incoming.CFToken),
 		CFEmail:        incoming.CFEmail,
 		CFSecret:       clearDashboardSecretMask(incoming.CFSecret),
-		IPv64Token:     incoming.IPv64Token,
+		IPv64Token:     clearDashboardSecretMask(incoming.IPv64Token),
 		FebasUpdateURL: clearDashboardSecretMask(incoming.FebasUpdateURL),
 		APIKey:         clearDashboardSecretMask(incoming.APIKey),
 		TTL:            incoming.TTL,
@@ -3486,836 +3493,8 @@ func appFooterHTML() string {
 }
 
 // ============================================================================
-// DIAGNOSE / HEALTH CENTER
-// ============================================================================
-
-func writeDiagnoseSection(w io.Writer) {
-	_, _ = fmt.Fprint(w, `
-	<div class="page-section" data-section="diagnose">
-		<div class="card">
-			<div class="card-header card-header--space-between">
-				<span>🩺 `+t(phrases().DiagnoseTitle, "Diagnose / Health Center")+`</span>
-				<button class="action-btn topbar-action-btn" data-click="refreshDiagnosis()">`+t(phrases().DiagnoseRefreshBtn, "🔄 Refresh")+`</button>
-			</div>
-			<div class="card-content">
-				<div id="diagnose-content" class="diag-loading">
-					`+t(phrases().DiagnoseLoading, "Loading diagnosis...")+`
-				</div>
-			</div>
-		</div>
-	</div>
-	`)
-}
-
-func handleAPIDiagnose(w http.ResponseWriter, r *http.Request) {
-	if r.Method != MethodGET {
-		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
-		return
-	}
-
-	writeJSON(w, http.StatusOK, buildDiagnosisPayload())
-}
-
-type diagnosisLogCounts struct {
-	Errors   int
-	Warnings int
-}
-
-type diagnosisConfigSnapshot struct {
-	ProviderCounts map[string]int
-	Warnings       []string
-	Notifiers      map[string]bool
-	Info           map[string]any
-}
-
-func buildDiagnosisPayload() map[string]any {
-	stats := apiMetrics.GetStats()
-	lastV4, lastV6 := loadLastKnownIPs()
-
-	statusData := loadStatusData()
-	domainKeys := domainKeysFromStatusData(statusData)
-	newestChange := newestDomainChange(statusData, domainKeys)
-
-	logs, _ := loadDashboardLogs()
-	logCounts := countDiagnosisLogs(logs)
-
-	cfgDiag := buildDiagnosisConfigSnapshot()
-	mainStatus, reason := diagnosisMainStatus(cfgDiag.Warnings, logCounts.Warnings)
-
-	return map[string]any{
-		"status":             mainStatus,
-		"reason":             reason,
-		"uptime":             time.Since(startTime).Round(time.Second).String(),
-		"scheduler_ran_once": schedulerRanOnce.Load(),
-		"last_ok":            lastOk.Load(),
-		"update_in_progress": updateInProgress.Load(),
-		"active_updates":     activeUpdates.Load(),
-
-		"last_known_ipv4":    lastV4,
-		"last_known_ipv6":    lastV6,
-		"last_domain_change": formatDiagnosisTime(newestChange),
-
-		"configured_domains": len(domainKeys),
-		"provider_counts":    cfgDiag.ProviderCounts,
-		"warnings":           cfgDiag.Warnings,
-		"log_errors":         logCounts.Errors,
-		"log_warnings":       logCounts.Warnings,
-		"api_metrics":        stats,
-		"config":             cfgDiag.Info,
-		"notifiers":          cfgDiag.Notifiers,
-
-		"files": diagnosisFileInfos(),
-	}
-}
-
-func countDiagnosisLogs(logs []LogEntry) diagnosisLogCounts {
-	var counts diagnosisLogCounts
-
-	for _, e := range logs {
-		lvl := strings.ToUpper(e.Level)
-
-		if strings.Contains(lvl, "ERR") || strings.Contains(lvl, "ERROR") {
-			counts.Errors++
-		}
-
-		if strings.Contains(lvl, "WARN") {
-			counts.Warnings++
-		}
-	}
-
-	return counts
-}
-
-func buildDiagnosisConfigSnapshot() diagnosisConfigSnapshot {
-	cfgCopy := cloneConfigForBackup()
-
-	warnings := diagnoseDomainWarnings(cfgCopy.DomainConfigs)
-	warnings = append(warnings, diagnoseGlobalConfigWarnings(cfgCopy)...)
-
-	return diagnosisConfigSnapshot{
-		ProviderCounts: diagnoseProviderCounts(cfgCopy.DomainConfigs),
-		Warnings:       warnings,
-		Notifiers:      diagnoseNotifiers(cfgCopy),
-		Info:           diagnoseConfigInfo(cfgCopy),
-	}
-}
-
-func diagnoseProviderCounts(domains []DomainConfig) map[string]int {
-	counts := make(map[string]int)
-
-	for _, dc := range domains {
-		counts[string(dc.Provider)]++
-	}
-
-	return counts
-}
-
-func diagnoseDomainWarnings(domains []DomainConfig) []string {
-	warnings := make([]string, 0)
-
-	for _, dc := range domains {
-		warnings = append(warnings, diagnoseSingleDomainWarnings(dc)...)
-	}
-
-	if len(domains) == 0 {
-		warnings = append(warnings, t(phrases().DiagnoseNoDomainsConfigured, "No domains configured."))
-	}
-
-	return warnings
-}
-
-func diagnoseSingleDomainWarnings(dc DomainConfig) []string {
-	warnings := make([]string, 0)
-
-	if strings.TrimSpace(dc.FQDN) == "" {
-		warnings = append(warnings, t(phrases().DiagnoseDomainWithoutFQDN, "A domain without FQDN is configured."))
-	}
-
-	if dc.TTL > 0 && dc.TTL < 60 {
-		warnings = append(warnings, fmt.Sprintf(
-			t(phrases().DiagnoseTTLTooLowFormat, "%s: TTL is very low."),
-			diagnosisDomainName(dc),
-		))
-	}
-
-	if msg := providerCredentialWarning(dc); msg != "" {
-		warnings = append(warnings, msg)
-	}
-
-	return warnings
-}
-
-func diagnosisDomainName(dc DomainConfig) string {
-	fqdn := strings.TrimSpace(dc.FQDN)
-	if fqdn == "" {
-		return t(phrases().DiagnoseUnknownDomain, "Unknown domain")
-	}
-	return fqdn
-}
-
-func providerCredentialWarning(dc DomainConfig) string {
-	fqdn := diagnosisDomainName(dc)
-
-	switch dc.Provider {
-	case ProviderIONOS:
-		if dc.APIPrefix == "" || dc.APISecret == "" {
-			return fmt.Sprintf(
-				t(phrases().DiagnoseIonosCredentialsIncompleteFormat, "%s: IONOS credentials incomplete."),
-				fqdn,
-			)
-		}
-
-	case ProviderCloudflare:
-		if dc.CFToken == "" && (dc.CFEmail == "" || dc.CFSecret == "") {
-			return fmt.Sprintf(
-				t(phrases().DiagnoseCloudflareCredentialsIncompleteFormat, "%s: Cloudflare credentials incomplete."),
-				fqdn,
-			)
-		}
-
-	case ProviderIPv64:
-		if dc.IPv64Token == "" {
-			return fmt.Sprintf(
-				t(phrases().DiagnoseIpv64TokenMissingFormat, "%s: IPv64 token missing."),
-				fqdn,
-			)
-		}
-
-	case ProviderFebas:
-		if err := validateFebasUpdateURL(dc.FebasUpdateURL); err != nil {
-			return fmt.Sprintf("%s: %v", fqdn, err)
-		}
-
-	case ProviderDNScale:
-		if strings.TrimSpace(dc.APIKey) == "" {
-			return fmt.Sprintf(
-				t(phrases().DiagnoseDNScaleAPIKeyMissingFormat, "%s: DNScale API Key missing."),
-				fqdn,
-			)
-		}
-	}
-
-	return ""
-}
-
-func diagnoseGlobalConfigWarnings(cfg Config) []string {
-	warnings := make([]string, 0)
-
-	if cfg.DryRun {
-		warnings = append(warnings, t(phrases().DiagnoseDryRunActive, "Dry-run is active: DNS changes are not written."))
-	}
-
-	if cfg.DebugEnabled {
-		warnings = append(warnings, t(phrases().DiagnoseDebugActive, "Debug mode is active."))
-	}
-
-	if cfg.DebugHTTPRaw {
-		warnings = append(warnings, t(phrases().DiagnoseHTTPRawDebugActive, "HTTP raw debug is active. Sensitive data may appear in logs."))
-	}
-
-	if cfg.Interval > 0 && cfg.Interval < 60 {
-		warnings = append(warnings, t(phrases().DiagnoseIntervalLow, "Update interval is very low."))
-	}
-
-	return warnings
-}
-
-func diagnoseNotifiers(cfg Config) map[string]bool {
-	return map[string]bool{
-		"telegram": cfg.Notifications.Telegram.Token != "" && cfg.Notifications.Telegram.ChatID != "",
-		"gotify":   cfg.Notifications.Gotify.URL != "" && cfg.Notifications.Gotify.Token != "",
-		"ntfy":     cfg.Notifications.Ntfy.URL != "" && cfg.Notifications.Ntfy.Topic != "",
-		"webhook":  cfg.Notifications.Webhook.URL != "",
-		"mqtt":     cfg.Notifications.MQTTConfig.Broker != "" && cfg.Notifications.MQTTConfig.Topic != "",
-		"email":    cfg.Notifications.Email.Host != "" && cfg.Notifications.Email.To != "",
-	}
-}
-
-func diagnoseConfigInfo(cfg Config) map[string]any {
-	return map[string]any{
-		"ip_mode":        cfg.IPMode,
-		"interval":       cfg.Interval,
-		"dry_run":        cfg.DryRun,
-		"debug":          cfg.DebugEnabled,
-		"debug_http_raw": cfg.DebugHTTPRaw,
-		"max_log_lines":  cfg.MaxLogLines,
-		"ipv4_endpoints": len(cfg.IPv4Endpoints),
-		"ipv6_endpoints": len(cfg.IPv6Endpoints),
-	}
-}
-
-func diagnosisMainStatus(warnings []string, logWarnings int) (string, string) {
-	if !schedulerRanOnce.Load() {
-		return starting, t(phrases().DiagnoseReasonSchedulerNotRun, "Scheduler has not run yet.")
-	}
-
-	if !lastOk.Load() {
-		return unhealthy, t(phrases().DiagnoseReasonLastSchedulerFailed, "The last scheduler run failed.")
-	}
-
-	if len(warnings) > 0 || logWarnings > 0 {
-		return "degraded", t(phrases().DiagnoseReasonWarningsButRunning, "There are warnings, but the service is running.")
-	}
-
-	return healthy, t(phrases().DiagnoseReasonAllGood, "Everything looks good.")
-}
-
-func formatDiagnosisTime(t time.Time) string {
-	if t.IsZero() {
-		return ""
-	}
-
-	return t.Format(statusTimestampLayout)
-}
-
-func diagnosisFileInfos() []map[string]any {
-	return []map[string]any{
-		diagnoseFileInfo("config.json", configPath),
-		diagnoseFileInfo("status/update.json", updatePath),
-		diagnoseFileInfo("logs", logPath),
-		diagnoseFileInfo("users.json", usersFilePath),
-		diagnoseFileInfo("audit.json", auditFilePath),
-	}
-}
-
-func diagnoseFileInfo(name, path string) map[string]any {
-	out := map[string]any{
-		"name":   name,
-		"exists": false,
-	}
-
-	if strings.TrimSpace(path) == "" {
-		out["error"] = t(phrases().DiagnosePathEmpty, "path empty")
-		return out
-	}
-
-	st, err := os.Stat(path)
-	if err != nil {
-		out["error"] = err.Error()
-		return out
-	}
-
-	out["exists"] = true
-	out["size"] = st.Size()
-	out["modified"] = st.ModTime().Format(statusTimestampLayout)
-	return out
-}
-
-// ============================================================================
-// AUDIT LOG & DNS PROPAGATION
-// ============================================================================
-
-const (
-	auditLogMaxBytes = 5 << 20
-	auditReadLimit   = 200
-)
-
-var (
-	auditLogMu      sync.Mutex
-	backupRestoreMu sync.Mutex
-	auditFilePath   string
-)
-
-type auditEntry struct {
-	ID        string `json:"id"`
-	Timestamp string `json:"timestamp"`
-	Actor     string `json:"actor"`
-	Role      string `json:"role"`
-	IP        string `json:"ip"`
-	Method    string `json:"method"`
-	Path      string `json:"path"`
-	Status    int    `json:"status"`
-	Result    string `json:"result"`
-}
-
-func auditLogFilePath() string {
-	basePath := strings.TrimSpace(logPath)
-	if basePath == "" {
-		basePath = strings.TrimSpace(usersFilePath)
-	}
-	if basePath == "" {
-		return ""
-	}
-
-	auditFilePath = filepath.Join(filepath.Dir(basePath), "audit.json")
-
-	return auditFilePath
-}
-
-func safeAuditField(value string, maxRunes int) string {
-	value = strings.Map(func(r rune) rune {
-		if r < 32 || r == 127 {
-			return ' '
-		}
-		return r
-	}, strings.TrimSpace(value))
-	runes := []rune(value)
-	if len(runes) > maxRunes {
-		return string(runes[:maxRunes]) + "…"
-	}
-	return value
-}
-
-func auditHTTPRequest(r *http.Request, sess *Session, status int) {
-	if r == nil {
-		return
-	}
-
-	actor := "anonymous"
-	role := ""
-	if sess != nil {
-		actor = sess.Username
-		role = string(sess.Role)
-	} else if !authEnabled {
-		actor = "auth-disabled"
-		role = string(RoleAdmin)
-	}
-
-	result := "success"
-	if status >= 400 {
-		result = "error"
-	}
-	id, err := randomHexToken(8)
-	if err != nil {
-		id = strconv.FormatInt(time.Now().UnixNano(), 36)
-	}
-
-	entry := auditEntry{
-		ID:        id,
-		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
-		Actor:     safeAuditField(actor, 128),
-		Role:      safeAuditField(role, 32),
-		IP:        safeAuditField(getClientIP(r), 128),
-		Method:    safeAuditField(strings.ToUpper(r.Method), 16),
-		Path:      safeAuditField(r.URL.Path, 256),
-		Status:    status,
-		Result:    result,
-	}
-	if err := appendAuditEntry(entry); err != nil {
-		debugLog("AUDIT", "", fmt.Sprintf("audit write failed: %v", err))
-	}
-}
-
-func appendAuditEntry(entry auditEntry) error {
-	path := auditLogFilePath()
-	if path == "" {
-		return errors.New("audit path unavailable")
-	}
-
-	auditLogMu.Lock()
-	defer auditLogMu.Unlock()
-
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	if st, err := os.Stat(path); err == nil && st.Size() >= auditLogMaxBytes {
-		_ = os.Remove(path + ".1")
-		if err := os.Rename(path, path+".1"); err != nil {
-			return err
-		}
-	}
-
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			debugLog("DASHBOARD", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
-		}
-	}()
-
-	data, err := json.Marshal(entry)
-	if err != nil {
-		return err
-	}
-	data = append(data, '\n')
-	_, err = file.Write(data)
-	return err
-}
-
-func readAuditEntries(limit int) ([]auditEntry, error) {
-	if limit <= 0 || limit > auditReadLimit {
-		limit = auditReadLimit
-	}
-	path := auditLogFilePath()
-	if path == "" {
-		return []auditEntry{}, nil
-	}
-
-	auditLogMu.Lock()
-	defer auditLogMu.Unlock()
-
-	file, err := os.Open(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return []auditEntry{}, nil
-		}
-		return nil, err
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			debugLog("DASHBOARD", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
-		}
-	}()
-
-	ring := make([]auditEntry, limit)
-	total := 0
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 4096), 128<<10)
-	for scanner.Scan() {
-		var entry auditEntry
-		if json.Unmarshal(scanner.Bytes(), &entry) != nil {
-			continue
-		}
-		ring[total%limit] = entry
-		total++
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-
-	count := min(total, limit)
-	entries := make([]auditEntry, 0, count)
-	for i := range count {
-		index := (total - 1 - i) % limit
-		entries = append(entries, ring[index])
-	}
-	return entries, nil
-}
-
-func handleAPIAudit(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
-		return
-	}
-	if !requireAdminAPI(w, r) {
-		return
-	}
-
-	entries, err := readAuditEntries(auditReadLimit)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
-}
-
-func deleteAuditEntry(id string) error {
-	path := auditLogFilePath()
-	if path == "" {
-		return errors.New("audit path unavailable")
-	}
-
-	auditLogMu.Lock()
-	defer auditLogMu.Unlock()
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-
-	var kept []string
-	for line := range strings.SplitSeq(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		var entry auditEntry
-		if json.Unmarshal([]byte(line), &entry) != nil {
-			kept = append(kept, line)
-			continue
-		}
-		if entry.ID != id {
-			kept = append(kept, line)
-		}
-	}
-
-	output := ""
-	if len(kept) > 0 {
-		output = strings.Join(kept, "\n") + "\n"
-	}
-	return os.WriteFile(path, []byte(output), 0o600)
-}
-
-func handleAPIAuditDelete(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
-		return
-	}
-	if !requireAdminAPI(w, r) {
-		return
-	}
-
-	var body struct {
-		ID string `json:"id"`
-	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&body); err != nil || body.ID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing id"})
-		return
-	}
-
-	if err := deleteAuditEntry(body.ID); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
-}
-
-type dnsResolverTarget struct {
-	Name    string
-	Address string
-	System  bool
-}
-
-type dnsPropagationResult struct {
-	Resolver   string   `json:"resolver"`
-	Address    string   `json:"address,omitempty"`
-	IPv4       []string `json:"ipv4"`
-	IPv6       []string `json:"ipv6"`
-	CNAME      string   `json:"cname,omitempty"`
-	MatchIPv4  bool     `json:"match_ipv4"`
-	MatchIPv6  bool     `json:"match_ipv6"`
-	DurationMS int64    `json:"duration_ms"`
-	Error      string   `json:"error,omitempty"`
-}
-
-func normalizeDNSName(raw string) (string, error) {
-	name := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(raw)), ".")
-	if len(name) == 0 || len(name) > 253 {
-		return "", errors.New(t(phrases().DNSInvalidDomainName, "invalid domain name"))
-	}
-	for label := range strings.SplitSeq(name, ".") {
-		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
-			return "", errors.New(t(phrases().DNSInvalidDomainName, "invalid domain name"))
-		}
-		for _, r := range label {
-			if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' && r != '_' {
-				return "", errors.New(t(phrases().DNSInvalidDomainName, "invalid domain name"))
-			}
-		}
-	}
-	return name, nil
-}
-
-func firstSystemNameserver() (string, error) {
-	data, err := os.ReadFile("/etc/resolv.conf")
-	if err != nil {
-		return "", err
-	}
-
-	scanner := bufio.NewScanner(strings.NewReader(string(data)))
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if !strings.HasPrefix(line, "nameserver") {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
-		}
-		return normalizeDNSServer(fields[1])
-	}
-	if err := scanner.Err(); err != nil {
-		return "", err
-	}
-
-	return "", errors.New(t(phrases().DNSNoNameserverFound, "no nameserver found in /etc/resolv.conf"))
-}
-
-func dnsResolverTargets() []dnsResolverTarget {
-	var targets []dnsResolverTarget
-	seen := map[string]struct{}{}
-
-	if addr, err := firstSystemNameserver(); err == nil {
-		key := strings.ToLower(addr)
-		seen[key] = struct{}{}
-		targets = append(targets, dnsResolverTarget{
-			Name:    fmt.Sprintf(t(phrases().DNSSystemResolverFormat, "System resolver (%s)"), addr),
-			Address: addr,
-		})
-	} else {
-		seen["system"] = struct{}{}
-		targets = append(targets, dnsResolverTarget{Name: t(phrases().DNSSystemResolver, "System resolver"), System: true})
-	}
-
-	add := func(name, raw string) {
-		address, err := normalizeDNSServer(raw)
-		if err != nil {
-			return
-		}
-		key := strings.ToLower(address)
-		if _, exists := seen[key]; exists {
-			return
-		}
-		seen[key] = struct{}{}
-		targets = append(targets, dnsResolverTarget{Name: name, Address: address})
-	}
-
-	for _, server := range snapshotConfig().DNSServers {
-		add("Configured: "+server, server)
-		if len(targets) >= 5 {
-			break
-		}
-	}
-	add("Cloudflare", "1.1.1.1:53")
-	add("Google", "8.8.8.8:53")
-	if len(targets) > 7 {
-		targets = targets[:7]
-	}
-	return targets
-}
-
-func stringSliceContains(values []string, wanted string) bool {
-	if wanted == "" {
-		return false
-	}
-	return slices.Contains(values, wanted)
-}
-
-func queryDNSResolver(ctx context.Context, target dnsResolverTarget, domain, expectedV4, expectedV6 string) dnsPropagationResult {
-	started := time.Now()
-	result := dnsPropagationResult{
-		Resolver: target.Name,
-		Address:  target.Address,
-		IPv4:     []string{},
-		IPv6:     []string{},
-	}
-
-	var resolver *net.Resolver
-
-	if target.Address != "" {
-		resolver = newResolverForDNSServer(target.Address)
-	} else {
-		resolver = net.DefaultResolver
-	}
-
-	ips, err := resolver.LookupIPAddr(ctx, domain)
-	if err != nil {
-		result.Error = err.Error()
-	} else {
-		for _, item := range ips {
-			if item.IP == nil {
-				continue
-			}
-			if item.IP.To4() != nil {
-				result.IPv4 = append(result.IPv4, item.IP.String())
-			} else {
-				result.IPv6 = append(result.IPv6, item.IP.String())
-			}
-		}
-		sort.Strings(result.IPv4)
-		sort.Strings(result.IPv6)
-	}
-
-	if cname, cnameErr := resolver.LookupCNAME(ctx, domain); cnameErr == nil {
-		result.CNAME = strings.TrimSuffix(cname, ".")
-	}
-
-	result.MatchIPv4 = stringSliceContains(result.IPv4, expectedV4)
-	result.MatchIPv6 = stringSliceContains(result.IPv6, expectedV6)
-	result.DurationMS = time.Since(started).Milliseconds()
-
-	return result
-}
-
-func canRunDNSPropagation(r *http.Request) bool {
-	if !authEnabled {
-		return true
-	}
-	sess, ok := sessionFromRequest(r)
-	return ok && (sess.Role == RoleAdmin || sess.Role == RoleEditor)
-}
-
-func handleAPIDNSPropagation(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
-		return
-	}
-	if !canRunDNSPropagation(r) {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": esc(phrases().DNSAdminEditorRequired)})
-		return
-	}
-
-	var req struct {
-		Domain string `json:"domain"`
-	}
-	if err := decodeJSONBody(w, r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": esc(phrases().APIErrorBadRequest)})
-		return
-	}
-	domain, err := normalizeDNSName(req.Domain)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
-
-	expectedV4, expectedV6 := loadLastKnownIPs()
-	targets := dnsResolverTargets()
-	results := make([]dnsPropagationResult, len(targets))
-	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
-	defer cancel()
-
-	var wg sync.WaitGroup
-	for i, target := range targets {
-		wg.Add(1)
-		go func(index int, target dnsResolverTarget) {
-			defer wg.Done()
-			results[index] = queryDNSResolver(ctx, target, domain, expectedV4, expectedV6)
-		}(i, target)
-	}
-	wg.Wait()
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"domain":        domain,
-		"expected_ipv4": expectedV4,
-		"expected_ipv6": expectedV6,
-		"checked_at":    time.Now().UTC().Format(time.RFC3339),
-		"results":       results,
-	})
-}
-
-func writeAuditDNSSection(w io.Writer, isAdmin bool) {
-	if !isAdmin {
-		_, _ = fmt.Fprint(w, `<div class="page-section" data-section="audit"><div class="card"><div class="card-header">`+phrases().NavAuditJS+`</div><div class="card-content"><div class="backup-warning">🔒 `+phrases().AuditAdminOnly+`</div></div></div></div>`)
-		return
-	}
-
-	var options strings.Builder
-	for _, domain := range snapshotConfig().DomainConfigs {
-		fqdn := strings.TrimSpace(domain.FQDN)
-		if fqdn != "" {
-			fmt.Fprintf(&options, `<option value="%s"></option>`, esc(fqdn))
-		}
-	}
-
-	_, _ = fmt.Fprintf(w, `<div class="page-section" data-section="audit">
-		<div class="audit-dns-grid">
-			<div class="card audit-log-card">
-				<div class="card-header card-header--space-between"><span>`+phrases().AuditLogTitle+`</span><button class="action-btn topbar-action-btn" data-click="refreshAuditLog()">`+phrases().AuditRefreshBtn+`</button></div>
-				<div class="card-content"><div id="audit-log-content" class="audit-log-container audit-loading">`+phrases().AuditLoadingJS+`</div></div>
-			</div>
-			<div class="card card--no-cv dns-propagation-card">
-				<div class="card-header">`+phrases().DNSPropagationTitle+`</div>
-				<div class="card-content">
-					<p class="audit-help">`+phrases().DNSPropagationHelp+`</p>
-					<div class="dns-check-controls"><input id="dns-propagation-domain" class="search-box" list="dns-domain-list" placeholder="host.example.com"><datalist id="dns-domain-list">%s</datalist><button class="action-btn" data-click="runDNSPropagation()">`+phrases().DNSCheckBtn+`</button></div>
-					<div id="dns-propagation-result" class="dns-propagation-result"></div>
-				</div>
-			</div>
-		</div>
-	</div>`, options.String())
-}
-
-// ============================================================================
 // BACKUP & RESTORE
 // ============================================================================
-
 const (
 	dashboardBackupApp     = "dyndns-dashboard"
 	dashboardBackupVersion = 1
@@ -4742,9 +3921,9 @@ func captureBackupRestoreSnapshot(selection backupRestoreSelection) backupRestor
 
 func rollbackBackupRestore(snapshot backupRestoreSnapshot, restored []string) error {
 	var rollbackErrors []string
-	for i := len(restored) - 1; i >= 0; i-- {
+	for _, r := range slices.Backward(restored) {
 		var err error
-		switch restored[i] {
+		switch r {
 		case "users":
 			err = saveUsers(snapshot.Backup.Users)
 			sessionStore.DeleteAll()
@@ -4754,7 +3933,7 @@ func rollbackBackupRestore(snapshot backupRestoreSnapshot, restored []string) er
 			_, err = restoreBackupConfig(snapshot.Backup)
 		}
 		if err != nil {
-			rollbackErrors = append(rollbackErrors, restored[i]+": "+err.Error())
+			rollbackErrors = append(rollbackErrors, r+": "+err.Error())
 		}
 	}
 	if len(rollbackErrors) > 0 {
@@ -4918,4 +4097,567 @@ func logBackupRestore(restored []string) {
 			strings.Join(restored, ", "),
 		),
 	})
+}
+
+// ============================================================================
+// DIAGNOSE / HEALTH CENTER
+// ============================================================================
+func writeDiagnoseSection(w io.Writer) {
+	_, _ = fmt.Fprint(w, `
+	<div class="page-section" data-section="diagnose">
+		<div class="card">
+			<div class="card-header card-header--space-between">
+				<span>🩺 `+t(phrases().DiagnoseTitle, "Diagnose / Health Center")+`</span>
+				<button class="action-btn topbar-action-btn" data-click="refreshDiagnosis()">`+t(phrases().DiagnoseRefreshBtn, "🔄 Refresh")+`</button>
+			</div>
+			<div class="card-content">
+				<div id="diagnose-content" class="diag-loading">
+					`+t(phrases().DiagnoseLoading, "Loading diagnosis...")+`
+				</div>
+			</div>
+		</div>
+	</div>
+	`)
+}
+
+func handleAPIDiagnose(w http.ResponseWriter, r *http.Request) {
+	if r.Method != MethodGET {
+		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, buildDiagnosisPayload())
+}
+
+type diagnosisLogCounts struct {
+	Errors   int
+	Warnings int
+}
+
+type diagnosisConfigSnapshot struct {
+	ProviderCounts map[string]int
+	Warnings       []string
+	Notifiers      map[string]bool
+	Info           map[string]any
+}
+
+func buildDiagnosisPayload() map[string]any {
+	stats := apiMetrics.GetStats()
+	lastV4, lastV6 := loadLastKnownIPs()
+
+	statusData := loadStatusData()
+	domainKeys := domainKeysFromStatusData(statusData)
+	newestChange := newestDomainChange(statusData, domainKeys)
+
+	logs, _ := loadDashboardLogs()
+	logCounts := countDiagnosisLogs(logs)
+
+	cfgDiag := buildDiagnosisConfigSnapshot()
+	mainStatus, reason := diagnosisMainStatus(cfgDiag.Warnings, logCounts.Warnings)
+
+	return map[string]any{
+		"status":             mainStatus,
+		"reason":             reason,
+		"uptime":             time.Since(startTime).Round(time.Second).String(),
+		"scheduler_ran_once": schedulerRanOnce.Load(),
+		"last_ok":            lastOk.Load(),
+		"update_in_progress": updateInProgress.Load(),
+		"active_updates":     activeUpdates.Load(),
+
+		"last_known_ipv4":    lastV4,
+		"last_known_ipv6":    lastV6,
+		"last_domain_change": formatDiagnosisTime(newestChange),
+
+		"configured_domains": len(domainKeys),
+		"provider_counts":    cfgDiag.ProviderCounts,
+		"warnings":           cfgDiag.Warnings,
+		"log_errors":         logCounts.Errors,
+		"log_warnings":       logCounts.Warnings,
+		"api_metrics":        stats,
+		"config":             cfgDiag.Info,
+		"notifiers":          cfgDiag.Notifiers,
+
+		"files": diagnosisFileInfos(),
+	}
+}
+
+func countDiagnosisLogs(logs []LogEntry) diagnosisLogCounts {
+	var counts diagnosisLogCounts
+
+	for _, e := range logs {
+		lvl := strings.ToUpper(e.Level)
+
+		if strings.Contains(lvl, "ERR") || strings.Contains(lvl, "ERROR") {
+			counts.Errors++
+		}
+
+		if strings.Contains(lvl, "WARN") {
+			counts.Warnings++
+		}
+	}
+
+	return counts
+}
+
+func buildDiagnosisConfigSnapshot() diagnosisConfigSnapshot {
+	cfgCopy := cloneConfigForBackup()
+
+	warnings := diagnoseDomainWarnings(cfgCopy.DomainConfigs)
+	warnings = append(warnings, diagnoseGlobalConfigWarnings(cfgCopy)...)
+
+	return diagnosisConfigSnapshot{
+		ProviderCounts: diagnoseProviderCounts(cfgCopy.DomainConfigs),
+		Warnings:       warnings,
+		Notifiers:      diagnoseNotifiers(cfgCopy),
+		Info:           diagnoseConfigInfo(cfgCopy),
+	}
+}
+
+func diagnoseProviderCounts(domains []DomainConfig) map[string]int {
+	counts := make(map[string]int)
+
+	for _, dc := range domains {
+		counts[string(dc.Provider)]++
+	}
+
+	return counts
+}
+
+func diagnoseDomainWarnings(domains []DomainConfig) []string {
+	warnings := make([]string, 0)
+
+	for _, dc := range domains {
+		warnings = append(warnings, diagnoseSingleDomainWarnings(dc)...)
+	}
+
+	if len(domains) == 0 {
+		warnings = append(warnings, t(phrases().DiagnoseNoDomainsConfigured, "No domains configured."))
+	}
+
+	return warnings
+}
+
+func diagnoseSingleDomainWarnings(dc DomainConfig) []string {
+	warnings := make([]string, 0)
+
+	if strings.TrimSpace(dc.FQDN) == "" {
+		warnings = append(warnings, t(phrases().DiagnoseDomainWithoutFQDN, "A domain without FQDN is configured."))
+	}
+
+	if dc.TTL > 0 && dc.TTL < 60 {
+		warnings = append(warnings, fmt.Sprintf(
+			t(phrases().DiagnoseTTLTooLowFormat, "%s: TTL is very low."),
+			diagnosisDomainName(dc),
+		))
+	}
+
+	if msg := providerCredentialWarning(dc); msg != "" {
+		warnings = append(warnings, msg)
+	}
+
+	return warnings
+}
+
+func diagnosisDomainName(dc DomainConfig) string {
+	fqdn := strings.TrimSpace(dc.FQDN)
+	if fqdn == "" {
+		return t(phrases().DiagnoseUnknownDomain, "Unknown domain")
+	}
+	return fqdn
+}
+
+func providerCredentialWarning(dc DomainConfig) string {
+	fqdn := diagnosisDomainName(dc)
+
+	switch dc.Provider {
+	case ProviderIONOS:
+		if dc.APIPrefix == "" || dc.APISecret == "" {
+			return fmt.Sprintf(
+				t(phrases().DiagnoseIonosCredentialsIncompleteFormat, "%s: IONOS credentials incomplete."),
+				fqdn,
+			)
+		}
+
+	case ProviderCloudflare:
+		if dc.CFToken == "" && (dc.CFEmail == "" || dc.CFSecret == "") {
+			return fmt.Sprintf(
+				t(phrases().DiagnoseCloudflareCredentialsIncompleteFormat, "%s: Cloudflare credentials incomplete."),
+				fqdn,
+			)
+		}
+
+	case ProviderIPv64:
+		if dc.IPv64Token == "" {
+			return fmt.Sprintf(
+				t(phrases().DiagnoseIpv64TokenMissingFormat, "%s: IPv64 token missing."),
+				fqdn,
+			)
+		}
+
+	case ProviderFebas:
+		if err := validateFebasUpdateURL(dc.FebasUpdateURL); err != nil {
+			return fmt.Sprintf("%s: %v", fqdn, err)
+		}
+
+	case ProviderDNScale:
+		if strings.TrimSpace(dc.APIKey) == "" {
+			return fmt.Sprintf(
+				t(phrases().DiagnoseDNScaleAPIKeyMissingFormat, "%s: DNScale API Key missing."),
+				fqdn,
+			)
+		}
+	}
+
+	return ""
+}
+
+func diagnoseGlobalConfigWarnings(cfg Config) []string {
+	warnings := make([]string, 0)
+
+	if cfg.DryRun {
+		warnings = append(warnings, t(phrases().DiagnoseDryRunActive, "Dry-run is active: DNS changes are not written."))
+	}
+
+	if cfg.DebugEnabled {
+		warnings = append(warnings, t(phrases().DiagnoseDebugActive, "Debug mode is active."))
+	}
+
+	if cfg.DebugHTTPRaw {
+		warnings = append(warnings, t(phrases().DiagnoseHTTPRawDebugActive, "HTTP raw debug is active. Sensitive data may appear in logs."))
+	}
+
+	if cfg.Interval > 0 && cfg.Interval < 60 {
+		warnings = append(warnings, t(phrases().DiagnoseIntervalLow, "Update interval is very low."))
+	}
+
+	return warnings
+}
+
+func diagnoseNotifiers(cfg Config) map[string]bool {
+	return map[string]bool{
+		"telegram": cfg.Notifications.Telegram.Token != "" && cfg.Notifications.Telegram.ChatID != "",
+		"gotify":   cfg.Notifications.Gotify.URL != "" && cfg.Notifications.Gotify.Token != "",
+		"ntfy":     cfg.Notifications.Ntfy.URL != "" && cfg.Notifications.Ntfy.Topic != "",
+		"webhook":  cfg.Notifications.Webhook.URL != "",
+		"mqtt":     cfg.Notifications.MQTTConfig.Broker != "" && cfg.Notifications.MQTTConfig.Topic != "",
+		"email":    cfg.Notifications.Email.Host != "" && cfg.Notifications.Email.To != "",
+	}
+}
+
+func diagnoseConfigInfo(cfg Config) map[string]any {
+	return map[string]any{
+		"ip_mode":        cfg.IPMode,
+		"interval":       cfg.Interval,
+		"dry_run":        cfg.DryRun,
+		"debug":          cfg.DebugEnabled,
+		"debug_http_raw": cfg.DebugHTTPRaw,
+		"max_log_lines":  cfg.MaxLogLines,
+		"ipv4_endpoints": len(cfg.IPv4Endpoints),
+		"ipv6_endpoints": len(cfg.IPv6Endpoints),
+	}
+}
+
+func diagnosisMainStatus(warnings []string, logWarnings int) (string, string) {
+	if !schedulerRanOnce.Load() {
+		return starting, t(phrases().DiagnoseReasonSchedulerNotRun, "Scheduler has not run yet.")
+	}
+
+	if !lastOk.Load() {
+		return unhealthy, t(phrases().DiagnoseReasonLastSchedulerFailed, "The last scheduler run failed.")
+	}
+
+	if len(warnings) > 0 || logWarnings > 0 {
+		return "degraded", t(phrases().DiagnoseReasonWarningsButRunning, "There are warnings, but the service is running.")
+	}
+
+	return healthy, t(phrases().DiagnoseReasonAllGood, "Everything looks good.")
+}
+
+func formatDiagnosisTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+
+	return t.Format(statusTimestampLayout)
+}
+
+func diagnosisFileInfos() []map[string]any {
+	return []map[string]any{
+		diagnoseFileInfo("config.json", configPath),
+		diagnoseFileInfo("status/update.json", updatePath),
+		diagnoseFileInfo("logs", logPath),
+		diagnoseFileInfo("users.json", usersFilePath),
+		diagnoseFileInfo("audit.json", auditLogFilePath()),
+	}
+}
+
+func diagnoseFileInfo(name, path string) map[string]any {
+	out := map[string]any{
+		"name":   name,
+		"exists": false,
+	}
+
+	if strings.TrimSpace(path) == "" {
+		out["error"] = t(phrases().DiagnosePathEmpty, "path empty")
+		return out
+	}
+
+	st, err := os.Stat(path)
+	if err != nil {
+		out["error"] = err.Error()
+		return out
+	}
+
+	out["exists"] = true
+	out["size"] = st.Size()
+	out["modified"] = st.ModTime().Format(statusTimestampLayout)
+	return out
+}
+
+// ============================================================================
+// DNS PROPAGATION
+// ============================================================================
+type dnsResolverTarget struct {
+	Name    string
+	Address string
+	System  bool
+}
+
+type dnsPropagationResult struct {
+	Resolver   string   `json:"resolver"`
+	Address    string   `json:"address,omitempty"`
+	IPv4       []string `json:"ipv4"`
+	IPv6       []string `json:"ipv6"`
+	CNAME      string   `json:"cname,omitempty"`
+	MatchIPv4  bool     `json:"match_ipv4"`
+	MatchIPv6  bool     `json:"match_ipv6"`
+	DurationMS int64    `json:"duration_ms"`
+	Error      string   `json:"error,omitempty"`
+}
+
+func normalizeDNSName(raw string) (string, error) {
+	name := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(raw)), ".")
+	if len(name) == 0 || len(name) > 253 {
+		return "", errors.New(t(phrases().DNSInvalidDomainName, "invalid domain name"))
+	}
+	for label := range strings.SplitSeq(name, ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return "", errors.New(t(phrases().DNSInvalidDomainName, "invalid domain name"))
+		}
+		for _, r := range label {
+			if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' && r != '_' {
+				return "", errors.New(t(phrases().DNSInvalidDomainName, "invalid domain name"))
+			}
+		}
+	}
+	return name, nil
+}
+
+func firstSystemNameserver() (string, error) {
+	data, err := os.ReadFile("/etc/resolv.conf")
+	if err != nil {
+		return "", err
+	}
+
+	scanner := bufio.NewScanner(strings.NewReader(string(data)))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, "nameserver") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		return normalizeDNSServer(fields[1])
+	}
+	if err := scanner.Err(); err != nil {
+		return "", err
+	}
+
+	return "", errors.New(t(phrases().DNSNoNameserverFound, "no nameserver found in /etc/resolv.conf"))
+}
+
+func dnsResolverTargets() []dnsResolverTarget {
+	var targets []dnsResolverTarget
+	seen := map[string]struct{}{}
+
+	if addr, err := firstSystemNameserver(); err == nil {
+		key := strings.ToLower(addr)
+		seen[key] = struct{}{}
+		targets = append(targets, dnsResolverTarget{
+			Name:    fmt.Sprintf(t(phrases().DNSSystemResolverFormat, "System resolver (%s)"), addr),
+			Address: addr,
+		})
+	} else {
+		seen["system"] = struct{}{}
+		targets = append(targets, dnsResolverTarget{Name: t(phrases().DNSSystemResolver, "System resolver"), System: true})
+	}
+
+	add := func(name, raw string) {
+		address, err := normalizeDNSServer(raw)
+		if err != nil {
+			return
+		}
+		key := strings.ToLower(address)
+		if _, exists := seen[key]; exists {
+			return
+		}
+		seen[key] = struct{}{}
+		targets = append(targets, dnsResolverTarget{Name: name, Address: address})
+	}
+
+	for _, server := range snapshotConfig().DNSServers {
+		add("Configured: "+server, server)
+		if len(targets) >= 5 {
+			break
+		}
+	}
+	add("Cloudflare", "1.1.1.1:53")
+	add("Google", "8.8.8.8:53")
+	if len(targets) > 7 {
+		targets = targets[:7]
+	}
+	return targets
+}
+
+func stringSliceContains(values []string, wanted string) bool {
+	if wanted == "" {
+		return false
+	}
+	return slices.Contains(values, wanted)
+}
+
+func queryDNSResolver(ctx context.Context, target dnsResolverTarget, domain, expectedV4, expectedV6 string) dnsPropagationResult {
+	started := time.Now()
+	result := dnsPropagationResult{
+		Resolver: target.Name,
+		Address:  target.Address,
+		IPv4:     []string{},
+		IPv6:     []string{},
+	}
+
+	var resolver *net.Resolver
+
+	if target.Address != "" {
+		resolver = newResolverForDNSServer(target.Address)
+	} else {
+		resolver = net.DefaultResolver
+	}
+
+	ips, err := resolver.LookupIPAddr(ctx, domain)
+	if err != nil {
+		result.Error = err.Error()
+	} else {
+		for _, item := range ips {
+			if item.IP == nil {
+				continue
+			}
+			if item.IP.To4() != nil {
+				result.IPv4 = append(result.IPv4, item.IP.String())
+			} else {
+				result.IPv6 = append(result.IPv6, item.IP.String())
+			}
+		}
+		sort.Strings(result.IPv4)
+		sort.Strings(result.IPv6)
+	}
+
+	if cname, cnameErr := resolver.LookupCNAME(ctx, domain); cnameErr == nil {
+		result.CNAME = strings.TrimSuffix(cname, ".")
+	}
+
+	result.MatchIPv4 = stringSliceContains(result.IPv4, expectedV4)
+	result.MatchIPv6 = stringSliceContains(result.IPv6, expectedV6)
+	result.DurationMS = time.Since(started).Milliseconds()
+
+	return result
+}
+
+func canRunDNSPropagation(r *http.Request) bool {
+	if !authEnabled {
+		return true
+	}
+	sess, ok := sessionFromRequest(r)
+	return ok && (sess.Role == RoleAdmin || sess.Role == RoleEditor)
+}
+
+func handleAPIDNSPropagation(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+		return
+	}
+	if !canRunDNSPropagation(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": esc(phrases().DNSAdminEditorRequired)})
+		return
+	}
+
+	var req struct {
+		Domain string `json:"domain"`
+	}
+	if err := decodeJSONBody(w, r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": esc(phrases().APIErrorBadRequest)})
+		return
+	}
+	domain, err := normalizeDNSName(req.Domain)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	expectedV4, expectedV6 := loadLastKnownIPs()
+	targets := dnsResolverTargets()
+	results := make([]dnsPropagationResult, len(targets))
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	for i, target := range targets {
+		wg.Add(1)
+		go func(index int, target dnsResolverTarget) {
+			defer wg.Done()
+			results[index] = queryDNSResolver(ctx, target, domain, expectedV4, expectedV6)
+		}(i, target)
+	}
+	wg.Wait()
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"domain":        domain,
+		"expected_ipv4": expectedV4,
+		"expected_ipv6": expectedV6,
+		"checked_at":    time.Now().UTC().Format(time.RFC3339),
+		"results":       results,
+	})
+}
+
+func writeAuditDNSSection(w io.Writer, isAdmin bool) {
+	if !isAdmin {
+		_, _ = fmt.Fprint(w, `<div class="page-section" data-section="audit"><div class="card"><div class="card-header">`+phrases().NavAuditJS+`</div><div class="card-content"><div class="backup-warning">🔒 `+phrases().AuditAdminOnly+`</div></div></div></div>`)
+		return
+	}
+
+	var options strings.Builder
+	for _, domain := range snapshotConfig().DomainConfigs {
+		fqdn := strings.TrimSpace(domain.FQDN)
+		if fqdn != "" {
+			fmt.Fprintf(&options, `<option value="%s"></option>`, esc(fqdn))
+		}
+	}
+
+	_, _ = fmt.Fprintf(w, `<div class="page-section" data-section="audit">
+		<div class="audit-dns-grid">
+			<div class="card audit-log-card audit-log-card-fixed">
+				<div class="card-header card-header--space-between"><span>`+phrases().AuditLogTitle+`</span><button class="action-btn topbar-action-btn" data-click="refreshAuditLog()">`+phrases().AuditRefreshBtn+`</button></div>
+				<div class="card-content"><div id="audit-log-content" class="audit-log-container audit-loading">`+phrases().AuditLoadingJS+`</div></div>
+			</div>
+			<div class="card card--no-cv dns-propagation-card">
+				<div class="card-header">`+phrases().DNSPropagationTitle+`</div>
+				<div class="card-content">
+					<p class="audit-help">`+phrases().DNSPropagationHelp+`</p>
+					<div class="dns-check-controls"><input id="dns-propagation-domain" class="search-box" list="dns-domain-list" placeholder="host.example.com"><datalist id="dns-domain-list">%s</datalist><button class="action-btn" data-click="runDNSPropagation()">`+phrases().DNSCheckBtn+`</button></div>
+					<div id="dns-propagation-result" class="dns-propagation-result"></div>
+				</div>
+			</div>
+		</div>
+	</div>`, options.String())
 }

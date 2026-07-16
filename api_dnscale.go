@@ -236,7 +236,6 @@ func loadDNScaleZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
 }
 
 func loadDNScaleInfrastructureRecords(ctx context.Context, dc *DomainConfig, zoneID string) ([]Record, error) {
-	// Paginate through all records (max 100 per page).
 	var allRecords []Record
 	offset := 0
 	const pageSize = 100

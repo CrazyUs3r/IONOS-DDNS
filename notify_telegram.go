@@ -191,8 +191,6 @@ func (t *telegramNotifier) drainQueue() {
 	for {
 		select {
 		case <-t.pollCtx.Done():
-			// All outbound requests use pollCtx. Once it is cancelled, trying to
-			// flush the queue can no longer succeed and only delays shutdown.
 			return
 
 		case <-ticker.C:

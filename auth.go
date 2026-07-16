@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bufio"
 	"crypto/pbkdf2"
 	"crypto/rand"
 	"crypto/sha256"
@@ -1604,6 +1605,271 @@ func checkPassword(password, stored string) bool {
 	}
 
 	return subtle.ConstantTimeCompare(got, want) == 1
+}
+
+// ============================================================================
+// AUDIT LOG
+// ============================================================================
+const (
+	auditLogMaxBytes = 5 << 20
+	auditReadLimit   = 200
+)
+
+var (
+	auditLogMu      sync.Mutex
+	backupRestoreMu sync.Mutex
+	auditFilePath   string
+)
+
+type auditEntry struct {
+	ID        string `json:"id"`
+	Timestamp string `json:"timestamp"`
+	Actor     string `json:"actor"`
+	Role      string `json:"role"`
+	IP        string `json:"ip"`
+	Method    string `json:"method"`
+	Path      string `json:"path"`
+	Status    int    `json:"status"`
+	Result    string `json:"result"`
+}
+
+func auditLogFilePath() string {
+	basePath := strings.TrimSpace(logPath)
+	if basePath == "" {
+		basePath = strings.TrimSpace(usersFilePath)
+	}
+	if basePath == "" {
+		return ""
+	}
+
+	auditFilePath = filepath.Join(filepath.Dir(basePath), "audit.json")
+
+	return auditFilePath
+}
+
+func safeAuditField(value string, maxRunes int) string {
+	value = strings.Map(func(r rune) rune {
+		if r < 32 || r == 127 {
+			return ' '
+		}
+		return r
+	}, strings.TrimSpace(value))
+	runes := []rune(value)
+	if len(runes) > maxRunes {
+		return string(runes[:maxRunes]) + "…"
+	}
+	return value
+}
+
+func auditHTTPRequest(r *http.Request, sess *Session, status int) {
+	if r == nil {
+		return
+	}
+
+	actor := "anonymous"
+	role := ""
+	if sess != nil {
+		actor = sess.Username
+		role = string(sess.Role)
+	} else if !authEnabled {
+		actor = "auth-disabled"
+		role = string(RoleAdmin)
+	}
+
+	result := "success"
+	if status >= 400 {
+		result = "error"
+	}
+	id, err := randomHexToken(8)
+	if err != nil {
+		id = strconv.FormatInt(time.Now().UnixNano(), 36)
+	}
+
+	entry := auditEntry{
+		ID:        id,
+		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+		Actor:     safeAuditField(actor, 128),
+		Role:      safeAuditField(role, 32),
+		IP:        safeAuditField(getClientIP(r), 128),
+		Method:    safeAuditField(strings.ToUpper(r.Method), 16),
+		Path:      safeAuditField(r.URL.Path, 256),
+		Status:    status,
+		Result:    result,
+	}
+	if err := appendAuditEntry(entry); err != nil {
+		debugLog("AUDIT", "", fmt.Sprintf("audit write failed: %v", err))
+	}
+}
+
+func appendAuditEntry(entry auditEntry) error {
+	path := auditLogFilePath()
+	if path == "" {
+		return errors.New("audit path unavailable")
+	}
+
+	auditLogMu.Lock()
+	defer auditLogMu.Unlock()
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	if st, err := os.Stat(path); err == nil && st.Size() >= auditLogMaxBytes {
+		_ = os.Remove(path + ".1")
+		if err := os.Rename(path, path+".1"); err != nil {
+			return err
+		}
+	}
+
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			debugLog("DASHBOARD", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
+		}
+	}()
+
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	_, err = file.Write(data)
+	return err
+}
+
+func readAuditEntries(limit int) ([]auditEntry, error) {
+	if limit <= 0 || limit > auditReadLimit {
+		limit = auditReadLimit
+	}
+	path := auditLogFilePath()
+	if path == "" {
+		return []auditEntry{}, nil
+	}
+
+	auditLogMu.Lock()
+	defer auditLogMu.Unlock()
+
+	file, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []auditEntry{}, nil
+		}
+		return nil, err
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			debugLog("DASHBOARD", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
+		}
+	}()
+
+	ring := make([]auditEntry, limit)
+	total := 0
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 4096), 128<<10)
+	for scanner.Scan() {
+		var entry auditEntry
+		if json.Unmarshal(scanner.Bytes(), &entry) != nil {
+			continue
+		}
+		ring[total%limit] = entry
+		total++
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	count := min(total, limit)
+	entries := make([]auditEntry, 0, count)
+	for i := range count {
+		index := (total - 1 - i) % limit
+		entries = append(entries, ring[index])
+	}
+	return entries, nil
+}
+
+func handleAPIAudit(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+		return
+	}
+	if !requireAdminAPI(w, r) {
+		return
+	}
+
+	entries, err := readAuditEntries(auditReadLimit)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
+}
+
+func deleteAuditEntry(id string) error {
+	path := auditLogFilePath()
+	if path == "" {
+		return errors.New("audit path unavailable")
+	}
+
+	auditLogMu.Lock()
+	defer auditLogMu.Unlock()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	var kept []string
+	for line := range strings.SplitSeq(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var entry auditEntry
+		if json.Unmarshal([]byte(line), &entry) != nil {
+			kept = append(kept, line)
+			continue
+		}
+		if entry.ID != id {
+			kept = append(kept, line)
+		}
+	}
+
+	output := ""
+	if len(kept) > 0 {
+		output = strings.Join(kept, "\n") + "\n"
+	}
+	return os.WriteFile(path, []byte(output), 0o600)
+}
+
+func handleAPIAuditDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+		return
+	}
+	if !requireAdminAPI(w, r) {
+		return
+	}
+
+	var body struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&body); err != nil || body.ID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing id"})
+		return
+	}
+
+	if err := deleteAuditEntry(body.ID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
 // ============================================================================

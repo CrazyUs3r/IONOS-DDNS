@@ -315,17 +315,6 @@ const (
 	ProtocolUDP     = "udp"
 )
 
-// isCleanupEligibleRecordType reports whether automatic orphan cleanup may
-// delete a record managed by this application.
-func isCleanupEligibleRecordType(recordType string) bool {
-	switch strings.ToUpper(strings.TrimSpace(recordType)) {
-	case RecordTypeA, RecordTypeAAAA, RecordTypeCNAME:
-		return true
-	default:
-		return false
-	}
-}
-
 // ============================================================================
 // WEBSOCKET
 // ============================================================================

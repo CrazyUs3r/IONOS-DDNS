@@ -1,7 +1,7 @@
 ﻿# =============================================================================
 # Builder Stage
 # =============================================================================
-FROM --platform=${BUILDPLATFORM} golang:1.26.4-alpine AS builder
+FROM --platform=${BUILDPLATFORM} golang:1.26.5-alpine AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -41,7 +41,7 @@ RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
 # =============================================================================
 # Runtime tools for target platform
 # =============================================================================
-FROM alpine:3.23 AS runtime-tools
+FROM alpine:3.24.1 AS runtime-tools
 
 ARG SU_EXEC_COMMIT=89c016e6e08749d583efdeda04b9f73e1218e253
 

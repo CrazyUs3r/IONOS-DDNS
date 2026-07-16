@@ -82,9 +82,6 @@ func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdate
 // ============================================================================
 // CNAME SUPPORT
 // ============================================================================
-
-// isCNAMEDomainConfig reports whether a domain is configured to receive a
-// static CNAME record instead of the usual A/AAAA address records.
 func isCNAMEDomainConfig(dc *DomainConfig) bool {
 	if dc == nil {
 		return false
@@ -93,9 +90,6 @@ func isCNAMEDomainConfig(dc *DomainConfig) bool {
 		strings.TrimSpace(dc.CNAMETarget) != ""
 }
 
-// cnameCapableProviders lists the providers whose update functions accept an
-// arbitrary record type/value pair. Febas and IPv64 speak classic
-// IP-only DynDNS update protocols and cannot represent a CNAME target.
 func cnameCapableProvider(provider ProviderType) bool {
 	switch provider {
 	case ProviderCloudflare, ProviderIONOS, ProviderHetzner, ProviderHetznerCloud, ProviderDNScale:
@@ -145,9 +139,6 @@ func processCNAMEDomainUpdate(
 	return result
 }
 
-// markCNAMEApplied clears the one-shot update flag only if the dashboard
-// configuration still points to the value that was just confirmed at the
-// provider. A concurrent dashboard change therefore remains pending.
 func markCNAMEApplied(fqdn string, provider ProviderType, target string) error {
 	wantedFQDN := normalizeDomainName(fqdn)
 	wantedTarget := normalizeDomainName(target)
