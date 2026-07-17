@@ -659,7 +659,7 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
 		if err == nil {
-			return fmt.Errorf("multiple JSON values")
+			return errors.New("multiple JSON values")
 		}
 		return err
 	}
@@ -983,7 +983,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 			log(LogContext{
 				Level:   LogWarn,
 				Action:  ActionConfig,
-				Message: fmt.Sprintf("🚫 Login rate limit exceeded for IP: %s", clientIP),
+				Message: "🚫 Login rate limit exceeded for IP: " + clientIP,
 			})
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusTooManyRequests)

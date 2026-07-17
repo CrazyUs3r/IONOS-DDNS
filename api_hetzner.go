@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -106,7 +107,7 @@ func marshalHetznerBody(body any) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("json marshal: %w", err)
 	}
-	debugLog("HTTP", "", fmt.Sprintf("📤 Payload: %s", string(bodyBytes)))
+	debugLog("HTTP", "", "📤 Payload: "+string(bodyBytes))
 	return bodyBytes, nil
 }
 
@@ -132,7 +133,7 @@ func buildHetznerRequest(
 
 	token := hetznerToken(dc)
 	if token == "" {
-		return nil, fmt.Errorf("missing Hetzner API token in api_secret")
+		return nil, errors.New("missing Hetzner API token in api_secret")
 	}
 
 	switch authMode {
@@ -572,7 +573,7 @@ func cleanupSingleHetznerRecord(ctx context.Context, dc *DomainConfig, provider 
 		return
 	}
 
-	log(LogContext{Level: LogInfo, Action: ActionCleanup, Domain: fqdn, Message: fmt.Sprintf("%s record removed", rec.Type)})
+	log(LogContext{Level: LogInfo, Action: ActionCleanup, Domain: fqdn, Message: rec.Type + " record removed"})
 }
 
 func shouldCleanupHetznerRecord(zoneName string, rec Record, configRecords, managedDomains map[string]struct{}) (string, bool) {

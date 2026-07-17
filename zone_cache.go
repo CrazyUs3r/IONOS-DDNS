@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -205,7 +206,7 @@ func convertIPv64DomainRecords(domain IPv64Domain) []Record {
 
 	for _, rec := range domain.Records {
 		records = append(records, Record{
-			ID:      fmt.Sprintf("%d", rec.RecordID),
+			ID:      strconv.Itoa(rec.RecordID),
 			Name:    ipv64RecordName(domain.Domain, rec.Praefix),
 			Type:    rec.Type,
 			Content: rec.Content,

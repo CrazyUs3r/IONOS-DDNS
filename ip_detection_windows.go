@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -126,7 +127,7 @@ func getPublicIPFromAny(parent context.Context, urls []string, want IPVersion) (
 			broadcastUpdate("ip_check_result", map[string]any{
 				"url":  u,
 				"ok":   true,
-				"want": fmt.Sprintf("%d", int(want)),
+				"want": strconv.Itoa(int(want)),
 			})
 			return ip, nil
 		}
@@ -134,7 +135,7 @@ func getPublicIPFromAny(parent context.Context, urls []string, want IPVersion) (
 		broadcastUpdate("ip_check_result", map[string]any{
 			"url":  u,
 			"ok":   false,
-			"want": fmt.Sprintf("%d", int(want)),
+			"want": strconv.Itoa(int(want)),
 		})
 		lastErr = err
 		debugLog("IP-CHECK", "", fmt.Sprintf(phrases().FallbackFailed, u, err))
@@ -191,12 +192,12 @@ func getIPv6FromInterface(ifaceName string) (string, error) {
 			}
 
 			if isInvalidWindowsIPv6Addr(addr) {
-				ipLog(fmt.Sprintf("⚠️ SKIP invalid IPv6: %s", ip.String()))
+				ipLog("⚠️ SKIP invalid IPv6: " + ip.String())
 				continue
 			}
 
 			if isDeprecatedWindowsIPv6Addr(addr) {
-				ipLog(fmt.Sprintf("⚠️ SKIP deprecated/expired IPv6: %s", ip.String()))
+				ipLog("⚠️ SKIP deprecated/expired IPv6: " + ip.String())
 				continue
 			}
 

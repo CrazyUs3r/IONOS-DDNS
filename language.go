@@ -4,6 +4,7 @@ package main
 import (
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -161,7 +162,7 @@ func translationLayers(
 func loadLanguageData(lang string) ([]byte, error) {
 	lang = normalizeLang(lang)
 	if lang == "" {
-		return nil, fmt.Errorf("invalid language code")
+		return nil, errors.New("invalid language code")
 	}
 
 	filename := lang + ".json"

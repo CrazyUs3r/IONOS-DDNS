@@ -4,6 +4,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -489,7 +490,7 @@ func doLogRotation(path string, maxLines int) {
 
 func tailLines(path string, maxLines int) ([]string, int, error) {
 	if maxLines <= 0 {
-		return nil, 0, fmt.Errorf("maxLines must be > 0")
+		return nil, 0, errors.New("maxLines must be > 0")
 	}
 
 	file, err := os.Open(path)

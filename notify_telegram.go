@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -534,7 +535,7 @@ func (t *telegramNotifier) isAuthorized(chatID string) bool {
 }
 
 func chatIDStr(id int64) string {
-	return fmt.Sprintf("%d", id)
+	return strconv.FormatInt(id, 10)
 }
 
 // ============================================================================

@@ -3,6 +3,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -311,7 +312,7 @@ func buildLegacyDNScaleConfigs(domains []string) ([]DomainConfig, error) {
 func buildLegacyHetznerDNSConfigs(domains []string) ([]DomainConfig, error) {
 	token := firstNonEmptyEnv("HETZNER_TOKEN", "HETZNER_DNS_TOKEN", "HETZNER_API_TOKEN")
 	if token == "" {
-		return nil, fmt.Errorf("HETZNER requires HETZNER_TOKEN or HETZNER_DNS_TOKEN")
+		return nil, errors.New("HETZNER requires HETZNER_TOKEN or HETZNER_DNS_TOKEN")
 	}
 
 	return buildLegacyConfigs(domains, DomainConfig{
@@ -323,7 +324,7 @@ func buildLegacyHetznerDNSConfigs(domains []string) ([]DomainConfig, error) {
 func buildLegacyHetznerCloudConfigs(domains []string) ([]DomainConfig, error) {
 	token := firstNonEmptyEnv("HCLOUD_TOKEN", "HETZNER_CLOUD_TOKEN", "HETZNER_CONSOLE_TOKEN")
 	if token == "" {
-		return nil, fmt.Errorf("HETZNERCLOUD requires HCLOUD_TOKEN or HETZNER_CLOUD_TOKEN")
+		return nil, errors.New("HETZNERCLOUD requires HCLOUD_TOKEN or HETZNER_CLOUD_TOKEN")
 	}
 
 	return buildLegacyConfigs(domains, DomainConfig{

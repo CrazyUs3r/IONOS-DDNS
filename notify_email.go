@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"mime"
 	"net"
@@ -187,7 +188,7 @@ func (e *emailNotifier) drainQueue() {
 
 func (e *emailNotifier) doSend(msg emailMsg) error {
 	if len(e.to) == 0 {
-		return fmt.Errorf("email: no recipients configured")
+		return errors.New("email: no recipients configured")
 	}
 
 	rawMsg := e.buildRawMessage(msg.subject, msg.body)

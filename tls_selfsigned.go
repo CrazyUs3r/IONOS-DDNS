@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math/big"
 	"net"
@@ -31,7 +32,7 @@ func resolveDashboardTLSFiles() (certFile, keyFile string, selfSigned bool, err 
 
 	if certFile != "" || keyFile != "" {
 		if certFile == "" || keyFile == "" {
-			return "", "", false, fmt.Errorf("DASHBOARD_TLS_CERT and DASHBOARD_TLS_KEY must both be set")
+			return "", "", false, errors.New("DASHBOARD_TLS_CERT and DASHBOARD_TLS_KEY must both be set")
 		}
 		if _, err := tls.LoadX509KeyPair(certFile, keyFile); err != nil {
 			return "", "", false, fmt.Errorf("load configured TLS certificate: %w", err)

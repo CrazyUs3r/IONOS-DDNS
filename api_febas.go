@@ -340,7 +340,7 @@ func febasAPIAttempt(
 
 	apiMetrics.RecordSuccess(MethodNIC, duration)
 	lastErrorMsg.Set("")
-	debugLog("HTTP", "", fmt.Sprintf("✅ Febas success: %s", sanitizeFebasText(strings.TrimSpace(string(respBody)))))
+	debugLog("HTTP", "", "✅ Febas success: "+sanitizeFebasText(strings.TrimSpace(string(respBody))))
 	return respBody, false, nil
 }
 

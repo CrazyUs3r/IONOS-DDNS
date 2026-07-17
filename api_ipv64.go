@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -63,13 +64,13 @@ func buildIPv64RequestData(params map[string]string) (method, apiURL, bodyData s
 		return MethodGET, buildIPv64URLWithQuery(apiURL, params), ""
 
 	case getIPv64Param(params, "add_domain") != "":
-		return MethodPOST, apiURL, fmt.Sprintf("add_domain=%s", url.QueryEscape(getIPv64Param(params, "add_domain")))
+		return MethodPOST, apiURL, "add_domain=" + url.QueryEscape(getIPv64Param(params, "add_domain"))
 
 	case getIPv64Param(params, "del_record") != "":
-		return MethodDELETE, apiURL, fmt.Sprintf("del_record=%s", url.QueryEscape(getIPv64Param(params, "del_record")))
+		return MethodDELETE, apiURL, "del_record=" + url.QueryEscape(getIPv64Param(params, "del_record"))
 
 	case getIPv64Param(params, "del_domain") != "":
-		return MethodDELETE, apiURL, fmt.Sprintf("del_domain=%s", url.QueryEscape(getIPv64Param(params, "del_domain")))
+		return MethodDELETE, apiURL, "del_domain=" + url.QueryEscape(getIPv64Param(params, "del_domain"))
 
 	case hasIPv64Param(params, "add_record"):
 		return MethodPOST, apiURL, encodeIPv64Form(params)
@@ -875,7 +876,7 @@ func logIPv64DryRun(fqdn, ipv4, ipv6 string, needV4, needV6 bool) {
 		msg += fmt.Sprintf("A %s ", ipv4)
 	}
 	if needV6 {
-		msg += fmt.Sprintf("AAAA %s", ipv6)
+		msg += "AAAA " + ipv6
 	}
 
 	log(LogContext{
@@ -1198,7 +1199,7 @@ func deleteIPv64Record(
 	record IPv64Record,
 ) error {
 	params := map[string]string{
-		"del_record": fmt.Sprintf("%d", record.RecordID),
+		"del_record": strconv.Itoa(record.RecordID),
 	}
 
 	data, err := ipv64API(ctx, dc, params)
@@ -1265,7 +1266,7 @@ func loadIPv64Domains(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
 func addIPv64Domain(ctx context.Context, dc *DomainConfig, fqdn string) error {
 	fqdn = normalizeIPv64FQDN(fqdn)
 	if fqdn == "" {
-		return fmt.Errorf("fqdn is empty")
+		return errors.New("fqdn is empty")
 	}
 
 	params := map[string]string{
@@ -1277,7 +1278,7 @@ func addIPv64Domain(ctx context.Context, dc *DomainConfig, fqdn string) error {
 		return fmt.Errorf("add_domain %s: %w", fqdn, err)
 	}
 
-	debugLog("IPv64", fqdn, fmt.Sprintf("add_domain response: %s", string(data)))
+	debugLog("IPv64", fqdn, "add_domain response: "+string(data))
 
 	lastIPv64DomainsLoadNano.Store(0)
 	if err := loadAllIPv64Domains(ctx, dc); err != nil {
@@ -1290,7 +1291,7 @@ func addIPv64Domain(ctx context.Context, dc *DomainConfig, fqdn string) error {
 func deleteIPv64Domain(ctx context.Context, dc *DomainConfig, fqdn string) error {
 	fqdn = normalizeIPv64FQDN(fqdn)
 	if fqdn == "" {
-		return fmt.Errorf("fqdn is empty")
+		return errors.New("fqdn is empty")
 	}
 
 	params := map[string]string{
@@ -1302,7 +1303,7 @@ func deleteIPv64Domain(ctx context.Context, dc *DomainConfig, fqdn string) error
 		return fmt.Errorf("del_domain %s: %w", fqdn, err)
 	}
 
-	debugLog("IPv64", fqdn, fmt.Sprintf("del_domain response: %s", string(data)))
+	debugLog("IPv64", fqdn, "del_domain response: "+string(data))
 
 	providerCache.Lock()
 	delete(providerCache.ipv64Records, fqdn)

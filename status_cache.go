@@ -4,6 +4,7 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -40,7 +41,7 @@ func writeStatusFileLocked(fqdn, ipv4, ipv6, provider string) (IPEntry, error) {
 	defer statusMutex.Unlock()
 
 	if strings.TrimSpace(fqdn) == "" {
-		return IPEntry{}, fmt.Errorf("fqdn must not be empty")
+		return IPEntry{}, errors.New("fqdn must not be empty")
 	}
 
 	current, err := currentStatusDomainsLocked()
@@ -175,7 +176,7 @@ func moveBrokenStatusFile(path, description string, parseErr error) error {
 func checkedUpdatePath() (string, error) {
 	path := strings.TrimSpace(updatePath)
 	if path == "" {
-		return "", fmt.Errorf("updatePath is empty")
+		return "", errors.New("updatePath is empty")
 	}
 
 	dir := filepath.Dir(path)
