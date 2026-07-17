@@ -524,7 +524,7 @@ func buildSettingsNotifySection(c Config) string {
 		`</div>`
 
 	telegramSection := `<div class="notify-box notify-telegram">` +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsTGChatID+`</span><input type="text" id="cfg-tg-chat-id" class="s-input s-input-lg" placeholder="-100xxxxxxxxx" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsTGChatID+`</span><input type="text" id="cfg-tg-chat-id" class="s-input s-input-lg" placeholder="123456789, -100xxxxxxxxx" value="%s"></div>`,
 			esc(c.Notifications.Telegram.ChatID)) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsTGToken+`</span><div class="input-with-action"><input type="password" id="cfg-tg-token" class="s-input s-input-lg" placeholder="`+phrases().SettingsTokenUnchanged+`" value="%s"><button type="button" class="input-action-btn" data-click="togglePassword('cfg-tg-token', this)">👁️</button></div></div>`,
 			esc(c.Notifications.Telegram.Token)) +
