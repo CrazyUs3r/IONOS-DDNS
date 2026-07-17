@@ -9,11 +9,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"time"
 )
-
-var lastLogInfrastructureWarning atomic.Int64
 
 const (
 	LogTDbg  = "DBG"
