@@ -3570,77 +3570,46 @@ body.auth-page .dashboard-footer {
 }
 
 .page-section[data-section="audit"] .audit-log-card-fixed {
-  display: block;
-  position: relative;
-  width: 100%;
-  height: auto;
-  min-height: 500px;
-  max-height: none;
-  overflow: visible;
-  contain: none;
-  content-visibility: visible;
-  visibility: visible;
-  opacity: 1;
+  --audit-footer-space: 70px;
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - var(--topbar-height) - 40px - var(--audit-footer-space));
+  min-height: 100px;
+  max-height: calc(100dvh - var(--topbar-height) - 40px - var(--audit-footer-space));
+  overflow: hidden;
+  margin-bottom: 15px;
 }
 
 .page-section[data-section="audit"] .audit-log-card-fixed>.card-header {
-  display: flex;
-  position: relative;
-  width: 100%;
-  visibility: visible;
-  opacity: 1;
+  flex-shrink: 0;
 }
 
 .page-section[data-section="audit"] .audit-log-card-fixed>.card-content {
-  display: block;
-  position: relative;
-  width: 100%;
-  height: 450px;
-  min-height: 450px;
-  max-height: 450px;
-  padding: 0 20px 20px;
-  overflow: visible;
-  contain: none;
-  content-visibility: visible;
-  visibility: visible;
-  opacity: 1;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  max-height: none;
+  overflow: hidden;
 }
 
 .page-section[data-section="audit"] .audit-log-card-fixed #audit-log-content {
-  display: block;
-  position: relative;
-  width: 100%;
-  height: 430px;
-  min-height: 430px;
-  max-height: 430px;
-  margin: 0;
-  padding: 0;
-  overflow: visible;
-  contain: none;
-  content-visibility: visible;
-  visibility: visible;
-  opacity: 1;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  max-height: none;
+  overflow: hidden;
 }
 
-.page-section[data-section="audit"] .audit-log-card-fixed #audit-log-content>.audit-table-wrap {
-  display: block;
-  position: relative;
-  width: 100%;
-  height: 430px;
-  min-height: 430px;
-  max-height: 430px;
-  margin: 0;
-  padding: 0;
-  overflow-x: auto;
-  overflow-y: scroll;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--card);
-  contain: none;
-  content-visibility: visible;
-  visibility: visible;
-  opacity: 1;
-  z-index: 1;
+.page-section[data-section="audit"] .audit-log-card-fixed .audit-table-wrap {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  max-height: none;
+  overflow: auto;
 }
 
 .page-section[data-section="audit"] .audit-log-card-fixed #audit-log-content table.audit-table {
@@ -3744,21 +3713,37 @@ body.auth-page .dashboard-footer {
   }
 
   .page-section[data-section="audit"] .audit-log-card-fixed {
-    min-height: 420px;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
   }
 
+
   .page-section[data-section="audit"] .audit-log-card-fixed>.card-content {
-    height: 370px;
-    min-height: 370px;
-    max-height: 370px;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
     padding: 0 10px 10px;
+  }
+
+  .page-section[data-section="audit"] .audit-log-card-fixed #audit-log-content {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
   }
 
   .page-section[data-section="audit"] .audit-log-card-fixed #audit-log-content,
   .page-section[data-section="audit"] .audit-log-card-fixed #audit-log-content>.audit-table-wrap {
-    height: 350px;
-    min-height: 350px;
-    max-height: 350px;
+    height: auto;
+    min-height: 0;
+    max-height: 46dvh;
+    overflow-x: auto;
+    overflow-y: auto;
+    padding-bottom: 14px;
+    scroll-padding-bottom: 14px;
   }
 }
 
