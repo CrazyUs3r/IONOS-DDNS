@@ -139,9 +139,6 @@
   "cloudflare_cache_save_failed": "⚠️ Konnte Cloudflare-Cache nicht speichern: %v",
   "cloudflare_requires_token_or_email_and_api_secret": "Cloudflare benötigt CLOUDFLARE_TOKEN oder CLOUDFLARE_EMAIL + CLOUDFLARE_API_SECRET",
   "cloudflare_zones_loaded_from_disk": "📂 Cloudflare: %d Zonen von Disk geladen",
-  "cname_target_invalid_format": "%s: ungültiges CNAME-Ziel: %s",
-  "cname_target_required_format": "%s: CNAME-Ziel erforderlich",
-  "cname_unsupported_provider_format": "%s: Provider %s unterstützt kein CNAME",
   "config_dir": "Konfigurationsverzeichnis: %s",
   "config_dry_run": "Dry-Run-Modus",
   "config_error_prefix": "Konfigurationsfehler: %s",
@@ -485,7 +482,6 @@
   "interval_too_small": "Gewähltes Intervall ist zu kurz",
   "invalid_domain_format": "Ungültiges Domain-Format: %s",
   "invalid_domain_ip_mode_format": "Für die Domain %s wurde der ungültige IP-Modus %q konfiguriert.",
-  "invalid_domain_record_mode_format": "%s: ungültiger Record-Modus '%s'",
   "invalid_domains_config_json_format": "Ungültiges JSON-Format in DOMAINS_CONFIG: %v",
   "invalid_interval": "Ungültiger INTERVAL-Wert '%s', nutze Standard (300s)",
   "invalid_ip_detected": "Ungültige IP erkannt: '%s'",
@@ -900,7 +896,6 @@
   "settings_checkbox_active_js": "Aktiv",
   "settings_checkbox_deactive": "deaktiviert",
   "settings_checkbox_inactive_js": "Inaktiv",
-  "settings_cname_target_placeholder": "CNAME-Ziel (z. B. ziel.example.com)",
   "settings_debug_http_hint": "API-Traffic protokollieren (Vorsicht: enthält sensible Daten).",
   "settings_debug_http_raw": "Debug HTTP Raw",
   "settings_debug_mode": "Debug-Modus",
@@ -1209,5 +1204,10 @@
   "zone_singular": "Zone",
   "zones_loaded_from_api": "✅ Zonen erfolgreich von API geladen",
   "zones_loaded_from_disk": "✅ Zonen erfolgreich aus Disk-Cache geladen",
-  "zones_loaded_from_disk_no_api_call": "✅ Zonen aus Disk-Cache übernommen (kein API-Aufruf nötig)"
+  "zones_loaded_from_disk_no_api_call": "✅ Zonen aus Disk-Cache übernommen (kein API-Aufruf nötig)",
+"settings_cname_target_placeholder": "CNAME-Ziel (z. B. ziel.example.com)",
+"invalid_domain_record_mode_format": "%s: ungültiger Record-Modus '%s'",
+"cname_target_required_format": "%s: CNAME-Ziel erforderlich",
+"cname_unsupported_provider_format": "%s: Provider %s unterstützt kein CNAME",
+"cname_target_invalid_format": "%s: ungültiges CNAME-Ziel: %s"
 }
