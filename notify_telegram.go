@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -64,7 +65,7 @@ type tgUpdateFull struct {
 }
 type telegramNotifier struct {
 	token          string
-	chatID         string
+	chatIDs        []string
 	instanceTag    string
 	pollOnce       sync.Once
 	pollClientOnce sync.Once
@@ -86,11 +87,11 @@ type tgQueuedMsg struct {
 // ============================================================================
 // TELEGRAM NOTIFIER
 // ============================================================================
-func newTelegramNotifier(token, chatID string) *telegramNotifier {
+func newTelegramNotifier(token, chatIDs string) *telegramNotifier {
 	ctx, cancel := context.WithCancel(shutdownCtx)
 	t := &telegramNotifier{
 		token:       token,
-		chatID:      chatID,
+		chatIDs:     parseTelegramChatIDs(chatIDs),
 		instanceTag: generateInstanceTag(),
 		sendQueue:   make(chan tgQueuedMsg, tgQueueSize),
 		pollCtx:     ctx,
@@ -143,13 +144,21 @@ func (t *telegramNotifier) Send(msg NotifyMessage) error {
 	}
 
 	text := formatTelegramMessage(msg, t.instanceTag)
-	t.enqueue(t.chatID, text, nil)
+	for _, chatID := range t.chatIDs {
+		t.enqueue(chatID, text, nil)
+	}
 	return nil
 }
 
 func (t *telegramNotifier) SendSync(msg NotifyMessage) error {
 	text := formatTelegramMessage(msg, t.instanceTag)
-	return t.sendTextWithRetry(t.chatID, text, nil)
+	var errs []error
+	for _, chatID := range t.chatIDs {
+		if err := t.sendTextWithRetry(chatID, text, nil); err != nil {
+			errs = append(errs, fmt.Errorf("chat %s: %w", chatID, err))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func (t *telegramNotifier) enqueue(chatID, text string, kb *tgInlineKeyboard) {
@@ -500,8 +509,28 @@ func (t *telegramNotifier) deleteWebhook() {
 // ============================================================================
 // AUTH
 // ============================================================================
+func parseTelegramChatIDs(value string) []string {
+	seen := make(map[string]struct{})
+	chatIDs := make([]string, 0)
+
+	for raw := range strings.SplitSeq(value, ",") {
+		chatID := strings.TrimSpace(raw)
+		if chatID == "" {
+			continue
+		}
+		if _, exists := seen[chatID]; exists {
+			continue
+		}
+		seen[chatID] = struct{}{}
+		chatIDs = append(chatIDs, chatID)
+	}
+
+	return chatIDs
+}
+
 func (t *telegramNotifier) isAuthorized(chatID string) bool {
-	return strings.TrimSpace(chatID) == strings.TrimSpace(t.chatID)
+	chatID = strings.TrimSpace(chatID)
+	return slices.Contains(t.chatIDs, chatID)
 }
 
 func chatIDStr(id int64) string {
