@@ -8,3 +8,17 @@ updates:
       day: "saturday"
       timezone: "Europe/Berlin"
       time: "05:00"
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "saturday"
+      timezone: "Europe/Berlin"
+      time: "18:25"
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "saturday"
+      timezone: "Europe/Berlin"
+      time: "18:25"
