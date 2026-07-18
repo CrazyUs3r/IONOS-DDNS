@@ -14,11 +14,11 @@ updates:
       interval: "weekly"
       day: "saturday"
       timezone: "Europe/Berlin"
-      time: "18:25"
+      time: "05:00"
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "saturday"
       timezone: "Europe/Berlin"
-      time: "18:25"
+      time: "05:00"
