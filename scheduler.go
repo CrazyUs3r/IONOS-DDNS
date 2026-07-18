@@ -257,15 +257,15 @@ func refreshIPv64DomainsIfNeeded(ctx context.Context, forced bool, domainConfigs
 }
 
 type lastKnownIPState struct {
-	ipv4     string
-	ipv6     string
 	ipv4Time time.Time
 	ipv6Time time.Time
+	ipv4     string
+	ipv6     string
 	ipv4Seq  int
 	ipv6Seq  int
 }
 
-func loadLastKnownIPs() (string, string) {
+func loadLastKnownIPs() (ipv4 string, ipv6 string) {
 	domains, err := readDomainHistories()
 	if err != nil {
 		return "", ""

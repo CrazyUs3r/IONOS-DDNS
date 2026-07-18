@@ -64,13 +64,13 @@ type DashboardUser struct {
 }
 
 type Session struct {
+	CreatedAt time.Time
+	ExpiresAt time.Time
 	Token     string
 	CSRFToken string
 	UserID    string
 	Username  string
 	Role      UserRole
-	CreatedAt time.Time
-	ExpiresAt time.Time
 }
 
 // ============================================================================
@@ -167,8 +167,8 @@ func maxLen(values ...string) int {
 // ============================================================================
 
 type SessionStore struct {
-	mu       sync.RWMutex
 	sessions map[string]*Session
+	mu       sync.RWMutex
 }
 
 const (
@@ -1161,11 +1161,11 @@ func saveInitialAdmin(newUser DashboardUser) error {
 // ============================================================================
 
 type safeUser struct {
+	CreatedAt   time.Time `json:"created_at"`
+	LastLogin   time.Time `json:"last_login"`
 	ID          string    `json:"id"`
 	Username    string    `json:"username"`
 	Role        UserRole  `json:"role"`
-	CreatedAt   time.Time `json:"created_at"`
-	LastLogin   time.Time `json:"last_login"`
 	TOTPEnabled bool      `json:"totp_enabled"`
 }
 
@@ -1629,8 +1629,8 @@ type auditEntry struct {
 	IP        string `json:"ip"`
 	Method    string `json:"method"`
 	Path      string `json:"path"`
-	Status    int    `json:"status"`
 	Result    string `json:"result"`
+	Status    int    `json:"status"`
 }
 
 func auditLogFilePath() string {

@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -25,7 +26,7 @@ import (
 func fetchIPResponse(ctx context.Context, url string) (string, int, time.Duration, error) {
 	debugLog("IP-CHECK", "", "🌐 "+url)
 
-	req, err := http.NewRequestWithContext(ctx, MethodGET, url, nil)
+	req, err := http.NewRequestWithContext(ctx, MethodGET, url, http.NoBody)
 	if err != nil {
 		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", phrases().RequestCreationFailed, err))
 		return "", 0, 0, fmt.Errorf("%s: %w", t(phrases().ErrRequestCreate, "request create failed"), err)
@@ -151,22 +152,21 @@ func getPublicIPFromAny(parent context.Context, urls []string, want IPVersion) (
 func getIPv6FromInterface(ifaceName string) (string, error) {
 	debugLog("IP-CHECK", "", fmt.Sprintf("🔍 %s: %s", phrases().CheckingInterface, ifaceName))
 
-	var ifaceIndex uint64
-	hasIfaceIndex := false
-
-	if iface, err := net.InterfaceByName(ifaceName); err == nil {
-		if iface.Index < 0 {
-			err := fmt.Errorf("invalid negative interface index: %d", iface.Index)
-			debugLog("IP-CHECK", "", fmt.Sprintf("❌ invalid interface index for %s: %v", ifaceName, err))
-			return "", err
-		}
-
-		ifaceIndex = uint64(iface.Index)
-		hasIfaceIndex = true
+	iface, err := net.InterfaceByName(ifaceName)
+	if err != nil {
+		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", phrases().InterfaceNotFound, err))
+		return "", err
 	}
+	if iface.Index < 0 {
+		err := fmt.Errorf("invalid negative interface index: %d", iface.Index)
+		debugLog("IP-CHECK", "", fmt.Sprintf("❌ invalid interface index for %s: %v", ifaceName, err))
+		return "", err
+	}
+	ifaceIndex := uint64(iface.Index)
+	hasIfaceIndex := true
 
 	adapters, buf, err := getWindowsIPv6Adapters()
-	_ = buf
+	defer runtime.KeepAlive(buf)
 	if err != nil {
 		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", phrases().AddressesNotReadable, err))
 		return "", err

@@ -23,24 +23,24 @@ const (
 )
 
 type emailNotifier struct {
+	ctx           context.Context
+	sendQueue     chan emailMsg
+	cancel        context.CancelFunc
 	host          string
-	port          int
 	username      string
 	password      string
 	from          string
-	to            []string
 	subjectPrefix string
-	tlsMode       string // "starttls" | "tls" | "plain"
-	sendQueue     chan emailMsg
-	ctx           context.Context
-	cancel        context.CancelFunc
+	tlsMode       string
+	to            []string
 	wg            sync.WaitGroup
+	port          int
 }
 
 type emailMsg struct {
+	enqueued time.Time
 	subject  string
 	body     string
-	enqueued time.Time
 }
 
 // ============================================================================

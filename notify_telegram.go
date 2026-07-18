@@ -26,10 +26,10 @@ import (
 // TELEGRAM TYPES
 // ============================================================================
 type tgMessage struct {
-	MessageID int    `json:"message_id"`
-	Text      string `json:"text"`
-	Chat      tgChat `json:"chat"`
 	From      tgUser `json:"from"`
+	Text      string `json:"text"`
+	MessageID int    `json:"message_id"`
+	Chat      tgChat `json:"chat"`
 	Date      int64  `json:"date"`
 }
 
@@ -38,9 +38,9 @@ type tgChat struct {
 }
 
 type tgUser struct {
-	ID        int64  `json:"id"`
 	FirstName string `json:"first_name"`
 	Username  string `json:"username"`
+	ID        int64  `json:"id"`
 }
 
 type tgInlineKeyboard struct {
@@ -53,36 +53,36 @@ type tgInlineButton struct {
 }
 
 type tgCallbackQuery struct {
-	ID      string    `json:"id"`
 	From    tgUser    `json:"from"`
-	Message tgMessage `json:"message"`
+	ID      string    `json:"id"`
 	Data    string    `json:"data"`
+	Message tgMessage `json:"message"`
 }
 
 type tgUpdateFull struct {
-	UpdateID      int64            `json:"update_id"`
 	Message       *tgMessage       `json:"message,omitempty"`
 	CallbackQuery *tgCallbackQuery `json:"callback_query,omitempty"`
+	UpdateID      int64            `json:"update_id"`
 }
 type telegramNotifier struct {
+	pollCtx        context.Context
+	pollClient     *http.Client
+	sendQueue      chan tgQueuedMsg
+	pollCancel     context.CancelFunc
 	token          string
-	chatIDs        []string
 	instanceTag    string
+	chatIDs        []string
+	wg             sync.WaitGroup
+	lastOffset     atomic.Int64
 	pollOnce       sync.Once
 	pollClientOnce sync.Once
-	pollClient     *http.Client
-	lastOffset     atomic.Int64
-	sendQueue      chan tgQueuedMsg
-	pollCtx        context.Context
-	pollCancel     context.CancelFunc
-	wg             sync.WaitGroup
 }
 
 type tgQueuedMsg struct {
+	enqueued time.Time
+	kb       *tgInlineKeyboard
 	chatID   string
 	text     string
-	kb       *tgInlineKeyboard
-	enqueued time.Time
 }
 
 // ============================================================================
@@ -295,8 +295,8 @@ func (t *telegramNotifier) sendText(chatID, text string, kb *tgInlineKeyboard) e
 	}
 
 	var result struct {
-		OK          bool   `json:"ok"`
 		Description string `json:"description"`
+		OK          bool   `json:"ok"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return fmt.Errorf("decode: %w", err)
@@ -423,7 +423,7 @@ func (t *telegramNotifier) getUpdates(offset int) ([]tgUpdateFull, error) {
 	ctx, cancel := context.WithTimeout(t.pollCtx, 40*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, MethodGET, url, nil)
+	req, err := http.NewRequestWithContext(ctx, MethodGET, url, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -443,10 +443,10 @@ func (t *telegramNotifier) getUpdates(offset int) ([]tgUpdateFull, error) {
 	logHTTPResponse(resp, duration)
 
 	var result struct {
-		OK          bool           `json:"ok"`
-		Result      []tgUpdateFull `json:"result"`
 		Description string         `json:"description"`
+		Result      []tgUpdateFull `json:"result"`
 		ErrorCode   int            `json:"error_code"`
+		OK          bool           `json:"ok"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
@@ -492,7 +492,7 @@ func (t *telegramNotifier) deleteWebhook() {
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/deleteWebhook?drop_pending_updates=false", t.token)
 	ctx, cancel := context.WithTimeout(t.pollCtx, 10*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, MethodGET, url, nil)
+	req, err := http.NewRequestWithContext(ctx, MethodGET, url, http.NoBody)
 	if err != nil {
 		debugLog("NOTIFY", "", fmt.Sprintf(phrases().TgWebhookDeleteRequestError, err))
 		return

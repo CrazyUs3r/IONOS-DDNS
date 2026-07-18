@@ -10,10 +10,10 @@ import (
 )
 
 type dnsProviderFileCache struct {
-	Version    int                 `json:"version"`
-	Zones      []Zone              `json:"zones"`
-	Records    map[string][]Record `json:"records"`
 	LastUpdate time.Time           `json:"last_update"`
+	Records    map[string][]Record `json:"records"`
+	Zones      []Zone              `json:"zones"`
+	Version    int                 `json:"version"`
 }
 
 // ============================================================================

@@ -17,10 +17,10 @@ import (
 // WEBHOOK NOTIFIER
 // ============================================================================
 type webhookNotifier struct {
-	url    string
-	secret string
 	ctx    context.Context
 	cancel context.CancelFunc
+	url    string
+	secret string
 }
 
 func newWebhookNotifier(url, secret string) *webhookNotifier {

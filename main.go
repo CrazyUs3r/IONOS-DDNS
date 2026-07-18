@@ -160,8 +160,8 @@ type runtimePaths struct {
 }
 
 type envConfig struct {
-	interval      int
 	dnsList       []string
+	interval      int
 	maxAPIRetries int
 	maxLogLines   int
 	hourlyLimit   int
@@ -597,7 +597,7 @@ func validateRuntimeConfig() error {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionConfig,
-			Message: fmt.Sprintf("%v", err),
+			Message: err.Error(),
 		})
 		return err
 	}

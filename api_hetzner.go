@@ -191,8 +191,8 @@ type hetznerDNSRecord struct {
 	Name   string `json:"name"`
 	Type   string `json:"type"`
 	Value  string `json:"value"`
-	TTL    int    `json:"ttl,omitempty"`
 	ZoneID string `json:"zone_id,omitempty"`
+	TTL    int    `json:"ttl,omitempty"`
 }
 
 func loadHetznerDNSZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
@@ -260,8 +260,8 @@ type hetznerCloudRRSet struct {
 	ID      any                    `json:"id,omitempty"`
 	Name    string                 `json:"name"`
 	Type    string                 `json:"type"`
-	TTL     int                    `json:"ttl,omitempty"`
 	Records []hetznerCloudRRRecord `json:"records"`
+	TTL     int                    `json:"ttl,omitempty"`
 }
 
 type hetznerCloudRRRecord struct {

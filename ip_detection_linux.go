@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -24,7 +25,7 @@ import (
 func fetchIPResponse(ctx context.Context, url string) (string, int, time.Duration, error) {
 	debugLog("IP-CHECK", "", "🌐 "+url)
 
-	req, err := http.NewRequestWithContext(ctx, MethodGET, url, nil)
+	req, err := http.NewRequestWithContext(ctx, MethodGET, url, http.NoBody)
 	if err != nil {
 		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", phrases().RequestCreationFailed, err))
 		return "", 0, 0, fmt.Errorf("%s: %w", t(phrases().ErrRequestCreate, "request create failed"), err)
@@ -126,7 +127,7 @@ func getPublicIPFromAny(parent context.Context, urls []string, want IPVersion) (
 			broadcastUpdate("ip_check_result", map[string]any{
 				"url":  u,
 				"ok":   true,
-				"want": fmt.Sprintf("%d", int(want)),
+				"want": strconv.Itoa(int(want)),
 			})
 			return ip, nil
 		}
@@ -134,7 +135,7 @@ func getPublicIPFromAny(parent context.Context, urls []string, want IPVersion) (
 		broadcastUpdate("ip_check_result", map[string]any{
 			"url":  u,
 			"ok":   false,
-			"want": fmt.Sprintf("%d", int(want)),
+			"want": strconv.Itoa(int(want)),
 		})
 		lastErr = err
 		debugLog("IP-CHECK", "", fmt.Sprintf(phrases().FallbackFailed, u, err))
@@ -188,12 +189,12 @@ func getIPv6FromInterface(ifaceName string) (string, error) {
 		}
 
 		if isInvalidIPv6Addr(addr) {
-			ipLog(fmt.Sprintf("⚠️ SKIP invalid IPv6: %s", ip.String()))
+			ipLog("⚠️ SKIP invalid IPv6: " + ip.String())
 			continue
 		}
 
 		if isDeprecatedIPv6Addr(addr) {
-			ipLog(fmt.Sprintf("⚠️ SKIP deprecated/expired IPv6: %s", ip.String()))
+			ipLog("⚠️ SKIP deprecated/expired IPv6: " + ip.String())
 
 			if fallbackDeprecated == nil {
 				fallbackDeprecated = &ipv6Candidate{

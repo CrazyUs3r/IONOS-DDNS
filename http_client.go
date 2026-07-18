@@ -29,23 +29,23 @@ import (
 // DNS CACHE
 // ============================================================================
 type dnsCache struct {
-	ttl        time.Duration
-	mu         sync.Mutex
 	entries    map[string]dnsCacheEntry
 	inflight   map[string]*dnsInFlight
 	resolvers  []*net.Resolver
 	dnsServers []string
+	ttl        time.Duration
+	mu         sync.Mutex
 }
 
 type dnsCacheEntry struct {
-	ips    []net.IPAddr
 	expiry time.Time
+	ips    []net.IPAddr
 }
 
 type dnsInFlight struct {
+	err   error
 	done  chan struct{}
 	addrs []net.IPAddr
-	err   error
 }
 
 type bodyReadCloser struct {
@@ -57,27 +57,27 @@ type bodyReadCloser struct {
 // HTTP TRACE / TIMINGS (DNS, CONNECT, TLS, TTFB, REUSE)
 // ============================================================================
 type httpTimings struct {
-	mu           sync.Mutex
-	start        time.Time
-	end          time.Time
-	gotConn      time.Time
-	connReused   bool
-	connWasIdle  bool
-	connIdleTime time.Duration
-	dnsStart     time.Time
-	dnsDone      time.Time
-	dnsErr       error
-	connectStart time.Time
-	connectDone  time.Time
-	connectNet   string
-	connectAddr  string
-	connectErr   error
 	tlsStart     time.Time
 	tlsDone      time.Time
-	tlsState     *tls.ConnectionState
-	tlsErr       error
-	wroteRequest time.Time
+	end          time.Time
+	gotConn      time.Time
 	firstByte    time.Time
+	wroteRequest time.Time
+	connectStart time.Time
+	dnsStart     time.Time
+	dnsDone      time.Time
+	connectDone  time.Time
+	start        time.Time
+	dnsErr       error
+	connectErr   error
+	tlsErr       error
+	tlsState     *tls.ConnectionState
+	connectAddr  string
+	connectNet   string
+	connIdleTime time.Duration
+	mu           sync.Mutex
+	connWasIdle  bool
+	connReused   bool
 }
 
 // ============================================================================
@@ -635,10 +635,10 @@ func dnsKey(servers []string) string {
 }
 
 type httpClientSettings struct {
+	ipMode      string
 	dnsServers  []string
 	domainCount int
 	interval    time.Duration
-	ipMode      string
 }
 
 func snapshotHTTPClientSettings() httpClientSettings {

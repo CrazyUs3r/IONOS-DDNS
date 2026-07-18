@@ -788,9 +788,9 @@ func loadAllProviderZones(ctx context.Context) (map[string][]Zone, error) {
 	}
 
 	type zoneResult struct {
+		err      error
 		provider string
 		zones    []Zone
-		err      error
 	}
 
 	count := len(providerConfigs)

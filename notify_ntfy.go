@@ -15,12 +15,12 @@ import (
 // NTFY TYPES
 // ============================================================================
 type ntfyNotifier struct {
+	ctx       context.Context
+	sendQueue chan ntfyQueuedMsg
+	cancel    context.CancelFunc
 	url       string
 	topic     string
 	token     string
-	sendQueue chan ntfyQueuedMsg
-	ctx       context.Context
-	cancel    context.CancelFunc
 	wg        sync.WaitGroup
 }
 
@@ -34,11 +34,11 @@ func (n *ntfyNotifier) Close() {
 }
 
 type ntfyQueuedMsg struct {
+	enqueued time.Time
 	title    string
 	message  string
 	domain   string
 	priority string
-	enqueued time.Time
 }
 
 // ============================================================================

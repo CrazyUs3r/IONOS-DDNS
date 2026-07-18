@@ -274,7 +274,7 @@ func febasAPIAttempt(
 	redactedURL := redactFebasURL(requestURL)
 	debugLog("HTTP", "", fmt.Sprintf(phrases().FebasAttempt, attempt+1, maxRetries, redactedURL))
 
-	req, err := http.NewRequestWithContext(ctx, MethodGET, requestURL, nil)
+	req, err := http.NewRequestWithContext(ctx, MethodGET, requestURL, http.NoBody)
 	if err != nil {
 		return nil, false, fmt.Errorf("%s: %w", phrases().FebasCreateRequest, err)
 	}

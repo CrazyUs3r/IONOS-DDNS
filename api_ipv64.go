@@ -153,7 +153,7 @@ func buildIPv64Request(
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		}
 	} else {
-		req, err = http.NewRequestWithContext(ctx, method, apiURL, nil)
+		req, err = http.NewRequestWithContext(ctx, method, apiURL, http.NoBody)
 	}
 
 	if err != nil {
@@ -338,10 +338,10 @@ const ipv64CacheMetaRecordType = "__IPV64_META"
 
 type ipv64FileCacheRecordMeta struct {
 	DomainUpdateHash string `json:"domain_update_hash,omitempty"`
-	RecordID         int    `json:"record_id,omitempty"`
 	Praefix          string `json:"praefix,omitempty"`
-	TTL              int    `json:"ttl,omitempty"`
 	FailoverPolicy   string `json:"failover_policy,omitempty"`
+	RecordID         int    `json:"record_id,omitempty"`
+	TTL              int    `json:"ttl,omitempty"`
 	Deactivated      int    `json:"deactivated,omitempty"`
 }
 
@@ -896,7 +896,7 @@ func performIPv64NICUpdate(
 
 	debugLog("DNS-LOGIC", fqdn, fmt.Sprintf(phrases().IPv64UpdateURL, sanitizeURLStringForLogging(updateURL)))
 
-	req, err := http.NewRequestWithContext(ctx, MethodGET, updateURL, nil)
+	req, err := http.NewRequestWithContext(ctx, MethodGET, updateURL, http.NoBody)
 	if err != nil {
 		return err
 	}

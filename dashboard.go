@@ -626,21 +626,21 @@ func buildSettingsNotifySection(c Config) string {
 }
 
 type safeDomainConfig struct {
-	FQDN           string `json:"fqdn"`
-	Provider       string `json:"provider"`
+	CFSecret       string `json:"cf_secret,omitempty"`
+	IPv64Token     string `json:"ipv64_token,omitempty"`
 	APIPrefix      string `json:"api_prefix,omitempty"`
 	APISecret      string `json:"api_secret,omitempty"`
 	CFToken        string `json:"cf_token,omitempty"`
 	CFEmail        string `json:"cf_email,omitempty"`
-	CFSecret       string `json:"cf_secret,omitempty"`
-	IPv64Token     string `json:"ipv64_token,omitempty"`
-	FebasUpdateURL string `json:"febas_update_url,omitempty"`
+	Provider       string `json:"provider"`
+	CNAMETarget    string `json:"cname_target,omitempty"`
+	FQDN           string `json:"fqdn"`
 	APIKey         string `json:"api_key,omitempty"`
+	FebasUpdateURL string `json:"febas_update_url,omitempty"`
+	RecordMode     string `json:"record_mode,omitempty"`
+	IPMode         string `json:"ip_mode,omitempty"`
 	TTL            int    `json:"ttl,omitempty"`
 	CFProxied      bool   `json:"cf_proxied,omitempty"`
-	IPMode         string `json:"ip_mode,omitempty"`
-	RecordMode     string `json:"record_mode,omitempty"`
-	CNAMETarget    string `json:"cname_target,omitempty"`
 }
 
 type safeMQTTConfig struct {
@@ -649,52 +649,52 @@ type safeMQTTConfig struct {
 	Username        string `json:"username"`
 	Password        string `json:"password"`
 	Topic           string `json:"topic"`
+	DiscoveryPrefix string `json:"discovery_prefix"`
 	QoS             byte   `json:"qos"`
 	Retain          bool   `json:"retain"`
 	Discovery       bool   `json:"discovery"`
-	DiscoveryPrefix string `json:"discovery_prefix"`
 }
 
 type safeEmail struct {
 	Host          string `json:"host"`
-	Port          int    `json:"port"`
 	Username      string `json:"username"`
 	Password      string `json:"password"`
 	From          string `json:"from"`
 	To            string `json:"to"`
 	SubjectPrefix string `json:"subject_prefix"`
 	TLSMode       string `json:"tls_mode"`
+	Port          int    `json:"port"`
 }
 
 type safeSystemConfig struct {
-	IPMode          string         `json:"ip_mode"`
-	IfaceName       string         `json:"iface_name"`
-	HealthPort      string         `json:"health_port"`
-	DNSServers      []string       `json:"dns_servers"`
-	Interval        int            `json:"interval"`
-	DryRun          bool           `json:"dry_run"`
-	DebugEnabled    bool           `json:"debug_enabled"`
-	DebugHTTPRaw    bool           `json:"debug_http_raw"`
-	HourlyRateLimit int            `json:"hourly_rate_limit"`
-	MaxConcurrent   int            `json:"max_concurrent"`
-	MaxLogLines     int            `json:"max_log_lines"`
-	MaxAPIRetries   int            `json:"max_api_retries"`
-	Lang            string         `json:"lang"`
-	NotifyEnabled   bool           `json:"notify_enabled"`
-	NotifyEvents    []string       `json:"notify_events"`
-	TelegramToken   string         `json:"telegram_token"`
-	TelegramChatID  string         `json:"telegram_chat_id"`
-	GotifyURL       string         `json:"gotify_url"`
-	GotifyToken     string         `json:"gotify_token"`
-	NtfyURL         string         `json:"ntfy_url"`
-	NtfyTopic       string         `json:"ntfy_topic"`
-	NtfyToken       string         `json:"ntfy_token"`
-	WebhookURL      string         `json:"webhook_url"`
-	WebhookSecret   string         `json:"webhook_secret"`
-	MQTT            safeMQTTConfig `json:"mqtt"`
 	Email           safeEmail      `json:"email"`
+	MQTT            safeMQTTConfig `json:"mqtt"`
+	WebhookURL      string         `json:"webhook_url"`
+	HealthPort      string         `json:"health_port"`
+	IfaceName       string         `json:"iface_name"`
+	WebhookSecret   string         `json:"webhook_secret"`
+	TelegramToken   string         `json:"telegram_token"`
+	NtfyToken       string         `json:"ntfy_token"`
+	NtfyTopic       string         `json:"ntfy_topic"`
+	NtfyURL         string         `json:"ntfy_url"`
+	GotifyToken     string         `json:"gotify_token"`
+	GotifyURL       string         `json:"gotify_url"`
+	Lang            string         `json:"lang"`
+	TelegramChatID  string         `json:"telegram_chat_id"`
+	IPMode          string         `json:"ip_mode"`
+	NotifyEvents    []string       `json:"notify_events"`
+	DNSServers      []string       `json:"dns_servers"`
 	IPv4Endpoints   []string       `json:"ipv4_endpoints"`
 	IPv6Endpoints   []string       `json:"ipv6_endpoints"`
+	MaxAPIRetries   int            `json:"max_api_retries"`
+	MaxLogLines     int            `json:"max_log_lines"`
+	MaxConcurrent   int            `json:"max_concurrent"`
+	HourlyRateLimit int            `json:"hourly_rate_limit"`
+	Interval        int            `json:"interval"`
+	NotifyEnabled   bool           `json:"notify_enabled"`
+	DebugHTTPRaw    bool           `json:"debug_http_raw"`
+	DebugEnabled    bool           `json:"debug_enabled"`
+	DryRun          bool           `json:"dry_run"`
 }
 
 type dashboardConfigPayload struct {
@@ -1894,8 +1894,8 @@ func handleAPINotifyTest(w http.ResponseWriter, r *http.Request) {
 
 	type result struct {
 		Name  string `json:"name"`
-		OK    bool   `json:"ok"`
 		Error string `json:"error,omitempty"`
+		OK    bool   `json:"ok"`
 	}
 
 	results := make([]result, 0, len(notifiers))
@@ -3501,14 +3501,14 @@ const (
 )
 
 type dashboardBackup struct {
-	Version   int                      `json:"version"`
-	App       string                   `json:"app"`
-	CreatedAt string                   `json:"created_at"`
 	Config    *Config                  `json:"config,omitempty"`
 	Status    map[string]DomainHistory `json:"status,omitempty"`
+	Metrics   map[string]any           `json:"metrics,omitempty"`
+	App       string                   `json:"app"`
+	CreatedAt string                   `json:"created_at"`
 	Users     []DashboardUser          `json:"users,omitempty"`
 	Logs      []LogEntry               `json:"logs,omitempty"`
-	Metrics   map[string]any           `json:"metrics,omitempty"`
+	Version   int                      `json:"version"`
 }
 
 func writeBackupSection(w io.Writer, isAdmin bool) {
@@ -4136,9 +4136,9 @@ type diagnosisLogCounts struct {
 
 type diagnosisConfigSnapshot struct {
 	ProviderCounts map[string]int
-	Warnings       []string
 	Notifiers      map[string]bool
 	Info           map[string]any
+	Warnings       []string
 }
 
 func buildDiagnosisPayload() map[string]any {
@@ -4426,13 +4426,13 @@ type dnsResolverTarget struct {
 type dnsPropagationResult struct {
 	Resolver   string   `json:"resolver"`
 	Address    string   `json:"address,omitempty"`
+	CNAME      string   `json:"cname,omitempty"`
+	Error      string   `json:"error,omitempty"`
 	IPv4       []string `json:"ipv4"`
 	IPv6       []string `json:"ipv6"`
-	CNAME      string   `json:"cname,omitempty"`
+	DurationMS int64    `json:"duration_ms"`
 	MatchIPv4  bool     `json:"match_ipv4"`
 	MatchIPv6  bool     `json:"match_ipv6"`
-	DurationMS int64    `json:"duration_ms"`
-	Error      string   `json:"error,omitempty"`
 }
 
 func normalizeDNSName(raw string) (string, error) {

@@ -8,10 +8,10 @@ import (
 )
 
 type DynamicWorkerLimiter struct {
-	mu      sync.Mutex
+	changed chan struct{}
 	limit   int
 	active  int
-	changed chan struct{}
+	mu      sync.Mutex
 }
 
 // ============================================================================

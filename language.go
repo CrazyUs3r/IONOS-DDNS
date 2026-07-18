@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bytes"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -421,7 +422,7 @@ func copyEmbeddedLangFiles(dir string) error {
 		}
 
 		if oldData, err := os.ReadFile(dst); err == nil {
-			if string(oldData) == string(newData) {
+			if bytes.Equal(oldData, newData) {
 				continue
 			}
 			log(LogContext{

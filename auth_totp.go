@@ -85,8 +85,8 @@ func totpProvisioningURI(secret, username, issuer string) string {
 // ============================================================================
 
 type totpPending struct {
-	Secret    string
 	ExpiresAt time.Time
+	Secret    string
 }
 
 var (
@@ -133,12 +133,12 @@ func totpEnabledForUser(u *DashboardUser) bool {
 // ============================================================================
 
 type pendingTOTPSession struct {
+	ExpiresAt time.Time
 	UserID    string
 	Username  string
 	Role      UserRole
 	Redirect  string
 	Attempts  int
-	ExpiresAt time.Time
 }
 
 var (

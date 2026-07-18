@@ -46,8 +46,8 @@ type NotifyMessage struct {
 var notifierInitMu sync.Mutex
 
 type notifyConfig struct {
-	notifiers []Notifier
 	events    map[NotifyEvent]struct{}
+	notifiers []Notifier
 }
 
 // ============================================================================

@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,7 +25,7 @@ import (
 func fetchIPResponse(ctx context.Context, url string) (string, int, time.Duration, error) {
 	debugLog("IP-CHECK", "", "🌐 "+url)
 
-	req, err := http.NewRequestWithContext(ctx, MethodGET, url, nil)
+	req, err := http.NewRequestWithContext(ctx, MethodGET, url, http.NoBody)
 	if err != nil {
 		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", phrases().RequestCreationFailed, err))
 		return "", 0, 0, fmt.Errorf("%s: %w", t(phrases().ErrRequestCreate, "request create failed"), err)
@@ -126,7 +127,7 @@ func getPublicIPFromAny(parent context.Context, urls []string, want IPVersion) (
 			broadcastUpdate("ip_check_result", map[string]any{
 				"url":  u,
 				"ok":   true,
-				"want": fmt.Sprintf("%d", int(want)),
+				"want": strconv.Itoa(int(want)),
 			})
 			return ip, nil
 		}
@@ -134,7 +135,7 @@ func getPublicIPFromAny(parent context.Context, urls []string, want IPVersion) (
 		broadcastUpdate("ip_check_result", map[string]any{
 			"url":  u,
 			"ok":   false,
-			"want": fmt.Sprintf("%d", int(want)),
+			"want": strconv.Itoa(int(want)),
 		})
 		lastErr = err
 		debugLog("IP-CHECK", "", fmt.Sprintf(phrases().FallbackFailed, u, err))
@@ -238,7 +239,7 @@ func parseDarwinIfconfigIPv6(out []byte) darwinIPv6ScanResult {
 		result.sawGlobal = true
 
 		if hasDarwinIPv6Flag(fields, "tentative", "duplicated", "duplicate", "dadfailed", "detached", "invalid") {
-			ipLog(fmt.Sprintf("⚠️ SKIP invalid IPv6: %s", ip.String()))
+			ipLog("⚠️ SKIP invalid IPv6: " + ip.String())
 			continue
 		}
 
@@ -251,7 +252,7 @@ func parseDarwinIfconfigIPv6(out []byte) darwinIPv6ScanResult {
 		}
 
 		if candidate.deprecated {
-			ipLog(fmt.Sprintf("⚠️ SKIP deprecated/expired IPv6: %s", ip.String()))
+			ipLog("⚠️ SKIP deprecated/expired IPv6: " + ip.String())
 			if fallbackDeprecated == nil {
 				fallbackDeprecated = candidate
 			}

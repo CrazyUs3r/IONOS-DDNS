@@ -20,26 +20,23 @@ import (
 )
 
 type mqttNotifier struct {
-	client     mqtt.Client
-	topic      string
-	qos        byte
-	retain     bool
-	stateTopic string
-	clientID   string
-
-	discovery       bool
-	discoveryPrefix string
-	discoveryID     string
-
-	baseTopic          string
+	client             mqtt.Client
+	discoveryID        string
 	domainsTopic       string
-	availabilityTopic  string
-	commandPrefix      string
 	commandResultTopic string
-
-	connected bool
-	mu        sync.RWMutex
-	closed    atomic.Bool
+	stateTopic         string
+	clientID           string
+	commandPrefix      string
+	availabilityTopic  string
+	discoveryPrefix    string
+	baseTopic          string
+	topic              string
+	mu                 sync.RWMutex
+	closed             atomic.Bool
+	qos                byte
+	discovery          bool
+	retain             bool
+	connected          bool
 }
 
 // ============================================================================
@@ -567,9 +564,9 @@ func validMQTTButtonPayload(payload []byte, command string) bool {
 // ============================================================================
 func (m *mqttNotifier) publishDiscovery(client mqtt.Client) error {
 	entities := []struct {
+		payload   map[string]any
 		component string
 		objectID  string
-		payload   map[string]any
 	}{
 		{
 			component: "sensor",

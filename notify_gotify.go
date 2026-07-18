@@ -17,19 +17,19 @@ import (
 // GOTIFY TYPES
 // ============================================================================
 type gotifyNotifier struct {
+	ctx       context.Context
+	sendQueue chan gotifyQueuedMsg
+	cancel    context.CancelFunc
 	url       string
 	token     string
-	sendQueue chan gotifyQueuedMsg
-	ctx       context.Context
-	cancel    context.CancelFunc
 	wg        sync.WaitGroup
 }
 
 type gotifyQueuedMsg struct {
+	enqueued time.Time
 	title    string
 	body     string
 	priority int
-	enqueued time.Time
 }
 
 // ============================================================================
