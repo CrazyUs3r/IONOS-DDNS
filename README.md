@@ -11,22 +11,22 @@
 [![Docker Stars](https://img.shields.io/docker/stars/crazyus3r/ionos-ddns?style=flat-square&logo=docker)](https://hub.docker.com/r/crazyus3r/ionos-ddns)
 [![Docker Last Updated](https://img.shields.io/docker/last-updated/crazyus3r/ionos-ddns?style=flat-square)](https://hub.docker.com/r/crazyus3r/ionos-ddns/tags)
 
-Ein hochperformanter, in Go geschriebener **Multi-Provider Dynamic DNS Client** mit vollwertigem Web-Dashboard. Unterstützt IONOS, Cloudflare, IPv64, Hetzner DNS und Hetzner Cloud — gleichzeitig, pro Domain konfigurierbar.
+Ein hochperformanter, in Go geschriebener **Multi-Provider Dynamic DNS Client** mit vollwertigem Web-Dashboard. Unterstützt IONOS, Cloudflare, IPv64, Hetzner DNS, Hetzner Cloud Febas und DNScale — gleichzeitig, pro Domain konfigurierbar.
 
 ---
 
 ## ✨ Highlights
 
-- **Multi-Provider:** IONOS, Cloudflare, IPv64, Hetzner DNS und Hetzner Cloud — auch gemischt in einer Instanz
+- **Multi-Provider:** IONOS, Cloudflare, IPv64, Hetzner DNS, Hetzner Cloud, Febas und DNScale — auch gemischt in einer Instanz
 - **Web-Dashboard:** Echtzeit-Monitoring via WebSockets — IP-Historie, API-Metriken, Logs, Diagnose und Einstellungen
 - **Dashboard-Auth:** Rollenbasierte Benutzerverwaltung (Admin / Editor / Viewer) mit sicherem PBKDF2-Passwort-Hashing
 - **2FA / TOTP:** Optionale Zwei-Faktor-Authentifizierung per RFC-6238-konformem TOTP (Google Authenticator, Authy)
 - **Dual-Stack:** Gleichzeitige Aktualisierung von A (IPv4) und AAAA (IPv6) Records
-- **Pro Domain konfigurierbar:** IP-Modus (IPV4/IPV6/BOTH) und TTL lassen sich je Domain überschreiben
+- **Pro Domain konfigurierbar:** IP-Modus (IPV4/IPV6/BOTH/CNAME) und TTL lassen sich je Domain überschreiben
 - **Intelligente IPv6-Erkennung:** Direkt vom Interface (via netlink) oder über öffentliche Endpunkte als Fallback
 - **Cache-First:** Zonen- und Record-Caches werden auf Disk persistiert — kein unnötiger API-Call nach Neustart
 - **Cleanup:** Automatisches Entfernen verwaister DNS-Records, die nicht mehr in der Konfiguration stehen
-- **Benachrichtigungen:** Telegram (inkl. Bot-Commands), Gotify, Webhook, MQTT (inkl. Home Assistant Discovery) und E-Mail (SMTP)
+- **Benachrichtigungen:** Telegram (inkl. Bot-Commands), Gotify, Ntfy, Webhook, MQTT (inkl. Home Assistant Discovery) und E-Mail (SMTP)
 - **Backup & Restore:** Export/Import von Config, Status und Benutzern direkt aus dem Dashboard
 - **Diagnose / Health Center:** Übersicht über System-, Provider- und Notifier-Status mit konfigurierbaren Warnungen
 - **Prometheus-Metriken:** Endpunkt `/metrics/prometheus` für Grafana & Co.
@@ -123,6 +123,17 @@ DOMAINS=home.example.com
 PROVIDER=HETZNERCLOUD
 HCLOUD_TOKEN=dein_token
 DOMAINS=home.example.com
+
+# Febas
+PROVIDER=FEBAS
+FEBAS_UPDATE_URL=https://www.febas.de/api/dyndns.php?kundenid=DEINE_ID&token=DEIN_TOKEN
+DOMAINS=home.example.com
+
+# DNScale
+PROVIDER=DNSCALE
+DNSCALE_TOKEN=dein_api_key
+DOMAINS=home.example.com
+
 ```
 
 #### Multi-Provider via `DOMAINS_CONFIG`
@@ -157,11 +168,21 @@ DOMAINS_CONFIG='[
     "fqdn": "hc.example.com",
     "provider": "HETZNERCLOUD",
     "api_secret": "dein_hcloud_token"
+  },
+  {
+    "fqdn": "febas.example.com",
+    "provider": "FEBAS",
+    "febas_update_url": "https://www.febas.de/api/dyndns.php?kundenid=DEINE_ID&token=DEIN_TOKEN"
+  },
+  {
+    "fqdn": "dnscale.example.com",
+    "provider": "DNSCALE",
+    "dnscale_token": "dein_api_key"
   }
 ]'
 ```
 
-Unterstützte Felder je Eintrag: `fqdn`, `provider`, `api_prefix`, `api_secret`, `cf_token`, `cf_email`, `cf_secret`, `cf_proxied`, `ipv64_token`, `hetzner_token`, `hcloud_token`, `ttl`, `ip_mode`
+Unterstützte Felder je Eintrag: `fqdn`, `provider`, `api_prefix`, `api_secret`, `cf_token`, `cf_email`, `cf_secret`, `cf_proxied`, `ipv64_token`, `hetzner_token`, `hcloud_token`, `febas_update_url`, `dnscale_token`, `ttl`, `ip_mode`
 
 ---
 
@@ -174,6 +195,8 @@ Unterstützte Felder je Eintrag: `fqdn`, `provider`, `api_prefix`, `api_secret`,
 | **IPv64** | NIC-Update + REST API | A, AAAA |
 | **Hetzner DNS** | REST API | A, AAAA |
 | **Hetzner Cloud DNS** | REST API | A, AAAA |
+| **Febas** | NIC-Update (GET) | A, AAAA |
+| **DNScale** | REST API | A, AAAA |
 
 ---
 
@@ -297,6 +320,10 @@ CONFIG_DIR=/pfad/zur/config ./go-dyndns
 **Hetzner DNS:** [dns.hetzner.com](https://dns.hetzner.com) → API-Tokens
 
 **Hetzner Cloud:** [console.hetzner.cloud](https://console.hetzner.cloud) → Projekt → API-Tokens
+
+**Febas:** Kundenbereich auf [febas.de](https://www.febas.de) → Update-URL mit `kundenid` und `token` aus dem DynDNS-Bereich kopieren
+
+**DNScale:** [dnscale.io](https://dnscale.io) → API-Bereich → Bearer-Token erstellen
 
 ---
 
