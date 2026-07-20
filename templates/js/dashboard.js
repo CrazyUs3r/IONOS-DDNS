@@ -1296,6 +1296,12 @@ function filterLogs(filter) {
 	document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.filter === filter));
 	const entries = document.querySelectorAll('.log-entry');
 	const f = filter.toUpperCase();
+
+	entries.forEach(entry => {
+		const level = (entry.dataset.level || '').toUpperCase();
+		const action = (entry.dataset.action || '').toUpperCase();
+		entry.style.display = (f === 'ALL' || level === f || action === f) ? '' : 'none';
+	});
 }
 
 function setUpdateButtonBusy(isBusy) {
