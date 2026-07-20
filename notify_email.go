@@ -95,6 +95,7 @@ func newEmailNotifier(host string, port int, username, password, from, toRaw, su
 	n.wg.Go(func() {
 		n.drainQueue()
 	})
+
 	return n
 }
 
@@ -135,11 +136,13 @@ func (e *emailNotifier) Send(msg NotifyMessage) error {
 		default:
 		}
 	}
+
 	return nil
 }
 
 func (e *emailNotifier) SendSync(msg NotifyMessage) error {
 	subject, body := formatEmailMessage(msg, e.subjectPrefix)
+
 	return e.doSend(emailMsg{subject: subject, body: body})
 }
 
@@ -164,6 +167,7 @@ func (e *emailNotifier) drainQueue() {
 						"⚠️ Email message discarded (too old: %v)",
 						time.Since(msg.enqueued).Round(time.Second),
 					))
+
 					continue
 				}
 				if err := e.doSend(msg); err != nil {
@@ -212,12 +216,14 @@ func (e *emailNotifier) sendStartTLS(addr string, msg []byte) error {
 	}
 	if err := conn.SetDeadline(time.Now().Add(emailOperationTimeout)); err != nil {
 		_ = conn.Close()
+
 		return fmt.Errorf("email deadline: %w", err)
 	}
 
 	client, err := smtp.NewClient(conn, e.host)
 	if err != nil {
 		_ = conn.Close()
+
 		return fmt.Errorf("email client: %w", err)
 	}
 	defer func() { _ = client.Quit() }()
@@ -248,12 +254,14 @@ func (e *emailNotifier) sendTLS(addr string, msg []byte) error {
 	}
 	if err := conn.SetDeadline(time.Now().Add(emailOperationTimeout)); err != nil {
 		_ = conn.Close()
+
 		return fmt.Errorf("email tls deadline: %w", err)
 	}
 
 	client, err := smtp.NewClient(conn, e.host)
 	if err != nil {
 		_ = conn.Close()
+
 		return fmt.Errorf("email tls client: %w", err)
 	}
 	defer func() { _ = client.Quit() }()
@@ -275,12 +283,14 @@ func (e *emailNotifier) sendPlain(addr string, msg []byte) error {
 	}
 	if err := conn.SetDeadline(time.Now().Add(emailOperationTimeout)); err != nil {
 		_ = conn.Close()
+
 		return fmt.Errorf("email plain deadline: %w", err)
 	}
 
 	client, err := smtp.NewClient(conn, e.host)
 	if err != nil {
 		_ = conn.Close()
+
 		return fmt.Errorf("email plain client: %w", err)
 	}
 	defer func() { _ = client.Quit() }()
@@ -310,11 +320,13 @@ func (e *emailNotifier) smtpSend(client *smtp.Client, msg []byte) error {
 	}
 	if _, err := wc.Write(msg); err != nil {
 		_ = wc.Close()
+
 		return fmt.Errorf("email write: %w", err)
 	}
 	if err := wc.Close(); err != nil {
 		return fmt.Errorf("email DATA close: %w", err)
 	}
+
 	return nil
 }
 
@@ -337,12 +349,14 @@ func (e *emailNotifier) buildRawMessage(subject, body string) []byte {
 	fmt.Fprintf(&sb, "Content-Type: text/plain; charset=UTF-8\r\n")
 	fmt.Fprintf(&sb, "\r\n")
 	fmt.Fprintf(&sb, "%s\r\n", body)
+
 	return []byte(sb.String())
 }
 
 func sanitizeEmailHeader(value string) string {
 	value = strings.ReplaceAll(value, "\r", " ")
 	value = strings.ReplaceAll(value, "\n", " ")
+
 	return strings.TrimSpace(value)
 }
 

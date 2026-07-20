@@ -45,6 +45,7 @@ func (l *DynamicWorkerLimiter) Acquire(ctx context.Context) bool {
 		if l.active < l.limit {
 			l.active++
 			l.mu.Unlock()
+
 			return true
 		}
 
@@ -81,12 +82,14 @@ func normalizeWorkerLimit(limit int) int {
 	if limit < 1 {
 		return 1
 	}
+
 	return limit
 }
 
 func setWorkerConcurrencyLimit(limit int) {
 	if workerLimiter == nil {
 		workerLimiter = NewDynamicWorkerLimiter(limit)
+
 		return
 	}
 	workerLimiter.SetLimit(limit)

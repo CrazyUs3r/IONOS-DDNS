@@ -72,6 +72,7 @@ func parseRetryAfter(h http.Header) (time.Duration, bool) {
 		if secs < 0 {
 			return 0, false
 		}
+
 		return secs, true
 	}
 
@@ -80,6 +81,7 @@ func parseRetryAfter(h http.Header) (time.Duration, bool) {
 		if d < 0 {
 			return 0, false
 		}
+
 		return d, true
 	}
 
@@ -102,6 +104,7 @@ func classifyAPIErrorWithHeaders(statusCode int, method, url, responseBody strin
 	if spec, ok := apiErrorSpecs[statusCode]; ok {
 		applyAPIErrorSpec(apiErr, spec, responseBody, headers)
 		logAPIError(spec.logLevel, spec.action, method, safeURL, apiErr.Message)
+
 		return apiErr
 	}
 
@@ -130,6 +133,7 @@ func applyDefaultAPIErrorSpec(apiErr *APIError, statusCode int, responseBody str
 		)
 		apiErr.Retryable = true
 		apiErr.RetryAfter = ServerErrorRetryDelay
+
 		return
 	}
 
@@ -157,6 +161,7 @@ func defaultAction(statusCode int) string {
 	if statusCode >= 500 {
 		return ActionRetry
 	}
+
 	return ActionError
 }
 
@@ -172,10 +177,12 @@ func withBody(base, responseBody string) string {
 	if strings.TrimSpace(responseBody) == "" {
 		return base
 	}
+
 	return fmt.Sprintf("%s - %s", base, responseBody)
 }
 
 func tf(value, fallback string, args ...any) string {
 	format := t(value, fallback)
+
 	return fmt.Sprintf(format, args...)
 }

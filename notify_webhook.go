@@ -13,9 +13,7 @@ import (
 	"time"
 )
 
-// ============================================================================
-// WEBHOOK NOTIFIER
-// ============================================================================
+// ============================================================================.
 type webhookNotifier struct {
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -25,6 +23,7 @@ type webhookNotifier struct {
 
 func newWebhookNotifier(url, secret string) *webhookNotifier {
 	ctx, cancel := context.WithCancel(notificationParentContext())
+
 	return &webhookNotifier{url: url, secret: secret, ctx: ctx, cancel: cancel}
 }
 
@@ -43,6 +42,7 @@ func (w *webhookNotifier) SendSync(msg NotifyMessage) error {
 func webhookSignature(secret string, body []byte) string {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write(body)
+
 	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
 }
 
@@ -78,11 +78,13 @@ func (w *webhookNotifier) doSend(msg NotifyMessage) error {
 		select {
 		case <-w.ctx.Done():
 			stopNotifyTimer(timer)
+
 			return err
 		case <-timer.C:
 		}
 		wait *= 2
 	}
+
 	return nil
 }
 
@@ -109,5 +111,6 @@ func (w *webhookNotifier) trySend(data []byte) error {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
+
 	return nil
 }

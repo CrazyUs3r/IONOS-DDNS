@@ -11,9 +11,7 @@ import (
 	"time"
 )
 
-// ============================================================================
-// UPDATE ORCHESTRATION
-// ============================================================================
+// ============================================================================.
 func tryClaimUpdate() bool {
 	return updateInProgress.CompareAndSwap(false, true)
 }
@@ -21,6 +19,7 @@ func tryClaimUpdate() bool {
 func runUpdate(firstRun bool) {
 	if !tryClaimUpdate() {
 		debugLog("SCHEDULER", "", phrases().UpdateAlreadyRunning)
+
 		return
 	}
 
@@ -132,6 +131,7 @@ func resolveCurrentIPs(ipCtx context.Context, firstRun, forced bool) (string, st
 	} else {
 		ips, err = doSingleflight(ipCtx, &ipLoadGroup, "current_ips", func() (ipPair, error) {
 			v4, v6, err := fetchCurrentIPs(ipCtx)
+
 			return ipPair{v4: v4, v6: v6}, err
 		})
 	}
@@ -154,6 +154,7 @@ func handleCurrentIPsError(err error, firstRun bool) (string, string, bool) {
 			Action:  ActionError,
 			Message: fmt.Sprintf(phrases().IPFetchFailed, err),
 		})
+
 		return "", "", false
 	}
 
@@ -165,6 +166,7 @@ func handleCurrentIPsError(err error, firstRun bool) (string, string, bool) {
 			Action:  ActionError,
 			Message: fmt.Sprintf(phrases().IPFetchFailed, err),
 		})
+
 		return "", "", false
 	}
 
@@ -207,6 +209,7 @@ func loadRunUpdateZones(ctx context.Context, forced bool) (map[string][]Zone, bo
 			Message: t(phrases().NoZoneFound, "No zone found"),
 			Error:   fmt.Errorf("%s: %w", phrases().ZoneLoadingFailed, err),
 		})
+
 		return nil, false
 	}
 
@@ -239,6 +242,7 @@ func loadRunUpdateRecords(
 	if err != nil {
 		lastOk.Store(false)
 		debugLog("CACHE", "", fmt.Sprintf(phrases().CacheLoadFailed, err))
+
 		return nil, false
 	}
 
@@ -265,13 +269,14 @@ type lastKnownIPState struct {
 	ipv6Seq  int
 }
 
-func loadLastKnownIPs() (ipv4 string, ipv6 string) {
+func loadLastKnownIPs() (ipv4, ipv6 string) {
 	domains, err := readDomainHistories()
 	if err != nil {
 		return "", ""
 	}
 
 	state := findLastKnownIPs(domains)
+
 	return state.ipv4, state.ipv6
 }
 
@@ -333,6 +338,7 @@ func sortedHistoryDomainNames(
 	}
 
 	sort.Strings(names)
+
 	return names
 }
 
@@ -422,9 +428,7 @@ func parseHistoryIPTime(value string) time.Time {
 	return time.Time{}
 }
 
-// ============================================================================
-// CACHE-FIRST ZONE LOADING
-// ============================================================================
+// ============================================================================.
 func getCachedZonesState() (map[string][]Zone, time.Duration, bool) {
 	zoneCacheMutex.RLock()
 	defer zoneCacheMutex.RUnlock()
@@ -530,9 +534,7 @@ func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zo
 	return zonesByProvider, nil
 }
 
-// ============================================================================
-// CACHE-FIRST RECORD LOADING
-// ============================================================================
+// ============================================================================.
 func loadRecordsWithCache(ctx context.Context, zonesByProvider map[string][]Zone, forceRefresh bool) (*ZoneRecordCache, error) {
 	cached, cacheAge, hasCachedRecords := getCachedRecordsState()
 
@@ -583,9 +585,7 @@ func loadRecordsWithCache(ctx context.Context, zonesByProvider map[string][]Zone
 	return cache, nil
 }
 
-// ============================================================================
-// CACHE ZU DISK SPEICHERN
-// ============================================================================
+// ============================================================================.
 type cacheSaveJob struct {
 	provider ProviderType
 	zones    []Zone
@@ -609,36 +609,46 @@ func saveProviderCacheJob(job cacheSaveJob, cache *ZoneRecordCache) bool {
 	case ProviderIONOS:
 		if err := saveIONOSCacheToFile(job.zones, cache); err != nil {
 			debugLog("CACHE", "", fmt.Sprintf(phrases().IonosCacheSaveFailed, err))
+
 			return false
 		}
+
 		return true
 
 	case ProviderCloudflare:
 		if err := saveCloudflareCacheToFile(job.zones, cache); err != nil {
 			debugLog("CACHE", "", fmt.Sprintf(phrases().CloudflareCacheSaveFailed, err))
+
 			return false
 		}
+
 		return true
 
 	case ProviderIPv64:
 		if err := saveIPv64Cache(); err != nil {
 			debugLog("CACHE", "", fmt.Sprintf(phrases().IPv64CacheSaveFailed, err))
+
 			return false
 		}
+
 		return true
 
 	case ProviderHetzner:
 		if err := saveHetznerDNSCacheToFile(job.zones, cache); err != nil {
 			debugLog("CACHE", "", fmt.Sprintf(phrases().HetznerDNSCacheSaveFailed, err))
+
 			return false
 		}
+
 		return true
 
 	case ProviderHetznerCloud:
 		if err := saveHetznerCloudCacheToFile(job.zones, cache); err != nil {
 			debugLog("CACHE", "", fmt.Sprintf(phrases().HetznerCloudCacheSaveFailed, err))
+
 			return false
 		}
+
 		return true
 
 	case ProviderFebas:
@@ -648,8 +658,10 @@ func saveProviderCacheJob(job cacheSaveJob, cache *ZoneRecordCache) bool {
 	case ProviderDNScale:
 		if err := saveDNScaleCacheToFile(job.zones, cache); err != nil {
 			debugLog("CACHE", "", fmt.Sprintf(phrases().DNScaleCacheSaveFailed, err))
+
 			return false
 		}
+
 		return true
 
 	default:
@@ -673,6 +685,7 @@ func saveCachesToDisk(
 
 	if !needsPersist {
 		debugLog("CACHE", "", phrases().DiskCachePersistSkipped)
+
 		return
 	}
 
@@ -702,9 +715,7 @@ func saveCachesToDisk(
 	diskPersistMutex.Unlock()
 }
 
-// ============================================================================
-// CLEANUP
-// ============================================================================
+// ============================================================================.
 func isCleanupEligibleRecordType(recordType string) bool {
 	switch strings.ToUpper(strings.TrimSpace(recordType)) {
 	case RecordTypeA, RecordTypeAAAA, RecordTypeCNAME:
@@ -730,6 +741,7 @@ func runCleanupIfNeeded(
 
 	if timeSinceLastCleanup < CleanupInterval {
 		debugLog("MAINTENANCE", "", fmt.Sprintf(phrases().CleanupSkippedLastRun, timeSinceLastCleanup.Round(time.Minute)))
+
 		return
 	}
 
@@ -765,9 +777,7 @@ func runCleanupIfNeeded(
 	}
 }
 
-// ============================================================================
-// DISK CACHE FALLBACK
-// ============================================================================
+// ============================================================================.
 func loadZonesFromDiskCache() (map[string][]Zone, error) {
 	zonesByProvider := make(map[string][]Zone)
 	seen := make(map[ProviderType]bool)
@@ -844,6 +854,7 @@ func loadProviderRecordCacheFromDisk(
 		for _, zone := range zones {
 			cache.Set(zone.ID, []Record{})
 		}
+
 		return len(zones) > 0, nil
 
 	case ProviderDNScale:
@@ -927,6 +938,7 @@ func loadProviderZonesFromDisk(provider ProviderType) ([]Zone, bool) {
 		if !ok {
 			return nil, false
 		}
+
 		return loadFileBackedProviderZonesFromDisk(source)
 	}
 }
@@ -955,6 +967,7 @@ func loadFileBackedProviderZonesFromDisk(source providerZoneDiskSource) ([]Zone,
 	}
 
 	debugLog("CACHE", "", fmt.Sprintf(source.loadedMessage, len(zones)))
+
 	return zones, true
 }
 
@@ -965,6 +978,7 @@ func loadIPv64ProviderZonesFromDisk() ([]Zone, bool) {
 	}
 
 	debugLog("CACHE", "", fmt.Sprintf(phrases().IPv64ZonesLoadedFromDisk, len(zones)))
+
 	return zones, true
 }
 
@@ -975,6 +989,7 @@ func loadFebasProviderZonesFromDisk() ([]Zone, bool) {
 	}
 
 	zones, err := loadFebasZones(context.Background())
+
 	return zones, err == nil && len(zones) > 0
 }
 

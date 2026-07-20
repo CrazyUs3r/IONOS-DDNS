@@ -8,9 +8,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// ============================================================================
-// WEBSOCKET
-// ============================================================================
+// ============================================================================.
 const wsMaxInboundMessageSize int64 = 1024
 
 func (h *WSHub) run() {
@@ -53,6 +51,7 @@ func (h *WSHub) run() {
 			h.mu.RLock()
 			if len(h.clients) == 0 {
 				h.mu.RUnlock()
+
 				continue
 			}
 
@@ -123,6 +122,7 @@ func (c *WSClient) readPump(h *WSHub) {
 	_ = c.conn.SetReadDeadline(time.Now().Add(WSPongTimeout))
 	c.conn.SetPongHandler(func(string) error {
 		_ = c.conn.SetReadDeadline(time.Now().Add(WSPongTimeout))
+
 		return nil
 	})
 

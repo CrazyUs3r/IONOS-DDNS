@@ -48,8 +48,10 @@ func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdate
 	if isCNAMEDomainConfig(dc) {
 		if !dc.CNAMEPending {
 			debugLog("DNS-LOGIC", job.Domain, "CNAME unchanged; automatic scheduler update skipped")
+
 			return result
 		}
+
 		return processCNAMEDomainUpdate(ctx, dc, job, result, cache)
 	}
 
@@ -66,26 +68,28 @@ func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdate
 	v4Changed, err := processDomainIPv4Update(ctx, dc, job, cache, ipMode)
 	if err != nil {
 		result.Error = err
+
 		return result
 	}
 
 	v6Changed, err := processDomainIPv6Update(ctx, dc, job, cache, ipMode)
 	if err != nil {
 		result.Error = err
+
 		return result
 	}
 
 	result.Changed = v4Changed || v6Changed
+
 	return result
 }
 
-// ============================================================================
-// CNAME SUPPORT
-// ============================================================================
+// ============================================================================.
 func isCNAMEDomainConfig(dc *DomainConfig) bool {
 	if dc == nil {
 		return false
 	}
+
 	return strings.EqualFold(strings.TrimSpace(dc.RecordMode), RecordModeCNAME) &&
 		strings.TrimSpace(dc.CNAMETarget) != ""
 }
@@ -108,12 +112,14 @@ func processCNAMEDomainUpdate(
 ) domainUpdateResult {
 	if !cnameCapableProvider(dc.Provider) {
 		result.Error = fmt.Errorf("provider %s does not support CNAME records", dc.Provider)
+
 		return result
 	}
 
 	target := normalizeDomainName(strings.TrimSpace(dc.CNAMETarget))
 	if target == "" {
 		result.Error = fmt.Errorf("CNAME target is empty for %s", job.Domain)
+
 		return result
 	}
 
@@ -123,9 +129,11 @@ func processCNAMEDomainUpdate(
 	if err != nil {
 		if isNonRecoverableError(err) {
 			result.Error = fmt.Errorf("non-recoverable CNAME error: %w", err)
+
 			return result
 		}
 		result.Error = fmt.Errorf("CNAME update failed: %w", err)
+
 		return result
 	}
 
@@ -133,6 +141,7 @@ func processCNAMEDomainUpdate(
 
 	if err := markCNAMEApplied(job.Domain, dc.Provider, target); err != nil {
 		result.Error = fmt.Errorf("CNAME was applied, but its pending state could not be saved: %w", err)
+
 		return result
 	}
 
@@ -157,6 +166,7 @@ func markCNAMEApplied(fqdn string, provider ProviderType, target string) error {
 
 		dc.CNAMEPending = false
 		found = true
+
 		break
 	}
 	cfgMu.Unlock()
@@ -164,6 +174,7 @@ func markCNAMEApplied(fqdn string, provider ProviderType, target string) error {
 	if !found {
 		return nil
 	}
+
 	return saveConfigToFile()
 }
 
@@ -181,6 +192,7 @@ func shouldStopDomainLoop(ctx context.Context) bool {
 	select {
 	case <-ctx.Done():
 		debugLog("SCHEDULER", "", t(phrases().DomainLoopCancelled, "Domain loop aborted: context cancelled"))
+
 		return true
 	default:
 		return false
@@ -221,6 +233,7 @@ func startDomainWorker(
 				Domain: domainConfig.FQDN,
 				Error:  fmt.Errorf("domain update cancelled before start: %w", err),
 			}
+
 			return
 		}
 		if !acquireWorkerSlot(ctx, domainConfig.FQDN) {
@@ -232,6 +245,7 @@ func startDomainWorker(
 				Domain: domainConfig.FQDN,
 				Error:  fmt.Errorf("worker slot acquisition cancelled: %w", err),
 			}
+
 			return
 		}
 		defer releaseWorkerSlot(domainConfig.FQDN)
@@ -241,6 +255,7 @@ func startDomainWorker(
 				Domain: domainConfig.FQDN,
 				Error:  err,
 			}
+
 			return
 		}
 
@@ -253,10 +268,12 @@ func startDomainWorker(
 func acquireWorkerSlot(ctx context.Context, fqdn string) bool {
 	if workerLimiter.Acquire(ctx) {
 		debugLog("WORKER", fqdn, t(phrases().WorkerSlotAcquired, "Worker slot acquired"))
+
 		return true
 	}
 
 	debugLog("WORKER", fqdn, t(phrases().WorkerCancelledContext, "Cancelled: context cancelled"))
+
 	return false
 }
 
@@ -274,6 +291,7 @@ func buildDomainUpdateJob(
 	zones, exists := zonesByProvider[string(dc.Provider)]
 	if !exists || len(zones) == 0 {
 		debugLog("DNS-LOGIC", dc.FQDN, phrases().NoZoneFoundForDomain)
+
 		return domainUpdateJob{}, fmt.Errorf(
 			t(phrases().NoZonesFoundForProvider, "No zones found for provider %s"),
 			dc.Provider,
@@ -283,6 +301,7 @@ func buildDomainUpdateJob(
 	matchedZone := findMatchedZoneForDomain(dc.FQDN, zones)
 	if matchedZone == nil {
 		debugLog("DNS-LOGIC", dc.FQDN, phrases().NoZoneFoundForDomain)
+
 		return domainUpdateJob{}, fmt.Errorf("%s", t(phrases().NoZoneFound, "No zone found"))
 	}
 
@@ -293,6 +312,7 @@ func buildDomainUpdateJob(
 	records, exists := cache.Get(matchedZone.ID)
 	if !exists && dc.Provider != ProviderIPv64 {
 		debugLog("DNS-LOGIC", dc.FQDN, phrases().NoRecordsInCache)
+
 		return domainUpdateJob{}, fmt.Errorf("%s", t(phrases().NoRecordsInCache, "no records in cache"))
 	}
 
@@ -326,6 +346,7 @@ func findMatchedZoneForDomain(fqdn string, zones []Zone) *Zone {
 	if bestIndex < 0 {
 		return nil
 	}
+
 	return &zones[bestIndex]
 }
 
@@ -382,6 +403,7 @@ func finalizeDomainResults(results <-chan domainUpdateResult, totalDomains int) 
 				Domain:  result.Domain,
 				Message: fmt.Sprintf("%s: %v", phrases().UpdateFailed, result.Error),
 			})
+
 			continue
 		}
 		if result.Changed {
@@ -414,6 +436,7 @@ func finalizeDomainResults(results <-chan domainUpdateResult, totalDomains int) 
 func currentIPMode() string {
 	cfgMu.RLock()
 	defer cfgMu.RUnlock()
+
 	return cfg.IPMode
 }
 
@@ -439,9 +462,11 @@ func processIPv64DomainUpdate(
 	if err != nil {
 		if isNonRecoverableError(err) {
 			result.Error = fmt.Errorf(t(phrases().NonRecoverableIPv64Error, "Non-recoverable IPv64 error: %w"), err)
+
 			return result
 		}
 		result.Error = fmt.Errorf("IPv64 update failed: %w", err)
+
 		return result
 	}
 
@@ -466,6 +491,7 @@ func processDomainIPv4Update(
 		if isNonRecoverableError(err) {
 			return changed, fmt.Errorf(t(phrases().NonRecoverableIPv4Error, "Non-recoverable IPv4 error: %w"), err)
 		}
+
 		return changed, fmt.Errorf("IPv4 update failed: %w", err)
 	}
 
@@ -490,6 +516,7 @@ func processDomainIPv6Update(
 		if isNonRecoverableError(err) {
 			return changed, fmt.Errorf(t(phrases().NonRecoverableIPv6Error, "Non-recoverable IPv6 error: %w"), err)
 		}
+
 		return changed, fmt.Errorf("IPv6 update failed: %w", err)
 	}
 
@@ -526,5 +553,6 @@ func domainIPMode(dc *DomainConfig) string {
 			return m
 		}
 	}
+
 	return currentIPMode()
 }

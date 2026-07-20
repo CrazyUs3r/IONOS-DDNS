@@ -66,10 +66,12 @@ func dnscaleAPIAttempt(
 		if !allowRetry {
 			debugLog("HTTP", "", fmt.Sprintf(phrases().DNScaleNetworkErrorNoRetry, err, duration))
 			apiMetrics.RecordError(method, 0, err, duration)
+
 			return nil, false, fmt.Errorf("%s: %w", phrases().ErrNetworkError, err)
 		}
 
 		retry, handledErr := handleProviderNetworkError(ctx, "DNScale", method, err, duration, attempt, maxRetries, false)
+
 		return nil, retry, handledErr
 	}
 
@@ -100,6 +102,7 @@ func marshalDNScaleBody(body any) ([]byte, error) {
 	}
 
 	debugLog("HTTP", "", fmt.Sprintf("📤 %s: %s", phrases().PayloadSent, string(bodyBytes)))
+
 	return bodyBytes, nil
 }
 
@@ -146,9 +149,7 @@ func handleDNScaleResponse(
 	return handleProviderHTTPResponse(ctx, "DNScale", phrases().DNScaleMaxAttempts, res, method, url, duration, attempt, maxAttempts)
 }
 
-// ============================================================================
-// ZONE HELPERS - DNSCALE
-// ============================================================================
+// ============================================================================.
 type dnscaleZonesResponse struct {
 	Status string `json:"status"`
 	Data   struct {
@@ -223,6 +224,7 @@ func loadDNScaleZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
 		for dn := range needed {
 			if dn == zn || strings.HasSuffix(dn, "."+zn) {
 				filtered = append(filtered, z)
+
 				break
 			}
 		}
@@ -293,6 +295,7 @@ func updateDNScaleDNS(
 			Domain:  fqdn,
 			Message: fmt.Sprintf("⚠️ %s %s %s", phrases().WouldSet, recordType, newIP),
 		})
+
 		return true, nil
 	}
 
@@ -311,6 +314,7 @@ func updateDNScaleDNS(
 	})
 
 	updateDNScaleCache(cache, zoneID, recordName, fqdn, recordType, newIP, existing, updatedRecord)
+
 	return true, nil
 }
 
@@ -326,9 +330,11 @@ func findDNScaleExistingRecord(records []Record, fqdn, recordName, recordType st
 		if (actualName == wantedFQDN || actualName == wantedRecordName) && actualType == wantedType {
 			existing := &records[i]
 			debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("📌 %s: %s (ID: %s)", phrases().RecordFound, existing.Content, existing.ID))
+
 			return existing
 		}
 	}
+
 	return nil
 }
 
@@ -341,6 +347,7 @@ func shouldSkipDNScaleUpdate(fqdn, recordType, newIP string, existing *Record) b
 			Domain:  fqdn,
 			Message: fmt.Sprintf("%-4s %s %s", recordType, newIP, phrases().Current),
 		})
+
 		return true
 	}
 
@@ -441,6 +448,7 @@ func executeDNScaleDNSUpdate(
 
 	record := parseDNScaleRecordResponse(data, fqdn)
 	debugLog("DNS-LOGIC", fqdn, fmt.Sprintf(phrases().DNScaleRecordArrow, phrases().Success, recordType, newIP))
+
 	return ActionCreate, record, nil
 }
 
@@ -449,11 +457,13 @@ func dnscaleRecordName(recordName, fqdn string) string {
 	if name == "" {
 		name = strings.TrimSpace(fqdn)
 	}
+
 	return name
 }
 
 func dnscalePathName(recordName, fqdn, zoneID string) string {
 	_ = zoneID
+
 	return neturl.PathEscape(dnscaleRecordName(recordName, fqdn))
 }
 
@@ -465,12 +475,14 @@ func parseDNScaleRecordResponse(data []byte, fqdn string) *Record {
 	var resp dnscaleRecordResponse
 	if err := json.Unmarshal(data, &resp); err != nil {
 		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf(phrases().DNScaleSuccessResponseParseFailed, err))
+
 		return nil
 	}
 
 	if strings.TrimSpace(resp.Data.Record.ID) != "" {
 		return &resp.Data.Record
 	}
+
 	return nil
 }
 
@@ -478,6 +490,7 @@ func handleDNScaleDNSAPIError(fqdn, recordType, newIP string, err error) error {
 	var apiErr *APIError
 	if !errors.As(err, &apiErr) || apiErr == nil {
 		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf(phrases().UpdateFailedWithError, err))
+
 		return err
 	}
 
@@ -488,22 +501,27 @@ func handleDNScaleDNSAPIError(fqdn, recordType, newIP string, err error) error {
 	switch apiErr.StatusCode {
 	case http.StatusUnauthorized, http.StatusForbidden:
 		log(LogContext{Level: level, Action: action, Domain: fqdn, Message: message})
+
 		return fmt.Errorf("%s: %w", phrases().ErrAuthFailed, err)
 	case http.StatusNotFound:
 		action = ActionZone
 		log(LogContext{Level: level, Action: action, Domain: fqdn, Message: message})
+
 		return fmt.Errorf("%s: %w", phrases().ErrResourceNotFound, err)
 	case http.StatusTooManyRequests:
 		level = LogWarn
 		action = ActionRetry
 		log(LogContext{Level: level, Action: action, Domain: fqdn, Message: message})
+
 		return err
 	case http.StatusBadRequest, http.StatusUnprocessableEntity:
 		message = fmt.Sprintf(phrases().DNScaleAPIErrorWithIP, recordType, apiErr.Message, newIP)
 		log(LogContext{Level: level, Action: action, Domain: fqdn, Message: message})
+
 		return fmt.Errorf("%s: %w", phrases().ErrValidationFailed, err)
 	default:
 		log(LogContext{Level: level, Action: action, Domain: fqdn, Message: message})
+
 		return err
 	}
 }
@@ -551,6 +569,7 @@ func dnscaleCacheZoneExists(cache *ZoneRecordCache, zoneID, fqdn string) bool {
 	}
 
 	debugLog("CACHE", fqdn, phrases().DNScaleCacheZoneNotFound)
+
 	return false
 }
 
@@ -613,6 +632,7 @@ func newDNScaleCachedRecord(
 		record.Type = recordType
 	}
 	record.Content = newIP
+
 	return &record
 }
 
@@ -701,6 +721,7 @@ func cleanupSingleDNScaleRecord(
 			Domain:  fqdn,
 			Message: phrases().CleanupDryRun,
 		})
+
 		return
 	}
 
@@ -717,6 +738,7 @@ func cleanupSingleDNScaleRecord(
 
 	if _, err := dnscaleAPI(ctx, dc, MethodDELETE, url, nil); err != nil {
 		debugLog("MAINTENANCE", fqdn, fmt.Sprintf(phrases().CleanupDeleteError, err))
+
 		return
 	}
 

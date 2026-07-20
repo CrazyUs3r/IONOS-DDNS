@@ -19,13 +19,12 @@ import (
 //go:embed lang/*.json
 var embeddedLang embed.FS
 
-// ============================================================================
-// LANGUAGE
-// ============================================================================
+// ============================================================================.
 func t(val, fallback string) string {
 	if strings.TrimSpace(val) == "" {
 		return fallback
 	}
+
 	return val
 }
 
@@ -281,7 +280,7 @@ func applyTranslations(translations map[string]string) {
 	v := reflect.ValueOf(newT).Elem()
 	typ := v.Type()
 
-	for i := 0; i < v.NumField(); i++ {
+	for i := range v.NumField() {
 		field := typ.Field(i)
 		jsonKey := toSnakeCase(field.Name)
 
@@ -314,6 +313,7 @@ func validateTranslationKeys(translations map[string]string) {
 				Action:   ActionConfig,
 				Message:  fmt.Sprintf("%s: %s", phrases().MissingTranslationKey, key),
 			})
+
 			continue
 		}
 		if strings.TrimSpace(val) == "" {
@@ -363,6 +363,7 @@ func toSnakeCase(s string) string {
 
 	result := buildSnakeCase(s)
 	snakeCaseCache.Store(s, result)
+
 	return result
 }
 
@@ -391,6 +392,7 @@ func buildSnakeCase(s string) string {
 		}
 		result = append(result, unicode.ToLower(r))
 	}
+
 	return string(result)
 }
 
@@ -403,6 +405,7 @@ func copyEmbeddedLangFiles(dir string) error {
 			Action:   ActionConfig,
 			Message:  fmt.Sprintf("%s: %v", t(phrases().CannotReadEmbeddedDir, "cannot read embedded lang dir"), err),
 		})
+
 		return err
 	}
 
@@ -418,6 +421,7 @@ func copyEmbeddedLangFiles(dir string) error {
 				Action:   ActionConfig,
 				Message:  fmt.Sprintf("%s: %s: %v", t(phrases().EmbeddedFileUnreadable, "Embedded file unreadable"), name, err),
 			})
+
 			continue
 		}
 
@@ -447,6 +451,7 @@ func copyEmbeddedLangFiles(dir string) error {
 				Action:   ActionConfig,
 				Message:  fmt.Sprintf("%s: %s: %v", t(phrases().WriteFailed, "write failed"), dst, err),
 			})
+
 			continue
 		}
 

@@ -12,9 +12,7 @@ import (
 	"time"
 )
 
-// ============================================================================
-// ZONE & CACHE
-// ============================================================================
+// ============================================================================.
 func NewZoneRecordCache() *ZoneRecordCache {
 	return &ZoneRecordCache{
 		data: make(map[string]cacheEntry),
@@ -93,6 +91,7 @@ func (c *ZoneRecordCache) Age(zoneID string) time.Duration {
 	if !exists {
 		return -1
 	}
+
 	return time.Since(entry.storedAt)
 }
 
@@ -115,6 +114,7 @@ func loadZoneCache(
 
 		if provider == ProviderIPv64 {
 			loadIPv64ZoneCache(cache, zones)
+
 			continue
 		}
 
@@ -176,6 +176,7 @@ func loadIPv64ZoneCache(cache *ZoneRecordCache, zones []Zone) {
 		domain, ok := providerCache.ipv64Records[z.Name]
 		if !ok {
 			debugLog("CACHE", z.Name, phrases().IPv64CacheNoData)
+
 			continue
 		}
 
@@ -248,6 +249,7 @@ func findProviderDomainConfig(domainConfigs []DomainConfig, provider ProviderTyp
 			return &domainConfigs[i]
 		}
 	}
+
 	return nil
 }
 
@@ -318,6 +320,7 @@ func startZoneCacheLoad(
 					zone,
 					err,
 				)
+
 				return
 			}
 
@@ -333,6 +336,7 @@ func startZoneCacheLoad(
 		if err != nil {
 			recordZoneCacheError(cacheErrors, cacheErrorsMu, zone, err)
 			debugLog("CACHE", zone.Name, fmt.Sprintf(phrases().CacheLoadError, err))
+
 			return
 		}
 
@@ -422,7 +426,6 @@ func finalizeZoneCacheErrors(
 
 	if attemptedLoads > 0 &&
 		len(cacheErrors) >= attemptedLoads {
-
 		return fmt.Errorf(
 			"all %d zone record loads failed: %s",
 			attemptedLoads,

@@ -13,9 +13,7 @@ import (
 	"time"
 )
 
-// ============================================================================
-// GOTIFY TYPES
-// ============================================================================
+// ============================================================================.
 type gotifyNotifier struct {
 	ctx       context.Context
 	sendQueue chan gotifyQueuedMsg
@@ -32,9 +30,7 @@ type gotifyQueuedMsg struct {
 	priority int
 }
 
-// ============================================================================
-// GOTIFY NOTIFIER
-// ============================================================================
+// ============================================================================.
 func newGotifyNotifier(url, token string) *gotifyNotifier {
 	ctx, cancel := context.WithCancel(notificationParentContext())
 	g := &gotifyNotifier{
@@ -47,6 +43,7 @@ func newGotifyNotifier(url, token string) *gotifyNotifier {
 	g.wg.Go(func() {
 		g.drainQueue()
 	})
+
 	return g
 }
 
@@ -87,11 +84,13 @@ func (g *gotifyNotifier) Send(msg NotifyMessage) error {
 		default:
 		}
 	}
+
 	return nil
 }
 
 func (g *gotifyNotifier) SendSync(msg NotifyMessage) error {
 	title, body := formatGotifyMessage(msg)
+
 	return g.sendWithRetry(gotifyQueuedMsg{
 		title:    title,
 		body:     body,
@@ -117,6 +116,7 @@ func (g *gotifyNotifier) drainQueue() {
 						t(phrases().GotifyMsgDiscarded, "⚠️ Gotify Nachricht verworfen (zu alt: %v)"),
 						time.Since(msg.enqueued).Round(time.Second),
 					))
+
 					continue
 				}
 				if err := g.sendWithRetry(msg); err != nil {
@@ -159,6 +159,7 @@ func (g *gotifyNotifier) sendWithRetry(msg gotifyQueuedMsg) error {
 		select {
 		case <-g.ctx.Done():
 			stopNotifyTimer(timer)
+
 			return lastErr
 		case <-timer.C:
 		}
@@ -193,8 +194,10 @@ func (g *gotifyNotifier) doSend(payload map[string]any) error {
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+
 		return fmt.Errorf("gotify HTTP %d: %s", resp.StatusCode, string(b))
 	}
+
 	return nil
 }
 

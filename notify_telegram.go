@@ -22,9 +22,7 @@ import (
 	"time"
 )
 
-// ============================================================================
-// TELEGRAM TYPES
-// ============================================================================
+// ============================================================================.
 type tgMessage struct {
 	From      tgUser `json:"from"`
 	Text      string `json:"text"`
@@ -85,9 +83,7 @@ type tgQueuedMsg struct {
 	text     string
 }
 
-// ============================================================================
-// TELEGRAM NOTIFIER
-// ============================================================================
+// ============================================================================.
 func newTelegramNotifier(token, chatIDs string) *telegramNotifier {
 	ctx, cancel := context.WithCancel(shutdownCtx)
 	t := &telegramNotifier{
@@ -101,6 +97,7 @@ func newTelegramNotifier(token, chatIDs string) *telegramNotifier {
 	t.wg.Go(func() {
 		t.drainQueue()
 	})
+
 	return t
 }
 
@@ -108,6 +105,7 @@ func (t *telegramNotifier) getPollClient() *http.Client {
 	t.pollClientOnce.Do(func() {
 		t.pollClient = newTelegramPollClient()
 	})
+
 	return t.pollClient
 }
 
@@ -134,9 +132,7 @@ func newTelegramPollClient() *http.Client {
 
 func (t *telegramNotifier) Name() string { return "Telegram" }
 
-// ============================================================================
-// SEND (outbound notifications) — uses shared getHTTPClient()
-// ============================================================================
+// ============================================================================.
 func (t *telegramNotifier) Send(msg NotifyMessage) error {
 	select {
 	case <-t.pollCtx.Done():
@@ -148,6 +144,7 @@ func (t *telegramNotifier) Send(msg NotifyMessage) error {
 	for _, chatID := range t.chatIDs {
 		t.enqueue(chatID, text, nil)
 	}
+
 	return nil
 }
 
@@ -159,6 +156,7 @@ func (t *telegramNotifier) SendSync(msg NotifyMessage) error {
 			errs = append(errs, fmt.Errorf("chat %s: %w", chatID, err))
 		}
 	}
+
 	return errors.Join(errs...)
 }
 
@@ -211,13 +209,13 @@ func (t *telegramNotifier) drainQueue() {
 						phrases().TgMsgDiscarded,
 						time.Since(msg.enqueued).Round(time.Second),
 					))
+
 					continue
 				}
 				if err := t.sendTextWithRetry(msg.chatID, msg.text, msg.kb); err != nil {
 					debugLog("NOTIFY", "", fmt.Sprintf(phrases().TgSendFailed, err))
 				}
 			default:
-
 			}
 		}
 	}
@@ -245,6 +243,7 @@ func (t *telegramNotifier) sendTextWithRetry(chatID, text string, kb *tgInlineKe
 		select {
 		case <-t.pollCtx.Done():
 			stopNotifyTimer(timer)
+
 			return lastErr
 		case <-timer.C:
 		}
@@ -254,6 +253,7 @@ func (t *telegramNotifier) sendTextWithRetry(chatID, text string, kb *tgInlineKe
 	if lastErr != nil {
 		return fmt.Errorf("%s: %w", phrases().TgMaxRetries, lastErr)
 	}
+
 	return errors.New(phrases().TgMaxRetries)
 }
 
@@ -291,6 +291,7 @@ func (t *telegramNotifier) sendText(chatID, text string, kb *tgInlineKeyboard) e
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+
 		return fmt.Errorf(phrases().TgHTTPError, resp.StatusCode, string(b))
 	}
 
@@ -348,9 +349,7 @@ func (t *telegramNotifier) answerCallback(callbackID string) {
 	_ = resp.Body.Close()
 }
 
-// ============================================================================
-// POLLING LOOP
-// ============================================================================
+// ============================================================================.
 func (t *telegramNotifier) StartPolling() {
 	t.pollOnce.Do(func() {
 		t.wg.Go(func() {
@@ -378,6 +377,7 @@ func (t *telegramNotifier) pollingLoop() {
 		select {
 		case <-t.pollCtx.Done():
 			debugLog("NOTIFY", "", phrases().TgPollingStopped)
+
 			return
 		default:
 		}
@@ -390,6 +390,7 @@ func (t *telegramNotifier) pollingLoop() {
 				return
 			case <-time.After(10 * time.Second):
 			}
+
 			continue
 		}
 
@@ -397,11 +398,13 @@ func (t *telegramNotifier) pollingLoop() {
 			if u.UpdateID > t.lastOffset.Load() {
 				t.lastOffset.Store(u.UpdateID)
 			}
-			u := u
+
 			if u.CallbackQuery != nil {
 				go t.handleCallback(u.CallbackQuery)
+
 				continue
 			}
+
 			if u.Message != nil {
 				go t.handleCommand(u.Message)
 			}
@@ -482,6 +485,7 @@ func (t *telegramNotifier) registerCommands() {
 	resp, err := getHTTPClient().Do(req)
 	if err != nil {
 		debugLog("NOTIFY", "", fmt.Sprintf(phrases().TgSetCmdsFailed, err))
+
 		return
 	}
 	_ = resp.Body.Close()
@@ -495,21 +499,21 @@ func (t *telegramNotifier) deleteWebhook() {
 	req, err := http.NewRequestWithContext(ctx, MethodGET, url, http.NoBody)
 	if err != nil {
 		debugLog("NOTIFY", "", fmt.Sprintf(phrases().TgWebhookDeleteRequestError, err))
+
 		return
 	}
 	req.Header.Set("User-Agent", ManagedComment)
 	resp, err := t.getPollClient().Do(req)
 	if err != nil {
 		debugLog("NOTIFY", "", fmt.Sprintf(phrases().TgWebhookDeleteFailed, err))
+
 		return
 	}
 	_ = resp.Body.Close()
 	debugLog("NOTIFY", "", phrases().TgWebhookUnregistered)
 }
 
-// ============================================================================
-// AUTH
-// ============================================================================
+// ============================================================================.
 func parseTelegramChatIDs(value string) []string {
 	seen := make(map[string]struct{})
 	chatIDs := make([]string, 0)
@@ -531,6 +535,7 @@ func parseTelegramChatIDs(value string) []string {
 
 func (t *telegramNotifier) isAuthorized(chatID string) bool {
 	chatID = strings.TrimSpace(chatID)
+
 	return slices.Contains(t.chatIDs, chatID)
 }
 
@@ -538,13 +543,12 @@ func chatIDStr(id int64) string {
 	return strconv.FormatInt(id, 10)
 }
 
-// ============================================================================
-// COMMAND HANDLER
-// ============================================================================
+// ============================================================================.
 func (t *telegramNotifier) handleCommand(msg *tgMessage) {
 	chatID := chatIDStr(msg.Chat.ID)
 	if !t.isAuthorized(chatID) {
 		debugLog("NOTIFY", "", fmt.Sprintf(phrases().TgUnauthAccess, chatID))
+
 		return
 	}
 
@@ -574,9 +578,7 @@ func (t *telegramNotifier) handleCommand(msg *tgMessage) {
 	}
 }
 
-// ============================================================================
-// CALLBACK HANDLER
-// ============================================================================
+// ============================================================================.
 func (t *telegramNotifier) handleCallback(cb *tgCallbackQuery) {
 	chatID := chatIDStr(cb.Message.Chat.ID)
 	t.answerCallback(cb.ID)
@@ -602,9 +604,7 @@ func (t *telegramNotifier) handleCallback(cb *tgCallbackQuery) {
 	}
 }
 
-// ============================================================================
-// KEYBOARDS
-// ============================================================================
+// ============================================================================.
 func mainKeyboard() *tgInlineKeyboard {
 	return &tgInlineKeyboard{
 		InlineKeyboard: [][]tgInlineButton{
@@ -640,9 +640,7 @@ func backKeyboard() *tgInlineKeyboard {
 	}
 }
 
-// ============================================================================
-// VIEWS
-// ============================================================================
+// ============================================================================.
 func (t *telegramNotifier) sendMainMenu(chatID string) {
 	text := fmt.Sprintf(
 		"<b>🌐 Go-DynDNS</b>  <code>%s</code>\n\n"+phrases().TgMenuPrompt,
@@ -797,6 +795,7 @@ func (t *telegramNotifier) sendHealth(chatID string) {
 func (t *telegramNotifier) triggerUpdate(chatID string) {
 	if !updateInProgress.CompareAndSwap(false, true) {
 		t.enqueue(chatID, phrases().TgUpdateAlreadyRunning, backKeyboard())
+
 		return
 	}
 	t.enqueue(chatID, phrases().TgUpdateStarting, backKeyboard())
@@ -812,9 +811,7 @@ func (t *telegramNotifier) triggerUpdate(chatID string) {
 	}()
 }
 
-// ============================================================================
-// HELPERS
-// ============================================================================
+// ============================================================================.
 var instanceEmojis = []string{
 	"🔵", "🟢", "🟡", "🟠", "🔴", "🟣", "⚫", "⚪",
 	"🐶", "🐱", "🦊", "🐻", "🐼", "🐨", "🐯", "🦁",
@@ -826,6 +823,7 @@ func secureRandInt(limit int) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+
 	return int(n.Int64()), nil
 }
 
@@ -866,5 +864,6 @@ func formatTelegramMessage(msg NotifyMessage, instanceTag string) string {
 	fmt.Fprintf(&sb, "📋 <b>%s</b>\n", esc(msg.Action))
 	fmt.Fprintf(&sb, "💬 %s\n", esc(msg.Message))
 	fmt.Fprintf(&sb, "🕒 <i>%s</i>", time.Now().Format(statusTimestampLayout))
+
 	return sb.String()
 }

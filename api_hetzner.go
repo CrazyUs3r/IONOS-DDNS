@@ -30,9 +30,7 @@ func loadHetznerCloudCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
 	return loadProviderCacheFromFile("HETZNERCLOUD", "hetzner_cloud_cache.json")
 }
 
-// ============================================================================
-// SHARED API CLIENT - HETZNER
-// ============================================================================
+// ============================================================================.
 type hetznerAuthMode int
 
 const (
@@ -87,6 +85,7 @@ func hetznerAPIAttempt(
 	duration := time.Since(start)
 	if err != nil {
 		shouldRetry, retryErr := handleProviderNetworkError(ctx, providerName, method, err, duration, attempt, maxRetries, false)
+
 		return nil, shouldRetry, retryErr
 	}
 
@@ -108,6 +107,7 @@ func marshalHetznerBody(body any) ([]byte, error) {
 		return nil, fmt.Errorf("json marshal: %w", err)
 	}
 	debugLog("HTTP", "", "📤 Payload: "+string(bodyBytes))
+
 	return bodyBytes, nil
 }
 
@@ -140,7 +140,7 @@ func buildHetznerRequest(
 	case hetznerAuthBearer:
 		req.Header.Set("Authorization", "Bearer "+token)
 	default:
-		req.Header.Set("Auth-API-Token", token)
+		req.Header.Set("Auth-Api-Token", token)
 	}
 
 	req.Header.Set("Accept", "application/json")
@@ -156,6 +156,7 @@ func hetznerToken(dc *DomainConfig) string {
 			return token
 		}
 	}
+
 	return ""
 }
 
@@ -170,9 +171,7 @@ func handleHetznerResponse(
 	return handleProviderHTTPResponse(ctx, providerName, "", res, method, endpoint, duration, attempt, maxAttempts)
 }
 
-// ============================================================================
-// ZONES & RECORD LOADING - LEGACY HETZNER DNS API
-// ============================================================================
+// ============================================================================.
 type hetznerDNSZonesResponse struct {
 	Zones []hetznerDNSZone `json:"zones"`
 }
@@ -213,6 +212,7 @@ func loadHetznerDNSZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) 
 		}
 		zones = append(zones, Zone{ID: z.ID, Name: strings.TrimSuffix(strings.ToLower(z.Name), ".")})
 	}
+
 	return zones, nil
 }
 
@@ -237,12 +237,11 @@ func loadHetznerDNSZoneRecords(ctx context.Context, dc *DomainConfig, zoneID str
 			Content: rec.Value,
 		})
 	}
+
 	return records, nil
 }
 
-// ============================================================================
-// ZONES & RECORD LOADING - NEW HETZNER CLOUD DNS API
-// ============================================================================
+// ============================================================================.
 type hetznerCloudZonesResponse struct {
 	Zones []hetznerCloudZone `json:"zones"`
 }
@@ -292,6 +291,7 @@ func loadHetznerCloudZones(ctx context.Context, dc *DomainConfig) ([]Zone, error
 		}
 		zones = append(zones, Zone{ID: id, Name: name})
 	}
+
 	return zones, nil
 }
 
@@ -321,6 +321,7 @@ func loadHetznerCloudZoneRecords(ctx context.Context, dc *DomainConfig, zoneID s
 			})
 		}
 	}
+
 	return records, nil
 }
 
@@ -339,9 +340,7 @@ func normalizeHetznerID(v any) string {
 	}
 }
 
-// ============================================================================
-// DNS UPDATE LOGIC - LEGACY HETZNER DNS API
-// ============================================================================
+// ============================================================================.
 func updateHetznerDNS(
 	ctx context.Context,
 	dc *DomainConfig,
@@ -359,6 +358,7 @@ func updateHetznerDNS(
 	}
 	if dryRunEnabled() {
 		log(LogContext{Level: LogWarn, Action: ActionDryRun, Domain: fqdn, Message: fmt.Sprintf("⚠️ Would set %s %s", recordType, newIP)})
+
 		return true, nil
 	}
 
@@ -386,12 +386,11 @@ func updateHetznerDNS(
 
 	log(LogContext{Level: LogInfo, Action: action, Domain: fqdn, Message: fmt.Sprintf("🔄 %s -> %s Update", recordType, newIP)})
 	updateHetznerRecordCache(cache, zoneID, recordName, recordType, newIP, existing)
+
 	return true, nil
 }
 
-// ============================================================================
-// DNS UPDATE LOGIC - NEW HETZNER CLOUD DNS API
-// ============================================================================
+// ============================================================================.
 func updateHetznerCloudDNS(
 	ctx context.Context,
 	dc *DomainConfig,
@@ -409,6 +408,7 @@ func updateHetznerCloudDNS(
 	}
 	if dryRunEnabled() {
 		log(LogContext{Level: LogWarn, Action: ActionDryRun, Domain: fqdn, Message: fmt.Sprintf("⚠️ Would set %s %s", recordType, newIP)})
+
 		return true, nil
 	}
 
@@ -444,6 +444,7 @@ func updateHetznerCloudDNS(
 
 	log(LogContext{Level: LogInfo, Action: action, Domain: fqdn, Message: fmt.Sprintf("🔄 %s -> %s Update", recordType, newIP)})
 	updateHetznerRecordCache(cache, zoneID, recordName, recordType, newIP, existing)
+
 	return true, nil
 }
 
@@ -457,9 +458,11 @@ func findHetznerExistingRecord(records []Record, fqdn, zoneName, recordName, rec
 		if name == recordName || hetznerRecordFQDN(zoneName, name) == fqdn {
 			existing := &records[i]
 			debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("📌 Record found: %s (ID: %s)", existing.Content, existing.ID))
+
 			return existing
 		}
 	}
+
 	return nil
 }
 
@@ -467,6 +470,7 @@ func shouldSkipHetznerUpdate(providerName, fqdn, recordType, newIP string, exist
 	if existing != nil && dnsRecordContentEqual(recordType, existing.Content, newIP) {
 		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("✅ %s current: %s = %s", providerName, recordType, newIP))
 		log(LogContext{Level: LogInfo, Action: ActionCurrent, Domain: fqdn, Message: fmt.Sprintf("%-4s %s Current", recordType, newIP)})
+
 		return true
 	}
 	if existing == nil {
@@ -474,6 +478,7 @@ func shouldSkipHetznerUpdate(providerName, fqdn, recordType, newIP string, exist
 	} else {
 		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("🔄 %s update needed: %s -> %s", providerName, existing.Content, newIP))
 	}
+
 	return false
 }
 
@@ -503,9 +508,7 @@ func updateHetznerRecordCache(cache *ZoneRecordCache, zoneID, recordName, record
 	)
 }
 
-// ============================================================================
-// CLEANUP - HETZNER
-// ============================================================================
+// ============================================================================.
 func cleanupHetznerDNSRecords(ctx context.Context, zones []Zone, recordCache *ZoneRecordCache) {
 	dc := findProviderConfigForCleanup(ProviderHetzner)
 	if dc == nil || recordCache == nil {
@@ -551,6 +554,7 @@ func cleanupSingleHetznerRecord(ctx context.Context, dc *DomainConfig, provider 
 	debugLog("MAINTENANCE", fqdn, fmt.Sprintf("cleanup orphaned %s record", rec.Type))
 	if dryRunEnabled() {
 		log(LogContext{Level: LogInfo, Action: ActionCleanup, Domain: fqdn, Message: "Cleanup dry-run"})
+
 		return
 	}
 
@@ -570,6 +574,7 @@ func cleanupSingleHetznerRecord(ctx context.Context, dc *DomainConfig, provider 
 	}
 	if err != nil {
 		debugLog("MAINTENANCE", fqdn, fmt.Sprintf("cleanup delete error: %v", err))
+
 		return
 	}
 
@@ -587,12 +592,11 @@ func shouldCleanupHetznerRecord(zoneName string, rec Record, configRecords, mana
 	if _, owned := managedDomains[fqdn]; !owned {
 		return "", false
 	}
+
 	return fqdn, true
 }
 
-// ============================================================================
-// NAME HELPERS
-// ============================================================================
+// ============================================================================.
 func normalizeProviderName(provider string) ProviderType {
 	p := strings.ToUpper(strings.TrimSpace(provider))
 	p = strings.ReplaceAll(p, "-", "_")
@@ -620,6 +624,7 @@ func hetznerRecordNameFromFQDN(fqdn, zoneName string) string {
 	if before, ok := strings.CutSuffix(fqdn, "."+zoneName); ok {
 		return normalizeHetznerRelativeName(before)
 	}
+
 	return normalizeHetznerRelativeName(fqdn)
 }
 
@@ -628,6 +633,7 @@ func normalizeHetznerRelativeName(name string) string {
 	if name == "" || name == "@" {
 		return "@"
 	}
+
 	return name
 }
 
@@ -648,6 +654,7 @@ func zoneIDOrName(zoneID, zoneName string) string {
 	if strings.TrimSpace(zoneID) != "" {
 		return zoneID
 	}
+
 	return strings.TrimSuffix(strings.ToLower(strings.TrimSpace(zoneName)), ".")
 }
 

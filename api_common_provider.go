@@ -65,6 +65,7 @@ func buildProviderConfigRecords(provider ProviderType) map[string]struct{} {
 
 		if isCNAMEDomainConfig(dc) {
 			out[managedRecordKey(fqdn, RecordTypeCNAME)] = struct{}{}
+
 			continue
 		}
 
@@ -100,6 +101,7 @@ func findProviderConfigForCleanup(provider ProviderType) *DomainConfig {
 	for i := range cfg.DomainConfigs {
 		if cfg.DomainConfigs[i].Provider == provider {
 			dc := cfg.DomainConfigs[i]
+
 			return &dc
 		}
 	}
@@ -113,6 +115,7 @@ func buildProviderManagedDomains(provider ProviderType) map[string]struct{} {
 	domains, err := snapshotStatusDomains()
 	if err != nil {
 		debugLog("MAINTENANCE", "", fmt.Sprintf("%s managed-domain snapshot failed: %v", provider, err))
+
 		return managed
 	}
 
@@ -139,6 +142,7 @@ func providerRetryWait(apiErr *APIError, attempt, statusCode int) time.Duration 
 	}
 
 	serverBusy := statusCode == http.StatusTooManyRequests || statusCode >= 500
+
 	return calculateRetryDelay(attempt, serverBusy)
 }
 
@@ -204,6 +208,7 @@ func handleProviderHTTPResponse(
 	respBody, readErr := readResponseBody(res)
 	if readErr != nil {
 		retry, handledErr := handleProviderReadError(ctx, providerName, method, res.StatusCode, readErr, duration, attempt, maxAttempts)
+
 		return nil, retry, handledErr
 	}
 
@@ -211,11 +216,13 @@ func handleProviderHTTPResponse(
 		apiMetrics.RecordSuccess(method, duration)
 		lastErrorMsg.Set("")
 		debugLog("HTTP", "", fmt.Sprintf("✅ %s success: %d bytes", providerName, len(respBody)))
+
 		return respBody, false, nil
 	}
 
 	apiErr := classifyAPIErrorWithHeaders(res.StatusCode, method, apiURL, string(respBody), res.Header)
 	retry, handledErr := handleProviderAPIError(ctx, providerName, maxAttemptsPrefix, apiErr, method, res.StatusCode, duration, attempt, maxAttempts)
+
 	return nil, retry, handledErr
 }
 
@@ -250,6 +257,7 @@ func handleProviderAPIError(
 		if maxAttemptsPrefix != "" {
 			return false, fmt.Errorf("%s: %w", maxAttemptsPrefix, apiErr)
 		}
+
 		return false, apiErr
 	}
 
@@ -293,6 +301,7 @@ func updateCachedZoneRecord(
 		if match(records[i]) {
 			update(&records[i])
 			cache.Set(zoneID, records)
+
 			return true
 		}
 	}
@@ -308,6 +317,7 @@ func updateCachedZoneRecord(
 
 	records = append(records, *newRecord)
 	cache.Set(zoneID, records)
+
 	return true
 }
 

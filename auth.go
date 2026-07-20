@@ -95,6 +95,7 @@ func initAuth(logsDir string) error {
 			Action:  ActionConfig,
 			Message: phrases().AuthDisabled,
 		})
+
 		return nil
 	}
 
@@ -151,6 +152,7 @@ func initAuth(logsDir string) error {
 	}
 
 	go sessionStore.cleanupLoop()
+
 	return nil
 }
 
@@ -159,6 +161,7 @@ func maxLen(values ...string) int {
 	for _, v := range values {
 		maxVal = max(maxVal, len(v))
 	}
+
 	return maxVal
 }
 
@@ -187,6 +190,7 @@ func randomHexToken(size int) (string, error) {
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
+
 	return hex.EncodeToString(b), nil
 }
 
@@ -227,8 +231,10 @@ func (s *SessionStore) Get(token string) (*Session, bool) {
 		if ok {
 			s.Delete(token)
 		}
+
 		return nil, false
 	}
+
 	return sess, true
 }
 
@@ -300,6 +306,7 @@ func readUsersFile() ([]DashboardUser, error) {
 		if os.IsNotExist(err) {
 			return []DashboardUser{}, nil
 		}
+
 		return nil, err
 	}
 	if len(strings.TrimSpace(string(data))) == 0 {
@@ -312,6 +319,7 @@ func readUsersFile() ([]DashboardUser, error) {
 	if users == nil {
 		return nil, errors.New("users.json must contain a JSON array")
 	}
+
 	return users, nil
 }
 
@@ -323,6 +331,7 @@ func loadUsers() []DashboardUser {
 	if cached != nil {
 		out := make([]DashboardUser, len(cached))
 		copy(out, cached)
+
 		return out
 	}
 
@@ -332,6 +341,7 @@ func loadUsers() []DashboardUser {
 	if usersCache != nil {
 		out := make([]DashboardUser, len(usersCache))
 		copy(out, usersCache)
+
 		return out
 	}
 
@@ -340,12 +350,14 @@ func loadUsers() []DashboardUser {
 		return nil
 	}
 	usersCache = users
+
 	return append([]DashboardUser(nil), users...)
 }
 
 func saveUsers(users []DashboardUser) error {
 	usersMutationMu.Lock()
 	defer usersMutationMu.Unlock()
+
 	return saveUsersLocked(users)
 }
 
@@ -361,6 +373,7 @@ func saveUsersLocked(users []DashboardUser) error {
 	usersCacheMu.Lock()
 	usersCache = append([]DashboardUser(nil), users...)
 	usersCacheMu.Unlock()
+
 	return nil
 }
 
@@ -373,6 +386,7 @@ func mutateUsers(fn func([]DashboardUser) ([]DashboardUser, error)) error {
 	if err != nil {
 		return err
 	}
+
 	return saveUsersLocked(updated)
 }
 
@@ -383,6 +397,7 @@ func countAdmins(users []DashboardUser) int {
 			count++
 		}
 	}
+
 	return count
 }
 
@@ -391,9 +406,11 @@ func updateUserLastLogin(userID string, when time.Time) error {
 		for i := range users {
 			if users[i].ID == userID {
 				users[i].LastLogin = when
+
 				return users, nil
 			}
 		}
+
 		return nil, errUserNotFound
 	})
 }
@@ -403,9 +420,11 @@ func findUserByUsername(username string) (*DashboardUser, bool) {
 	for i := range users {
 		if strings.EqualFold(users[i].Username, username) {
 			u := users[i]
+
 			return &u, true
 		}
 	}
+
 	return nil, false
 }
 
@@ -414,9 +433,11 @@ func findUserByID(userID string) (*DashboardUser, bool) {
 	for i := range users {
 		if users[i].ID == userID {
 			u := users[i]
+
 			return &u, true
 		}
 	}
+
 	return nil, false
 }
 
@@ -430,6 +451,7 @@ func validDashboardUsername(username string) bool {
 	if runeCount < 3 || runeCount > 64 {
 		return false
 	}
+
 	return strings.IndexFunc(username, unicode.IsControl) == -1
 }
 
@@ -438,12 +460,14 @@ func safeAuthLogValue(value string) string {
 		if unicode.IsControl(r) {
 			return '�'
 		}
+
 		return r
 	}, strings.TrimSpace(value))
 	if utf8.RuneCountInString(value) <= 128 {
 		return value
 	}
 	runes := []rune(value)
+
 	return string(runes[:128]) + "…"
 }
 
@@ -461,6 +485,7 @@ func safeLocalRedirect(raw string) string {
 	if err != nil || strings.HasPrefix(decodedPath, "//") || strings.Contains(decodedPath, "\\") {
 		return "/"
 	}
+
 	return u.RequestURI()
 }
 
@@ -483,6 +508,7 @@ func remoteRequestIP(r *http.Request) net.IP {
 		host = parsedHost
 	}
 	host = strings.Trim(host, "[]")
+
 	return net.ParseIP(host)
 }
 
@@ -502,6 +528,7 @@ func requestFromTrustedProxy(r *http.Request) bool {
 			if ip.Equal(remoteIP) {
 				return true
 			}
+
 			continue
 		}
 
@@ -510,6 +537,7 @@ func requestFromTrustedProxy(r *http.Request) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -531,6 +559,7 @@ func forwardedRequestProto(r *http.Request) string {
 	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
 		return strings.ToLower(strings.TrimSpace(strings.Split(proto, ",")[0]))
 	}
+
 	return ""
 }
 
@@ -541,6 +570,7 @@ func requestUsesHTTPS(r *http.Request) bool {
 	if r.TLS != nil || envBool("DASHBOARD_EXTERNAL_HTTPS") {
 		return true
 	}
+
 	return forwardedRequestProto(r) == "https"
 }
 
@@ -565,6 +595,7 @@ func externalRequestHost(r *http.Request) string {
 			return host
 		}
 	}
+
 	return r.Host
 }
 
@@ -572,6 +603,7 @@ func sessionCookieName(r *http.Request) string {
 	if requestUsesHTTPS(r) {
 		return sessionCookieNameHTTPS
 	}
+
 	return sessionCookieNameHTTP
 }
 
@@ -632,7 +664,7 @@ func validCSRFRequest(w http.ResponseWriter, r *http.Request, sess *Session) boo
 		return false
 	}
 
-	provided := strings.TrimSpace(r.Header.Get("X-CSRF-Token"))
+	provided := strings.TrimSpace(r.Header.Get("X-Csrf-Token"))
 	if provided == "" {
 		contentType := strings.ToLower(r.Header.Get("Content-Type"))
 		if !strings.HasPrefix(contentType, "application/x-www-form-urlencoded") || r.ContentLength > maxAuthRequestBody {
@@ -646,6 +678,7 @@ func validCSRFRequest(w http.ResponseWriter, r *http.Request, sess *Session) boo
 		}
 		provided = strings.TrimSpace(r.PostForm.Get("csrf_token"))
 	}
+
 	return subtle.ConstantTimeCompare([]byte(provided), []byte(sess.CSRFToken)) == 1
 }
 
@@ -661,8 +694,10 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
 		if err == nil {
 			return errors.New("multiple JSON values")
 		}
+
 		return err
 	}
+
 	return nil
 }
 
@@ -674,8 +709,10 @@ func parseLimitedAuthForm(w http.ResponseWriter, r *http.Request) bool {
 		} else {
 			http.Error(w, "invalid form data", http.StatusBadRequest)
 		}
+
 		return false
 	}
+
 	return true
 }
 
@@ -693,6 +730,7 @@ func sessionFromRequest(r *http.Request) (*Session, bool) {
 			return sess, true
 		}
 	}
+
 	return nil, false
 }
 
@@ -717,6 +755,7 @@ func isPublicAuthPath(path string) bool {
 
 func sessionMatchesUser(sess *Session) bool {
 	currentUser, exists := findUserByID(sess.UserID)
+
 	return exists &&
 		currentUser.Role == sess.Role &&
 		currentUser.Username == sess.Username
@@ -727,6 +766,7 @@ func rejectUnauthenticated(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
 			"error": "unauthorized",
 		})
+
 		return
 	}
 
@@ -747,6 +787,7 @@ func rejectRevokedSession(w http.ResponseWriter, r *http.Request, sess *Session)
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
 			"error": "session revoked",
 		})
+
 		return
 	}
 
@@ -763,6 +804,7 @@ func rejectForbidden(
 		writeJSON(w, http.StatusForbidden, map[string]string{
 			"error": apiError,
 		})
+
 		return
 	}
 
@@ -786,6 +828,7 @@ func (w *auditResponseWriter) Write(data []byte) (int, error) {
 	if w.status == 0 {
 		w.status = http.StatusOK
 	}
+
 	return w.ResponseWriter.Write(data)
 }
 
@@ -807,6 +850,7 @@ func authMiddleware(next http.Handler) http.Handler {
 
 		if isPublicAuthPath(path) {
 			next.ServeHTTP(w, r)
+
 			return
 		}
 		if !authEnabled {
@@ -818,25 +862,30 @@ func authMiddleware(next http.Handler) http.Handler {
 					status = http.StatusOK
 				}
 				auditHTTPRequest(r, nil, status)
+
 				return
 			}
 			next.ServeHTTP(w, r)
+
 			return
 		}
 
 		if len(loadUsers()) == 0 {
 			http.Redirect(w, r, "/setup", http.StatusSeeOther)
+
 			return
 		}
 
 		sess, ok := sessionFromRequest(r)
 		if !ok {
 			rejectUnauthenticated(w, r)
+
 			return
 		}
 
 		if !sessionMatchesUser(sess) {
 			rejectRevokedSession(w, r, sess)
+
 			return
 		}
 
@@ -848,12 +897,14 @@ func authMiddleware(next http.Handler) http.Handler {
 				"invalid csrf token",
 				"invalid csrf token",
 			)
+
 			return
 		}
 
 		if !hasPermission(sess.Role, r.Method, path) {
 			auditHTTPRequest(r, sess, http.StatusForbidden)
 			rejectForbidden(w, r, "forbidden", "Forbidden")
+
 			return
 		}
 
@@ -865,6 +916,7 @@ func authMiddleware(next http.Handler) http.Handler {
 				status = http.StatusOK
 			}
 			auditHTTPRequest(r, sess, status)
+
 			return
 		}
 
@@ -877,6 +929,7 @@ func isAPIPath(path string) bool {
 		return true
 	}
 	_, ok := exactPaths[path]
+
 	return ok
 }
 
@@ -926,15 +979,18 @@ func hasPermission(role UserRole, method, path string) bool {
 
 	if method == http.MethodGet || method == http.MethodHead {
 		_, allowed := sharedReadRoutes[path]
+
 		return allowed
 	}
 
 	switch role {
 	case RoleEditor:
 		_, allowed := editorWriteRoutes[path]
+
 		return allowed
 	case RoleViewer:
 		_, allowed := viewerWriteRoutes[path]
+
 		return allowed
 	default:
 		return false
@@ -949,6 +1005,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
 		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+
 		return
 	}
 	if r.Method == http.MethodPost && !parseLimitedAuthForm(w, r) {
@@ -956,12 +1013,14 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	if !authEnabled {
 		http.Redirect(w, r, "/", http.StatusFound)
+
 		return
 	}
 
 	users := loadUsers()
 	if len(users) == 0 {
 		http.Redirect(w, r, "/setup", http.StatusFound)
+
 		return
 	}
 
@@ -969,6 +1028,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	if _, ok := sessionFromRequest(r); ok {
 		http.Redirect(w, r, redirect, http.StatusFound)
+
 		return
 	}
 
@@ -988,6 +1048,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusTooManyRequests)
 			_, _ = fmt.Fprintf(w, "%s", buildLoginPage(errMsg, redirect))
+
 			return
 		}
 
@@ -1002,6 +1063,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		passwordOK := checkPassword(password, storedHash)
 		if found && passwordOK {
 			handleLoginPost2FA(w, r, user, redirect)
+
 			return
 		}
 
@@ -1024,6 +1086,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 func handleLogout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+
 		return
 	}
 
@@ -1047,6 +1110,7 @@ func handleSetup(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
 		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+
 		return
 	}
 	if r.Method == http.MethodPost && !parseLimitedAuthForm(w, r) {
@@ -1054,10 +1118,12 @@ func handleSetup(w http.ResponseWriter, r *http.Request) {
 	}
 	if !authEnabled {
 		http.Redirect(w, r, "/", http.StatusFound)
+
 		return
 	}
 	if len(loadUsers()) > 0 {
 		http.Redirect(w, r, "/login", http.StatusFound)
+
 		return
 	}
 
@@ -1098,6 +1164,7 @@ func handleSetupPost(w http.ResponseWriter, r *http.Request) (string, bool) {
 	}
 	setSessionCookie(w, r, sess)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+
 	return "", true
 }
 
@@ -1144,6 +1211,7 @@ func createInitialAdmin(form setupForm) (DashboardUser, string) {
 	if err := saveInitialAdmin(newUser); err != nil {
 		return DashboardUser{}, phrases().ErrAccountSave
 	}
+
 	return newUser, ""
 }
 
@@ -1152,6 +1220,7 @@ func saveInitialAdmin(newUser DashboardUser) error {
 		if len(users) > 0 {
 			return nil, errUsersExist
 		}
+
 		return []DashboardUser{newUser}, nil
 	})
 }
@@ -1220,11 +1289,13 @@ func handleCreateUser(w http.ResponseWriter, r *http.Request, sess *Session) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{
 			"error": phrases().ErrHash,
 		})
+
 		return
 	}
 
 	if err := createDashboardUser(req, hash); err != nil {
 		writeCreateUserError(w, err)
+
 		return
 	}
 
@@ -1254,6 +1325,7 @@ func decodeCreateUserRequest(
 		writeJSON(w, http.StatusBadRequest, map[string]string{
 			"error": phrases().ErrInvalidJSON,
 		})
+
 		return createUserRequest{}, false
 	}
 
@@ -1263,6 +1335,7 @@ func decodeCreateUserRequest(
 		writeJSON(w, http.StatusBadRequest, map[string]string{
 			"error": phrases().ErrUsernamePasswordMin,
 		})
+
 		return createUserRequest{}, false
 	}
 
@@ -1270,6 +1343,7 @@ func decodeCreateUserRequest(
 		writeJSON(w, http.StatusBadRequest, map[string]string{
 			"error": phrases().ErrInvalidRole,
 		})
+
 		return createUserRequest{}, false
 	}
 
@@ -1315,6 +1389,7 @@ func writeCreateUserError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusConflict, map[string]string{
 			"error": phrases().ErrUsernameTaken,
 		})
+
 		return
 	}
 
@@ -1332,6 +1407,7 @@ func handleAPIUsersID(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/users/")
 	if id == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": phrases().ErrMissingID})
+
 		return
 	}
 
@@ -1353,6 +1429,7 @@ func handleUpdateUser(w http.ResponseWriter, r *http.Request, id string) {
 
 	if err := decodeJSONBody(w, r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": phrases().ErrInvalidJSON})
+
 		return
 	}
 
@@ -1360,13 +1437,16 @@ func handleUpdateUser(w http.ResponseWriter, r *http.Request, id string) {
 	switch {
 	case errors.Is(err, errUserNotFound):
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": phrases().ErrUserNotFound})
+
 		return
 	case errors.Is(err, errLastAdmin), errors.Is(err, errInvalidRole),
 		errors.Is(err, errPasswordShort), errors.Is(err, errNoUserChanges):
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+
 		return
 	case err != nil:
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": phrases().ErrSave})
+
 		return
 	}
 
@@ -1392,6 +1472,7 @@ func updateUserByID(id string, role UserRole, password string) error {
 	}
 
 	sessionStore.DeleteByUserID(id)
+
 	return nil
 }
 
@@ -1499,6 +1580,7 @@ func requireAdmin(w http.ResponseWriter, r *http.Request) (*Session, bool) {
 	sess, ok := sessionFromRequest(r)
 	if !ok || sess.Role != RoleAdmin {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": phrases().ErrForbidden})
+
 		return nil, false
 	}
 
@@ -1508,21 +1590,25 @@ func requireAdmin(w http.ResponseWriter, r *http.Request) (*Session, bool) {
 func handleDeleteUser(w http.ResponseWriter, id, currentUserID string) {
 	if id == currentUserID {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": phrases().ErrOwnAccountDelete})
+
 		return
 	}
 
 	found, err := removeUserByID(id)
 	if errors.Is(err, errLastAdmin) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+
 		return
 	}
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": phrases().ErrSave})
+
 		return
 	}
 
 	if !found {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": phrases().ErrUserNotFound})
+
 		return
 	}
 
@@ -1536,6 +1622,7 @@ func removeUserByID(id string) (bool, error) {
 		for _, user := range users {
 			if user.ID != id {
 				filtered = append(filtered, user)
+
 				continue
 			}
 
@@ -1548,6 +1635,7 @@ func removeUserByID(id string) (bool, error) {
 		if !found {
 			return users, nil
 		}
+
 		return filtered, nil
 	})
 	if err != nil {
@@ -1556,6 +1644,7 @@ func removeUserByID(id string) (bool, error) {
 	if found {
 		sessionStore.DeleteByUserID(id)
 	}
+
 	return found, nil
 }
 
@@ -1607,9 +1696,7 @@ func checkPassword(password, stored string) bool {
 	return subtle.ConstantTimeCompare(got, want) == 1
 }
 
-// ============================================================================
-// AUDIT LOG
-// ============================================================================
+// ============================================================================.
 const (
 	auditLogMaxBytes = 5 << 20
 	auditReadLimit   = 200
@@ -1652,12 +1739,14 @@ func safeAuditField(value string, maxRunes int) string {
 		if r < 32 || r == 127 {
 			return ' '
 		}
+
 		return r
 	}, strings.TrimSpace(value))
 	runes := []rune(value)
 	if len(runes) > maxRunes {
 		return string(runes[:maxRunes]) + "…"
 	}
+
 	return value
 }
 
@@ -1736,6 +1825,7 @@ func appendAuditEntry(entry auditEntry) error {
 	}
 	data = append(data, '\n')
 	_, err = file.Write(data)
+
 	return err
 }
 
@@ -1756,6 +1846,7 @@ func readAuditEntries(limit int) ([]auditEntry, error) {
 		if os.IsNotExist(err) {
 			return []auditEntry{}, nil
 		}
+
 		return nil, err
 	}
 	defer func() {
@@ -1786,12 +1877,14 @@ func readAuditEntries(limit int) ([]auditEntry, error) {
 		index := (total - 1 - i) % limit
 		entries = append(entries, ring[index])
 	}
+
 	return entries, nil
 }
 
 func handleAPIAudit(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
 		return
 	}
 	if !requireAdminAPI(w, r) {
@@ -1801,6 +1894,7 @@ func handleAPIAudit(w http.ResponseWriter, r *http.Request) {
 	entries, err := readAuditEntries(auditReadLimit)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
@@ -1821,6 +1915,7 @@ func deleteAuditEntry(id string) error {
 		if os.IsNotExist(err) {
 			return nil
 		}
+
 		return err
 	}
 
@@ -1833,6 +1928,7 @@ func deleteAuditEntry(id string) error {
 		var entry auditEntry
 		if json.Unmarshal([]byte(line), &entry) != nil {
 			kept = append(kept, line)
+
 			continue
 		}
 		if entry.ID != id {
@@ -1844,12 +1940,14 @@ func deleteAuditEntry(id string) error {
 	if len(kept) > 0 {
 		output = strings.Join(kept, "\n") + "\n"
 	}
+
 	return os.WriteFile(path, []byte(output), 0o600)
 }
 
 func handleAPIAuditDelete(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
 		return
 	}
 	if !requireAdminAPI(w, r) {
@@ -1861,11 +1959,13 @@ func handleAPIAuditDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&body); err != nil || body.ID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing id"})
+
 		return
 	}
 
 	if err := deleteAuditEntry(body.ID); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+
 		return
 	}
 

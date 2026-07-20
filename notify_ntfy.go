@@ -11,9 +11,7 @@ import (
 	"time"
 )
 
-// ============================================================================
-// NTFY TYPES
-// ============================================================================
+// ============================================================================.
 type ntfyNotifier struct {
 	ctx       context.Context
 	sendQueue chan ntfyQueuedMsg
@@ -41,9 +39,7 @@ type ntfyQueuedMsg struct {
 	priority string
 }
 
-// ============================================================================
-// NTFY NOTIFIER
-// ============================================================================
+// ============================================================================.
 func newNtfyNotifier(url, topic, token string) *ntfyNotifier {
 	ctx, cancel := context.WithCancel(notificationParentContext())
 	n := &ntfyNotifier{
@@ -58,6 +54,7 @@ func newNtfyNotifier(url, topic, token string) *ntfyNotifier {
 	n.wg.Go(func() {
 		n.drainQueue()
 	})
+
 	return n
 }
 
@@ -101,6 +98,7 @@ func (n *ntfyNotifier) Send(msg NotifyMessage) error {
 		default:
 		}
 	}
+
 	return nil
 }
 
@@ -124,6 +122,7 @@ func (n *ntfyNotifier) drainQueue() {
 						),
 						age,
 					))
+
 					continue
 				}
 				if err := n.sendWithRetry(msg); err != nil {
@@ -166,6 +165,7 @@ func (n *ntfyNotifier) sendWithRetry(msg ntfyQueuedMsg) error {
 		select {
 		case <-n.ctx.Done():
 			stopNotifyTimer(timer)
+
 			return lastErr
 		case <-timer.C:
 		}
@@ -214,6 +214,7 @@ func (n *ntfyNotifier) doSend(msg ntfyQueuedMsg) error {
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+
 		return fmt.Errorf(
 			"ntfy HTTP %d: %s",
 			resp.StatusCode,

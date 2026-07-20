@@ -7,9 +7,7 @@ import (
 	"time"
 )
 
-// ============================================================================
-// RATE LIMITER
-// ============================================================================
+// ============================================================================.
 func NewRateLimiter(maxTokens, refillPerSecond float64) *RateLimiter {
 	return &RateLimiter{
 		tokens:     maxTokens,
@@ -30,6 +28,7 @@ func (rl *RateLimiter) Allow() bool {
 
 	if rl.tokens >= 1.0 {
 		rl.tokens -= 1.0
+
 		return true
 	}
 
@@ -44,6 +43,7 @@ func (rl *RateLimiter) Remaining() int {
 	elapsed := now.Sub(rl.lastRefill).Seconds()
 	rl.tokens = math.Min(rl.maxTokens, rl.tokens+elapsed*rl.refillRate)
 	rl.lastRefill = now
+
 	return int(rl.tokens)
 }
 
@@ -56,6 +56,7 @@ func NewIPRateLimiter(ctx context.Context, tokensPerIP, refillRate float64) *IPR
 		ctx:         ctx,
 	}
 	go limiter.cleanupRoutine()
+
 	return limiter
 }
 
@@ -104,6 +105,7 @@ func (ipl *IPRateLimiter) cleanupRoutine() {
 
 		case <-ipl.ctx.Done():
 			debugLog("SYSTEM", "", "IP Rate Limiter cleanup routine stopping...")
+
 			return
 		}
 	}

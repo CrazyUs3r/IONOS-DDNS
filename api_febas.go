@@ -15,9 +15,7 @@ import (
 
 const febasResponseBodyLimit = 64 << 10
 
-// ============================================================================
-// LOADZONE
-// ============================================================================
+// ============================================================================.
 func loadFebasZones(ctx context.Context) ([]Zone, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -72,6 +70,7 @@ func loadFebasZoneRecords(ctx context.Context, zone Zone) ([]Record, error) {
 	addrs, err := resolverCache.getIPAddrs(ctx, fqdn)
 	if err != nil {
 		debugLog("FEBAS", fqdn, fmt.Sprintf(phrases().FebasDNSLookupFailed, err))
+
 		return []Record{}, nil
 	}
 
@@ -138,10 +137,12 @@ func processFebasDomainUpdate(
 	)
 	if err != nil {
 		result.Error = err
+
 		return result
 	}
 
 	result.Changed = changed
+
 	return result
 }
 
@@ -161,6 +162,7 @@ func updateFebasDNS(
 	needV6 := ipv6 != "" && !febasRecordContains(records, RecordTypeAAAA, ipv6)
 	if !needV4 && !needV6 {
 		debugLog("FEBAS", fqdn, phrases().FebasAlreadyCurrent)
+
 		return false, nil
 	}
 
@@ -175,6 +177,7 @@ func updateFebasDNS(
 			Domain:  fqdn,
 			Message: fmt.Sprintf(phrases().FebasWouldUpdate, ipv4, ipv6),
 		})
+
 		return true, nil
 	}
 
@@ -248,6 +251,7 @@ func setFebasCachedAddress(
 		if strings.EqualFold(records[i].Type, recordType) &&
 			normalizeProviderFQDN(records[i].Name) == normalizeProviderFQDN(fqdn) {
 			records[i].Content = value
+
 			return records
 		}
 	}
@@ -286,6 +290,7 @@ func febasAPIAttempt(
 	duration := time.Since(start)
 	if err != nil {
 		retry, handledErr := handleProviderNetworkError(ctx, "FEBAS", MethodNIC, err, duration, attempt, maxRetries, false)
+
 		return nil, retry, handledErr
 	}
 	defer func() {
@@ -297,6 +302,7 @@ func febasAPIAttempt(
 	respBody, readErr := io.ReadAll(io.LimitReader(res.Body, febasResponseBodyLimit))
 	if readErr != nil {
 		retry, handledErr := handleProviderReadError(ctx, "FEBAS", MethodNIC, res.StatusCode, readErr, duration, attempt, maxRetries)
+
 		return nil, retry, handledErr
 	}
 
@@ -319,6 +325,7 @@ func febasAPIAttempt(
 			attempt,
 			maxRetries,
 		)
+
 		return nil, retry, handledErr
 	}
 
@@ -332,6 +339,7 @@ func febasAPIAttempt(
 			if !sleepOrCancel(ctx, wait) {
 				return nil, false, fmt.Errorf("%s: %w", phrases().ErrContextCancelled, ctx.Err())
 			}
+
 			return nil, true, responseErr
 		}
 
@@ -341,6 +349,7 @@ func febasAPIAttempt(
 	apiMetrics.RecordSuccess(MethodNIC, duration)
 	lastErrorMsg.Set("")
 	debugLog("HTTP", "", "✅ Febas success: "+sanitizeFebasText(strings.TrimSpace(string(respBody))))
+
 	return respBody, false, nil
 }
 
@@ -360,6 +369,7 @@ func febasHTTPClient() *http.Client {
 		if baseRedirect != nil {
 			return baseRedirect(req, via)
 		}
+
 		return nil
 	}
 
@@ -513,6 +523,7 @@ func redactFebasURL(rawURL string) string {
 		}
 	}
 	u.RawQuery = query.Encode()
+
 	return u.String()
 }
 
@@ -520,5 +531,6 @@ func sanitizeFebasText(value string) string {
 	if replacer := getSecretReplacer(); replacer != nil {
 		return replacer.Replace(value)
 	}
+
 	return value
 }

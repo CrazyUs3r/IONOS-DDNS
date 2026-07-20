@@ -25,9 +25,7 @@ import (
 	"time"
 )
 
-// ============================================================================
-// DNS CACHE
-// ============================================================================
+// ============================================================================.
 type dnsCache struct {
 	entries    map[string]dnsCacheEntry
 	inflight   map[string]*dnsInFlight
@@ -53,9 +51,7 @@ type bodyReadCloser struct {
 	io.Closer
 }
 
-// ============================================================================
-// HTTP TRACE / TIMINGS (DNS, CONNECT, TLS, TTFB, REUSE)
-// ============================================================================
+// ============================================================================.
 type httpTimings struct {
 	tlsStart     time.Time
 	tlsDone      time.Time
@@ -80,9 +76,7 @@ type httpTimings struct {
 	connReused   bool
 }
 
-// ============================================================================
-// HTTP TRACE / TIMINGS (DNS, CONNECT, TLS, TTFB, REUSE)
-// ============================================================================
+// ============================================================================.
 func (t *httpTimings) trace() *httptrace.ClientTrace {
 	return &httptrace.ClientTrace{
 		GotConn: func(info httptrace.GotConnInfo) {
@@ -154,6 +148,7 @@ func fmtDur(a, b time.Time) string {
 	if a.IsZero() || b.IsZero() || b.Before(a) {
 		return "-"
 	}
+
 	return b.Sub(a).String()
 }
 
@@ -215,9 +210,7 @@ func (t *httpTimings) String() string {
 	return strings.Join(parts, " | ")
 }
 
-// ============================================================================
-// HTTP CLIENT & TRANSPORT
-// ============================================================================
+// ============================================================================.
 const (
 	httpDebugResponseBodyLimit = 5_000
 	httpDebugRequestBodyLimit  = 10_000
@@ -228,6 +221,7 @@ func httpDebugEnabled() bool {
 	cfgMu.RLock()
 	enabled := cfg.DebugHTTPRaw
 	cfgMu.RUnlock()
+
 	return enabled
 }
 
@@ -294,6 +288,7 @@ func cloneRequestForLogging(req *http.Request) (*http.Request, func()) {
 	if req.GetBody == nil {
 		logReq.Body = nil
 		logReq.ContentLength = 0
+
 		return logReq, cleanup
 	}
 
@@ -302,10 +297,12 @@ func cloneRequestForLogging(req *http.Request) (*http.Request, func()) {
 		logReq.Body = nil
 		logReq.ContentLength = 0
 		debugLog("HTTP-RAW", "", fmt.Sprintf(phrases().HTTPDebugCloneRequestBodyFailed, err))
+
 		return logReq, cleanup
 	}
 
 	logReq.Body = rc
+
 	return logReq, cleanup
 }
 
@@ -327,14 +324,15 @@ func maskSensitiveRequestHeaders(req *http.Request) {
 }
 
 func maskAPIKeyHeader(header http.Header) {
-	apiKey := header.Get("X-API-Key")
+	apiKey := header.Get("X-Api-Key")
 	if apiKey == "" {
 		return
 	}
 
 	parts := strings.Split(apiKey, ".")
 	if len(parts) != 2 {
-		header.Set("X-API-Key", "***MASKED***")
+		header.Set("X-Api-Key", "***MASKED***")
+
 		return
 	}
 
@@ -351,7 +349,7 @@ func maskAPIKeyHeader(header http.Header) {
 		tail = tail[len(tail)-5:]
 	}
 
-	header.Set("X-API-Key", head+"***."+"***"+tail)
+	header.Set("X-Api-Key", head+"***."+"***"+tail)
 }
 
 func maskAuthorizationHeader(header http.Header) {
@@ -362,6 +360,7 @@ func maskAuthorizationHeader(header http.Header) {
 
 	if strings.HasPrefix(strings.ToLower(auth), "bearer ") {
 		header.Set("Authorization", "Bearer ***MASKED***")
+
 		return
 	}
 
@@ -386,6 +385,7 @@ func sanitizeURLStringForLogging(rawURL string) string {
 	if err != nil {
 		return sanitizeHTTPDebugBody(rawURL)
 	}
+
 	return sanitizeURLForLogging(u)
 }
 
@@ -477,6 +477,7 @@ func sanitizeStructuredDebugBody(body []byte, contentType string, complete bool)
 	if mediaType == "application/x-www-form-urlencoded" {
 		if values, err := url.ParseQuery(string(body)); err == nil {
 			redactSensitiveValues(values)
+
 			return []byte(values.Encode())
 		}
 	}
@@ -490,6 +491,7 @@ func redactSensitiveJSONValue(value any) {
 		for key, child := range typed {
 			if isSensitiveFieldName(key) {
 				typed[key] = "***MASKED***"
+
 				continue
 			}
 			redactSensitiveJSONValue(child)
@@ -512,6 +514,7 @@ func logHTTPRequest(req *http.Request) {
 	requestDump, err := httputil.DumpRequestOut(logReq, true)
 	if err != nil {
 		debugLog("HTTP-RAW", "", fmt.Sprintf(phrases().HTTPDebugDumpRequestFailed, err))
+
 		return
 	}
 
@@ -556,6 +559,7 @@ func peekAndRestoreResponseBody(resp *http.Response, maxBytes int) ([]byte, bool
 			Closer: original,
 		}
 		debugLog("HTTP-RAW", "", fmt.Sprintf(phrases().HTTPDebugPeekResponseBodyFailed, readErr))
+
 		return logBytes, truncated
 	}
 
@@ -564,6 +568,7 @@ func peekAndRestoreResponseBody(resp *http.Response, maxBytes int) ([]byte, bool
 			Reader: io.MultiReader(bytes.NewReader(peeked), original),
 			Closer: original,
 		}
+
 		return logBytes, true
 	}
 
@@ -572,6 +577,7 @@ func peekAndRestoreResponseBody(resp *http.Response, maxBytes int) ([]byte, bool
 	}
 
 	resp.Body = io.NopCloser(bytes.NewReader(peeked))
+
 	return logBytes, false
 }
 
@@ -592,6 +598,7 @@ func sanitizeHTTPDebugBody(body string) string {
 	if replacer := getSecretReplacer(); replacer != nil {
 		return replacer.Replace(body)
 	}
+
 	return body
 }
 
@@ -600,6 +607,7 @@ func prettyPrintHTTPDebugJSON(body string) string {
 	if err := json.Indent(&prettyJSON, []byte(body), "", "  "); err == nil {
 		return prettyJSON.String()
 	}
+
 	return body
 }
 
@@ -609,6 +617,7 @@ func truncateHTTPDebugBody(body string, maxLen int) string {
 	}
 
 	totalLen := len(body)
+
 	return body[:maxLen] + fmt.Sprintf(phrases().HTTPDebugBodyTruncated, totalLen-maxLen)
 }
 
@@ -652,6 +661,7 @@ func snapshotHTTPClientSettings() httpClientSettings {
 	cfgMu.RUnlock()
 
 	settings.dnsServers = normalizeDNSServers(settings.dnsServers)
+
 	return settings
 }
 
@@ -693,6 +703,7 @@ func getHTTPClient() *http.Client {
 	if httpClient != nil && clientDNSKey == currentKey {
 		client := httpClient
 		clientMu.RUnlock()
+
 		return client
 	}
 	clientMu.RUnlock()
@@ -701,6 +712,7 @@ func getHTTPClient() *http.Client {
 	if httpClient != nil && clientDNSKey == currentKey {
 		client := httpClient
 		clientMu.Unlock()
+
 		return client
 	}
 
@@ -781,6 +793,7 @@ func buildHTTPClientWithSettings(settings httpClientSettings) *http.Client {
 		}
 
 		cache.invalidate(host)
+
 		return nil, err
 	}
 
@@ -810,6 +823,7 @@ func buildHTTPClientWithSettings(settings httpClientSettings) *http.Client {
 	}
 
 	debugLog("SYSTEM", "", fmt.Sprintf(phrases().HTTPClientInitialized, len(dnsList), strings.Join(dnsList, ", ")))
+
 	return client
 }
 
@@ -867,6 +881,7 @@ func normalizeDNSServers(servers []string) []string {
 	if len(out) == 0 {
 		return []string{"1.1.1.1:53", "8.8.8.8:53"}
 	}
+
 	return out
 }
 
@@ -887,6 +902,7 @@ func splitDNSServerList(serverList string) []string {
 			out = append(out, part)
 		}
 	}
+
 	return out
 }
 
@@ -902,11 +918,13 @@ func normalizeDNSServer(raw string) (string, error) {
 		if strings.TrimSpace(host) == "" || strings.TrimSpace(port) == "" {
 			return "", errors.New("invalid DNS server")
 		}
+
 		return net.JoinHostPort(strings.Trim(host, "[]"), port), nil
 	}
 	if strings.Contains(server, ":") {
 		return "", errors.New("invalid DNS server")
 	}
+
 	return net.JoinHostPort(server, "53"), nil
 }
 
@@ -923,6 +941,7 @@ func newResolverForDNSServer(server string) *net.Resolver {
 				Timeout:   dnsLookupTimeout(),
 				KeepAlive: DNSKeepalive,
 			}
+
 			return dialer.DialContext(ctx, network, server)
 		},
 	}
@@ -932,6 +951,7 @@ func dnsLookupTimeout() time.Duration {
 	if DNSResolverTimeout > 0 {
 		return DNSResolverTimeout
 	}
+
 	return 5 * time.Second
 }
 
@@ -967,6 +987,7 @@ func dialResolvedAddrs(ctx context.Context, d *net.Dialer, network, originalAddr
 				select {
 				case <-ctx.Done():
 					results <- dialResult{err: ctx.Err(), addr: target}
+
 					return
 				case <-timer.C:
 				}
@@ -982,17 +1003,19 @@ func dialResolvedAddrs(ctx context.Context, d *net.Dialer, network, originalAddr
 	}
 
 	var lastErr error
-	for i := 0; i < started; i++ {
+	for i := range started {
 		select {
 		case <-ctx.Done():
 			if lastErr != nil {
 				return nil, lastErr
 			}
+
 			return nil, ctx.Err()
 		case result := <-results:
 			if result.err == nil {
 				cancel()
 				go closeLateDialResults(results, started-i-1)
+
 				return result.conn, nil
 			}
 			lastErr = result.err
@@ -1029,6 +1052,7 @@ func filterIPAddrsForNetwork(addrs []net.IPAddr, network string) []net.IPAddr {
 			out = append(out, addr)
 		}
 	}
+
 	return out
 }
 
@@ -1057,12 +1081,11 @@ func prioritizeIPAddrs(addrs []net.IPAddr) []net.IPAddr {
 			v4 = v4[1:]
 		}
 	}
+
 	return out
 }
 
-// ============================================================================
-// SANITIZATION
-// ============================================================================
+// ============================================================================.
 func getSecretReplacer() *strings.Replacer {
 	secretReplacerMu.RLock()
 	r := secretReplacer
@@ -1075,6 +1098,7 @@ func getSecretReplacer() *strings.Replacer {
 	if secretReplacer == nil {
 		secretReplacer = buildSecretReplacer(snapshotSecretConfig())
 	}
+
 	return secretReplacer
 }
 
@@ -1083,6 +1107,7 @@ func snapshotSecretConfig() Config {
 	config := cfg
 	config.DomainConfigs = append([]DomainConfig(nil), cfg.DomainConfigs...)
 	cfgMu.RUnlock()
+
 	return config
 }
 
@@ -1122,6 +1147,7 @@ func appendNotificationReplacements(replacements []string, config Config) []stri
 	} {
 		replacements = appendURLCredentialReplacements(replacements, rawURL)
 	}
+
 	return replacements
 }
 
@@ -1149,6 +1175,7 @@ func appendURLCredentialReplacements(replacements []string, rawURL string) []str
 			replacements = appendIfNotEmpty(replacements, value, "***URL-SECRET***")
 		}
 	}
+
 	return replacements
 }
 
@@ -1241,6 +1268,7 @@ func appendIfNotEmpty(replacements []string, value, replacement string) []string
 		seen[variant] = struct{}{}
 		replacements = append(replacements, variant, replacement)
 	}
+
 	return replacements
 }
 
@@ -1248,6 +1276,7 @@ func sanitizeText(message string) string {
 	if replacer := getSecretReplacer(); replacer != nil {
 		return replacer.Replace(message)
 	}
+
 	return message
 }
 
@@ -1285,6 +1314,7 @@ func sanitizeID(s string) string {
 	if out == "" {
 		return "x"
 	}
+
 	return out
 }
 
@@ -1314,12 +1344,11 @@ func sanitizeIDWithHash(s string) string {
 			sanitizeIDCacheLen.Add(1)
 		}
 	}
+
 	return result
 }
 
-// ============================================================================
-// DNS CACHE (TTL cache + in-flight dedupe)
-// ============================================================================
+// ============================================================================.
 func newDNSCacheWithServers(dnsServers []string, ttl time.Duration) *dnsCache {
 	dnsServers = normalizeDNSServers(dnsServers)
 	resolvers := make([]*net.Resolver, 0, len(dnsServers))
@@ -1348,6 +1377,7 @@ func (c *dnsCache) getIPAddrs(ctx context.Context, host string) ([]net.IPAddr, e
 	if entry, ok := c.entries[host]; ok && now.Before(entry.expiry) && len(entry.ips) > 0 {
 		out := append([]net.IPAddr(nil), entry.ips...)
 		c.mu.Unlock()
+
 		return out, nil
 	}
 
@@ -1362,6 +1392,7 @@ func (c *dnsCache) getIPAddrs(ctx context.Context, host string) ([]net.IPAddr, e
 			if inflight.err != nil {
 				return nil, inflight.err
 			}
+
 			return append([]net.IPAddr(nil), inflight.addrs...), nil
 		}
 	}
@@ -1399,6 +1430,7 @@ func (c *dnsCache) lookupWithTrace(
 	if len(c.resolvers) == 0 {
 		err := fmt.Errorf("%s", phrases().DNSErrorNoResolverConfigured)
 		finishDNSTrace(trace, nil, err)
+
 		return nil, err
 	}
 
@@ -1443,7 +1475,7 @@ func (c *dnsCache) lookupUsingResolvers(
 	startIndex := int(lastSuccessfulDNS.Load()) % len(c.resolvers)
 	var lastErr error
 
-	for offset := 0; offset < len(c.resolvers); offset++ {
+	for offset := range len(c.resolvers) {
 		if err := ctx.Err(); err != nil {
 			return nil, newAllResolversError(host, err)
 		}
@@ -1452,6 +1484,7 @@ func (c *dnsCache) lookupUsingResolvers(
 		addrs, err := lookupIPAddrWithTimeout(ctx, c.resolvers[index], host)
 		if err == nil {
 			lastSuccessfulDNS.Store(int64(index))
+
 			return addrs, nil
 		}
 
@@ -1519,9 +1552,7 @@ func (c *dnsCache) invalidate(host string) {
 	c.mu.Unlock()
 }
 
-// ============================================================================
-// TRUST_PROXY - Forwarded-For
-// ============================================================================
+// ============================================================================.
 func getClientIP(r *http.Request) string {
 	remoteIP := r.RemoteAddr
 	if ip, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {

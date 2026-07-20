@@ -39,14 +39,13 @@ type mqttNotifier struct {
 	connected          bool
 }
 
-// ============================================================================
-// MQTT NOTIFIER
-// ============================================================================
+// ============================================================================.
 func (m *mqttNotifier) Name() string { return "Mqtt" }
 
 func (m *mqttNotifier) isConnected() bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+
 	return m.connected
 }
 
@@ -149,6 +148,7 @@ func newMQTTNotifier(
 	opts.OnConnect = func(c mqtt.Client) {
 		if n.closed.Load() {
 			c.Disconnect(0)
+
 			return
 		}
 		n.setConnected(true)
@@ -188,6 +188,7 @@ func newMQTTNotifier(
 			Action:  ActionConfig,
 			Message: phrases().MqttInitialConnectionPending,
 		})
+
 		return n
 	}
 	if err := token.Error(); err != nil {
@@ -270,6 +271,7 @@ func (m *mqttNotifier) handleInbound(client mqtt.Client, message mqtt.Message) {
 				_ = m.publishSnapshot(client)
 				_ = m.publishDomainStates(client)
 			}
+
 			return
 		}
 
@@ -329,9 +331,7 @@ func (m *mqttNotifier) Close() {
 	m.setConnected(false)
 }
 
-// ============================================================================
-// STATE
-// ============================================================================
+// ============================================================================.
 func (m *mqttNotifier) publishSnapshot(client mqtt.Client) error {
 	cfgMu.RLock()
 	ipMode := cfg.IPMode
@@ -443,9 +443,7 @@ func (m *mqttNotifier) publishDomainStates(client mqtt.Client) error {
 	})
 }
 
-// ============================================================================
-// COMMANDS
-// ============================================================================
+// ============================================================================.
 type mqttCommandRequest struct {
 	RequestID string `json:"request_id"`
 }
@@ -456,10 +454,12 @@ func (m *mqttNotifier) handleCommand(client mqtt.Client, topic string, payload [
 
 	if retained {
 		m.publishCommandResult(client, command, requestID, false, "rejected", phrases().MqttCmdRetainedIgnored)
+
 		return
 	}
 	if len(payload) > 4096 {
 		m.publishCommandResult(client, command, requestID, false, "rejected", phrases().MqttCmdPayloadTooLarge)
+
 		return
 	}
 
@@ -467,10 +467,12 @@ func (m *mqttNotifier) handleCommand(client mqtt.Client, topic string, payload [
 	case "update":
 		if !validMQTTButtonPayload(payload, "UPDATE") {
 			m.publishCommandResult(client, command, requestID, false, "rejected", phrases().MqttCmdInvalidUpdatePayload)
+
 			return
 		}
 		if !updateInProgress.CompareAndSwap(false, true) {
 			m.publishCommandResult(client, command, requestID, false, "busy", phrases().MqttCmdUpdateAlreadyRunning)
+
 			return
 		}
 
@@ -499,6 +501,7 @@ func (m *mqttNotifier) handleCommand(client mqtt.Client, topic string, payload [
 	case "refresh", "status":
 		if !validMQTTButtonPayload(payload, "REFRESH") {
 			m.publishCommandResult(client, command, requestID, false, "rejected", phrases().MqttCmdInvalidRefreshPayload)
+
 			return
 		}
 		if m.discovery {
@@ -508,6 +511,7 @@ func (m *mqttNotifier) handleCommand(client mqtt.Client, topic string, payload [
 		domainErr := m.publishDomainStates(client)
 		if stateErr != nil || domainErr != nil {
 			m.publishCommandResult(client, command, requestID, false, "failed", phrases().MqttCmdStateRefreshFailed)
+
 			return
 		}
 		m.publishCommandResult(client, command, requestID, true, "completed", phrases().MqttCmdStateRepublished)
@@ -547,6 +551,7 @@ func mqttRequestID(payload []byte) string {
 	if len(request.RequestID) > 128 {
 		return request.RequestID[:128]
 	}
+
 	return request.RequestID
 }
 
@@ -556,12 +561,11 @@ func validMQTTButtonPayload(payload []byte, command string) bool {
 		return true
 	}
 	value = strings.ToUpper(value)
+
 	return value == "PRESS" || value == "ON" || value == command
 }
 
-// ============================================================================
-// HOME ASSISTANT DISCOVERY
-// ============================================================================
+// ============================================================================.
 func (m *mqttNotifier) publishDiscovery(client mqtt.Client) error {
 	entities := []struct {
 		payload   map[string]any
@@ -703,6 +707,7 @@ func (m *mqttNotifier) publishDiscovery(client mqtt.Client) error {
 		Action:  ActionConfig,
 		Message: phrases().MqttDiscoveryPublished,
 	})
+
 	return nil
 }
 
@@ -731,6 +736,7 @@ func (m *mqttNotifier) publishDomainDiscovery(
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -754,6 +760,7 @@ func (m *mqttNotifier) discoveryEntity(name, uniqueID string, extra map[string]a
 		},
 	}
 	maps.Copy(payload, extra)
+
 	return payload
 }
 
@@ -764,12 +771,11 @@ func (m *mqttNotifier) publishDiscoveryEntity(
 	payload map[string]any,
 ) error {
 	configTopic := fmt.Sprintf("%s/%s/%s/config", m.discoveryPrefix, component, mqttObjectID(objectID))
+
 	return m.publishJSONWithClient(client, configTopic, payload)
 }
 
-// ============================================================================
-// PUBLISH HELPERS
-// ============================================================================
+// ============================================================================.
 func (m *mqttNotifier) publishJSONWithClient(
 	client mqtt.Client,
 	topic string,
@@ -779,6 +785,7 @@ func (m *mqttNotifier) publishJSONWithClient(
 	if err != nil {
 		return err
 	}
+
 	return m.publishRawWithClient(client, topic, 1, true, data)
 }
 
@@ -797,23 +804,24 @@ func (m *mqttNotifier) publishRawWithClient(
 	if !token.WaitTimeout(3 * time.Second) {
 		return fmt.Errorf(phrases().MqttPublishTimeout, topic)
 	}
+
 	return token.Error()
 }
 
-// ============================================================================
-// TOPIC / ID HELPERS
-// ============================================================================
+// ============================================================================.
 func deriveMQTTBaseTopic(eventTopic string) string {
 	base := strings.TrimRight(eventTopic, "/")
 	for _, suffix := range []string{"/events", "/event", "/notifications"} {
 		if before, ok := strings.CutSuffix(base, suffix); ok {
 			base = before
+
 			break
 		}
 	}
 	if base == "" {
 		return "go-dyndns"
 	}
+
 	return base
 }
 
@@ -825,6 +833,7 @@ func runtimeMQTTClientID(clientID string) string {
 
 	h := fnv.New32a()
 	_, _ = fmt.Fprintf(h, "%s:%d:%d", base, os.Getpid(), time.Now().UnixNano())
+
 	return fmt.Sprintf("%s-%08x", base, h.Sum32())
 }
 
@@ -840,6 +849,7 @@ func mqttObjectID(value string) string {
 		if valid {
 			b.WriteRune(r)
 			lastUnderscore = false
+
 			continue
 		}
 		if !lastUnderscore {
@@ -851,6 +861,7 @@ func mqttObjectID(value string) string {
 	if result == "" {
 		return "go_dyndns"
 	}
+
 	return result
 }
 
@@ -861,5 +872,6 @@ func mqttDomainID(domain string) string {
 	if len(base) > 40 {
 		base = base[:40]
 	}
+
 	return fmt.Sprintf("%s_%08x", base, h.Sum32())
 }

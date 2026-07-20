@@ -8,9 +8,7 @@ import (
 	"strings"
 )
 
-// ============================================================================
-// PRINTING
-// ============================================================================
+// ============================================================================.
 func printGroupedDomains() {
 	cfgMu.RLock()
 	lang := cfg.Lang
@@ -24,6 +22,7 @@ func printGroupedDomains() {
 
 	if len(domainConfigs) == 0 {
 		fmt.Println("\n⚠️  " + phrases().NoDomains)
+
 		return
 	}
 
@@ -88,6 +87,7 @@ func sortedProviderTypes(zonesByProvider map[string][]Zone) []string {
 		pTypes = append(pTypes, p)
 	}
 	sort.Strings(pTypes)
+
 	return pTypes
 }
 
@@ -95,6 +95,7 @@ func localizedCountLabel(count int, singular, plural string) string {
 	if count == 1 {
 		return singular
 	}
+
 	return plural
 }
 
@@ -114,6 +115,7 @@ func findProviderConfigForPrinting(provider ProviderType, domainConfigs []Domain
 			return &domainConfigs[i]
 		}
 	}
+
 	return nil
 }
 
@@ -124,6 +126,7 @@ func printZoneInfrastructure(ctx context.Context, provider ProviderType, z Zone,
 	if err != nil {
 		debugLog("DEBUG", z.Name, err.Error())
 		fmt.Printf("   └─ ⚠️ %s\n", err)
+
 		return
 	}
 
@@ -135,6 +138,7 @@ func printZoneInfrastructure(ctx context.Context, provider ProviderType, z Zone,
 
 	if len(relevant) == 0 {
 		fmt.Printf("   └─ ⚠️ %s\n", phrases().NoRelevantRecordsFound)
+
 		return
 	}
 
@@ -216,6 +220,7 @@ func filterRelevantInfrastructureRecords(records []Record) []Record {
 			relevant = append(relevant, r)
 		}
 	}
+
 	return relevant
 }
 

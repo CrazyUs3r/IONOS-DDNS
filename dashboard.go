@@ -43,12 +43,11 @@ var (
 
 func contentETag(content string) string {
 	sum := sha256.Sum256([]byte(content))
+
 	return `"` + hex.EncodeToString(sum[:]) + `"`
 }
 
-// ============================================================================
-// SVG CHARTS
-// ============================================================================
+// ============================================================================.
 func generateSVGChart(data [24]int) string {
 	maxVal := 0
 	for _, v := range data {
@@ -77,7 +76,7 @@ func generateSVGChart(data [24]int) string {
 	var pathBuilder strings.Builder
 	fmt.Fprintf(&pathBuilder, "M %.1f,%.1f", points[0][0], points[0][1])
 
-	for i := 0; i < len(points)-1; i++ {
+	for i := range len(points) - 1 {
 		p0, p1 := points[i], points[i+1]
 		cp1x := p0[0] + (p1[0]-p0[0])/2
 		fmt.Fprintf(&pathBuilder, " C %.1f,%.1f %.1f,%.1f %.1f,%.1f",
@@ -150,7 +149,7 @@ func generateLatencyChart(data [24]time.Duration) string {
 
 	var pathData strings.Builder
 	fmt.Fprintf(&pathData, "M %.1f,%.1f", points[0][0], points[0][1])
-	for i := 0; i < len(points)-1; i++ {
+	for i := range len(points) - 1 {
 		p0, p1 := points[i], points[i+1]
 		cp1x := p0[0] + (p1[0]-p0[0])/2
 		fmt.Fprintf(&pathData, " C %.1f,%.1f %.1f,%.1f %.1f,%.1f", cp1x, p0[1], cp1x, p1[1], p1[0], p1[1])
@@ -207,6 +206,7 @@ func toInt24(v any) ([24]int, bool) {
 		for i := range 24 {
 			out[i] = x[i]
 		}
+
 		return out, true
 	case []any:
 		if len(x) != 24 {
@@ -230,6 +230,7 @@ func toInt24(v any) ([24]int, bool) {
 				return out, false
 			}
 		}
+
 		return out, true
 	default:
 		return out, false
@@ -249,6 +250,7 @@ func toDur24(v any) ([24]time.Duration, bool) {
 		for i := range 24 {
 			out[i] = x[i]
 		}
+
 		return out, true
 	case []any:
 		if len(x) != 24 {
@@ -274,6 +276,7 @@ func toDur24(v any) ([24]time.Duration, bool) {
 				return out, false
 			}
 		}
+
 		return out, true
 	default:
 		return out, false
@@ -302,9 +305,7 @@ func buildChartTooltipPoints(points [][2]float64, values []float64, unit string)
 	return b.String()
 }
 
-// ============================================================================
-// DASHBOARD HTTP HANDLER
-// ============================================================================
+// ============================================================================.
 func buildSettingsInlineSection(title, body string) string {
 	return `<div class="s-section s-section--spaced">` +
 		`<div class="s-section-label s-section-label--heading">` + title + `</div>` +
@@ -373,6 +374,7 @@ func buildSettingsNotifyEventCheckboxes(current []string) string {
 	}
 
 	out.WriteString(`</div>`)
+
 	return out.String()
 }
 
@@ -380,6 +382,7 @@ func checkedAttr(v bool) string {
 	if v {
 		return HTMLChecked
 	}
+
 	return ""
 }
 
@@ -387,6 +390,7 @@ func checkboxLabel(v bool) string {
 	if v {
 		return esc(phrases().SettingsCheckboxActive)
 	}
+
 	return esc(phrases().SettingsCheckboxDeactive)
 }
 
@@ -394,6 +398,7 @@ func selected(v bool) string {
 	if v {
 		return HTMLSelected
 	}
+
 	return ""
 }
 
@@ -412,6 +417,7 @@ func buildNetworkInterfaceOptions(selectedName string) string {
 		if selectedName != "" {
 			fmt.Fprintf(&out, `<option value="%s" selected>%s</option>`, esc(selectedName), esc(selectedName))
 		}
+
 		return out.String()
 	}
 
@@ -723,6 +729,7 @@ func safeDomainConfigs(dcs []DomainConfig) []safeDomainConfig {
 			CNAMETarget:    dc.CNAMETarget,
 		}
 	}
+
 	return out
 }
 
@@ -917,6 +924,7 @@ func serveDashboardAsset(w http.ResponseWriter, r *http.Request, contentType, et
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
 		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
 		return
 	}
 
@@ -931,6 +939,7 @@ func serveDashboardAsset(w http.ResponseWriter, r *http.Request, contentType, et
 		candidate = strings.TrimSpace(candidate)
 		if candidate == etag || candidate == "*" {
 			w.WriteHeader(http.StatusNotModified)
+
 			return
 		}
 	}
@@ -1007,22 +1016,26 @@ func validWebSocketOrigin(r *http.Request) bool {
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
 		return false
 	}
+
 	return strings.EqualFold(u.Host, externalRequestHost(r))
 }
 
 func handleWS(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
 		return
 	}
 	if !validWebSocketOrigin(r) {
 		http.Error(w, "invalid websocket origin", http.StatusForbidden)
+
 		return
 	}
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		debugLog("WS", "", fmt.Sprintf(phrases().WSUpgradeFailed, err))
+
 		return
 	}
 
@@ -1036,6 +1049,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 	stats := apiMetrics.GetStats()
 	if !client.enqueue(WSMessage{Type: "initial", Data: stats}) {
 		_ = conn.Close()
+
 		return
 	}
 
@@ -1049,6 +1063,7 @@ func handleAPIDomains(w http.ResponseWriter, r *http.Request) {
 func handleAPIDomainsHTML(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodGET {
 		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
 		return
 	}
 	data := loadStatusData()
@@ -1067,6 +1082,7 @@ func handleAPIPageSection(w http.ResponseWriter, r *http.Request) {
 			phrases().APIErrorMethodNotAllowed,
 			http.StatusMethodNotAllowed,
 		)
+
 		return
 	}
 
@@ -1141,6 +1157,7 @@ func handleAPIPageSection(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
 			"error": esc(phrases().UnsupportedPage),
 		})
+
 		return
 	}
 
@@ -1155,6 +1172,7 @@ func handleAPIPageSection(w http.ResponseWriter, r *http.Request) {
 func handleAPIConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodGET {
 		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
 		return
 	}
 
@@ -1187,6 +1205,7 @@ func maskSecret(s string) string {
 	if s == "" {
 		return ""
 	}
+
 	return dashboardSecPlaceholderMask
 }
 
@@ -1198,6 +1217,7 @@ func preserveDashboardSecret(incoming, current string) string {
 	if isDashboardSecretMask(incoming) {
 		return current
 	}
+
 	return incoming
 }
 
@@ -1205,6 +1225,7 @@ func clearDashboardSecretMask(s string) string {
 	if isDashboardSecretMask(s) {
 		return ""
 	}
+
 	return s
 }
 
@@ -1247,6 +1268,7 @@ func maskDashboardConfigSecrets(config Config) Config {
 	config.Notifications.Webhook.Secret = maskSecret(config.Notifications.Webhook.Secret)
 	config.Notifications.MQTTConfig.Password = maskSecret(config.Notifications.MQTTConfig.Password)
 	config.Notifications.Email.Password = maskSecret(config.Notifications.Email.Password)
+
 	return config
 }
 
@@ -1255,12 +1277,14 @@ func handleAPILanguages(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != MethodGET {
 		http.Error(w, p.APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+
 		return
 	}
 
 	langs, err := getAvailableLanguages(langDir)
 	if err != nil {
 		http.Error(w, p.CouldNotLoadLanguages, http.StatusInternalServerError)
+
 		return
 	}
 
@@ -1289,16 +1313,19 @@ func handleAPILanguages(w http.ResponseWriter, r *http.Request) {
 func handleAPISaveConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodPOST {
 		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
 		return
 	}
 	if !validateTriggerToken(r) {
 		w.WriteHeader(http.StatusUnauthorized)
+
 		return
 	}
 
 	var payload dashboardConfigPayload
 	if err := decodeJSONBody(w, r, &payload); err != nil {
 		http.Error(w, esc(phrases().JSONParseError), http.StatusBadRequest)
+
 		return
 	}
 
@@ -1316,6 +1343,7 @@ func handleAPISaveConfig(w http.ResponseWriter, r *http.Request) {
 		cfg = oldCfg
 		cfgMu.Unlock()
 		http.Error(w, validationErr.Error(), http.StatusUnprocessableEntity)
+
 		return
 	}
 	newMaxConcurrent := cfg.MaxConcurrent
@@ -1331,6 +1359,7 @@ func handleAPISaveConfig(w http.ResponseWriter, r *http.Request) {
 		invalidateSecretReplacer()
 
 		http.Error(w, esc(phrases().SaveFailed), http.StatusInternalServerError)
+
 		return
 	}
 
@@ -1451,6 +1480,7 @@ func cleanDNSServers(in []string) []string {
 			}
 		}
 	}
+
 	return cleaned
 }
 
@@ -1467,12 +1497,14 @@ func mergeDomainConfigs(existingCfg []DomainConfig, incoming []safeDomainConfig)
 		found, ok := existing[fqdn]
 		if ok {
 			newConfigs = append(newConfigs, mergeExistingDomainConfig(found, sc))
+
 			continue
 		}
 		newConfigs = append(newConfigs, newDomainConfig(fqdn, sc))
 	}
 
 	sortDomainConfigs(newConfigs)
+
 	return newConfigs
 }
 
@@ -1481,6 +1513,7 @@ func indexDomainConfigs(configs []DomainConfig) map[string]DomainConfig {
 	for _, config := range configs {
 		indexed[strings.ToLower(config.FQDN)] = config
 	}
+
 	return indexed
 }
 
@@ -1564,6 +1597,7 @@ func sortDomainConfigs(configs []DomainConfig) {
 		if configs[i].Provider != configs[j].Provider {
 			return string(configs[i].Provider) < string(configs[j].Provider)
 		}
+
 		return configs[i].FQDN < configs[j].FQDN
 	})
 }
@@ -1573,17 +1607,20 @@ func handleAPISetLanguage(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != MethodPOST {
 		http.Error(w, p.APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+
 		return
 	}
 
 	if !validateTriggerToken(r) {
 		w.WriteHeader(http.StatusUnauthorized)
+
 		return
 	}
 
 	lang := normalizeLang(r.URL.Query().Get("lang"))
 	if lang == "" {
 		http.Error(w, p.LanguageParamMissing, http.StatusBadRequest)
+
 		return
 	}
 
@@ -1594,6 +1631,7 @@ func handleAPISetLanguage(w http.ResponseWriter, r *http.Request) {
 			fmt.Sprintf(p.UnsupportedLanguage, lang),
 			http.StatusBadRequest,
 		)
+
 		return
 	}
 
@@ -1606,6 +1644,7 @@ func handleAPISetLanguage(w http.ResponseWriter, r *http.Request) {
 			fmt.Sprintf(p.LanguageLoadFailed, err),
 			http.StatusInternalServerError,
 		)
+
 		return
 	}
 
@@ -1631,10 +1670,12 @@ func handleAPISetLanguage(w http.ResponseWriter, r *http.Request) {
 func handleAPIIPv64Domain(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodPOST {
 		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
 		return
 	}
 	if !validateTriggerToken(r) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": esc(phrases().InvalidToken)})
+
 		return
 	}
 
@@ -1646,18 +1687,21 @@ func handleAPIIPv64Domain(w http.ResponseWriter, r *http.Request) {
 
 	if err := decodeJSONBody(w, r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": esc(phrases().ErrInvalidJSON)})
+
 		return
 	}
 
 	req.FQDN = normalizeIPv64FQDN(req.FQDN)
 	if req.FQDN == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": esc(phrases().DomainIsEmpty)})
+
 		return
 	}
 
 	req.Action = strings.ToUpper(strings.TrimSpace(req.Action))
 	if req.Action != MethodADD && req.Action != MethodDELETE {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": esc(phrases().IPv64ActionInvalid)})
+
 		return
 	}
 
@@ -1666,6 +1710,7 @@ func handleAPIIPv64Domain(w http.ResponseWriter, r *http.Request) {
 	dc, statusCode, err := selectIPv64DomainConfigForAction(ctx, req.Action, req.FQDN, req.APIToken)
 	if err != nil {
 		writeJSON(w, statusCode, map[string]string{"error": err.Error()})
+
 		return
 	}
 
@@ -1679,6 +1724,7 @@ func handleAPIIPv64Domain(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		debugLog("API", getClientIP(r), fmt.Sprintf("IPv64 %s domain %s: %v", req.Action, req.FQDN, err))
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+
 		return
 	}
 
@@ -1697,21 +1743,25 @@ func handleAPIIPv64Domain(w http.ResponseWriter, r *http.Request) {
 func handleAPIDomainDelete(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodPOST {
 		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
 		return
 	}
 	if !validateTriggerToken(r) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": esc(phrases().InvalidToken)})
+
 		return
 	}
 
 	domain := strings.TrimSpace(r.URL.Query().Get("domain"))
 	if domain == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": esc(phrases().DomainParamMissing)})
+
 		return
 	}
 
 	if isDomainActiveInConfig(domain) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": esc(phrases().DomainStillActiveInConfig)})
+
 		return
 	}
 
@@ -1721,6 +1771,7 @@ func handleAPIDomainDelete(w http.ResponseWriter, r *http.Request) {
 
 	if statusCode != http.StatusOK {
 		writeJSON(w, statusCode, map[string]string{"error": errMsg})
+
 		return
 	}
 	forceNextUpdate.Store(true)
@@ -1753,6 +1804,7 @@ func findDomainInStatusLocked(domain string) (string, int, string) {
 		if os.IsNotExist(err) {
 			return "", http.StatusNotFound, esc(phrases().NoStatusFileFound)
 		}
+
 		return "", http.StatusInternalServerError, err.Error()
 	}
 
@@ -1770,6 +1822,7 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodPOST {
 		w.Header().Set("Allow", MethodPOST)
 		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
 		return
 	}
 
@@ -1780,6 +1833,7 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 			"error": esc(phrases().InvalidOrMissingTriggerToken),
 		})
 		debugLog("API", clientIP, esc(phrases().TriggerBlockedInvalidToken))
+
 		return
 	}
 
@@ -1788,6 +1842,7 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 			"error": esc(phrases().TriggerNoDomainsError),
 		})
 		debugLog("API", clientIP, esc(phrases().TriggerBlockedNoDomainsLog))
+
 		return
 	}
 
@@ -1798,6 +1853,7 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 		})
 		debugLog("API", clientIP, esc(phrases().TriggerBlockedUpdateRunning))
 		broadcastNotification(phrases().UpdateAlreadyRunningNotification, "info")
+
 		return
 	}
 
@@ -1810,6 +1866,7 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 		})
 		debugLog("API", clientIP, esc(phrases().TriggerBlockedGlobalRateLimit))
 		broadcastNotification(phrases().RateLimitGlobal, "warning")
+
 		return
 	}
 
@@ -1818,7 +1875,7 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 		const retryAfter = 10
 		remaining := ipLimiter.Remaining()
 		w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
-		w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
+		w.Header().Set("X-Ratelimit-Remaining", strconv.Itoa(remaining))
 		writeJSON(w, http.StatusTooManyRequests, map[string]any{
 			"error":               esc(phrases().IPRateLimitExceeded),
 			"retry_after_seconds": retryAfter,
@@ -1826,6 +1883,7 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 		})
 		debugLog("API", clientIP, esc(phrases().TriggerBlockedIPRateLimit))
 		broadcastNotification(phrases().TooManyUpdateRequestsWait, "warning")
+
 		return
 	}
 
@@ -1836,11 +1894,12 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 		})
 		debugLog("API", clientIP, esc(phrases().TriggerBlockedUpdateRunning))
 		broadcastNotification(phrases().UpdateAlreadyRunningNotification, "info")
+
 		return
 	}
 
 	remaining := ipLimiter.Remaining()
-	w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
+	w.Header().Set("X-Ratelimit-Remaining", strconv.Itoa(remaining))
 	writeJSON(w, http.StatusAccepted, map[string]any{
 		"status":               "triggered",
 		"message":              esc(phrases().UpdateStartedMessage),
@@ -1851,6 +1910,7 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 		if !hasDomainConfig() {
 			updateInProgress.Store(false)
 			debugLog("API", triggerIP, esc(phrases().UpdateAbortedNoDomainsLog))
+
 			return
 		}
 
@@ -1865,10 +1925,12 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 func handleAPINotifyTest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodPOST {
 		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
 		return
 	}
 	if !validateTriggerToken(r) {
 		w.WriteHeader(http.StatusUnauthorized)
+
 		return
 	}
 
@@ -1882,6 +1944,7 @@ func handleAPINotifyTest(w http.ResponseWriter, r *http.Request) {
 			"message": esc(phrases().NotifyNoNotifier),
 			"sent":    0,
 		})
+
 		return
 	}
 
@@ -1937,6 +2000,7 @@ func handleAPITriggerStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodGET {
 		w.Header().Set("Allow", MethodGET)
 		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
 		return
 	}
 
@@ -1944,6 +2008,7 @@ func handleAPITriggerStatus(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
 			"error": esc(phrases().InvalidOrMissingTriggerToken),
 		})
+
 		return
 	}
 
@@ -1962,11 +2027,13 @@ func handleAPITriggerStatus(w http.ResponseWriter, r *http.Request) {
 func handleAPIExport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodGET {
 		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
 		return
 	}
 
 	if !validateTriggerToken(r) {
 		w.WriteHeader(http.StatusUnauthorized)
+
 		return
 	}
 
@@ -2007,6 +2074,7 @@ func handleAPIExport(w http.ResponseWriter, r *http.Request) {
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(exportData); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+
 		return
 	}
 }
@@ -2035,6 +2103,7 @@ func healthDetailAuthorized(r *http.Request) bool {
 	if auth := strings.TrimSpace(r.Header.Get("Authorization")); strings.HasPrefix(strings.ToLower(auth), "bearer ") {
 		provided = strings.TrimSpace(auth[len("Bearer "):])
 	}
+
 	return subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) == 1
 }
 
@@ -2080,15 +2149,18 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("detailed") == constTrue {
 		if !healthDetailAuthorized(r) {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "detailed health access denied"})
+
 			return
 		}
 		handleDetailedHealth(w, statusCode, status, reason, stats)
+
 		return
 	}
 
 	if status == healthy {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("OK"))
+
 		return
 	}
 
@@ -2107,6 +2179,7 @@ func handleReadiness(w http.ResponseWriter, _ *http.Request) {
 	if !schedulerRanOnce.Load() {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte("not ready"))
+
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -2167,18 +2240,21 @@ func readLastUpdateTimeFromStatusFile() string {
 	if newest.IsZero() {
 		return ""
 	}
+
 	return newest.Format(statusTimestampLayout)
 }
 
 func handleDashboard(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
+
 		return
 	}
 
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
 		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
 		return
 	}
 
@@ -2227,6 +2303,7 @@ func writePagePlaceholder(w io.Writer, page string) {
 func writeDebugSection(w io.Writer, config Config) {
 	if config.DebugEnabled || config.DebugHTTPRaw {
 		writeDebugCard(w)
+
 		return
 	}
 
@@ -2249,6 +2326,7 @@ func loadStatusData() map[string]any {
 	if fileData, err := os.ReadFile(updatePath); err == nil {
 		_ = json.Unmarshal(fileData, &data)
 	}
+
 	return data
 }
 
@@ -2256,6 +2334,7 @@ func dashboardStatus() (string, string) {
 	if !lastOk.Load() {
 		return "status-error", esc(phrases().StatusErr)
 	}
+
 	return "status-ok", esc(phrases().StatusOk)
 }
 
@@ -2267,6 +2346,7 @@ func getDashboardStats() map[string]any {
 	if stats == nil {
 		stats = apiMetrics.GetStats()
 	}
+
 	return stats
 }
 
@@ -2294,6 +2374,7 @@ func buildNICHTML(stats map[string]any) string {
 	for _, dc := range config.DomainConfigs {
 		if dc.Provider == ProviderIPv64 {
 			hasIPv64 = true
+
 			break
 		}
 	}
@@ -2321,6 +2402,7 @@ func loadDashboardLogs() ([]LogEntry, string) {
 		copy(logs, logMemCache)
 		r := logMemCacheRange
 		logMemCacheMu.RUnlock()
+
 		return logs, r
 	}
 	logMemCacheMu.RUnlock()
@@ -2351,6 +2433,7 @@ func loadDashboardLogsFresh() ([]LogEntry, string) {
 func handleAPILogs(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodGET {
 		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
 		return
 	}
 
@@ -2369,6 +2452,7 @@ func handleAPILogs(w http.ResponseWriter, r *http.Request) {
 func handleAPILogDelete(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
 		return
 	}
 	if !requireAdminAPI(w, r) {
@@ -2380,6 +2464,7 @@ func handleAPILogDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&body); err != nil || body.ID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing id"})
+
 		return
 	}
 
@@ -2398,6 +2483,7 @@ func handleAPILogDelete(w http.ResponseWriter, r *http.Request) {
 	data, err := os.ReadFile(logPath)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+
 		return
 	}
 
@@ -2410,6 +2496,7 @@ func handleAPILogDelete(w http.ResponseWriter, r *http.Request) {
 		var e LogEntry
 		if json.Unmarshal([]byte(line), &e) != nil {
 			kept = append(kept, line)
+
 			continue
 		}
 		e.Timestamp = formatDashboardLogTimestamp(e.Timestamp)
@@ -2421,6 +2508,7 @@ func handleAPILogDelete(w http.ResponseWriter, r *http.Request) {
 	output := strings.Join(kept, "\n") + "\n"
 	if err := os.WriteFile(logPath, []byte(output), 0o600); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+
 		return
 	}
 
@@ -2504,6 +2592,7 @@ func formatDashboardLogTimestamp(ts string) string {
 	if err != nil {
 		return ts
 	}
+
 	return t.Format(statusTimestampLayout)
 }
 
@@ -2724,6 +2813,7 @@ func buildNotifierStatusHTML() string {
 	}
 
 	sb.WriteString(`</span>`)
+
 	return sb.String()
 }
 
@@ -3007,6 +3097,7 @@ func writeDebugCard(w io.Writer) {
 
 func logEntryID(e LogEntry) string {
 	h := sha256.Sum256([]byte(e.Timestamp + "|" + e.Action + "|" + e.Message))
+
 	return hex.EncodeToString(h[:8])
 }
 
@@ -3101,6 +3192,7 @@ func writeDomainsCard(w io.Writer, data map[string]any) {
 	for _, dc := range cfg.DomainConfigs {
 		if dc.Provider == ProviderIPv64 {
 			hasIPv64 = true
+
 			break
 		}
 	}
@@ -3180,6 +3272,7 @@ func writeSettingsSection(w io.Writer, c Config) {
 func writeTOTPSection(w io.Writer, sess *Session, enabled bool) {
 	if !enabled {
 		_, _ = fmt.Fprint(w, `<div class="page-section" data-section="totp"></div>`)
+
 		return
 	}
 
@@ -3198,6 +3291,7 @@ func writeTOTPSection(w io.Writer, sess *Session, enabled bool) {
 func writeUsersSection(w io.Writer, isAdmin bool) {
 	if !isAdmin {
 		_, _ = fmt.Fprint(w, `<div class="page-section" data-section="users"></div>`)
+
 		return
 	}
 	_, _ = fmt.Fprint(w, `
@@ -3220,6 +3314,7 @@ func domainKeysFromStatusData(data map[string]any) []string {
 		}
 	}
 	sort.Strings(keys)
+
 	return keys
 }
 
@@ -3228,6 +3323,7 @@ func configuredDomainSet() map[string]struct{} {
 	for _, dc := range snapshotDomainConfigs() {
 		configured[strings.ToLower(strings.TrimSuffix(dc.FQDN, "."))] = struct{}{}
 	}
+
 	return configured
 }
 
@@ -3242,6 +3338,7 @@ func newestDomainChange(data map[string]any, keys []string) time.Time {
 			newestChange = t
 		}
 	}
+
 	return newestChange
 }
 
@@ -3249,6 +3346,7 @@ func parseDomainHistory(v any) DomainHistory {
 	var h DomainHistory
 	b, _ := json.Marshal(v)
 	_ = json.Unmarshal(b, &h)
+
 	return h
 }
 
@@ -3279,6 +3377,7 @@ func writeSingleDomainCard(w io.Writer, domain string, h DomainHistory, configur
 	for _, dc := range snapshotDomainConfigs() {
 		if strings.EqualFold(dc.FQDN, domain) && dc.IPMode != "" {
 			ipModeLabel = " · " + dc.IPMode
+
 			break
 		}
 	}
@@ -3323,7 +3422,11 @@ func writeSingleDomainCard(w io.Writer, domain string, h DomainHistory, configur
 					<tbody>`,
 		orphanStyle,
 		esc(domain),
-		func() string { b, _ := json.Marshal(h.IPs); return esc(string(b)) }(),
+		func() string {
+			b, _ := json.Marshal(h.IPs)
+
+			return esc(string(b))
+		}(),
 		safeID,
 		dotClass,
 		esc(dotTitle),
@@ -3492,9 +3595,7 @@ func appFooterHTML() string {
 </footer>`
 }
 
-// ============================================================================
-// BACKUP & RESTORE
-// ============================================================================
+// ============================================================================.
 const (
 	dashboardBackupApp     = "dyndns-dashboard"
 	dashboardBackupVersion = 1
@@ -3525,6 +3626,7 @@ func writeBackupSection(w io.Writer, isAdmin bool) {
 			</div>
 		</div>
 		`)
+
 		return
 	}
 
@@ -3587,6 +3689,7 @@ func requireAdminAPI(w http.ResponseWriter, r *http.Request) bool {
 		writeJSON(w, http.StatusForbidden, map[string]string{
 			"error": t(phrases().BackupAdminRequired, "admin required"),
 		})
+
 		return false
 	}
 
@@ -3609,12 +3712,14 @@ func readStatusBackup() map[string]DomainHistory {
 	}
 
 	_ = json.Unmarshal(b, &out)
+
 	return out
 }
 
 func handleAPIBackupDownload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodGET {
 		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
 		return
 	}
 	if !requireAdminAPI(w, r) {
@@ -3646,6 +3751,7 @@ func handleAPIBackupDownload(w http.ResponseWriter, r *http.Request) {
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(backup); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+
 		return
 	}
 }
@@ -3653,6 +3759,7 @@ func handleAPIBackupDownload(w http.ResponseWriter, r *http.Request) {
 func handleAPIBackupRestore(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodPOST {
 		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
 		return
 	}
 
@@ -3663,12 +3770,14 @@ func handleAPIBackupRestore(w http.ResponseWriter, r *http.Request) {
 	req, status, err := parseBackupRestoreRequest(w, r)
 	if err != nil {
 		writeJSON(w, status, map[string]string{"error": err.Error()})
+
 		return
 	}
 
 	restored, status, err := restoreSelectedBackup(req)
 	if err != nil {
 		writeJSON(w, status, map[string]string{"error": err.Error()})
+
 		return
 	}
 
@@ -3748,10 +3857,11 @@ func decodeDashboardBackup(file io.Reader) (dashboardBackup, error) {
 		)
 	}
 	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
 		if err == nil {
 			err = errors.New("multiple JSON values")
 		}
+
 		return dashboardBackup{}, fmt.Errorf(
 			t(phrases().BackupInvalidJSONFormat, "invalid backup json: %w"),
 			err,
@@ -3761,6 +3871,7 @@ func decodeDashboardBackup(file io.Reader) (dashboardBackup, error) {
 	if err := validateBackupEnvelope(backup); err != nil {
 		return dashboardBackup{}, err
 	}
+
 	return backup, nil
 }
 
@@ -3777,6 +3888,7 @@ func validateBackupEnvelope(backup dashboardBackup) error {
 	if _, err := time.Parse(time.RFC3339, backup.CreatedAt); err != nil {
 		return fmt.Errorf("invalid backup creation time: %w", err)
 	}
+
 	return nil
 }
 
@@ -3794,6 +3906,7 @@ func validBackupPasswordHash(stored string) bool {
 		return false
 	}
 	key, err := base64.RawStdEncoding.DecodeString(parts[3])
+
 	return err == nil && len(key) >= 16
 }
 
@@ -3803,6 +3916,7 @@ func validBackupTOTPSecret(secret string) bool {
 		return false
 	}
 	decoded, err := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(secret)
+
 	return err == nil && len(decoded) >= 10
 }
 
@@ -3853,6 +3967,7 @@ func validateBackupUsers(users []DashboardUser) error {
 	if admins == 0 {
 		return errors.New("backup must contain at least one administrator")
 	}
+
 	return nil
 }
 
@@ -3868,6 +3983,7 @@ func validateBackupStatus(status map[string]DomainHistory) error {
 			return fmt.Errorf("invalid status domain %q", domain)
 		}
 	}
+
 	return nil
 }
 
@@ -3893,6 +4009,7 @@ func validateBackupRestoreRequest(req backupRestoreRequest) error {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -3916,6 +4033,7 @@ func captureBackupRestoreSnapshot(selection backupRestoreSelection) backupRestor
 	if selection.Users {
 		snapshot.Users = loadUsers()
 	}
+
 	return backupRestoreSnapshot{Backup: snapshot}
 }
 
@@ -3939,6 +4057,7 @@ func rollbackBackupRestore(snapshot backupRestoreSnapshot, restored []string) er
 	if len(rollbackErrors) > 0 {
 		return errors.New(strings.Join(rollbackErrors, "; "))
 	}
+
 	return nil
 }
 
@@ -3957,11 +4076,13 @@ func restoreSelectedBackup(req backupRestoreRequest) ([]string, int, error) {
 		status, err := fn()
 		if err == nil {
 			restored = append(restored, name)
+
 			return status, nil
 		}
 		if rollbackErr := rollbackBackupRestore(snapshot, restored); rollbackErr != nil {
-			return http.StatusInternalServerError, fmt.Errorf("%w; rollback failed: %v", err, rollbackErr)
+			return http.StatusInternalServerError, fmt.Errorf("%w; rollback failed: %w", err, rollbackErr)
 		}
+
 		return status, err
 	}
 
@@ -4001,6 +4122,7 @@ func restoreBackupConfig(backup dashboardBackup) (int, error) {
 		restoreConfigInMemory(oldCfg)
 		ResetHTTPClient()
 		invalidateSecretReplacer()
+
 		return http.StatusInternalServerError, fmt.Errorf(
 			t(phrases().BackupConfigSaveFailedFormat, "config save failed: %w"),
 			err,
@@ -4008,6 +4130,7 @@ func restoreBackupConfig(backup dashboardBackup) (int, error) {
 	}
 
 	afterConfigRestore()
+
 	return http.StatusOK, nil
 }
 
@@ -4022,6 +4145,7 @@ func applyBackupConfig(newCfg Config) (Config, error) {
 		cfg.DomainConfigs,
 	); err != nil {
 		cfg = oldCfg
+
 		return oldCfg, err
 	}
 
@@ -4085,6 +4209,7 @@ func restoreBackupUsers(backup dashboardBackup) (int, error) {
 	}
 
 	sessionStore.DeleteAll()
+
 	return http.StatusOK, nil
 }
 
@@ -4099,9 +4224,7 @@ func logBackupRestore(restored []string) {
 	})
 }
 
-// ============================================================================
-// DIAGNOSE / HEALTH CENTER
-// ============================================================================
+// ============================================================================.
 func writeDiagnoseSection(w io.Writer) {
 	_, _ = fmt.Fprint(w, `
 	<div class="page-section" data-section="diagnose">
@@ -4123,6 +4246,7 @@ func writeDiagnoseSection(w io.Writer) {
 func handleAPIDiagnose(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodGET {
 		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
 		return
 	}
 
@@ -4263,6 +4387,7 @@ func diagnosisDomainName(dc DomainConfig) string {
 	if fqdn == "" {
 		return t(phrases().DiagnoseUnknownDomain, "Unknown domain")
 	}
+
 	return fqdn
 }
 
@@ -4399,24 +4524,25 @@ func diagnoseFileInfo(name, path string) map[string]any {
 
 	if strings.TrimSpace(path) == "" {
 		out["error"] = t(phrases().DiagnosePathEmpty, "path empty")
+
 		return out
 	}
 
 	st, err := os.Stat(path)
 	if err != nil {
 		out["error"] = err.Error()
+
 		return out
 	}
 
 	out["exists"] = true
 	out["size"] = st.Size()
 	out["modified"] = st.ModTime().Format(statusTimestampLayout)
+
 	return out
 }
 
-// ============================================================================
-// DNS PROPAGATION
-// ============================================================================
+// ============================================================================.
 type dnsResolverTarget struct {
 	Name    string
 	Address string
@@ -4450,6 +4576,7 @@ func normalizeDNSName(raw string) (string, error) {
 			}
 		}
 	}
+
 	return name, nil
 }
 
@@ -4469,6 +4596,7 @@ func firstSystemNameserver() (string, error) {
 		if len(fields) < 2 {
 			continue
 		}
+
 		return normalizeDNSServer(fields[1])
 	}
 	if err := scanner.Err(); err != nil {
@@ -4518,6 +4646,7 @@ func dnsResolverTargets() []dnsResolverTarget {
 	if len(targets) > 7 {
 		targets = targets[:7]
 	}
+
 	return targets
 }
 
@@ -4525,6 +4654,7 @@ func stringSliceContains(values []string, wanted string) bool {
 	if wanted == "" {
 		return false
 	}
+
 	return slices.Contains(values, wanted)
 }
 
@@ -4579,16 +4709,19 @@ func canRunDNSPropagation(r *http.Request) bool {
 		return true
 	}
 	sess, ok := sessionFromRequest(r)
+
 	return ok && (sess.Role == RoleAdmin || sess.Role == RoleEditor)
 }
 
 func handleAPIDNSPropagation(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
 		return
 	}
 	if !canRunDNSPropagation(r) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": esc(phrases().DNSAdminEditorRequired)})
+
 		return
 	}
 
@@ -4597,11 +4730,13 @@ func handleAPIDNSPropagation(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := decodeJSONBody(w, r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": esc(phrases().APIErrorBadRequest)})
+
 		return
 	}
 	domain, err := normalizeDNSName(req.Domain)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+
 		return
 	}
 
@@ -4633,6 +4768,7 @@ func handleAPIDNSPropagation(w http.ResponseWriter, r *http.Request) {
 func writeAuditDNSSection(w io.Writer, isAdmin bool) {
 	if !isAdmin {
 		_, _ = fmt.Fprint(w, `<div class="page-section" data-section="audit"><div class="card"><div class="card-header">`+phrases().NavAuditJS+`</div><div class="card-content"><div class="backup-warning">🔒 `+phrases().AuditAdminOnly+`</div></div></div></div>`)
+
 		return
 	}
 

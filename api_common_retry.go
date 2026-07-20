@@ -24,9 +24,7 @@ func canRetryAPIAttempt(attempt, maxAttempts int) bool {
 	return attempt+1 < maxAttempts
 }
 
-// ============================================================================
-// COMMON RETRY
-// ============================================================================
+// ============================================================================.
 func apiWithRetry(
 	ctx context.Context,
 	providerName string,

@@ -7,9 +7,7 @@ import (
 	"strings"
 )
 
-// ============================================================================
-// VALIDATION
-// ============================================================================
+// ============================================================================.
 func validateDomainConfigs() error {
 	return validateDomainConfigList(snapshotDomainConfigs())
 }
@@ -118,6 +116,7 @@ func validateUniqueDomain(
 	}
 
 	seenDomains[fqdn] = index
+
 	return nil
 }
 
@@ -152,6 +151,7 @@ func validateDomainRecordMode(fqdn string, dc DomainConfig) error {
 		if err := validateDomain(dc.CNAMETarget); err != nil {
 			return fmt.Errorf(phrases().CNAMETargetInvalidFormat, fqdn, err.Error())
 		}
+
 		return nil
 	default:
 		return fmt.Errorf(phrases().InvalidDomainRecordModeFormat, fqdn, dc.RecordMode)
@@ -188,6 +188,7 @@ func validateIONOSCredentials(dc DomainConfig, fqdn string) error {
 	if dc.APIPrefix != "" && dc.APISecret != "" {
 		return nil
 	}
+
 	return fmt.Errorf(phrases().IonosAPIRequired, fqdn)
 }
 
@@ -195,6 +196,7 @@ func validateIPv64Credentials(dc DomainConfig, fqdn string) error {
 	if dc.IPv64Token != "" {
 		return nil
 	}
+
 	return fmt.Errorf(phrases().Ipv64TokenRequired, fqdn)
 }
 
@@ -202,6 +204,7 @@ func validateCloudflareCredentials(dc DomainConfig, fqdn string) error {
 	if dc.CFToken != "" || (dc.CFEmail != "" && dc.CFSecret != "") {
 		return nil
 	}
+
 	return fmt.Errorf(phrases().CloudflareAuthRequired, fqdn)
 }
 
@@ -209,6 +212,7 @@ func validateHetznerCredentials(dc DomainConfig, fqdn string) error {
 	if hetznerToken(&dc) != "" {
 		return nil
 	}
+
 	return fmt.Errorf(phrases().HetznerAuthRequired, fqdn)
 }
 
@@ -216,6 +220,7 @@ func validateFebasCredentials(dc DomainConfig, fqdn string) error {
 	if err := validateFebasUpdateURL(dc.FebasUpdateURL); err != nil {
 		return fmt.Errorf("%s: %w", fqdn, err)
 	}
+
 	return nil
 }
 
@@ -223,6 +228,7 @@ func validateDNScaleCredentials(dc DomainConfig, fqdn string) error {
 	if strings.TrimSpace(dc.APIKey) != "" {
 		return nil
 	}
+
 	return fmt.Errorf(phrases().DNScaleAPIKeyRequired, fqdn)
 }
 
@@ -239,6 +245,7 @@ func validateProviderAccount(
 	previousAuth, exists := providerAuth[dc.Provider]
 	if !exists {
 		providerAuth[dc.Provider] = auth
+
 		return nil
 	}
 
@@ -261,6 +268,7 @@ func providerAuthFingerprint(dc DomainConfig) string {
 		if dc.CFToken != "" {
 			return "token\x00" + dc.CFToken
 		}
+
 		return "global\x00" + dc.CFEmail + "\x00" + dc.CFSecret
 
 	case ProviderIPv64:

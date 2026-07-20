@@ -8,9 +8,7 @@ import (
 	"time"
 )
 
-// ============================================================================
-// NOTIFICATION
-// ============================================================================
+// ============================================================================.
 type NotifyEvent string
 
 const (
@@ -50,9 +48,7 @@ type notifyConfig struct {
 	notifiers []Notifier
 }
 
-// ============================================================================
-// INIT
-// ============================================================================
+// ============================================================================.
 func initNotifiers() {
 	notifierInitMu.Lock()
 	defer notifierInitMu.Unlock()
@@ -87,6 +83,7 @@ func buildNotifyConfig(config Config) notifyConfig {
 	appendNtfyNotifier(&newCfg, config)
 	appendMQTTNotifier(&newCfg, config)
 	appendEmailNotifier(&newCfg, config)
+
 	return newCfg
 }
 
@@ -176,6 +173,7 @@ func notificationParentContext() context.Context {
 	if shutdownCtx != nil {
 		return shutdownCtx
 	}
+
 	return context.Background()
 }
 
@@ -203,6 +201,7 @@ func snapshotNotifierConfig() Config {
 	config := cfg
 	config.Notifications.Events = append([]string(nil), cfg.Notifications.Events...)
 	cfgMu.RUnlock()
+
 	return config
 }
 
@@ -229,9 +228,7 @@ func closeNotifiers() {
 	closeNotifierList(oldNotifiers)
 }
 
-// ============================================================================
-// DISPATCH — async (normal log path)
-// ============================================================================
+// ============================================================================.
 func notify(ctx LogContext) {
 	notifyCfgMu.RLock()
 	notifiers := notifyCfg.notifiers
@@ -302,6 +299,7 @@ func buildNotifyMessage(ctx LogContext) NotifyMessage {
 		msg = fmt.Sprintf("%s: %v", ctx.Message, ctx.Error)
 	}
 	msg = sanitizeText(msg)
+
 	return NotifyMessage{
 		Action:  ctx.Action,
 		Domain:  ctx.Domain,
@@ -310,9 +308,7 @@ func buildNotifyMessage(ctx LogContext) NotifyMessage {
 	}
 }
 
-// ============================================================================
-// HELPERS
-// ============================================================================
+// ============================================================================.
 func normalizeNotifyEvent(action string) NotifyEvent {
 	return NotifyEvent(action)
 }

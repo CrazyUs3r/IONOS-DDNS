@@ -20,9 +20,7 @@ const (
 	LogTErr  = "ERR"
 )
 
-// ============================================================================
-// LOGGING
-// ============================================================================
+// ============================================================================.
 func log(ctx LogContext) {
 	if shouldSkipLog(ctx) {
 		return
@@ -46,6 +44,7 @@ func shouldSkipLog(ctx LogContext) bool {
 	if ctx.Level != LogDebug {
 		return false
 	}
+
 	return !atomicDebugEnabled.Load() && !atomicDebugHTTPRaw.Load()
 }
 
@@ -74,6 +73,7 @@ func buildLogMessage(ctx LogContext) string {
 	if ctx.Error != nil {
 		message = fmt.Sprintf("%s: %v", ctx.Message, ctx.Error)
 	}
+
 	return sanitizeText(message)
 }
 
@@ -84,6 +84,7 @@ func overrideLogIcon(icon string, ctx LogContext) string {
 	if ctx.Category != "" {
 		icon = getCategoryIcon(ctx.Category)
 	}
+
 	return icon
 }
 
@@ -141,15 +142,18 @@ func getCategoryIcon(category string) string {
 	if icon, ok := categoryIcons[category]; ok {
 		return icon
 	}
+
 	return IconDBG
 }
 
 func shouldPersistLevel(level LogLevel, action string) bool {
 	if level == LogError || level == LogWarn {
 		_, ok := persistOnWarnError[action]
+
 		return ok
 	}
 	_, ok := persistOnOtherLevels[action]
+
 	return ok
 }
 
@@ -195,6 +199,7 @@ func reportLogInfrastructureError(message string, err error) {
 	message = sanitizeText(message)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "log infrastructure error: %s: %v\n", message, err)
+
 		return
 	}
 	fmt.Fprintf(os.Stderr, "log infrastructure warning: %s\n", message)
@@ -232,9 +237,7 @@ func ipLog(msg string) {
 	})
 }
 
-// ============================================================================
-// LOG WRITER
-// ============================================================================
+// ============================================================================.
 func startLogWriter() {
 	if !logWriterStarted.CompareAndSwap(false, true) {
 		return
@@ -295,6 +298,7 @@ func runLogWriterLoop() {
 
 				default:
 					_ = flushLogWriterBatch(batchCount)
+
 					return
 				}
 			}
@@ -311,12 +315,14 @@ func handleLogWriterEntry(entry LogEntry, batchCount, maxBatchSize int) int {
 			fmt.Sprintf(t(phrases().LogCannotOpenFile, "Cannot open log file %s"), logPath),
 			err,
 		)
+
 		return batchCount
 	}
 
 	data, err := json.Marshal(entry)
 	if err != nil {
 		logMutex.Unlock()
+
 		return batchCount
 	}
 
@@ -328,6 +334,7 @@ func handleLogWriterEntry(entry LogEntry, batchCount, maxBatchSize int) int {
 			t(phrases().LogWriteFailed, "Write failed"),
 			err,
 		)
+
 		return batchCount
 	}
 
@@ -338,6 +345,7 @@ func handleLogWriterEntry(entry LogEntry, batchCount, maxBatchSize int) int {
 	}
 
 	logMutex.Unlock()
+
 	return batchCount
 }
 
@@ -358,16 +366,19 @@ func ensureLogWriterOpen() error {
 
 	if err := f.Chmod(0o600); err != nil {
 		_ = f.Close()
+
 		return err
 	}
 
 	logFile = f
 	logWriter = bufio.NewWriterSize(logFile, 256*1024)
+
 	return nil
 }
 
 func writeLogEntry(data []byte) error {
 	_, err := logWriter.Write(append(data, '\n'))
+
 	return err
 }
 
@@ -381,6 +392,7 @@ func flushLogWriterBatch(batchCount int) int {
 
 	if logWriter != nil && batchCount > 0 {
 		_ = logWriter.Flush()
+
 		return 0
 	}
 
@@ -451,6 +463,7 @@ func doLogRotation(path string, maxLines int) {
 	newLines, totalCount, err := tailLines(path, maxLines)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "log rotation error: %v\n", err)
+
 		return
 	}
 
@@ -463,18 +476,21 @@ func doLogRotation(path string, maxLines int) {
 
 	if err := os.WriteFile(tmpPath, []byte(output), 0o600); err != nil {
 		fmt.Fprintf(os.Stderr, "log rotation write error: %v\n", err)
+
 		return
 	}
 
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		fmt.Fprintf(os.Stderr, "log rotation remove failed: %v\n", err)
 		_ = os.Remove(tmpPath)
+
 		return
 	}
 
 	if err := os.Rename(tmpPath, path); err != nil {
 		fmt.Fprintf(os.Stderr, "log rotation rename failed: %v\n", err)
 		_ = os.Remove(tmpPath)
+
 		return
 	}
 
@@ -528,6 +544,7 @@ func tailLines(path string, maxLines int) ([]string, int, error) {
 			Action:   ActionError,
 			Message:  fmt.Sprintf("%s: %v", t(phrases().ScannerError, "Scanner error"), err),
 		})
+
 		return nil, 0, err
 	}
 
@@ -539,6 +556,7 @@ func tailLines(path string, maxLines int) ([]string, int, error) {
 	out := make([]string, 0, maxLines)
 	out = append(out, lines[start:]...)
 	out = append(out, lines[:start]...)
+
 	return out, count, nil
 }
 

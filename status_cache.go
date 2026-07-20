@@ -13,9 +13,7 @@ import (
 	"time"
 )
 
-// ============================================================================
-// STATUS FILE
-// ============================================================================
+// ============================================================================.
 func updateStatusFile(fqdn, ipv4, ipv6, provider string) error {
 	newEntry, err := writeStatusFileLocked(fqdn, ipv4, ipv6, provider)
 	if err != nil {
@@ -98,6 +96,7 @@ func currentStatusDomainsLocked() (map[string]DomainHistory, error) {
 	}
 
 	statusDomains = loaded
+
 	return statusDomains, nil
 }
 
@@ -118,6 +117,7 @@ func loadStatusDomainsFromDiskLocked() (map[string]DomainHistory, error) {
 			Action:  ActionError,
 			Message: fmt.Sprintf("Failed to read status file %s: %v", path, err),
 		})
+
 		return nil, err
 	}
 
@@ -126,6 +126,7 @@ func loadStatusDomainsFromDiskLocked() (map[string]DomainHistory, error) {
 		if moveErr := moveBrokenStatusFile(path, "Broken status file", err); moveErr != nil {
 			return nil, moveErr
 		}
+
 		return make(map[string]DomainHistory), nil
 	}
 
@@ -133,6 +134,7 @@ func loadStatusDomainsFromDiskLocked() (map[string]DomainHistory, error) {
 		if moveErr := moveBrokenStatusFile(path, "Invalid/null status file", nil); moveErr != nil {
 			return nil, moveErr
 		}
+
 		return make(map[string]DomainHistory), nil
 	}
 
@@ -156,6 +158,7 @@ func moveBrokenStatusFile(path, description string, parseErr error) error {
 				err,
 			),
 		})
+
 		return fmt.Errorf("backup invalid status file %s: %w", path, err)
 	}
 
@@ -203,6 +206,7 @@ func replaceStatusDomainsLocked(next map[string]DomainHistory) error {
 	}
 
 	statusDomains = persisted
+
 	return nil
 }
 
@@ -217,6 +221,7 @@ func writeStatusDomainsAtomic(path string, domains map[string]DomainHistory) err
 				err,
 			),
 		})
+
 		return err
 	}
 
@@ -233,6 +238,7 @@ func writeStatusDomainsAtomic(path string, domains map[string]DomainHistory) err
 				err,
 			),
 		})
+
 		return err
 	}
 
@@ -246,6 +252,7 @@ func writeStatusDomainsAtomic(path string, domains map[string]DomainHistory) err
 
 	fail := func(err error) error {
 		_ = tmpFile.Close()
+
 		return err
 	}
 
@@ -262,6 +269,7 @@ func writeStatusDomainsAtomic(path string, domains map[string]DomainHistory) err
 				err,
 			),
 		})
+
 		return fail(err)
 	}
 
@@ -282,6 +290,7 @@ func writeStatusDomainsAtomic(path string, domains map[string]DomainHistory) err
 				err,
 			),
 		})
+
 		return err
 	}
 	removeTemp = false
@@ -306,6 +315,7 @@ func cloneStatusDomains(src map[string]DomainHistory) map[string]DomainHistory {
 		history.IPs = append([]IPEntry(nil), history.IPs...)
 		dst[domain] = history
 	}
+
 	return dst
 }
 
@@ -358,9 +368,7 @@ func pruneOrphanStatusDomainsMap(domains map[string]DomainHistory) []string {
 	return pruned
 }
 
-// ============================================================================
-// CACHING
-// ============================================================================
+// ============================================================================.
 func updateDomainsCache() error {
 	snapshot, err := snapshotStatusDomains()
 	if err != nil {
@@ -407,6 +415,7 @@ func updateMetricsCache() error {
 	data, err := json.MarshalIndent(stats, "", " ")
 	if err != nil {
 		debugLog("CACHE", "", fmt.Sprintf(t(phrases().ErrMetricsCacheMarshal, "Metrics cache marshal error: %v"), err))
+
 		return err
 	}
 
@@ -451,6 +460,7 @@ func serveCachedJSON(w http.ResponseWriter, r *http.Request, cache *CachedRespon
 
 	if r.Header.Get("If-None-Match") == etag {
 		w.WriteHeader(http.StatusNotModified)
+
 		return
 	}
 
@@ -458,6 +468,7 @@ func serveCachedJSON(w http.ResponseWriter, r *http.Request, cache *CachedRespon
 		if parsed, err := http.ParseTime(ifModSince); err == nil {
 			if !lastMod.After(parsed) {
 				w.WriteHeader(http.StatusNotModified)
+
 				return
 			}
 		}
@@ -465,6 +476,7 @@ func serveCachedJSON(w http.ResponseWriter, r *http.Request, cache *CachedRespon
 
 	if r.Method == http.MethodHead {
 		w.WriteHeader(http.StatusOK)
+
 		return
 	}
 
@@ -503,6 +515,7 @@ func startCacheRefresher() {
 			select {
 			case <-shutdownCtx.Done():
 				debugLog("CACHE", "", t(phrases().CacheRefresherStopped, "Cache refresher stopped (shutdown)"))
+
 				return
 
 			case <-ticker.C:

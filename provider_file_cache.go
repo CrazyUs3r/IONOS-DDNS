@@ -16,9 +16,7 @@ type dnsProviderFileCache struct {
 	Version    int                 `json:"version"`
 }
 
-// ============================================================================
-// CACHE FILE SYSTEM
-// ============================================================================
+// ============================================================================.
 func saveDNSProviderCacheToFile(providerName, cachePath string, zones []Zone, recordCache *ZoneRecordCache) error {
 	if recordCache == nil {
 		return fmt.Errorf("%s", phrases().ErrRecordCacheNil)
@@ -53,6 +51,7 @@ func saveDNSProviderCacheToFile(providerName, cachePath string, zones []Zone, re
 	}
 
 	debugLog("CACHE", "", fmt.Sprintf(phrases().CacheSavedZones, providerName, len(zones), totalRecords))
+
 	return nil
 }
 
@@ -61,8 +60,10 @@ func loadDNSProviderCacheFromFile(providerName, cachePath string) ([]Zone, *Zone
 	if err != nil {
 		if os.IsNotExist(err) {
 			debugLog("CACHE", "", fmt.Sprintf(phrases().CacheFileNotFound, providerName))
+
 			return nil, nil, nil
 		}
+
 		return nil, nil, fmt.Errorf("%s: %w", phrases().ErrBodyRead, err)
 	}
 

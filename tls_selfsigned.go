@@ -21,11 +21,7 @@ import (
 
 const selfSignedCertificateLifetime = 365 * 24 * time.Hour
 
-// ============================================================================
-// TLS FILE
-// resolveDashboardTLSFiles returns an explicitly configured certificate pair,
-// or creates/reuses a persistent self-signed pair under CONFIG_DIR/tls.
-// ============================================================================
+// ============================================================================.
 func resolveDashboardTLSFiles() (certFile, keyFile string, selfSigned bool, err error) {
 	certFile = strings.TrimSpace(os.Getenv("DASHBOARD_TLS_CERT"))
 	keyFile = strings.TrimSpace(os.Getenv("DASHBOARD_TLS_KEY"))
@@ -37,6 +33,7 @@ func resolveDashboardTLSFiles() (certFile, keyFile string, selfSigned bool, err 
 		if _, err := tls.LoadX509KeyPair(certFile, keyFile); err != nil {
 			return "", "", false, fmt.Errorf("load configured TLS certificate: %w", err)
 		}
+
 		return certFile, keyFile, false, nil
 	}
 
@@ -104,6 +101,7 @@ func addCertificateHost(raw string, dnsSet map[string]struct{}, ipSet map[string
 
 	if parsed := net.ParseIP(host); parsed != nil {
 		ipSet[parsed.String()] = parsed
+
 		return
 	}
 
@@ -192,6 +190,7 @@ func ensureSelfSignedCertificate(certFile, keyFile string, dnsNames []string, ip
 	if _, err := tls.LoadX509KeyPair(certFile, keyFile); err != nil {
 		return fmt.Errorf("verify generated TLS certificate: %w", err)
 	}
+
 	return nil
 }
 
@@ -235,14 +234,17 @@ func writeTLSFile(path string, data []byte, mode os.FileMode) error {
 
 	if err := temporaryFile.Chmod(mode); err != nil {
 		_ = temporaryFile.Close()
+
 		return err
 	}
 	if _, err := temporaryFile.Write(data); err != nil {
 		_ = temporaryFile.Close()
+
 		return err
 	}
 	if err := temporaryFile.Sync(); err != nil {
 		_ = temporaryFile.Close()
+
 		return err
 	}
 	if err := temporaryFile.Close(); err != nil {

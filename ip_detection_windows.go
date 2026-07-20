@@ -20,15 +20,14 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// ============================================================================
-// IP DETECTION
-// ============================================================================
+// ============================================================================.
 func fetchIPResponse(ctx context.Context, url string) (string, int, time.Duration, error) {
 	debugLog("IP-CHECK", "", "🌐 "+url)
 
 	req, err := http.NewRequestWithContext(ctx, MethodGET, url, http.NoBody)
 	if err != nil {
 		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", phrases().RequestCreationFailed, err))
+
 		return "", 0, 0, fmt.Errorf("%s: %w", t(phrases().ErrRequestCreate, "request create failed"), err)
 	}
 
@@ -37,6 +36,7 @@ func fetchIPResponse(ctx context.Context, url string) (string, int, time.Duratio
 	duration := time.Since(start)
 	if err != nil {
 		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", phrases().HTTPError, err))
+
 		return "", 0, duration, fmt.Errorf("%s: %w", t(phrases().ErrNetworkError, "network error"), err)
 	}
 	defer func() {
@@ -52,12 +52,14 @@ func fetchIPResponse(ctx context.Context, url string) (string, int, time.Duratio
 	if resp.StatusCode != http.StatusOK {
 		err := fmt.Errorf("%s: %d", phrases().BadStatusCode, resp.StatusCode)
 		debugLog("IP-CHECK", "", "❌ "+err.Error())
+
 		return "", resp.StatusCode, duration, err
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, IPCheckBodyMaxBytes))
 	if err != nil {
 		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", phrases().BodyReadError, err))
+
 		return "", resp.StatusCode, duration, fmt.Errorf("%s: %w", t(phrases().ErrBodyRead, "body read failed"), err)
 	}
 
@@ -88,6 +90,7 @@ func getPublicIP(ctx context.Context, url string, want IPVersion) (string, error
 	ipStr, statusCode, duration, err := fetchIPResponse(ctx, url)
 	if err != nil {
 		apiMetrics.RecordError("IP", statusCode, err, duration)
+
 		return "", err
 	}
 
@@ -95,6 +98,7 @@ func getPublicIP(ctx context.Context, url string, want IPVersion) (string, error
 	if err != nil {
 		apiMetrics.RecordError("IP", statusCode, err, duration)
 		debugLog("IP-CHECK", "", "❌ "+err.Error())
+
 		return "", err
 	}
 
@@ -130,6 +134,7 @@ func getPublicIPFromAny(parent context.Context, urls []string, want IPVersion) (
 				"ok":   true,
 				"want": strconv.Itoa(int(want)),
 			})
+
 			return ip, nil
 		}
 
@@ -155,11 +160,13 @@ func getIPv6FromInterface(ifaceName string) (string, error) {
 	iface, err := net.InterfaceByName(ifaceName)
 	if err != nil {
 		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", phrases().InterfaceNotFound, err))
+
 		return "", err
 	}
 	if iface.Index < 0 {
 		err := fmt.Errorf("invalid negative interface index: %d", iface.Index)
 		debugLog("IP-CHECK", "", fmt.Sprintf("❌ invalid interface index for %s: %v", ifaceName, err))
+
 		return "", err
 	}
 	ifaceIndex := uint64(iface.Index)
@@ -169,6 +176,7 @@ func getIPv6FromInterface(ifaceName string) (string, error) {
 	defer runtime.KeepAlive(buf)
 	if err != nil {
 		debugLog("IP-CHECK", "", fmt.Sprintf("❌ %s: %v", phrases().AddressesNotReadable, err))
+
 		return "", err
 	}
 
@@ -193,11 +201,13 @@ func getIPv6FromInterface(ifaceName string) (string, error) {
 
 			if isInvalidWindowsIPv6Addr(addr) {
 				ipLog("⚠️ SKIP invalid IPv6: " + ip.String())
+
 				continue
 			}
 
 			if isDeprecatedWindowsIPv6Addr(addr) {
 				ipLog("⚠️ SKIP deprecated/expired IPv6: " + ip.String())
+
 				continue
 			}
 
@@ -208,10 +218,12 @@ func getIPv6FromInterface(ifaceName string) (string, error) {
 	if !matchedInterface {
 		err := fmt.Errorf("%s: %s", phrases().InterfaceNotFound, ifaceName)
 		debugLog("IP-CHECK", "", "❌ "+err.Error())
+
 		return "", err
 	}
 
 	debugLog("IP-CHECK", "", "⚠️  "+phrases().NoIPv6OnInterface)
+
 	return "", errors.New(phrases().NoIPv6OnInterface)
 }
 
@@ -233,7 +245,7 @@ func getWindowsIPv6Adapters() (*windows.IpAdapterAddresses, []byte, error) {
 			return adapter, buf, nil
 		}
 
-		if err != windows.ERROR_BUFFER_OVERFLOW {
+		if !errors.Is(err, windows.ERROR_BUFFER_OVERFLOW) {
 			return nil, nil, err
 		}
 	}
@@ -271,6 +283,7 @@ func windowsUTF16PtrToString(p *uint16) string {
 	if p == nil {
 		return ""
 	}
+
 	return windows.UTF16PtrToString(p)
 }
 
@@ -278,6 +291,7 @@ func windowsBytePtrToString(p *byte) string {
 	if p == nil {
 		return ""
 	}
+
 	return windows.BytePtrToString(p)
 }
 
@@ -354,6 +368,7 @@ func getIPv6(ctx context.Context, ifaceName string) (string, error) {
 	}
 	ipLog(phrases().IPv6PublicFallback)
 	debugLog("IP-CHECK", "", phrases().IPv6FallbackEndpoints)
+
 	return getPublicIPFromAny(ctx, activeIPv6Endpoints(), IPV6)
 }
 
@@ -412,6 +427,7 @@ func finalizeFetchedIPs(ipMode, ipv4, ipv6 string, errV4, errV6 error) (string, 
 		return finalizeBothIPs(ipv4, ipv6, errV4, errV6)
 	default:
 		logFetchedIPs(ipv4, ipv6)
+
 		return ipv4, ipv6, nil
 	}
 }
@@ -423,6 +439,7 @@ func finalizeIPv4Only(ipv4 string, errV4 error) (string, string, error) {
 	if ipv4 != "" {
 		ipLog(fmt.Sprintf(phrases().IPv4Current, ipv4))
 	}
+
 	return ipv4, "", nil
 }
 
@@ -433,14 +450,16 @@ func finalizeIPv6Only(ipv6 string, errV6 error) (string, string, error) {
 	if ipv6 != "" {
 		ipLog(fmt.Sprintf(phrases().IPv6Current, ipv6))
 	}
+
 	return "", ipv6, nil
 }
 
 func finalizeBothIPs(ipv4, ipv6 string, errV4, errV6 error) (string, string, error) {
 	if errV4 != nil && errV6 != nil {
-		return "", "", fmt.Errorf("%s: v4=%v, v6=%v", phrases().BothIPVersionsFailed, errV4, errV6)
+		return "", "", fmt.Errorf("%s: v4=%w, v6=%w", phrases().BothIPVersionsFailed, errV4, errV6)
 	}
 	logFetchedIPs(ipv4, ipv6)
+
 	return ipv4, ipv6, nil
 }
 
@@ -460,6 +479,7 @@ func activeIPv4Endpoints() []string {
 	if len(eps) > 0 {
 		return eps
 	}
+
 	return DefaultIPv4Endpoints
 }
 
@@ -470,6 +490,7 @@ func activeIPv6Endpoints() []string {
 	if len(eps) > 0 {
 		return eps
 	}
+
 	return DefaultIPv6Endpoints
 }
 
@@ -486,5 +507,6 @@ func getLocalIP() string {
 			}
 		}
 	}
+
 	return "localhost"
 }

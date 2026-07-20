@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -16,9 +17,7 @@ import (
 	"time"
 )
 
-// ============================================================================
-// MAIN
-// ============================================================================
+// ============================================================================.
 func initTimezone() {
 	tz := os.Getenv("TZ")
 	if tz == "" {
@@ -32,6 +31,7 @@ func initTimezone() {
 			err,
 		)
 		time.Local = time.UTC
+
 		return
 	}
 	time.Local = loc
@@ -82,7 +82,7 @@ func run() (exitCode int) {
 		return 1
 	}
 
-	initShutdownContext()
+	initShutdownContext(context.Background())
 	defer shutdownCancel()
 
 	if err := initAuth(paths.logsDir); err != nil {
@@ -92,6 +92,7 @@ func run() (exitCode int) {
 			Message: "Dashboard authentication initialization failed",
 			Error:   err,
 		})
+
 		return 1
 	}
 
@@ -139,6 +140,7 @@ func run() (exitCode int) {
 			Action:  ActionError,
 			Message: fmt.Sprintf("Dashboard server configuration failed: %v", err),
 		})
+
 		return 1
 	}
 
@@ -211,6 +213,7 @@ func prepareRuntimeDirectories(paths runtimePaths) error {
 			Category: "CONFIG",
 			Message:  fmt.Sprintf(t(phrases().LanguageDirCreateFailed, "Failed to create language directory: %v"), err),
 		})
+
 		return err
 	}
 
@@ -388,6 +391,7 @@ func loadConfigFromFile() bool {
 			Action:  ActionConfig,
 			Message: fmt.Sprintf(t(phrases().ConfigJSONReadFailed, "config.json could not be read, using defaults: %v"), err),
 		})
+
 		return false
 	}
 
@@ -402,6 +406,7 @@ func loadConfigFromFile() bool {
 func parseConfig(data []byte) (Config, error) {
 	var loaded Config
 	err := json.Unmarshal(data, &loaded)
+
 	return loaded, err
 }
 
@@ -444,6 +449,7 @@ func applyConfigDefaults(loaded *Config) {
 func configuredLogDir() string {
 	cfgMu.RLock()
 	defer cfgMu.RUnlock()
+
 	return cfg.LogDir
 }
 
@@ -481,6 +487,7 @@ func configFieldPresent(data []byte, objectKey, fieldKey string) bool {
 		return false
 	}
 	_, ok = object[fieldKey]
+
 	return ok
 }
 
@@ -511,14 +518,19 @@ func configureLanguage(langDir string) error {
 			Category: "CONFIG",
 			Message:  fmt.Sprintf(t(phrases().LanguageFileLoadFailed, "Failed to load language file: %v"), err),
 		})
+
 		return err
 	}
 
 	return nil
 }
 
-func initShutdownContext() {
-	shutdownCtx, shutdownCancel = context.WithCancel(context.Background())
+func initShutdownContext(parent context.Context) {
+	if shutdownCancel != nil {
+		shutdownCancel()
+	}
+
+	shutdownCtx, shutdownCancel = context.WithCancel(parent)
 }
 
 func initializeProvidersAndNotifiers() error {
@@ -528,11 +540,13 @@ func initializeProvidersAndNotifiers() error {
 			Action:  ActionConfig,
 			Message: fmt.Sprintf(t(phrases().ProviderConfigFailed, "Provider-%s failed: %v"), phrases().ConfigHeading, err),
 		})
+
 		return err
 	}
 
 	invalidateSecretReplacer()
 	initNotifiers()
+
 	return nil
 }
 
@@ -563,6 +577,7 @@ func ensureRuntimeDirs(paths runtimePaths) error {
 			Action:  ActionConfig,
 			Message: fmt.Sprintf(t(phrases().LogDirCreateFailed, "Failed to create log directory: %v"), err),
 		})
+
 		return err
 	}
 
@@ -572,6 +587,7 @@ func ensureRuntimeDirs(paths runtimePaths) error {
 			Action:  ActionConfig,
 			Message: fmt.Sprintf(t(phrases().LanguageDirCreateFailed, "Failed to create lang directory: %v"), err),
 		})
+
 		return err
 	}
 
@@ -599,6 +615,7 @@ func validateRuntimeConfig() error {
 			Action:  ActionConfig,
 			Message: err.Error(),
 		})
+
 		return err
 	}
 
@@ -608,6 +625,7 @@ func validateRuntimeConfig() error {
 func hasDomainConfig() bool {
 	cfgMu.RLock()
 	defer cfgMu.RUnlock()
+
 	return len(cfg.DomainConfigs) > 0
 }
 
@@ -720,6 +738,7 @@ func newDashboardServers() (*dashboardServers, error) {
 	servers.certFile = certFile
 	servers.keyFile = keyFile
 	servers.selfSigned = selfSigned
+
 	return servers, nil
 }
 
@@ -740,7 +759,7 @@ func startHTTPServer(srv *http.Server) {
 			Message: fmt.Sprintf("%s (http://%s%s)", phrases().DashboardStarted, ip, srv.Addr),
 		})
 
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log(LogContext{
 				Level:   LogError,
 				Action:  ActionError,
@@ -764,7 +783,7 @@ func startHTTPSServer(srv *http.Server, certFile, keyFile string, selfSigned boo
 			Message: message,
 		})
 
-		if err := srv.ListenAndServeTLS(certFile, keyFile); err != nil && err != http.ErrServerClosed {
+		if err := srv.ListenAndServeTLS(certFile, keyFile); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log(LogContext{
 				Level:   LogError,
 				Action:  ActionError,
@@ -794,6 +813,7 @@ func runMainLoop(servers *dashboardServers) int {
 		select {
 		case <-shutdownCtx.Done():
 			debugLog("SCHEDULER", "", t(phrases().SchedulerShutdownActive, "Shutdown active, stopping scheduler"))
+
 			return handleContextShutdown(ticker, servers)
 
 		case <-ticker.C:
@@ -848,6 +868,7 @@ func handleSchedulerTick(ticker *time.Ticker, currentInterval *int) *time.Ticker
 
 	if !hasDomainConfig() {
 		debugLog("SCHEDULER", "", "No domains configured yet; scheduler paused until config.json is saved.")
+
 		return ticker
 	}
 
@@ -861,6 +882,7 @@ func handleSchedulerTick(ticker *time.Ticker, currentInterval *int) *time.Ticker
 			limit = 1000
 		}
 		rotateLogFile(logPath, limit)
+
 		return ticker
 	}
 

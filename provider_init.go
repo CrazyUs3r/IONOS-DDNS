@@ -10,9 +10,7 @@ import (
 	"strings"
 )
 
-// ============================================================================
-// PROVIDER INITIALIZATION
-// ============================================================================
+// ============================================================================.
 func saveConfigToFile() error {
 	dir := filepath.Dir(configPath)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -21,6 +19,7 @@ func saveConfigToFile() error {
 			Action:  ActionError,
 			Message: fmt.Sprintf(phrases().FailedToCreateConfigDirectoryFormat, err),
 		})
+
 		return fmt.Errorf(phrases().CreateConfigDirectoryFormat, err)
 	}
 
@@ -40,6 +39,7 @@ func saveConfigToFile() error {
 			Action:  ActionError,
 			Message: fmt.Sprintf(phrases().FailedToMarshalConfigFormat, err),
 		})
+
 		return fmt.Errorf(phrases().MarshalConfigFormat, err)
 	}
 
@@ -49,6 +49,7 @@ func saveConfigToFile() error {
 			Action:  ActionError,
 			Message: fmt.Sprintf(phrases().FailedToReplaceConfigFileFormat, err),
 		})
+
 		return fmt.Errorf(phrases().ReplaceConfigFileFormat, err)
 	}
 
@@ -60,6 +61,7 @@ func initProviderConfig() error {
 		if err := validateConfig(); err != nil {
 			return err
 		}
+
 		return validateDomainConfigs()
 	}
 
@@ -83,6 +85,7 @@ func initProviderConfig() error {
 		} else {
 			debugLog("CONFIG", "", phrases().ConfigJSONSuccessfullyCreatedFromEnv)
 		}
+
 		return nil
 	}
 
@@ -92,10 +95,12 @@ func initProviderConfig() error {
 		if err == nil {
 			_ = saveConfigToFile()
 		}
+
 		return err
 	}
 
 	debugLog("CONFIG", "", "No domain/provider configuration found yet; dashboard setup mode active.")
+
 	return nil
 }
 
@@ -104,8 +109,10 @@ func (r rawEntry) toDomainConfig() DomainConfig {
 		if a != "" {
 			return a
 		}
+
 		return b
 	}
+
 	return DomainConfig{
 		Provider:  normalizeProviderName(r.Provider),
 		APIPrefix: pick(r.APIPrefix, r.APIPrefix2),
@@ -142,6 +149,7 @@ func expandDomainConfigs(raw []rawEntry) []DomainConfig {
 			out = append(out, dc)
 		}
 	}
+
 	return out
 }
 
@@ -154,11 +162,13 @@ func splitDomains(s string) []string {
 			out = append(out, p)
 		}
 	}
+
 	return out
 }
 
 func normalizeDomain(d string) string {
 	d = strings.TrimSpace(strings.ToLower(d))
+
 	return strings.TrimSuffix(d, ".")
 }
 
@@ -175,6 +185,7 @@ func initLegacyConfig() error {
 	}
 
 	cfg.DomainConfigs = configs
+
 	return validateDomainConfigs()
 }
 
@@ -183,6 +194,7 @@ func legacyProviderEnv() string {
 	if providerEnv == "" {
 		return "IONOS"
 	}
+
 	return providerEnv
 }
 
@@ -339,6 +351,7 @@ func firstNonEmpty(values ...string) string {
 			return value
 		}
 	}
+
 	return ""
 }
 
@@ -348,5 +361,6 @@ func firstNonEmptyEnv(keys ...string) string {
 			return value
 		}
 	}
+
 	return ""
 }

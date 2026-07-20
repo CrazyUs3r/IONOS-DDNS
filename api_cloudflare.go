@@ -22,9 +22,7 @@ func loadCloudflareCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
 	return loadProviderCacheFromFile("Cloudflare", "cloudflare_cache.json")
 }
 
-// ============================================================================
-// API - CLOUDFLARE
-// ============================================================================
+// ============================================================================.
 func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint string, body any) ([]byte, error) {
 	fullURL := cloudflareAPIBase + endpoint
 
@@ -54,6 +52,7 @@ func cloudflareAPIAttempt(
 
 	if err != nil {
 		retry, handledErr := handleProviderNetworkError(ctx, "Cloudflare", method, err, duration, attempt, maxRetries, true)
+
 		return nil, retry, handledErr
 	}
 
@@ -116,11 +115,13 @@ func applyCloudflareAuthHeaders(req *http.Request, dc *DomainConfig) error {
 			return fmt.Errorf("%s", phrases().CFTokenEmpty)
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
+
 		return nil
 
 	case dc.CFEmail != "" && dc.CFSecret != "":
 		req.Header.Set("X-Auth-Email", strings.TrimSpace(dc.CFEmail))
 		req.Header.Set("X-Auth-Key", strings.TrimSpace(dc.CFSecret))
+
 		return nil
 
 	default:
@@ -140,6 +141,7 @@ func normalizeCloudflareToken(token string) string {
 		if r < 32 || r == 127 {
 			return -1
 		}
+
 		return r
 	}, token)
 
@@ -157,26 +159,31 @@ func handleCloudflareResponse(
 
 	if readErr != nil {
 		retry, handledErr := handleCloudflareReadError(ctx, res, method, readErr, duration, attempt, maxAttempts)
+
 		return nil, retry, handledErr
 	}
 
 	if res.StatusCode == http.StatusTooManyRequests {
 		retry, handledErr := handleCloudflareRateLimit(ctx, res, method, fullURL, respBody, duration, attempt, maxAttempts)
+
 		return nil, retry, handledErr
 	}
 
 	var cfResp CloudflareResponse
 	if err := json.Unmarshal(respBody, &cfResp); err != nil {
 		retry, handledErr := handleCloudflareInvalidJSON(ctx, res, method, fullURL, respBody, duration, attempt, maxAttempts)
+
 		return nil, retry, handledErr
 	}
 
 	if !cfResp.Success {
 		retry, handledErr := handleCloudflareAPIFailure(ctx, res, method, fullURL, respBody, &cfResp, duration, attempt, maxAttempts)
+
 		return nil, retry, handledErr
 	}
 
 	apiMetrics.RecordSuccess(method, duration)
+
 	return respBody, false, nil
 }
 
@@ -319,6 +326,7 @@ func loadCloudflareZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) 
 		data, err := cloudflareAPI(ctx, dc, MethodGET, endpoint, nil)
 		if err != nil {
 			debugLog("CACHE", "", fmt.Sprintf(phrases().CFZoneLoadError+": %v", err))
+
 			return nil, fmt.Errorf("%s: %w", phrases().CFZoneLoadError, err)
 		}
 
@@ -332,6 +340,7 @@ func loadCloudflareZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) 
 		}
 		if err := json.Unmarshal(data, &resp); err != nil {
 			debugLog("CACHE", "", fmt.Sprintf(phrases().CFZoneParseError+": %v", err))
+
 			return nil, fmt.Errorf("%s: %w", phrases().CFZoneParseError, err)
 		}
 
@@ -381,12 +390,11 @@ func loadCloudflareRecords(ctx context.Context, dc *DomainConfig, zoneID string)
 		}
 		page++
 	}
+
 	return out, nil
 }
 
-// ============================================================================
-// DNS LOGIC - CLOUDFLARE
-// ============================================================================
+// ============================================================================.
 func updateCloudflareDNS(
 	ctx context.Context,
 	dc *DomainConfig,
@@ -410,6 +418,7 @@ func updateCloudflareDNS(
 			Domain:  fqdn,
 			Message: fmt.Sprintf("⚠️ %s %s %s", phrases().WouldSet, recordType, newIP),
 		})
+
 		return true, nil
 	}
 
@@ -454,6 +463,7 @@ func findMatchingCloudflareRecord(records []Record, fqdn, recordType string) *Re
 		if records[i].Type != recordType {
 			continue
 		}
+
 		return &records[i]
 	}
 
@@ -473,6 +483,7 @@ func shouldSkipCloudflareUpdate(fqdn, recordType, newIP string, existing *Record
 			Domain:  fqdn,
 			Message: fmt.Sprintf("%-4s  %s %s", recordType, newIP, phrases().Current),
 		})
+
 		return true
 	}
 
@@ -486,6 +497,7 @@ func shouldSkipCloudflareUpdate(fqdn, recordType, newIP string, existing *Record
 			Domain:  fqdn,
 			Message: msg,
 		})
+
 		return true
 	}
 
@@ -537,6 +549,7 @@ func updateCloudflareRecord(
 	if err != nil {
 		return "", err
 	}
+
 	return ActionUpdate, nil
 }
 
@@ -548,11 +561,13 @@ func createCloudflareRecord(
 ) error {
 	endpoint := fmt.Sprintf("/zones/%s/dns_records", zoneID)
 	_, err := cloudflareAPI(ctx, dc, MethodPOST, endpoint, payload)
+
 	return err
 }
 
 func shouldRetryCloudflareUpdateAsCreate(err error) bool {
 	var apiErr *APIError
+
 	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound
 }
 
@@ -571,6 +586,7 @@ func recoverCloudflareMissingRecord(
 		if err := createCloudflareRecord(ctx, dc, zoneID, payload); err != nil {
 			return "", err
 		}
+
 		return ActionCreate, nil
 	}
 
@@ -581,9 +597,7 @@ func recoverCloudflareMissingRecord(
 	return ActionUpdate, nil
 }
 
-// ============================================================================
-// CLEANUP - CLOUDFLARE
-// ============================================================================
+// ============================================================================.
 func cloudflareDCForZone(zoneName string) *DomainConfig {
 	zoneName = strings.ToLower(strings.TrimSuffix(zoneName, "."))
 	for _, dc := range snapshotDomainConfigs() {
@@ -598,6 +612,7 @@ func cloudflareDCForZone(zoneName string) *DomainConfig {
 			return &dc
 		}
 	}
+
 	return nil
 }
 
@@ -663,6 +678,7 @@ func cleanupSingleCloudflareRecord(
 			Domain:  fqdn,
 			Message: phrases().CleanupDryRun,
 		})
+
 		return
 	}
 
@@ -712,6 +728,7 @@ func deleteCloudflareRecord(
 
 	if _, err := cloudflareAPI(ctx, cfDC, MethodDELETE, endpoint, nil); err != nil {
 		debugLog("MAINTENANCE", fqdn, fmt.Sprintf(phrases().CleanupDeleteError, err))
+
 		return
 	}
 
@@ -727,9 +744,7 @@ func normalizeCloudflareName(name string) string {
 	return strings.ToLower(strings.TrimSuffix(strings.TrimSpace(name), "."))
 }
 
-// ============================================================================
-// Helper - CLOUDFLARE
-// ============================================================================
+// ============================================================================.
 func classifyCloudflareAPIError(
 	statusCode int,
 	method, url string,
@@ -764,6 +779,7 @@ func classifyCloudflareAPIError(
 	}
 
 	apiErr.StatusCode = statusCode
+
 	return apiErr
 }
 
@@ -775,6 +791,7 @@ func cfErrorMessage(cfResp *CloudflareResponse, fallback string) string {
 		if fallback != "" {
 			return fallback
 		}
+
 		return "unknown error"
 	}
 	var parts []string
@@ -789,6 +806,7 @@ func cfErrorMessage(cfResp *CloudflareResponse, fallback string) string {
 	if len(parts) > 0 {
 		return strings.Join(parts, "; ")
 	}
+
 	return fallback
 }
 

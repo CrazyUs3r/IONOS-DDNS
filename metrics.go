@@ -56,6 +56,7 @@ type apiMetricsSnapshot struct {
 var percentileBufPool = sync.Pool{
 	New: func() any {
 		buf := make([]int64, 0, 1000)
+
 		return &buf
 	},
 }
@@ -112,7 +113,6 @@ func sameLocalDate(a, b time.Time) bool {
 func (m *APIMetrics) resetHourlyMetricsIfNeeded(now time.Time) {
 	if !m.HourlyReset.IsZero() &&
 		!sameLocalDate(now, m.HourlyReset) {
-
 		m.HourlyStats = [24]int{}
 		m.HourlyLatency = [24]time.Duration{}
 		m.HourlyLatencySum = [24]time.Duration{}
@@ -211,7 +211,6 @@ func (m *APIMetrics) RecordError(
 
 func (m *APIMetrics) incrementDailyMethod(method string, now time.Time) {
 	if !m.DailyReset.IsZero() && !sameLocalDate(now, m.DailyReset) {
-
 		m.DailyGET = 0
 		m.DailyPOST = 0
 		m.DailyPUT = 0
@@ -359,6 +358,7 @@ func (m *APIMetrics) refreshTimeWindows(now time.Time) {
 func (m *APIMetrics) GetStats() map[string]any {
 	m.Lock()
 	defer m.Unlock()
+
 	return m.getStatsUnsafe()
 }
 
@@ -369,6 +369,7 @@ func (m *APIMetrics) getUsageColor(p float64) string {
 	if p > 70 {
 		return "#facc15"
 	}
+
 	return "#4ade80"
 }
 
@@ -379,6 +380,7 @@ func reorderHourlyStatsToChronological(hourlyData [24]int) [24]int {
 		hourIndex := (currentHour - 23 + i + 24) % 24
 		chronological[i] = hourlyData[hourIndex]
 	}
+
 	return chronological
 }
 
@@ -389,6 +391,7 @@ func reorderHourlyLatencyToChronological(hourlyData [24]time.Duration) [24]time.
 		hourIndex := (currentHour - 23 + i + 24) % 24
 		chronological[i] = hourlyData[hourIndex]
 	}
+
 	return chronological
 }
 
@@ -486,6 +489,7 @@ func ensureMetricsFile(path string) error {
 
 	empty := apiMetricsSnapshot{SavedAt: time.Now()}
 	b, _ := json.Marshal(empty)
+
 	return os.WriteFile(path, b, 0o600)
 }
 
@@ -515,6 +519,7 @@ func normalizeRingIndex(index, size int) int {
 	if index < 0 {
 		index += size
 	}
+
 	return index
 }
 
@@ -531,6 +536,7 @@ func (m *APIMetrics) LoadFromFile(path string) error {
 	m.Lock()
 	defer m.Unlock()
 	m.restoreSnapshot(*snap, now)
+
 	return nil
 }
 
@@ -551,6 +557,7 @@ func readAPIMetricsSnapshot(path string) (*apiMetricsSnapshot, error) {
 	if err := json.Unmarshal(data, &snap); err != nil {
 		return nil, errors.New("metrics.json konnte nicht gelesen werden (invalid JSON)")
 	}
+
 	return &snap, nil
 }
 
@@ -626,6 +633,7 @@ func (m *APIMetrics) restoreHourlyLatency(snap apiMetricsSnapshot, hour int) {
 	if snap.HourlyLatencyCount[hour] > 0 && snap.HourlyLatencySumMs[hour] >= 0 {
 		m.HourlyLatencyCount[hour] = snap.HourlyLatencyCount[hour]
 		m.HourlyLatencySum[hour] = time.Duration(snap.HourlyLatencySumMs[hour]) * time.Millisecond
+
 		return
 	}
 	if snap.HourlyStats[hour] > 0 && m.HourlyLatency[hour] > 0 {
@@ -759,11 +767,13 @@ func metricsBroadcasterLoop() {
 func handleMetricsReset(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodPOST {
 		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+
 		return
 	}
 
 	if !validateTriggerToken(r) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+
 		return
 	}
 

@@ -21,9 +21,7 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-// ============================================================================
-// HELPERS
-// ============================================================================
+// ============================================================================.
 func (s *SafeErrorMsg) Set(msg string) {
 	s.Lock()
 	defer s.Unlock()
@@ -33,12 +31,11 @@ func (s *SafeErrorMsg) Set(msg string) {
 func (s *SafeErrorMsg) Get() string {
 	s.RLock()
 	defer s.RUnlock()
+
 	return s.msg
 }
 
-// ============================================================================
-// HELPERS - DASHBOARD
-// ============================================================================
+// ============================================================================.
 func getAvailableLanguages(dir string) (map[string]bool, error) {
 	langs := make(map[string]bool)
 
@@ -186,7 +183,7 @@ func isASCIILetters(value string) bool {
 		return false
 	}
 
-	for i := 0; i < len(value); i++ {
+	for i := range len(value) {
 		char := value[i]
 
 		if (char < 'a' || char > 'z') &&
@@ -203,7 +200,7 @@ func isASCIIDigits(value string) bool {
 		return false
 	}
 
-	for i := 0; i < len(value); i++ {
+	for i := range len(value) {
 		if value[i] < '0' || value[i] > '9' {
 			return false
 		}
@@ -217,7 +214,7 @@ func isASCIIAlphaNumeric(value string) bool {
 		return false
 	}
 
-	for i := 0; i < len(value); i++ {
+	for i := range len(value) {
 		char := value[i]
 
 		isLetter := (char >= 'a' && char <= 'z') ||
@@ -300,6 +297,7 @@ func detectLanguage(langDir, preferred string) string {
 			"[WARN] Konnte Sprachdateien nicht lesen: %v\n",
 			err,
 		)
+
 		return "en"
 	}
 
@@ -511,6 +509,7 @@ func dashboardI18NJSON() string {
 	if err != nil {
 		return "{}"
 	}
+
 	return string(b)
 }
 
@@ -643,6 +642,7 @@ func expectedTranslationKeys() []string {
 		keys = append(keys, toSnakeCase(field.Name))
 	}
 	sort.Strings(keys)
+
 	return keys
 }
 
@@ -670,6 +670,7 @@ func jsString(s string) string {
 	s = strings.ReplaceAll(s, "<", `\u003c`)
 	s = strings.ReplaceAll(s, ">", `\u003e`)
 	s = strings.ReplaceAll(s, "&", `\u0026`)
+
 	return s
 }
 
@@ -683,6 +684,7 @@ func dryRunEnabled() bool {
 	cfgMu.RLock()
 	enabled := cfg.DryRun
 	cfgMu.RUnlock()
+
 	return enabled
 }
 
@@ -723,9 +725,7 @@ func writeFileAtomic(path string, data []byte) (err error) {
 	return os.Rename(tmpPath, path)
 }
 
-// ============================================================================
-// HELPER - DNS
-// ============================================================================
+// ============================================================================.
 func recordNameFromFQDN(fqdn, zone string) string {
 	if fqdn == zone {
 		return "@"
@@ -742,10 +742,11 @@ func recordNameFromFQDN(fqdn, zone string) string {
 func isNonRecoverableError(err error) bool {
 	if apiErr, ok := errors.AsType[*APIError](err); ok {
 		switch apiErr.StatusCode {
-		case 401, 403, 404:
+		case http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound:
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -831,6 +832,7 @@ func loadAllProviderZones(ctx context.Context) (map[string][]Zone, error) {
 				Action:  ActionZone,
 				Message: wrappedErr.Error(),
 			})
+
 			continue
 		}
 
@@ -867,6 +869,7 @@ func doSingleflight[T any](
 		if err != nil {
 			return nil, err
 		}
+
 		return v, nil
 	})
 
@@ -877,6 +880,7 @@ func doSingleflight[T any](
 		if res.Err != nil {
 			return zero, res.Err
 		}
+
 		return res.Val.(T), nil
 	}
 }
@@ -935,5 +939,6 @@ func effectiveTTL(dc *DomainConfig) int {
 	if dc.TTL <= 0 {
 		return 60
 	}
+
 	return dc.TTL
 }
