@@ -323,38 +323,82 @@ func (t *telegramNotifier) deleteMessage(chatID int64, messageID int) {
 		"chat_id":    chatID,
 		"message_id": messageID,
 	}
-	body, _ := json.Marshal(payload)
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/deleteMessage", t.token)
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		debugLog("NOTIFY", "", fmt.Sprintf("marshal deleteMessage payload: %v", err))
+
+		return
+	}
+
+	url := fmt.Sprintf(
+		"https://api.telegram.org/bot%s/deleteMessage",
+		t.token,
+	)
+
 	ctx, cancel := context.WithTimeout(t.pollCtx, 5*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, MethodPOST, url, bytes.NewReader(body))
+
+	req, err := http.NewRequestWithContext(
+		ctx,
+		MethodPOST,
+		url,
+		bytes.NewReader(body),
+	)
 	if err != nil {
 		return
 	}
+
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", ManagedComment)
+
 	resp, err := getHTTPClient().Do(req)
 	if err != nil {
 		return
 	}
+
 	_ = resp.Body.Close()
 }
 
 func (t *telegramNotifier) answerCallback(callbackID string) {
-	payload := map[string]any{"callback_query_id": callbackID}
-	body, _ := json.Marshal(payload)
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/answerCallbackQuery", t.token)
+	payload := struct {
+		CallbackQueryID string `json:"callback_query_id"`
+	}{
+		CallbackQueryID: callbackID,
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		debugLog("NOTIFY", "", fmt.Sprintf("marshal callback response: %v", err))
+
+		return
+	}
+
+	url := fmt.Sprintf(
+		"https://api.telegram.org/bot%s/answerCallbackQuery",
+		t.token,
+	)
+
 	ctx, cancel := context.WithTimeout(t.pollCtx, 5*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, MethodPOST, url, bytes.NewReader(body))
+
+	req, err := http.NewRequestWithContext(
+		ctx,
+		MethodPOST,
+		url,
+		bytes.NewReader(body),
+	)
 	if err != nil {
 		return
 	}
+
 	req.Header.Set("Content-Type", "application/json")
+
 	resp, err := getHTTPClient().Do(req)
 	if err != nil {
 		return
 	}
+
 	_ = resp.Body.Close()
 }
 
@@ -474,32 +518,64 @@ func (t *telegramNotifier) getUpdates(offset int) ([]tgUpdateFull, error) {
 }
 
 func (t *telegramNotifier) registerCommands() {
-	commands := []map[string]string{
-		{"command": "start", "description": phrases().TgCmdStart},
-		{"command": "status", "description": phrases().TgCmdStatus},
-		{"command": "metrics", "description": phrases().TgCmdMetrics},
-		{"command": "domains", "description": phrases().TgCmdDomains},
-		{"command": "update", "description": phrases().TgCmdUpdate},
-		{"command": "health", "description": phrases().TgCmdHealth},
-		{"command": "help", "description": phrases().TgCmdHelp},
+	type telegramCommand struct {
+		Command     string `json:"command"`
+		Description string `json:"description"`
 	}
-	payload := map[string]any{"commands": commands}
-	body, _ := json.Marshal(payload)
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/setMyCommands", t.token)
-	ctx, cancel := context.WithTimeout(t.pollCtx, 10*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, MethodPOST, url, bytes.NewReader(body))
-	if err != nil {
-		return
+
+	payload := struct {
+		Commands []telegramCommand `json:"commands"`
+	}{
+		Commands: []telegramCommand{
+			{Command: "start", Description: phrases().TgCmdStart},
+			{Command: "status", Description: phrases().TgCmdStatus},
+			{Command: "metrics", Description: phrases().TgCmdMetrics},
+			{Command: "domains", Description: phrases().TgCmdDomains},
+			{Command: "update", Description: phrases().TgCmdUpdate},
+			{Command: "health", Description: phrases().TgCmdHealth},
+			{Command: "help", Description: phrases().TgCmdHelp},
+		},
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", ManagedComment)
-	resp, err := getHTTPClient().Do(req)
+
+	body, err := json.Marshal(payload)
 	if err != nil {
-		debugLog("NOTIFY", "", fmt.Sprintf(phrases().TgSetCmdsFailed, err))
+		debugLog("NOTIFY", "", fmt.Sprintf("marshal bot commands: %v", err))
 
 		return
 	}
+
+	url := fmt.Sprintf(
+		"https://api.telegram.org/bot%s/setMyCommands",
+		t.token,
+	)
+
+	ctx, cancel := context.WithTimeout(t.pollCtx, 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(
+		ctx,
+		MethodPOST,
+		url,
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", ManagedComment)
+
+	resp, err := getHTTPClient().Do(req)
+	if err != nil {
+		debugLog(
+			"NOTIFY",
+			"",
+			fmt.Sprintf(phrases().TgSetCmdsFailed, err),
+		)
+
+		return
+	}
+
 	_ = resp.Body.Close()
 	debugLog("NOTIFY", "", phrases().TgBotCmdsReg)
 }
