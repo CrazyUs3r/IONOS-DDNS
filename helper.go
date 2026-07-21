@@ -670,6 +670,15 @@ func esc(s string) string {
 	return html.EscapeString(s)
 }
 
+func ipEntriesJSONAttr(entries []IPEntry) string {
+	b, err := json.Marshal(entries)
+	if err != nil {
+		return "[]"
+	}
+
+	return esc(string(b))
+}
+
 func jsString(s string) string {
 	s = strings.ReplaceAll(s, `\`, `\\`)
 	s = strings.ReplaceAll(s, `'`, `\'`)
@@ -684,9 +693,20 @@ func jsString(s string) string {
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
+	var buf bytes.Buffer
+
+	if err := json.NewEncoder(&buf).Encode(v); err != nil {
+		http.Error(w, `{"error":"failed to encode response"}`, http.StatusInternalServerError)
+
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+
+	if _, err := w.Write(buf.Bytes()); err != nil {
+		debugLog("HTTP", "", fmt.Sprintf("write JSON response: %v", err))
+	}
 }
 
 func dryRunEnabled() bool {
