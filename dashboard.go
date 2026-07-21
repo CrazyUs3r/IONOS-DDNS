@@ -3334,7 +3334,11 @@ func writeDomainsCard(w io.Writer, data map[string]any) {
 	_, _ = fmt.Fprint(w, `<div id="domainContainer">`)
 
 	for _, k := range keys {
-		h := parseDomainHistory(data[k])
+		h, err := parseDomainHistory(data[k])
+		if err != nil {
+			continue
+		}
+
 		writeSingleDomainCard(w, k, h, configuredDomains, newestChange)
 	}
 
@@ -3425,12 +3429,22 @@ func configuredDomainSet() map[string]struct{} {
 
 func newestDomainChange(data map[string]any, keys []string) time.Time {
 	var newestChange time.Time
+
 	for _, k := range keys {
-		dh := parseDomainHistory(data[k])
+		dh, err := parseDomainHistory(data[k])
+		if err != nil {
+			continue
+		}
+
 		if dh.LastChanged == "" {
 			continue
 		}
-		if t, err := time.ParseInLocation(statusTimestampLayout, dh.LastChanged, time.Local); err == nil && t.After(newestChange) {
+
+		if t, err := time.ParseInLocation(
+			statusTimestampLayout,
+			dh.LastChanged,
+			time.Local,
+		); err == nil && t.After(newestChange) {
 			newestChange = t
 		}
 	}
@@ -3438,12 +3452,19 @@ func newestDomainChange(data map[string]any, keys []string) time.Time {
 	return newestChange
 }
 
-func parseDomainHistory(v any) DomainHistory {
+func parseDomainHistory(v any) (DomainHistory, error) {
 	var h DomainHistory
-	b, _ := json.Marshal(v)
-	_ = json.Unmarshal(b, &h)
 
-	return h
+	b, err := json.Marshal(v)
+	if err != nil {
+		return h, fmt.Errorf("marshal domain history: %w", err)
+	}
+
+	if err := json.Unmarshal(b, &h); err != nil {
+		return h, fmt.Errorf("unmarshal domain history: %w", err)
+	}
+
+	return h, nil
 }
 
 func writeSingleDomainCard(w io.Writer, domain string, h DomainHistory, configuredDomains map[string]struct{}, newestChange time.Time) {
@@ -3519,11 +3540,7 @@ func writeSingleDomainCard(w io.Writer, domain string, h DomainHistory, configur
 					<tbody>`,
 		orphanStyle,
 		esc(domain),
-		func() string {
-			b, _ := json.Marshal(h.IPs)
-
-			return esc(string(b))
-		}(),
+		ipEntriesJSONAttr(h.IPs),
 		safeID,
 		dotClass,
 		esc(dotTitle),
