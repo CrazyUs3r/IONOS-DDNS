@@ -94,3 +94,14 @@ func setWorkerConcurrencyLimit(limit int) {
 	}
 	workerLimiter.SetLimit(limit)
 }
+
+func (l *DynamicWorkerLimiter) Limit() int {
+	if l == nil {
+		return 1
+	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	return l.limit
+}

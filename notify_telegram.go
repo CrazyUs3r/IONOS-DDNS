@@ -22,7 +22,10 @@ import (
 	"time"
 )
 
-// ============================================================================.
+// ============================================================================
+// TELEGRAM TYPES
+// ============================================================================
+
 type tgMessage struct {
 	From      tgUser `json:"from"`
 	Text      string `json:"text"`
@@ -83,7 +86,10 @@ type tgQueuedMsg struct {
 	text     string
 }
 
-// ============================================================================.
+// ============================================================================
+// TELEGRAM NOTIFIER
+// ============================================================================
+
 func newTelegramNotifier(token, chatIDs string) *telegramNotifier {
 	ctx, cancel := context.WithCancel(shutdownCtx)
 	t := &telegramNotifier{
@@ -132,7 +138,10 @@ func newTelegramPollClient() *http.Client {
 
 func (t *telegramNotifier) Name() string { return "Telegram" }
 
-// ============================================================================.
+// ============================================================================
+// SEND (outbound notifications) — uses shared getHTTPClient()
+// ============================================================================
+
 func (t *telegramNotifier) Send(msg NotifyMessage) error {
 	select {
 	case <-t.pollCtx.Done():
@@ -349,7 +358,10 @@ func (t *telegramNotifier) answerCallback(callbackID string) {
 	_ = resp.Body.Close()
 }
 
-// ============================================================================.
+// ============================================================================
+// POLLING LOOP
+// ============================================================================
+
 func (t *telegramNotifier) StartPolling() {
 	t.pollOnce.Do(func() {
 		t.wg.Go(func() {
@@ -513,7 +525,10 @@ func (t *telegramNotifier) deleteWebhook() {
 	debugLog("NOTIFY", "", phrases().TgWebhookUnregistered)
 }
 
-// ============================================================================.
+// ============================================================================
+// AUTH
+// ============================================================================
+
 func parseTelegramChatIDs(value string) []string {
 	seen := make(map[string]struct{})
 	chatIDs := make([]string, 0)
@@ -543,7 +558,10 @@ func chatIDStr(id int64) string {
 	return strconv.FormatInt(id, 10)
 }
 
-// ============================================================================.
+// ============================================================================
+// COMMAND HANDLER
+// ============================================================================
+
 func (t *telegramNotifier) handleCommand(msg *tgMessage) {
 	chatID := chatIDStr(msg.Chat.ID)
 	if !t.isAuthorized(chatID) {
@@ -578,7 +596,10 @@ func (t *telegramNotifier) handleCommand(msg *tgMessage) {
 	}
 }
 
-// ============================================================================.
+// ============================================================================
+// CALLBACK HANDLER
+// ============================================================================
+
 func (t *telegramNotifier) handleCallback(cb *tgCallbackQuery) {
 	chatID := chatIDStr(cb.Message.Chat.ID)
 	t.answerCallback(cb.ID)
@@ -604,7 +625,10 @@ func (t *telegramNotifier) handleCallback(cb *tgCallbackQuery) {
 	}
 }
 
-// ============================================================================.
+// ============================================================================
+// KEYBOARDS
+// ============================================================================
+
 func mainKeyboard() *tgInlineKeyboard {
 	return &tgInlineKeyboard{
 		InlineKeyboard: [][]tgInlineButton{
@@ -640,7 +664,10 @@ func backKeyboard() *tgInlineKeyboard {
 	}
 }
 
-// ============================================================================.
+// ============================================================================
+// VIEWS
+// ============================================================================
+
 func (t *telegramNotifier) sendMainMenu(chatID string) {
 	text := fmt.Sprintf(
 		"<b>🌐 Go-DynDNS</b>  <code>%s</code>\n\n"+phrases().TgMenuPrompt,
@@ -811,7 +838,10 @@ func (t *telegramNotifier) triggerUpdate(chatID string) {
 	}()
 }
 
-// ============================================================================.
+// ============================================================================
+// HELPERS
+// ============================================================================
+
 var instanceEmojis = []string{
 	"🔵", "🟢", "🟡", "🟠", "🔴", "🟣", "⚫", "⚪",
 	"🐶", "🐱", "🦊", "🐻", "🐼", "🐨", "🐯", "🦁",

@@ -20,22 +20,73 @@ func processDomains(
 ) int {
 	domains, dryRun := snapshotProcessDomainsConfig()
 
-	var wg sync.WaitGroup
-	results := make(chan domainUpdateResult, len(domains))
-
-	for i := range domains {
-		if shouldStopDomainLoop(ctx) {
-			break
-		}
-
-		dc := &domains[i]
-		startDomainWorker(ctx, &wg, results, dc, zonesByProvider, cache, ipv4, ipv6, dryRun)
+	if len(domains) == 0 {
+		return 0
 	}
 
+	workerCount := currentDomainWorkerCount(len(domains))
+
+	jobs := make(chan *DomainConfig)
+	results := make(chan domainUpdateResult, len(domains))
+	pending := &statusUpdateCollector{}
+
+	var wg sync.WaitGroup
+	wg.Add(workerCount)
+
+	for range workerCount {
+		go domainWorkerLoop(
+			ctx,
+			&wg,
+			jobs,
+			results,
+			zonesByProvider,
+			cache,
+			ipv4,
+			ipv6,
+			dryRun,
+			pending,
+		)
+	}
+
+	submitted := 0
+
+sendLoop:
+	for i := range domains {
+		select {
+		case jobs <- &domains[i]:
+			submitted++
+		case <-ctx.Done():
+			debugLog(
+				"SCHEDULER",
+				"",
+				t(
+					phrases().DomainLoopCancelled,
+					"Domain loop aborted: context cancelled",
+				),
+			)
+
+			break sendLoop
+		}
+	}
+
+	close(jobs)
 	wg.Wait()
 	close(results)
 
-	return finalizeDomainResults(results, len(domains))
+	if updates := pending.drain(); len(updates) > 0 {
+		if err := updateStatusFileBatch(updates); err != nil {
+			log(LogContext{
+				Level:  LogError,
+				Action: ActionError,
+				Message: fmt.Sprintf(
+					"batch status write failed: %v",
+					err,
+				),
+			})
+		}
+	}
+
+	return finalizeDomainResults(results, submitted)
 }
 
 func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdateJob, cache *ZoneRecordCache) domainUpdateResult {
@@ -84,7 +135,47 @@ func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdate
 	return result
 }
 
-// ============================================================================.
+type statusUpdateCollector struct {
+	mu      sync.Mutex
+	updates []statusUpdate
+}
+
+func (c *statusUpdateCollector) push(u statusUpdate) {
+	c.mu.Lock()
+	c.updates = append(c.updates, u)
+	c.mu.Unlock()
+}
+
+func (c *statusUpdateCollector) drain() []statusUpdate {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := c.updates
+	c.updates = nil
+
+	return out
+}
+
+func currentDomainWorkerCount(domainCount int) int {
+	if domainCount <= 0 {
+		return 0
+	}
+
+	limit := 1
+	if workerLimiter != nil {
+		limit = workerLimiter.Limit()
+	}
+
+	if limit > domainCount {
+		return domainCount
+	}
+
+	return max(limit, 1)
+}
+
+// ============================================================================
+// CNAME SUPPORT
+// ============================================================================
+
 func isCNAMEDomainConfig(dc *DomainConfig) bool {
 	if dc == nil {
 		return false
@@ -188,98 +279,122 @@ func snapshotProcessDomainsConfig() ([]DomainConfig, bool) {
 	return domains, cfg.DryRun
 }
 
-func shouldStopDomainLoop(ctx context.Context) bool {
-	select {
-	case <-ctx.Done():
-		debugLog("SCHEDULER", "", t(phrases().DomainLoopCancelled, "Domain loop aborted: context cancelled"))
-
-		return true
-	default:
-		return false
-	}
-}
-
-func startDomainWorker(
+func domainWorkerLoop(
 	ctx context.Context,
 	wg *sync.WaitGroup,
+	jobs <-chan *DomainConfig,
 	results chan<- domainUpdateResult,
-	dc *DomainConfig,
 	zonesByProvider map[string][]Zone,
 	cache *ZoneRecordCache,
 	ipv4, ipv6 string,
 	dryRun bool,
+	pending *statusUpdateCollector,
 ) {
-	wg.Add(1)
-	go func(domainConfig *DomainConfig) {
-		defer wg.Done()
-		defer func() {
-			if r := recover(); r != nil {
-				log(LogContext{
-					Level:   LogError,
-					Action:  ActionError,
-					Domain:  domainConfig.FQDN,
-					Message: fmt.Sprintf(t(phrases().PanicOccurred, "Panic: %v"), r),
-				})
+	defer wg.Done()
 
-				results <- domainUpdateResult{
-					Domain: domainConfig.FQDN,
-					Error:  fmt.Errorf("panic in domain worker: %v", r),
-				}
-			}
-		}()
-
-		if err := ctx.Err(); err != nil {
-			results <- domainUpdateResult{
-				Domain: domainConfig.FQDN,
-				Error:  fmt.Errorf("domain update cancelled before start: %w", err),
-			}
-
+	for {
+		select {
+		case <-ctx.Done():
 			return
-		}
-		if !acquireWorkerSlot(ctx, domainConfig.FQDN) {
-			err := ctx.Err()
-			if err == nil {
-				err = context.Canceled
-			}
-			results <- domainUpdateResult{
-				Domain: domainConfig.FQDN,
-				Error:  fmt.Errorf("worker slot acquisition cancelled: %w", err),
+
+		case domainConfig, ok := <-jobs:
+			if !ok {
+				return
 			}
 
-			return
-		}
-		defer releaseWorkerSlot(domainConfig.FQDN)
-		job, err := buildDomainUpdateJob(domainConfig, zonesByProvider, cache, ipv4, ipv6)
-		if err != nil {
-			results <- domainUpdateResult{
-				Domain: domainConfig.FQDN,
-				Error:  err,
+			result, statusUpdate := processDomainWorkerJob(
+				ctx,
+				domainConfig,
+				zonesByProvider,
+				cache,
+				ipv4,
+				ipv6,
+				dryRun,
+			)
+
+			if statusUpdate != nil {
+				pending.push(*statusUpdate)
 			}
 
-			return
+			select {
+			case results <- result:
+			case <-ctx.Done():
+				return
+			}
 		}
-
-		result := processDomainUpdate(ctx, domainConfig, job, cache)
-		result = handleDomainResultStatus(domainConfig, result, ipv4, ipv6, dryRun)
-		results <- result
-	}(dc)
+	}
 }
 
-func acquireWorkerSlot(ctx context.Context, fqdn string) bool {
-	if workerLimiter.Acquire(ctx) {
-		debugLog("WORKER", fqdn, t(phrases().WorkerSlotAcquired, "Worker slot acquired"))
+func processDomainWorkerJob(
+	ctx context.Context,
+	domainConfig *DomainConfig,
+	zonesByProvider map[string][]Zone,
+	cache *ZoneRecordCache,
+	ipv4, ipv6 string,
+	dryRun bool,
+) (
+	result domainUpdateResult,
+	statusUpdate *statusUpdate,
+) {
+	result.Domain = domainConfig.FQDN
 
-		return true
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			log(LogContext{
+				Level:  LogError,
+				Action: ActionError,
+				Domain: domainConfig.FQDN,
+				Message: fmt.Sprintf(
+					t(phrases().PanicOccurred, "Panic: %v"),
+					recovered,
+				),
+			})
+
+			result = domainUpdateResult{
+				Domain: domainConfig.FQDN,
+				Error: fmt.Errorf(
+					"panic in domain worker: %v",
+					recovered,
+				),
+			}
+
+			statusUpdate = nil
+		}
+	}()
+
+	if err := ctx.Err(); err != nil {
+		result.Error = fmt.Errorf(
+			"domain update cancelled before start: %w",
+			err,
+		)
+
+		return result, nil
 	}
 
-	debugLog("WORKER", fqdn, t(phrases().WorkerCancelledContext, "Cancelled: context cancelled"))
+	job, err := buildDomainUpdateJob(
+		domainConfig,
+		zonesByProvider,
+		cache,
+		ipv4,
+		ipv6,
+	)
+	if err != nil {
+		result.Error = err
 
-	return false
-}
+		return result, nil
+	}
 
-func releaseWorkerSlot(fqdn string) {
-	debugLog("WORKER", fqdn, t(phrases().WorkerSlotReleased, "Worker slot released"))
-	workerLimiter.Release()
+	result = processDomainUpdate(ctx, domainConfig, job, cache)
+
+	result, statusUpdate = handleDomainResultStatus(
+		domainConfig,
+		result,
+		ipv4,
+		ipv6,
+		dryRun,
+	)
+
+	return result, statusUpdate
 }
 
 func buildDomainUpdateJob(
@@ -359,7 +474,7 @@ func handleDomainResultStatus(
 	result domainUpdateResult,
 	ipv4, ipv6 string,
 	dryRun bool,
-) domainUpdateResult {
+) (domainUpdateResult, *statusUpdate) {
 	providerName := string(dc.Provider)
 
 	if result.Error == nil && result.Changed && !dryRun {
@@ -374,18 +489,14 @@ func handleDomainResultStatus(
 			v6 = ipv6
 		}
 
-		if err := updateStatusFile(dc.FQDN, v4, v6, providerName); err != nil {
-			result.Error = fmt.Errorf("DNS updated, but update.json was not written: %w", err)
-		}
-
-		return result
+		return result, &statusUpdate{FQDN: dc.FQDN, IPv4: v4, IPv6: v6, Provider: providerName}
 	}
 
 	if result.Error == nil {
 		debugLog("STATUS", dc.FQDN, phrases().NoChangesNeeded)
 	}
 
-	return result
+	return result, nil
 }
 
 func finalizeDomainResults(results <-chan domainUpdateResult, totalDomains int) int {

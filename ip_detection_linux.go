@@ -19,7 +19,10 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
-// ============================================================================.
+// ============================================================================
+// IP DETECTION LINUX
+// ============================================================================
+
 func fetchIPResponse(ctx context.Context, url string) (string, int, time.Duration, error) {
 	debugLog("IP-CHECK", "", "🌐 "+url)
 

@@ -2,7 +2,10 @@
 
 package main
 
-// ============================================================================.
+// ============================================================================
+// GLOBALE TRANSLATE VARIABLEN
+// ============================================================================
+
 type Phrases struct {
 	// Basis & Dashboard
 	Startup, Shutdown, NoZones, Update, Current, LoginSubtitle, Username                  string

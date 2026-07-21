@@ -149,7 +149,10 @@ func handleDNScaleResponse(
 	return handleProviderHTTPResponse(ctx, "DNScale", phrases().DNScaleMaxAttempts, res, method, url, duration, attempt, maxAttempts)
 }
 
-// ============================================================================.
+// ============================================================================
+// ZONE HELPERS - DNSCALE
+// ============================================================================
+
 type dnscaleZonesResponse struct {
 	Status string `json:"status"`
 	Data   struct {

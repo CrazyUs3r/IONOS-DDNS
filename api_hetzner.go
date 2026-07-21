@@ -30,7 +30,10 @@ func loadHetznerCloudCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
 	return loadProviderCacheFromFile("HETZNERCLOUD", "hetzner_cloud_cache.json")
 }
 
-// ============================================================================.
+// ============================================================================
+// SHARED API CLIENT - HETZNER
+// ============================================================================
+
 type hetznerAuthMode int
 
 const (
@@ -171,7 +174,10 @@ func handleHetznerResponse(
 	return handleProviderHTTPResponse(ctx, providerName, "", res, method, endpoint, duration, attempt, maxAttempts)
 }
 
-// ============================================================================.
+// ============================================================================
+// ZONES & RECORD LOADING - LEGACY HETZNER DNS API
+// ============================================================================
+
 type hetznerDNSZonesResponse struct {
 	Zones []hetznerDNSZone `json:"zones"`
 }
@@ -241,7 +247,10 @@ func loadHetznerDNSZoneRecords(ctx context.Context, dc *DomainConfig, zoneID str
 	return records, nil
 }
 
-// ============================================================================.
+// ============================================================================
+// ZONES & RECORD LOADING - NEW HETZNER CLOUD DNS API
+// ============================================================================
+
 type hetznerCloudZonesResponse struct {
 	Zones []hetznerCloudZone `json:"zones"`
 }
@@ -340,7 +349,10 @@ func normalizeHetznerID(v any) string {
 	}
 }
 
-// ============================================================================.
+// ============================================================================
+// DNS UPDATE LOGIC - LEGACY HETZNER DNS API
+// ============================================================================
+
 func updateHetznerDNS(
 	ctx context.Context,
 	dc *DomainConfig,
@@ -390,7 +402,10 @@ func updateHetznerDNS(
 	return true, nil
 }
 
-// ============================================================================.
+// ============================================================================
+// DNS UPDATE LOGIC - NEW HETZNER CLOUD DNS API
+// ============================================================================
+
 func updateHetznerCloudDNS(
 	ctx context.Context,
 	dc *DomainConfig,
@@ -508,7 +523,10 @@ func updateHetznerRecordCache(cache *ZoneRecordCache, zoneID, recordName, record
 	)
 }
 
-// ============================================================================.
+// ============================================================================
+// CLEANUP - HETZNER
+// ============================================================================
+
 func cleanupHetznerDNSRecords(ctx context.Context, zones []Zone, recordCache *ZoneRecordCache) {
 	dc := findProviderConfigForCleanup(ProviderHetzner)
 	if dc == nil || recordCache == nil {
@@ -596,7 +614,10 @@ func shouldCleanupHetznerRecord(zoneName string, rec Record, configRecords, mana
 	return fqdn, true
 }
 
-// ============================================================================.
+// ============================================================================
+// NAME HELPERS
+// ============================================================================
+
 func normalizeProviderName(provider string) ProviderType {
 	p := strings.ToUpper(strings.TrimSpace(provider))
 	p = strings.ReplaceAll(p, "-", "_")

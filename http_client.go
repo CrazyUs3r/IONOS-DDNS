@@ -25,7 +25,10 @@ import (
 	"time"
 )
 
-// ============================================================================.
+// ============================================================================
+// DNS CACHE
+// ============================================================================
+
 type dnsCache struct {
 	entries    map[string]dnsCacheEntry
 	inflight   map[string]*dnsInFlight
@@ -51,7 +54,10 @@ type bodyReadCloser struct {
 	io.Closer
 }
 
-// ============================================================================.
+// ============================================================================
+// HTTP TRACE / TIMINGS (DNS, CONNECT, TLS, TTFB, REUSE)
+// ============================================================================
+
 type httpTimings struct {
 	tlsStart     time.Time
 	tlsDone      time.Time
@@ -76,7 +82,10 @@ type httpTimings struct {
 	connReused   bool
 }
 
-// ============================================================================.
+// ============================================================================
+// HTTP TRACE / TIMINGS (DNS, CONNECT, TLS, TTFB, REUSE)
+// ============================================================================
+
 func (t *httpTimings) trace() *httptrace.ClientTrace {
 	return &httptrace.ClientTrace{
 		GotConn: func(info httptrace.GotConnInfo) {
@@ -210,7 +219,10 @@ func (t *httpTimings) String() string {
 	return strings.Join(parts, " | ")
 }
 
-// ============================================================================.
+// ============================================================================
+// HTTP CLIENT & TRANSPORT
+// ============================================================================
+
 const (
 	httpDebugResponseBodyLimit = 5_000
 	httpDebugRequestBodyLimit  = 10_000
@@ -1085,7 +1097,10 @@ func prioritizeIPAddrs(addrs []net.IPAddr) []net.IPAddr {
 	return out
 }
 
-// ============================================================================.
+// ============================================================================
+// SANITIZATION
+// ============================================================================
+
 func getSecretReplacer() *strings.Replacer {
 	secretReplacerMu.RLock()
 	r := secretReplacer
@@ -1348,7 +1363,10 @@ func sanitizeIDWithHash(s string) string {
 	return result
 }
 
-// ============================================================================.
+// ============================================================================
+// DNS CACHE (TTL cache + in-flight dedupe)
+// ============================================================================
+
 func newDNSCacheWithServers(dnsServers []string, ttl time.Duration) *dnsCache {
 	dnsServers = normalizeDNSServers(dnsServers)
 	resolvers := make([]*net.Resolver, 0, len(dnsServers))
@@ -1552,7 +1570,10 @@ func (c *dnsCache) invalidate(host string) {
 	c.mu.Unlock()
 }
 
-// ============================================================================.
+// ============================================================================
+// TRUST_PROXY - Forwarded-For
+// ============================================================================
+
 func getClientIP(r *http.Request) string {
 	remoteIP := r.RemoteAddr
 	if ip, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {

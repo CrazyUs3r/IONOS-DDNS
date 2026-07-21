@@ -13,7 +13,10 @@ import (
 	"time"
 )
 
-// ============================================================================.
+// ============================================================================
+// GOTIFY TYPES
+// ============================================================================
+
 type gotifyNotifier struct {
 	ctx       context.Context
 	sendQueue chan gotifyQueuedMsg
@@ -30,7 +33,10 @@ type gotifyQueuedMsg struct {
 	priority int
 }
 
-// ============================================================================.
+// ============================================================================
+// GOTIFY NOTIFIER
+// ============================================================================
+
 func newGotifyNotifier(url, token string) *gotifyNotifier {
 	ctx, cancel := context.WithCancel(notificationParentContext())
 	g := &gotifyNotifier{

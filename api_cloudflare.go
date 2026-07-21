@@ -22,7 +22,10 @@ func loadCloudflareCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
 	return loadProviderCacheFromFile("Cloudflare", "cloudflare_cache.json")
 }
 
-// ============================================================================.
+// ============================================================================
+// API - CLOUDFLARE
+// ============================================================================
+
 func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint string, body any) ([]byte, error) {
 	fullURL := cloudflareAPIBase + endpoint
 
@@ -394,7 +397,10 @@ func loadCloudflareRecords(ctx context.Context, dc *DomainConfig, zoneID string)
 	return out, nil
 }
 
-// ============================================================================.
+// ============================================================================
+// DNS LOGIC - CLOUDFLARE
+// ============================================================================
+
 func updateCloudflareDNS(
 	ctx context.Context,
 	dc *DomainConfig,
@@ -597,7 +603,10 @@ func recoverCloudflareMissingRecord(
 	return ActionUpdate, nil
 }
 
-// ============================================================================.
+// ============================================================================
+// CLEANUP - CLOUDFLARE
+// ============================================================================
+
 func cloudflareDCForZone(zoneName string) *DomainConfig {
 	zoneName = strings.ToLower(strings.TrimSuffix(zoneName, "."))
 	for _, dc := range snapshotDomainConfigs() {
@@ -744,7 +753,10 @@ func normalizeCloudflareName(name string) string {
 	return strings.ToLower(strings.TrimSuffix(strings.TrimSpace(name), "."))
 }
 
-// ============================================================================.
+// ============================================================================
+// Helper - CLOUDFLARE
+// ============================================================================
+
 func classifyCloudflareAPIError(
 	statusCode int,
 	method, url string,

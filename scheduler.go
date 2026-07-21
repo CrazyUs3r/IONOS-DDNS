@@ -11,7 +11,10 @@ import (
 	"time"
 )
 
-// ============================================================================.
+// ============================================================================
+// UPDATE ORCHESTRATION
+// ============================================================================
+
 func tryClaimUpdate() bool {
 	return updateInProgress.CompareAndSwap(false, true)
 }
@@ -428,7 +431,10 @@ func parseHistoryIPTime(value string) time.Time {
 	return time.Time{}
 }
 
-// ============================================================================.
+// ============================================================================
+// CACHE-FIRST ZONE LOADING
+// ============================================================================
+
 func getCachedZonesState() (map[string][]Zone, time.Duration, bool) {
 	zoneCacheMutex.RLock()
 	defer zoneCacheMutex.RUnlock()
@@ -504,7 +510,8 @@ func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zo
 
 	loadedFromDisk := false
 
-	zonesByProvider, err := doSingleflight(ctx, &zonesLoadGroup, "zones_api",
+	zonesByProvider, err := doSingleflight(
+		ctx, &zonesLoadGroup, "zones_api",
 		func() (map[string][]Zone, error) {
 			return loadAllProviderZones(ctx)
 		},
@@ -534,7 +541,10 @@ func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zo
 	return zonesByProvider, nil
 }
 
-// ============================================================================.
+// ============================================================================
+// CACHE-FIRST RECORD LOADING
+// ============================================================================
+
 func loadRecordsWithCache(ctx context.Context, zonesByProvider map[string][]Zone, forceRefresh bool) (*ZoneRecordCache, error) {
 	cached, cacheAge, hasCachedRecords := getCachedRecordsState()
 
@@ -585,7 +595,10 @@ func loadRecordsWithCache(ctx context.Context, zonesByProvider map[string][]Zone
 	return cache, nil
 }
 
-// ============================================================================.
+// ============================================================================
+// CACHE To DISK SAVE
+// ============================================================================
+
 type cacheSaveJob struct {
 	provider ProviderType
 	zones    []Zone
@@ -674,13 +687,13 @@ func saveCachesToDisk(
 	cache *ZoneRecordCache,
 ) {
 	zoneCacheMutex.RLock()
-	zoneLoadTs := lastZoneLoad
-	recordLoadTs := lastRecordLoad
+	zoneLoadTS := lastZoneLoad
+	recordLoadTS := lastRecordLoad
 	zoneCacheMutex.RUnlock()
 
 	diskPersistMutex.Lock()
-	needsPersist := zoneLoadTs.After(lastDiskPersistZone) ||
-		recordLoadTs.After(lastDiskPersistRecord)
+	needsPersist := zoneLoadTS.After(lastDiskPersistZone) ||
+		recordLoadTS.After(lastDiskPersistRecord)
 	diskPersistMutex.Unlock()
 
 	if !needsPersist {
@@ -710,12 +723,15 @@ func saveCachesToDisk(
 	}
 
 	diskPersistMutex.Lock()
-	lastDiskPersistZone = zoneLoadTs
-	lastDiskPersistRecord = recordLoadTs
+	lastDiskPersistZone = zoneLoadTS
+	lastDiskPersistRecord = recordLoadTS
 	diskPersistMutex.Unlock()
 }
 
-// ============================================================================.
+// ============================================================================
+// CLEANUP
+// ============================================================================
+
 func isCleanupEligibleRecordType(recordType string) bool {
 	switch strings.ToUpper(strings.TrimSpace(recordType)) {
 	case RecordTypeA, RecordTypeAAAA, RecordTypeCNAME:
@@ -777,7 +793,10 @@ func runCleanupIfNeeded(
 	}
 }
 
-// ============================================================================.
+// ============================================================================
+// DISK CACHE FALLBACK
+// ============================================================================
+
 func loadZonesFromDiskCache() (map[string][]Zone, error) {
 	zonesByProvider := make(map[string][]Zone)
 	seen := make(map[ProviderType]bool)

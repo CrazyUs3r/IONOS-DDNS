@@ -17,7 +17,10 @@ import (
 	"time"
 )
 
-// ============================================================================.
+// ============================================================================
+// MAIN
+// ============================================================================
+
 func initTimezone() {
 	tz := os.Getenv("TZ")
 	if tz == "" {
@@ -253,6 +256,7 @@ func loadPersistedMetrics(path string) {
 			Message:  fmt.Sprintf(t(phrases().MetricsLoadFailed, "Failed to load metrics: %v"), err),
 		})
 	}
+	metricsDirty.Store(false)
 }
 
 func readEnvConfig() envConfig {
@@ -842,9 +846,8 @@ func handleContextShutdown(
 
 	waitForRunningUpdates()
 
-	if err := apiMetrics.SaveToFile(metricsPersistPath); err != nil {
-		debugLog("SYSTEM", "", fmt.Sprintf(t(phrases().MetricsSaveFailed, "Metrics could not be saved: %v"), err))
-	}
+	markMetricsDirty()
+	saveMetricsIfDirty()
 
 	debugLog("SYSTEM", "", t(phrases().WaitingForLogQueue, "📝 Waiting for log queue..."))
 
@@ -932,9 +935,8 @@ func handleShutdownSignal(sig os.Signal, ticker *time.Ticker, servers *dashboard
 
 	waitForRunningUpdates()
 
-	if err := apiMetrics.SaveToFile(metricsPersistPath); err != nil {
-		debugLog("SYSTEM", "", fmt.Sprintf(t(phrases().MetricsSaveFailed, "Metrics could not be saved: %v"), err))
-	}
+	markMetricsDirty()
+	saveMetricsIfDirty()
 
 	debugLog("SYSTEM", "", t(phrases().WaitingForLogQueue, "📝 Waiting for log queue..."))
 

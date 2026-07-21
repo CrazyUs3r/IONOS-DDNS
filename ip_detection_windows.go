@@ -20,7 +20,10 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// ============================================================================.
+// ============================================================================
+// IP DETECTION WINDOWS
+// ============================================================================
+
 func fetchIPResponse(ctx context.Context, url string) (string, int, time.Duration, error) {
 	debugLog("IP-CHECK", "", "🌐 "+url)
 

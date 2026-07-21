@@ -21,7 +21,12 @@ import (
 
 const selfSignedCertificateLifetime = 365 * 24 * time.Hour
 
-// ============================================================================.
+// ============================================================================
+// TLS FILE
+// resolveDashboardTLSFiles returns an explicitly configured certificate pair,
+// or creates/reuses a persistent self-signed pair under CONFIG_DIR/tls.
+// ============================================================================
+
 func resolveDashboardTLSFiles() (certFile, keyFile string, selfSigned bool, err error) {
 	certFile = strings.TrimSpace(os.Getenv("DASHBOARD_TLS_CERT"))
 	keyFile = strings.TrimSpace(os.Getenv("DASHBOARD_TLS_KEY"))

@@ -21,7 +21,10 @@ func loadIONOSCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
 	return loadProviderCacheFromFile("IONOS", "ionos_cache.json")
 }
 
-// ============================================================================.
+// ============================================================================
+// API - IONOS
+// ============================================================================
+
 func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body any) ([]byte, error) {
 	allowRetry := method != MethodPOST
 
@@ -153,7 +156,10 @@ func loadIonosInfrastructureRecords(ctx context.Context, dc *DomainConfig, zoneI
 	return detail.Records, nil
 }
 
-// ============================================================================.
+// ============================================================================
+// DNS LOGIC - IONOS
+// ============================================================================
+
 func updateIonosDNS(
 	ctx context.Context,
 	dc *DomainConfig,
@@ -870,7 +876,10 @@ func loadIONOSZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
 	return filtered, nil
 }
 
-// ============================================================================.
+// ============================================================================
+// CACHE UPDATE - IONOS
+// ============================================================================
+
 func updateIONOSCache(
 	cache *ZoneRecordCache,
 	zoneID, recordName, fqdn, recordType, newIP string,
@@ -945,7 +954,10 @@ func updateIONOSCache(
 	debugLog("CACHE", fqdn, fmt.Sprintf(phrases().IonosCacheUpdated, recordType, newIP))
 }
 
-// ============================================================================.
+// ============================================================================
+// CLEANUP - IONOS
+// ============================================================================
+
 func cleanupIONOSRecords(ctx context.Context, zones []Zone, recordCache *ZoneRecordCache) {
 	ionosDC := findIONOSConfigForCleanup()
 	if ionosDC == nil {

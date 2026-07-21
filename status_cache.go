@@ -13,76 +13,136 @@ import (
 	"time"
 )
 
-// ============================================================================.
-func updateStatusFile(fqdn, ipv4, ipv6, provider string) error {
-	newEntry, err := writeStatusFileLocked(fqdn, ipv4, ipv6, provider)
+// ============================================================================
+// STATSU FILE
+// ============================================================================
+
+type statusUpdate struct {
+	FQDN     string
+	IPv4     string
+	IPv6     string
+	Provider string
+}
+
+func updateStatusFileBatch(updates []statusUpdate) error {
+	if len(updates) == 0 {
+		return nil
+	}
+
+	now := time.Now().Format(statusTimestampLayout)
+	changedUpdates := make([]statusUpdate, 0, len(updates))
+
+	statusMutex.Lock()
+
+	domains, err := currentStatusDomainsLocked()
+	if err != nil {
+		statusMutex.Unlock()
+
+		return err
+	}
+
+	for _, u := range updates {
+		fqdn := strings.TrimSpace(u.FQDN)
+		if fqdn == "" {
+			continue
+		}
+
+		key := existingStatusDomainKey(domains, fqdn)
+		if key == "" {
+			key = fqdn
+		}
+
+		history, exists := domains[key]
+
+		if exists && statusUpdateUnchanged(history, u) {
+			continue
+		}
+
+		history.Provider = u.Provider
+		history.LastChanged = now
+		history.IPs = append(history.IPs, IPEntry{
+			Time: now,
+			IPv4: u.IPv4,
+			IPv6: u.IPv6,
+		})
+
+		if excess := len(history.IPs) - MaxStatusHistoryItems; excess > 0 {
+			copy(history.IPs, history.IPs[excess:])
+			history.IPs = history.IPs[:MaxStatusHistoryItems]
+		}
+
+		domains[key] = history
+		changedUpdates = append(changedUpdates, u)
+	}
+
+	pruned := pruneOrphanStatusDomainsMap(domains)
+
+	changed := len(changedUpdates) > 0 || len(pruned) > 0
+	if changed {
+		statusPersistDirty = true
+	}
+
+	if statusPersistDirty {
+		err = writeStatusDomainsLocked(domains)
+		if err == nil {
+			statusPersistDirty = false
+		}
+	}
+
+	statusMutex.Unlock()
+
 	if err != nil {
 		return err
 	}
 
-	if err := updateDomainsCache(); err != nil {
-		debugLog("CACHE", "", fmt.Sprintf(t(phrases().ErrUpdateDomainsCache, "updateDomainsCache failed: %v"), err))
-	}
-
-	broadcastUpdate("domain_update", map[string]any{
-		"domain": fqdn,
-		"ipv4":   ipv4,
-		"ipv6":   ipv6,
-		"time":   newEntry.Time,
-	})
-
-	return nil
-}
-
-func writeStatusFileLocked(fqdn, ipv4, ipv6, provider string) (IPEntry, error) {
-	statusMutex.Lock()
-	defer statusMutex.Unlock()
-
-	if strings.TrimSpace(fqdn) == "" {
-		return IPEntry{}, errors.New("fqdn must not be empty")
-	}
-
-	current, err := currentStatusDomainsLocked()
-	if err != nil {
-		return IPEntry{}, err
-	}
-
-	next := cloneStatusDomains(current)
-
-	key := existingStatusDomainKey(next, fqdn)
-	if key == "" {
-		key = fqdn
-	}
-
-	history := next[key]
-	history.Provider = provider
-
-	now := time.Now().Format(statusTimestampLayout)
-	history.LastChanged = now
-
-	newEntry := IPEntry{
-		Time: now,
-		IPv4: ipv4,
-		IPv6: ipv6,
-	}
-
-	history.IPs = append(history.IPs, newEntry)
-	if len(history.IPs) > MaxStatusHistoryItems {
-		history.IPs = append([]IPEntry(nil), history.IPs[len(history.IPs)-MaxStatusHistoryItems:]...)
-	}
-	next[key] = history
-
-	pruned := pruneOrphanStatusDomainsMap(next)
-
-	if err := replaceStatusDomainsLocked(next); err != nil {
-		return IPEntry{}, err
+	if !changed {
+		return nil
 	}
 
 	for _, domain := range pruned {
 		debugLog("STATUS", domain, "Orphaned domain pruned from status")
 	}
 
-	return newEntry, nil
+	if err := updateDomainsCache(); err != nil {
+		debugLog(
+			"CACHE",
+			"",
+			fmt.Sprintf(
+				t(
+					phrases().ErrUpdateDomainsCache,
+					"updateDomainsCache failed: %v",
+				),
+				err,
+			),
+		)
+	}
+
+	// Nur Änderungen broadcasten.
+	for _, u := range changedUpdates {
+		broadcastUpdate("domain_update", map[string]any{
+			"domain": u.FQDN,
+			"ipv4":   u.IPv4,
+			"ipv6":   u.IPv6,
+			"time":   now,
+		})
+	}
+
+	return nil
+}
+
+func statusUpdateUnchanged(history DomainHistory, update statusUpdate) bool {
+	if history.Provider != update.Provider {
+		return false
+	}
+
+	if len(history.IPs) == 0 {
+		return false
+	}
+
+	last := history.IPs[len(history.IPs)-1]
+
+	return last.IPv4 == update.IPv4 &&
+		last.IPv6 == update.IPv6
 }
 
 func currentStatusDomainsLocked() (map[string]DomainHistory, error) {
@@ -190,22 +250,21 @@ func checkedUpdatePath() (string, error) {
 	return path, nil
 }
 
-func replaceStatusDomainsLocked(next map[string]DomainHistory) error {
+func writeStatusDomainsLocked(domains map[string]DomainHistory) error {
 	path, err := checkedUpdatePath()
 	if err != nil {
 		return err
 	}
 
-	persisted := cloneStatusDomains(next)
-	if persisted == nil {
-		persisted = make(map[string]DomainHistory)
+	if domains == nil {
+		domains = make(map[string]DomainHistory)
 	}
 
-	if err := writeStatusDomainsAtomic(path, persisted); err != nil {
+	if err := writeStatusDomainsAtomic(path, domains); err != nil {
 		return err
 	}
 
-	statusDomains = persisted
+	statusDomains = domains
 
 	return nil
 }
@@ -368,7 +427,10 @@ func pruneOrphanStatusDomainsMap(domains map[string]DomainHistory) []string {
 	return pruned
 }
 
-// ============================================================================.
+// ============================================================================
+// CACHING
+// ============================================================================
+
 func updateDomainsCache() error {
 	snapshot, err := snapshotStatusDomains()
 	if err != nil {

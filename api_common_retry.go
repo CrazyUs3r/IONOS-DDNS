@@ -8,23 +8,10 @@ import (
 
 type apiAttemptFunc func(attempt, maxRetries int) ([]byte, bool, error)
 
-func configuredAPIMaxAttempts() int {
-	cfgMu.RLock()
-	maxAttempts := cfg.MaxAPIRetries
-	cfgMu.RUnlock()
+// ============================================================================
+// COMMON RETRY
+// ============================================================================
 
-	if maxAttempts <= 0 {
-		return 1
-	}
-
-	return maxAttempts
-}
-
-func canRetryAPIAttempt(attempt, maxAttempts int) bool {
-	return attempt+1 < maxAttempts
-}
-
-// ============================================================================.
 func apiWithRetry(
 	ctx context.Context,
 	providerName string,
@@ -54,4 +41,20 @@ func apiWithRetry(
 	}
 
 	return nil, fmt.Errorf("%s: %w", fmt.Sprintf(failedFormat, maxRetries), lastErr)
+}
+
+func configuredAPIMaxAttempts() int {
+	cfgMu.RLock()
+	maxAttempts := cfg.MaxAPIRetries
+	cfgMu.RUnlock()
+
+	if maxAttempts <= 0 {
+		return 1
+	}
+
+	return maxAttempts
+}
+
+func canRetryAPIAttempt(attempt, maxAttempts int) bool {
+	return attempt+1 < maxAttempts
 }

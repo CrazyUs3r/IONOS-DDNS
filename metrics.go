@@ -110,6 +110,10 @@ func sameLocalDate(a, b time.Time) bool {
 		aDay == bDay
 }
 
+func markMetricsDirty() {
+	metricsDirty.Store(true)
+}
+
 func (m *APIMetrics) resetHourlyMetricsIfNeeded(now time.Time) {
 	if !m.HourlyReset.IsZero() &&
 		!sameLocalDate(now, m.HourlyReset) {
@@ -154,6 +158,7 @@ func (m *APIMetrics) RecordSuccess(
 
 	m.Unlock()
 
+	markMetricsDirty()
 	m.signalStatsUpdate()
 }
 
@@ -206,6 +211,7 @@ func (m *APIMetrics) RecordError(
 
 	m.Unlock()
 
+	markMetricsDirty()
 	m.signalStatsUpdate()
 }
 
@@ -276,6 +282,7 @@ func (m *APIMetrics) RecordIPLatency(duration time.Duration) {
 	if m.IPLatencySampleCount < len(m.IPLatencySamples) {
 		m.IPLatencySampleCount++
 	}
+	markMetricsDirty()
 }
 
 func (m *APIMetrics) calcPercentile(p float64) time.Duration {
@@ -721,18 +728,40 @@ func startMetricsAutosave(interval time.Duration) {
 	if interval <= 0 {
 		return
 	}
+
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
+
 		for {
 			select {
 			case <-ticker.C:
-				_ = apiMetrics.SaveToFile(metricsPersistPath)
+				saveMetricsIfDirty()
+
 			case <-shutdownCtx.Done():
+				// Beim Shutdown die letzte Änderung sichern.
+				saveMetricsIfDirty()
+
 				return
 			}
 		}
 	}()
+}
+
+func saveMetricsIfDirty() {
+	if !metricsDirty.CompareAndSwap(true, false) {
+		return
+	}
+
+	if err := apiMetrics.SaveToFile(metricsPersistPath); err != nil {
+		metricsDirty.Store(true)
+
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: fmt.Sprintf("Failed to save metrics: %v", err),
+		})
+	}
 }
 
 func setLatestMetrics(stats map[string]any) {
@@ -817,7 +846,10 @@ func handleMetricsReset(w http.ResponseWriter, r *http.Request) {
 	apiMetrics.Unlock()
 
 	if err := apiMetrics.SaveToFile(metricsPersistPath); err != nil {
+		metricsDirty.Store(true)
 		debugLog("API", getClientIP(r), "Failed to save empty metrics: "+err.Error())
+	} else {
+		metricsDirty.Store(false)
 	}
 
 	stats := apiMetrics.GetStats()

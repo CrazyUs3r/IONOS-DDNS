@@ -39,7 +39,10 @@ type mqttNotifier struct {
 	connected          bool
 }
 
-// ============================================================================.
+// ============================================================================
+// MQTT NOTIFIER
+// ============================================================================
+
 func (m *mqttNotifier) Name() string { return "Mqtt" }
 
 func (m *mqttNotifier) isConnected() bool {
@@ -331,7 +334,10 @@ func (m *mqttNotifier) Close() {
 	m.setConnected(false)
 }
 
-// ============================================================================.
+// ============================================================================
+// STATE
+// ============================================================================
+
 func (m *mqttNotifier) publishSnapshot(client mqtt.Client) error {
 	cfgMu.RLock()
 	ipMode := cfg.IPMode
@@ -443,7 +449,10 @@ func (m *mqttNotifier) publishDomainStates(client mqtt.Client) error {
 	})
 }
 
-// ============================================================================.
+// ============================================================================
+// COMMANDS
+// ============================================================================
+
 type mqttCommandRequest struct {
 	RequestID string `json:"request_id"`
 }
@@ -565,7 +574,10 @@ func validMQTTButtonPayload(payload []byte, command string) bool {
 	return value == "PRESS" || value == "ON" || value == command
 }
 
-// ============================================================================.
+// ============================================================================
+// HOME ASSISTANT DISCOVERY
+// ============================================================================
+
 func (m *mqttNotifier) publishDiscovery(client mqtt.Client) error {
 	entities := []struct {
 		payload   map[string]any
@@ -775,7 +787,10 @@ func (m *mqttNotifier) publishDiscoveryEntity(
 	return m.publishJSONWithClient(client, configTopic, payload)
 }
 
-// ============================================================================.
+// ============================================================================
+// PUBLISH HELPERS
+// ============================================================================
+
 func (m *mqttNotifier) publishJSONWithClient(
 	client mqtt.Client,
 	topic string,
@@ -808,7 +823,10 @@ func (m *mqttNotifier) publishRawWithClient(
 	return token.Error()
 }
 
-// ============================================================================.
+// ============================================================================
+// TOPIC / ID HELPERS
+// ============================================================================
+
 func deriveMQTTBaseTopic(eventTopic string) string {
 	base := strings.TrimRight(eventTopic, "/")
 	for _, suffix := range []string{"/events", "/event", "/notifications"} {

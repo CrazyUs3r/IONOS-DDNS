@@ -2,12 +2,15 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	cryptorand "crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
+	"io"
 	"math"
 	"math/big"
 	"net/http"
@@ -21,7 +24,10 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-// ============================================================================.
+// ============================================================================
+// HELPERS
+// ============================================================================
+
 func (s *SafeErrorMsg) Set(msg string) {
 	s.Lock()
 	defer s.Unlock()
@@ -35,7 +41,10 @@ func (s *SafeErrorMsg) Get() string {
 	return s.msg
 }
 
-// ============================================================================.
+// ============================================================================
+// HELPERS -DASHBOARD
+// ============================================================================
+
 func getAvailableLanguages(dir string) (map[string]bool, error) {
 	langs := make(map[string]bool)
 
@@ -725,7 +734,115 @@ func writeFileAtomic(path string, data []byte) (err error) {
 	return os.Rename(tmpPath, path)
 }
 
-// ============================================================================.
+func deleteLogEntryStreaming(path, wantedID string) (bool, error) {
+	source, err := os.Open(path)
+	if err != nil {
+		return false, err
+	}
+
+	dir := filepath.Dir(path)
+	base := filepath.Base(path)
+
+	temp, err := os.CreateTemp(dir, "."+base+".delete-*")
+	if err != nil {
+		_ = source.Close()
+
+		return false, err
+	}
+
+	tempPath := temp.Name()
+	keepTemp := true
+
+	defer func() {
+		_ = source.Close()
+		_ = temp.Close()
+
+		if keepTemp {
+			_ = os.Remove(tempPath)
+		}
+	}()
+
+	if err := temp.Chmod(0o600); err != nil {
+		return false, err
+	}
+
+	reader := bufio.NewReaderSize(source, 64*1024)
+	writer := bufio.NewWriterSize(temp, 64*1024)
+
+	deleted := false
+
+	for {
+		line, readErr := reader.ReadBytes('\n')
+
+		if len(line) > 0 {
+			remove := false
+			trimmed := bytes.TrimSpace(line)
+
+			if len(trimmed) > 0 {
+				var entry LogEntry
+
+				if err := json.Unmarshal(trimmed, &entry); err == nil {
+					entry.Timestamp = formatDashboardLogTimestamp(
+						entry.Timestamp,
+					)
+
+					remove = logEntryID(entry) == wantedID
+				}
+			}
+
+			if remove {
+				deleted = true
+			} else {
+				if _, err := writer.Write(line); err != nil {
+					return false, err
+				}
+
+				if readErr == io.EOF && line[len(line)-1] != '\n' {
+					if err := writer.WriteByte('\n'); err != nil {
+						return false, err
+					}
+				}
+			}
+		}
+
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
+				break
+			}
+
+			return false, readErr
+		}
+	}
+
+	if err := writer.Flush(); err != nil {
+		return false, err
+	}
+
+	if err := temp.Sync(); err != nil {
+		return false, err
+	}
+
+	if err := temp.Close(); err != nil {
+		return false, err
+	}
+
+	if err := source.Close(); err != nil {
+		return false, err
+	}
+
+	if err := os.Rename(tempPath, path); err != nil {
+		return false, err
+	}
+
+	keepTemp = false
+
+	return deleted, nil
+}
+
+// ============================================================================
+// HELPER - DNS
+// ============================================================================
+
 func recordNameFromFQDN(fqdn, zone string) string {
 	if fqdn == zone {
 		return "@"

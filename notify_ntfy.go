@@ -11,7 +11,10 @@ import (
 	"time"
 )
 
-// ============================================================================.
+// ============================================================================
+// NTFY TYPES
+// ============================================================================
+
 type ntfyNotifier struct {
 	ctx       context.Context
 	sendQueue chan ntfyQueuedMsg
@@ -39,7 +42,10 @@ type ntfyQueuedMsg struct {
 	priority string
 }
 
-// ============================================================================.
+// ============================================================================
+// NTFY NOTIFIER
+// ============================================================================
+
 func newNtfyNotifier(url, topic, token string) *ntfyNotifier {
 	ctx, cancel := context.WithCancel(notificationParentContext())
 	n := &ntfyNotifier{

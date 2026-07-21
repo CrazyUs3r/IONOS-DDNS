@@ -3,6 +3,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -47,7 +48,10 @@ func contentETag(content string) string {
 	return `"` + hex.EncodeToString(sum[:]) + `"`
 }
 
-// ============================================================================.
+// ============================================================================
+// SVG CHARTS
+// ============================================================================
+
 func generateSVGChart(data [24]int) string {
 	maxVal := 0
 	for _, v := range data {
@@ -305,7 +309,10 @@ func buildChartTooltipPoints(points [][2]float64, values []float64, unit string)
 	return b.String()
 }
 
-// ============================================================================.
+// ============================================================================
+// DASHBOARD HTTP HANDLER
+// ============================================================================
+
 func buildSettingsInlineSection(title, body string) string {
 	return `<div class="s-section s-section--spaced">` +
 		`<div class="s-section-label s-section-label--heading">` + title + `</div>` +
@@ -2025,8 +2032,12 @@ func handleAPITriggerStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAPIExport(w http.ResponseWriter, r *http.Request) {
-	if r.Method != MethodGET {
-		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+	if r.Method != http.MethodGet {
+		http.Error(
+			w,
+			esc(phrases().APIErrorMethodNotAllowed),
+			http.StatusMethodNotAllowed,
+		)
 
 		return
 	}
@@ -2037,46 +2048,120 @@ func handleAPIExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	statusMutex.Lock()
-	defer statusMutex.Unlock()
-
-	exportData := map[string]any{
-		"timestamp": time.Now().Format(time.RFC3339),
-		"metrics":   apiMetrics.GetStats(),
-	}
-
-	if b, err := os.ReadFile(updatePath); err == nil {
-		var domains map[string]DomainHistory
-		if err := json.Unmarshal(b, &domains); err == nil {
-			exportData["domains"] = domains
-		}
-	}
-
-	if b, err := os.ReadFile(logPath); err == nil {
-		var logEntries []LogEntry
-		for line := range strings.SplitSeq(string(b), "\n") {
-			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
-			}
-			var entry LogEntry
-			if json.Unmarshal([]byte(line), &entry) == nil {
-				logEntries = append(logEntries, entry)
-			}
-		}
-		exportData["logs"] = logEntries
-	}
-
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Content-Disposition", "attachment; filename=dyndns-export.json")
+	w.Header().Set(
+		"Content-Disposition",
+		"attachment; filename=dyndns-export.json",
+	)
 
-	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(exportData); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-
-		return
+	if err := streamDashboardExport(w); err != nil {
+		debugLog("EXPORT", "", fmt.Sprintf("Export failed: %v", err))
 	}
+}
+
+func streamDashboardExport(w io.Writer) error {
+	if _, err := io.WriteString(w, `{"timestamp":`); err != nil {
+		return err
+	}
+
+	if err := writeJSONValue(w, time.Now().Format(time.RFC3339)); err != nil {
+		return err
+	}
+
+	if _, err := io.WriteString(w, `,"metrics":`); err != nil {
+		return err
+	}
+
+	if err := writeJSONValue(w, apiMetrics.GetStats()); err != nil {
+		return err
+	}
+
+	if _, err := io.WriteString(w, `,"domains":`); err != nil {
+		return err
+	}
+
+	if err := streamDomainsJSON(w); err != nil {
+		return err
+	}
+
+	if _, err := io.WriteString(w, `,"logs":[`); err != nil {
+		return err
+	}
+
+	if err := streamLogEntriesJSON(w); err != nil {
+		return err
+	}
+
+	_, err := io.WriteString(w, "]}\n")
+
+	return err
+}
+
+func writeJSONValue(w io.Writer, value any) error {
+	encoder := json.NewEncoder(w)
+	encoder.SetEscapeHTML(false)
+
+	return encoder.Encode(value)
+}
+
+func streamDomainsJSON(w io.Writer) error {
+	file, err := os.Open(updatePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			_, writeErr := io.WriteString(w, "{}")
+
+			return writeErr
+		}
+
+		return err
+	}
+	defer file.Close()
+
+	_, err = io.Copy(w, file)
+
+	return err
+}
+
+func streamLogEntriesJSON(w io.Writer) error {
+	file, err := os.Open(logPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+
+		return err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+
+	first := true
+
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+
+		if !json.Valid(line) {
+			continue
+		}
+
+		if !first {
+			if _, err := io.WriteString(w, ","); err != nil {
+				return err
+			}
+		}
+
+		if _, err := w.Write(line); err != nil {
+			return err
+		}
+
+		first = false
+	}
+
+	return scanner.Err()
 }
 
 func handleMetrics(w http.ResponseWriter, r *http.Request) {
@@ -2480,34 +2565,13 @@ func handleAPILogDelete(w http.ResponseWriter, r *http.Request) {
 		logFile = nil
 	}
 
-	data, err := os.ReadFile(logPath)
+	deleted, err := deleteLogEntryStreaming(logPath, body.ID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-
-		return
-	}
-
-	var kept []string
-	for line := range strings.SplitSeq(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		var e LogEntry
-		if json.Unmarshal([]byte(line), &e) != nil {
-			kept = append(kept, line)
-
-			continue
-		}
-		e.Timestamp = formatDashboardLogTimestamp(e.Timestamp)
-		if logEntryID(e) != body.ID {
-			kept = append(kept, line)
-		}
-	}
-
-	output := strings.Join(kept, "\n") + "\n"
-	if err := os.WriteFile(logPath, []byte(output), 0o600); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeJSON(
+			w,
+			http.StatusInternalServerError,
+			map[string]string{"error": err.Error()},
+		)
 
 		return
 	}
@@ -2517,7 +2581,14 @@ func handleAPILogDelete(w http.ResponseWriter, r *http.Request) {
 	logMemCacheTime = time.Time{}
 	logMemCacheMu.Unlock()
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+	status := "not_found"
+	if deleted {
+		status = "deleted"
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status": status,
+	})
 }
 
 func loadLogsFromMainFile() ([]LogEntry, string) {
@@ -3595,7 +3666,10 @@ func appFooterHTML() string {
 </footer>`
 }
 
-// ============================================================================.
+// ============================================================================
+// DIAGNOSE / HEALTH CENTER
+// ============================================================================
+
 const (
 	dashboardBackupApp     = "dyndns-dashboard"
 	dashboardBackupVersion = 1
@@ -4176,21 +4250,47 @@ func afterConfigRestore() {
 
 func restoreBackupStatus(backup dashboardBackup) (int, error) {
 	if backup.Status == nil {
-		return http.StatusBadRequest, fmt.Errorf("%s", t(phrases().BackupContainsNoStatus, "backup contains no status"))
+		return http.StatusBadRequest, fmt.Errorf(
+			"%s",
+			t(
+				phrases().BackupContainsNoStatus,
+				"backup contains no status",
+			),
+		)
 	}
 
 	statusMutex.Lock()
-	err := replaceStatusDomainsLocked(backup.Status)
+
+	err := writeStatusDomainsLocked(backup.Status)
+	if err == nil {
+		statusDomains = backup.Status
+		statusPersistDirty = false
+	}
+
 	statusMutex.Unlock()
+
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf(
-			t(phrases().BackupStatusRestoreFailedFormat, "status restore failed: %w"),
+			t(
+				phrases().BackupStatusRestoreFailedFormat,
+				"status restore failed: %w",
+			),
 			err,
 		)
 	}
 
 	if err := updateDomainsCache(); err != nil {
-		debugLog("CACHE", "", fmt.Sprintf(t(phrases().ErrUpdateDomainsCache, "updateDomainsCache failed: %v"), err))
+		debugLog(
+			"CACHE",
+			"",
+			fmt.Sprintf(
+				t(
+					phrases().ErrUpdateDomainsCache,
+					"updateDomainsCache failed: %v",
+				),
+				err,
+			),
+		)
 	}
 
 	return http.StatusOK, nil
@@ -4224,7 +4324,10 @@ func logBackupRestore(restored []string) {
 	})
 }
 
-// ============================================================================.
+// ============================================================================
+// DIAGNOSE / HEALTH CENTER
+// ============================================================================
+
 func writeDiagnoseSection(w io.Writer) {
 	_, _ = fmt.Fprint(w, `
 	<div class="page-section" data-section="diagnose">
@@ -4542,7 +4645,10 @@ func diagnoseFileInfo(name, path string) map[string]any {
 	return out
 }
 
-// ============================================================================.
+// ============================================================================
+// DNS PROPAGATION
+// ============================================================================
+
 type dnsResolverTarget struct {
 	Name    string
 	Address string
