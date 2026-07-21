@@ -294,7 +294,8 @@ func buildChartTooltipPoints(points [][2]float64, values []float64, unit string)
 	for i, p := range points {
 		label := now.Add(-time.Duration(len(points)-1-i) * time.Hour).Format("15:00")
 
-		fmt.Fprintf(&b,
+		fmt.Fprintf(
+			&b,
 			`<circle class="chart-point" cx="%.1f" cy="%.1f" r="4" data-x="%.1f" data-y="%.1f" data-value="%.0f" data-label="%s" data-unit="%s"></circle>`,
 			p[0],
 			p[1],
@@ -448,7 +449,8 @@ func buildNetworkInterfaceOptions(selectedName string) string {
 		if name == selectedName {
 			foundSelected = true
 		}
-		fmt.Fprintf(&out, `<option value="%s"%s>%s</option>`,
+		fmt.Fprintf(
+			&out, `<option value="%s"%s>%s</option>`,
 			esc(name),
 			selected(name == selectedName),
 			esc(label),
@@ -476,7 +478,8 @@ func buildSettingsSystemSection(c Config) string {
 		buildNetworkInterfaceOptions(c.IfaceName) +
 		`</select></div>` +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsDNS+` <small class="s-label-hint-inline">(`+phrases().SettingsDNSHint+`)</small></span><input type="text" id="cfg-dns" class="s-input s-input-lg" placeholder="1.1.1.1, 8.8.8.8:53" value="%s"></div>`,
+		fmt.Sprintf(
+			`<div class="s-row"><span class="s-label">`+phrases().SettingsDNS+` <small class="s-label-hint-inline">(`+phrases().SettingsDNSHint+`)</small></span><input type="text" id="cfg-dns" class="s-input s-input-lg" placeholder="1.1.1.1, 8.8.8.8:53" value="%s"></div>`,
 			esc(strings.Join(c.DNSServers, ", ")),
 		) +
 
@@ -488,11 +491,13 @@ func buildSettingsSystemSection(c Config) string {
 
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsHourlyLimit+`</span><input type="number" id="cfg-hourly-limit" class="s-input s-input-sm-right" min="100" max="100000" value="%d"></div>`, c.HourlyRateLimit) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsIPv4Endpoints+`<small class="s-label-hint-block">(`+phrases().SettingsDNSHint+`)</small></span><input type="text" id="cfg-ipv4_endpoints" class="s-input s-input-lg" placeholder="https://4.ident.me/, https://4.tnedi.me/" value="%s"></div>`,
+		fmt.Sprintf(
+			`<div class="s-row"><span class="s-label">`+phrases().SettingsIPv4Endpoints+`<small class="s-label-hint-block">(`+phrases().SettingsDNSHint+`)</small></span><input type="text" id="cfg-ipv4_endpoints" class="s-input s-input-lg" placeholder="https://4.ident.me/, https://4.tnedi.me/" value="%s"></div>`,
 			esc(strings.Join(c.IPv4Endpoints, ", ")),
 		) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsIPv6Endpoints+`<small class="s-label-hint-block">(`+phrases().SettingsDNSHint+`)</small></span><input type="text" id="cfg-ipv6_endpoints" class="s-input s-input-lg" placeholder="https://6.ident.me/, https://6.tnedi.me/" value="%s"></div>`,
+		fmt.Sprintf(
+			`<div class="s-row"><span class="s-label">`+phrases().SettingsIPv6Endpoints+`<small class="s-label-hint-block">(`+phrases().SettingsDNSHint+`)</small></span><input type="text" id="cfg-ipv6_endpoints" class="s-input s-input-lg" placeholder="https://6.ident.me/, https://6.tnedi.me/" value="%s"></div>`,
 			esc(strings.Join(c.IPv6Endpoints, ", ")),
 		) +
 
@@ -500,19 +505,22 @@ func buildSettingsSystemSection(c Config) string {
 		buildDynamicLangOptions(c.Lang) +
 		`</select></div>` +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsDryRun+`<small class="s-label-hint-block">`+phrases().SettingsDryRunHint+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-dry-run" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
+		fmt.Sprintf(
+			`<div class="s-row"><span class="s-label">`+phrases().SettingsDryRun+`<small class="s-label-hint-block">`+phrases().SettingsDryRunHint+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-dry-run" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
 			phrases().SettingsCheckboxActive, esc(phrases().SettingsCheckboxDeactive),
 			checkedAttr(c.DryRun),
 			checkboxLabel(c.DryRun),
 		) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsDebugMode+` <small class="s-label-hint-block">`+phrases().SettingsDebugVerboseHint+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-debug" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
+		fmt.Sprintf(
+			`<div class="s-row"><span class="s-label">`+phrases().SettingsDebugMode+` <small class="s-label-hint-block">`+phrases().SettingsDebugVerboseHint+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-debug" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
 			phrases().SettingsCheckboxActive, esc(phrases().SettingsCheckboxDeactive),
 			checkedAttr(c.DebugEnabled),
 			checkboxLabel(c.DebugEnabled),
 		) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsDebugHTTPRaw+` <small class="s-label-hint-block">`+phrases().SettingsDebugHTTPHint+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-debug-http" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
+		fmt.Sprintf(
+			`<div class="s-row"><span class="s-label">`+phrases().SettingsDebugHTTPRaw+` <small class="s-label-hint-block">`+phrases().SettingsDebugHTTPHint+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-debug-http" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
 			phrases().SettingsCheckboxActive, esc(phrases().SettingsCheckboxDeactive),
 			checkedAttr(c.DebugHTTPRaw),
 			checkboxLabel(c.DebugHTTPRaw),
@@ -579,13 +587,15 @@ func buildSettingsNotifySection(c Config) string {
 			esc(c.Notifications.MQTTConfig.Topic)) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMQTTQoS+`</span><input type="number" min="0" max="2" id="cfg-mqtt-qos" class="s-input s-input-sm" autocomplete="off" value="%d"></div>`,
 			c.Notifications.MQTTConfig.QoS) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMQTTRetain+`</span><label class="s-checkbox-container"><input type="checkbox" id="cfg-mqtt-retain" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
+		fmt.Sprintf(
+			`<div class="s-row"><span class="s-label">`+phrases().SettingsMQTTRetain+`</span><label class="s-checkbox-container"><input type="checkbox" id="cfg-mqtt-retain" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
 			phrases().SettingsCheckboxActive,
 			phrases().SettingsCheckboxDeactive,
 			checkedAttr(c.Notifications.MQTTConfig.Retain),
 			checkboxLabel(c.Notifications.MQTTConfig.Retain),
 		) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMQTTDiscovery+` <small class="s-label-hint-inline">`+phrases().SettingsMQTTHomeAssistant+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-mqtt-discovery" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
+		fmt.Sprintf(
+			`<div class="s-row"><span class="s-label">`+phrases().SettingsMQTTDiscovery+` <small class="s-label-hint-inline">`+phrases().SettingsMQTTHomeAssistant+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-mqtt-discovery" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
 			phrases().SettingsCheckboxActive,
 			phrases().SettingsCheckboxDeactive,
 			checkedAttr(c.Notifications.MQTTConfig.Discovery),
@@ -610,7 +620,8 @@ func buildSettingsNotifySection(c Config) string {
 			esc(c.Notifications.Email.To)) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsEmailSubject+`</span><input type="text" id="cfg-email-subject-prefix" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" placeholder="[DynDNS]" value="%s"></div>`,
 			esc(c.Notifications.Email.SubjectPrefix)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsEmailTLSMode+`</span><select id="cfg-email-tls-mode" class="s-input s-input-lg"><option value="starttls" %s>`+phrases().SettingsEmailTLSStartTLS+`</option><option value="tls" %s>`+phrases().SettingsEmailTLSDirectTLS+`</option><option value="plain" %s>`+phrases().SettingsEmailTLSPlain+`</option></select></div>`,
+		fmt.Sprintf(
+			`<div class="s-row"><span class="s-label">`+phrases().SettingsEmailTLSMode+`</span><select id="cfg-email-tls-mode" class="s-input s-input-lg"><option value="starttls" %s>`+phrases().SettingsEmailTLSStartTLS+`</option><option value="tls" %s>`+phrases().SettingsEmailTLSDirectTLS+`</option><option value="plain" %s>`+phrases().SettingsEmailTLSPlain+`</option></select></div>`,
 			selected(c.Notifications.Email.TLSMode == emailTLSModeStartTLS || c.Notifications.Email.TLSMode == ""),
 			selected(c.Notifications.Email.TLSMode == emailTLSModeTLS),
 			selected(c.Notifications.Email.TLSMode == emailTLSModePlain),
@@ -622,7 +633,8 @@ func buildSettingsNotifySection(c Config) string {
 		`</button><div id="notify-test-result" class="notify-test-result"></div>
 		</div>`
 
-	return fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsNotifyEnabled+`</span><label class="s-checkbox-container"><input type="checkbox" id="cfg-notify-enabled" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
+	return fmt.Sprintf(
+		`<div class="s-row"><span class="s-label">`+phrases().SettingsNotifyEnabled+`</span><label class="s-checkbox-container"><input type="checkbox" id="cfg-notify-enabled" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
 		phrases().SettingsCheckboxActive, esc(phrases().SettingsCheckboxDeactive),
 		checkedAttr(c.Notifications.Enabled),
 		checkboxLabel(c.Notifications.Enabled),
@@ -2115,7 +2127,11 @@ func streamDomainsJSON(w io.Writer) error {
 
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			debugLog("DASHBOARD", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
+		}
+	}()
 
 	_, err = io.Copy(w, file)
 
@@ -2131,7 +2147,11 @@ func streamLogEntriesJSON(w io.Writer) error {
 
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			debugLog("DASHBOARD", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
+		}
+	}()
 
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
@@ -2693,7 +2713,8 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 		auditPage = `<button type="button" class="nav-item" data-page="audit" data-click="navTo('audit')">` + esc(phrases().NavAuditJS) + `</button>`
 	}
 
-	_, _ = fmt.Fprintf(w, `<!DOCTYPE html><html><head>
+	_, _ = fmt.Fprintf(
+		w, `<!DOCTYPE html><html><head>
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<meta name="format-detection" content="telephone=no">
@@ -2877,7 +2898,8 @@ func buildNotifierStatusHTML() string {
 			title = name + " " + esc(phrases().NotifierDisconnected)
 		}
 
-		fmt.Fprintf(&sb,
+		fmt.Fprintf(
+			&sb,
 			`<span class="notifier-icon %s" title="%s" data-tooltip="%s" data-click="showNotifierTooltip()">%s</span>`,
 			stateClass, esc(title), esc(title), esc(icon),
 		)
@@ -2889,7 +2911,8 @@ func buildNotifierStatusHTML() string {
 }
 
 func writeDashboardTop(w io.Writer, statusClass, statusText string, config Config) {
-	_, _ = fmt.Fprintf(w, `
+	_, _ = fmt.Fprintf(
+		w, `
 	<div class="page-section" data-section="dashboard">
 		<div class="status-banner %s">
 			<div class="status-banner-left">
@@ -2983,7 +3006,8 @@ func writeDashboardMetricsCard(
 	if isViewer {
 		resetBtn = ""
 	}
-	_, _ = fmt.Fprintf(w, `
+	_, _ = fmt.Fprintf(
+		w, `
 <div class="page-section" data-section="metrics">
 	<div class="card" id="metrics-card">
 		<div class="card-header card-header--space-between">
@@ -3228,7 +3252,8 @@ func writeLogsCard(w io.Writer, logs []LogEntry, logTimeRange string) {
 		}
 		copyText += " " + e.Message
 
-		_, _ = fmt.Fprintf(w, `
+		_, _ = fmt.Fprintf(
+			w, `
 				<div class="log-entry log-entry-row" data-action="%s" data-level="%s" data-copy="%s" data-log-id="%s">
 					<span class="log-entry-icon">%s</span>
 					<span class="log-entry-time">%s</span>
@@ -3453,7 +3478,8 @@ func writeSingleDomainCard(w io.Writer, domain string, h DomainHistory, configur
 		}
 	}
 
-	_, _ = fmt.Fprintf(w, `
+	_, _ = fmt.Fprintf(
+		w, `
 	<details class="card domain-item%s" data-domain="%s" data-ip-history="%s">
 		<summary class="domain-summary">
 			<span id="dot-%s" class="%s" title="%s"></span>
@@ -3597,7 +3623,8 @@ func writeDomainHistoryRows(w io.Writer, h DomainHistory) {
 			v6 = esc(e.IPv6)
 		}
 
-		_, _ = fmt.Fprintf(w, `
+		_, _ = fmt.Fprintf(
+			w, `
 			<tr class="domain-history-row">
 				<td class="domain-history-td-time">
 					%s
@@ -3621,7 +3648,8 @@ func writeDomainHistoryRows(w io.Writer, h DomainHistory) {
 		)
 	}
 	if end > 0 {
-		_, _ = fmt.Fprint(w,
+		_, _ = fmt.Fprint(
+			w,
 			`<tr class="domain-history-more">
 				<td colspan="2">
 					`+fmt.Sprintf(phrases().HiddenEntriesFormat, end)+`
