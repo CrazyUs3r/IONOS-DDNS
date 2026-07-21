@@ -495,7 +495,11 @@ func ensureMetricsFile(path string) error {
 	}
 
 	empty := apiMetricsSnapshot{SavedAt: time.Now()}
-	b, _ := json.Marshal(empty)
+
+	b, err := json.Marshal(empty)
+	if err != nil {
+		return fmt.Errorf("marshal empty metrics snapshot: %w", err)
+	}
 
 	return os.WriteFile(path, b, 0o600)
 }
