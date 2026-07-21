@@ -3924,11 +3924,28 @@ body.auth-page .dashboard-footer {
   min-width: 760px;
   height: auto;
   table-layout: auto;
+  border-collapse: collapse;
 }
 
 .dns-table th,
 .dns-table td {
   width: auto;
+  padding: 9px 10px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  vertical-align: top;
+  text-align: left;
+}
+
+.dns-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--card);
+  color: #94a3b8;
+  opacity: 0.85;
+}
+
+.dns-table tbody tr:last-child td {
+  border-bottom: none;
 }
 
 .dns-table th:nth-child(1),
@@ -4245,7 +4262,7 @@ body.auth-page .dashboard-footer {
     margin-bottom: 0;
   }
 
-  .audit-table-wrap,
+  .audit-log-card-fixed .audit-table-wrap,
   .audit-log-scroll {
     height: 52vh;
     min-height: 260px;
@@ -4270,7 +4287,7 @@ body.auth-page .dashboard-footer {
     font-size: 0.74rem;
   }
 
-  .audit-table-wrap,
+  .audit-log-card-fixed .audit-table-wrap,
   .audit-log-scroll {
     height: 46vh;
     min-height: 220px;
@@ -4320,4 +4337,4 @@ body.auth-page .dashboard-footer {
   .audit-actions .copy-btn {
     padding: 5px 6px;
   }
-}
+   }
