@@ -722,7 +722,7 @@ func handleLoginPost2FA(w http.ResponseWriter, r *http.Request, user *DashboardU
 
 	log(LogContext{
 		Level:   LogInfo,
-		Action:  ActionConfig,
+		Action:  ActionLogin,
 		Message: fmt.Sprintf(phrases().LoginSuccessLog, user.Username, user.Role, getClientIP(r)),
 	})
 

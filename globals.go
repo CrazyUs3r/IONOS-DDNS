@@ -169,21 +169,24 @@ var (
 // ============================================================================
 
 const (
-	ActionStart   = "START"
-	ActionStop    = "STOP"
-	ActionUpdate  = "UPDATE"
-	ActionCreate  = "CREATE"
-	ActionCurrent = "CURRENT"
-	ActionRetry   = "RETRY"
-	ActionError   = "ERROR"
-	ActionConfig  = "CONFIG"
-	ActionZone    = "ZONE"
-	ActionDryRun  = "DRY-RUN"
-	ActionCleanup = "CLEANUP"
-	ActionSkip    = "SKIP"
-	ActionAPI     = "API"
-	ActionServer  = "SERVER"
-	ActionInfo    = "INFO"
+	ActionStart     = "START"
+	ActionStop      = "STOP"
+	ActionUpdate    = "UPDATE"
+	ActionCreate    = "CREATE"
+	ActionCurrent   = "CURRENT"
+	ActionRetry     = "RETRY"
+	ActionError     = "ERROR"
+	ActionConfig    = "CONFIG"
+	ActionZone      = "ZONE"
+	ActionDryRun    = "DRY-RUN"
+	ActionCleanup   = "CLEANUP"
+	ActionSkip      = "SKIP"
+	ActionAPI       = "API"
+	ActionServer    = "SERVER"
+	ActionInfo      = "INFO"
+	ActionLogin     = "LOGIN"
+	ActionLogout    = "LOGOUT"
+	ActionLoginFail = "LOGINFAILED"
 )
 
 var persistOnWarnError = map[string]struct{}{
@@ -202,18 +205,21 @@ var persistOnWarnError = map[string]struct{}{
 }
 
 var persistOnOtherLevels = map[string]struct{}{
-	ActionStart:   {},
-	ActionStop:    {},
-	ActionUpdate:  {},
-	ActionCreate:  {},
-	ActionCleanup: {},
-	ActionSkip:    {},
-	ActionAPI:     {},
-	ActionRetry:   {},
-	ActionConfig:  {},
-	ActionZone:    {},
-	ActionServer:  {},
-	ActionInfo:    {},
+	ActionStart:     {},
+	ActionStop:      {},
+	ActionUpdate:    {},
+	ActionCreate:    {},
+	ActionCleanup:   {},
+	ActionSkip:      {},
+	ActionAPI:       {},
+	ActionRetry:     {},
+	ActionConfig:    {},
+	ActionZone:      {},
+	ActionServer:    {},
+	ActionInfo:      {},
+	ActionLogin:     {},
+	ActionLogout:    {},
+	ActionLoginFail: {},
 }
 
 // ============================================================================
@@ -221,47 +227,53 @@ var persistOnOtherLevels = map[string]struct{}{
 // ============================================================================
 
 const (
-	IconDefault = "🔹"
-	IconDBG     = "🐞"
-	IconInfo    = "ℹ️"
-	IconWarn    = "⚠️"
-	IconError   = "❌"
-	IconStart   = "🚀"
-	IconStop    = "🛑"
-	IconUpdate  = "🔄"
-	IconCreate  = "🆕"
-	IconCurrent = "✓"
-	IconRetry   = "🔁"
-	IconConfig  = "⚙️"
-	IconZone    = "🌐"
-	IconNetwork = "📡"
-	IconDryRun  = "🔍"
-	IconCleanup = "🧹"
-	IconSkip    = "⏭️"
-	IconAPI     = "🔌"
-	IconServer  = "🖥️"
-	IconSuccess = "✅"
+	IconDefault     = "🔹"
+	IconDBG         = "🐞"
+	IconInfo        = "ℹ️"
+	IconWarn        = "⚠️"
+	IconError       = "❌"
+	IconStart       = "🚀"
+	IconStop        = "🛑"
+	IconUpdate      = "🔄"
+	IconCreate      = "🆕"
+	IconCurrent     = "✓"
+	IconRetry       = "🔁"
+	IconConfig      = "⚙️"
+	IconZone        = "🌐"
+	IconNetwork     = "📡"
+	IconDryRun      = "🔍"
+	IconCleanup     = "🧹"
+	IconSkip        = "⏭️"
+	IconAPI         = "🔌"
+	IconServer      = "🖥️"
+	IconSuccess     = "✅"
+	IconLogin       = "🔑"
+	IconLogout      = "🔒"
+	IconLoginFailed = "⚠️"
 )
 
 var actionIcons = map[string]string{
-	ActionStart:   IconStart,
-	ActionStop:    IconStop,
-	ActionUpdate:  IconUpdate,
-	ActionCreate:  IconCreate,
-	ActionCurrent: IconCurrent,
-	ActionRetry:   IconRetry,
-	ActionError:   IconError,
-	ActionConfig:  IconConfig,
-	ActionZone:    IconZone,
-	ActionDryRun:  IconDryRun,
-	ActionCleanup: IconCleanup,
-	ActionSkip:    IconSkip,
-	ActionAPI:     IconAPI,
-	ActionServer:  IconServer,
-	ActionInfo:    IconInfo,
-	"FAIL":        IconError,
-	"SUCCESS":     IconSuccess,
-	"ADDED":       IconSuccess,
+	ActionStart:     IconStart,
+	ActionStop:      IconStop,
+	ActionUpdate:    IconUpdate,
+	ActionCreate:    IconCreate,
+	ActionCurrent:   IconCurrent,
+	ActionRetry:     IconRetry,
+	ActionError:     IconError,
+	ActionConfig:    IconConfig,
+	ActionZone:      IconZone,
+	ActionDryRun:    IconDryRun,
+	ActionCleanup:   IconCleanup,
+	ActionSkip:      IconSkip,
+	ActionAPI:       IconAPI,
+	ActionServer:    IconServer,
+	ActionInfo:      IconInfo,
+	ActionLogin:     IconLogin,
+	ActionLogout:    IconLogout,
+	ActionLoginFail: IconLoginFailed,
+	"FAIL":          IconError,
+	"SUCCESS":       IconSuccess,
+	"ADDED":         IconSuccess,
 }
 
 // ============================================================================

@@ -1070,7 +1070,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		errMsg = phrases().ErrInvalidLogin
 		log(LogContext{
 			Level:   LogWarn,
-			Action:  ActionConfig,
+			Action:  ActionLoginFail,
 			Message: fmt.Sprintf(phrases().LoginFailedLog, safeAuthLogValue(username), getClientIP(r)),
 		})
 	}
@@ -1092,6 +1092,11 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 
 	if sess, ok := sessionFromRequest(r); ok {
 		sessionStore.Delete(sess.Token)
+		log(LogContext{
+			Level:   LogInfo,
+			Action:  ActionLogout,
+			Message: fmt.Sprintf(phrases().LogoutLog, sess.Username, sess.Role, getClientIP(r)),
+		})
 	}
 	clearSessionCookie(w, r)
 	http.Redirect(w, r, "/login", http.StatusSeeOther)

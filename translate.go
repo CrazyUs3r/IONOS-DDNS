@@ -23,7 +23,7 @@ type Phrases struct {
 	TooltipLastCheck, TooltipClock, TooltipUptime, FirstAdminCreatedLog                   string
 	LoadingSavingJS, LoadingSlowJS, NoLogEntries, AuthDisabled, AuthDisabledActor         string
 	SetupRequired, SetupTokenLabel, SetupOpenURL, LoginSuccessLog, LoginFailedLog         string
-	ErrInvalidLogin, ErrInvalidSetupToken, ErrUsernameTooShort                            string
+	ErrInvalidLogin, ErrInvalidSetupToken, ErrUsernameTooShort, LogoutLog                 string
 	ErrPasswordTooShort, ErrPasswordsMismatch, ErrAccountCreate, ErrAccountSave           string
 	ErrInvalidJSON, ErrUsernamePasswordMin, ErrHash, ErrSave, UserCreatedLog              string
 	StatusCreated, ErrInvalidRole, ErrUsernameTaken, ErrMissingID                         string
@@ -201,7 +201,8 @@ type Phrases struct {
 	DomainSearchPlaceholder, NoMoreEntries, ChecksLabel, EntriesLabel        string
 	BadgeChanged, FilterAll, FilterErrors, FilterWarnings                    string
 	FilterUpdates, FilterStarts, FilterStop, FilterCreated, FilterCleanup    string
-	FilterSkip, FilterConfig, FilterInfo, NoDomainsConfigured                string
+	FilterSkip, FilterConfig, FilterInfo, FilterLogin, FilterLogout          string
+	FilterLoginFailed, NoDomainsConfigured                                   string
 	DomainContext, ThemeLabelJS, NoIPToCopyJS, CopiedJS, CopyFailedJS        string
 	UpdateStartingJS, UpdateStartedJS, ConnectionErrorJS                     string
 	ExportStartedJS, ExportFailedJS, FQDNMissingJS                           string
@@ -332,7 +333,10 @@ type Phrases struct {
 	NotifyEventDryRunLabel, NotifyEventDryRunDesc                                      string
 	NotifyEventSkipLabel, NotifyEventSkipDesc                                          string
 	NotifyEventAPILabel, NotifyEventAPIDesc                                            string
-	NotifyEventServerLabel, NotifyEventServerDesc                                      string
+  NotifyEventServerLabel, NotifyEventServerDesc                                      string
+	NotifyEventLoginLabel, NotifyEventLoginDesc                                        string
+	NotifyEventLoginFailedLabel, NotifyEventLoginFailedDesc                            string
+	NotifyEventLogoutLabel, NotifyEventLogoutDesc                                      string
 	NotifyTelegramActive, NotifyGotifyActive, NotifyWebhookActive                      string
 	NotifyNtfyActive                                                                   string
 	NotifyTestSuccess, NotifyTestUnauthorized, NotifyTestError                         string

@@ -350,7 +350,7 @@ func buildSettingsNotifyEventCheckboxes(current []string) string {
 		active[strings.ToUpper(strings.TrimSpace(e))] = true
 	}
 
-	events := []struct{ code, label, desc string }{
+events := []struct{ code, label, desc string }{
 		{ActionUpdate, esc(phrases().NotifyEventUpdateLabel), esc(phrases().NotifyEventUpdateDesc)},
 		{ActionCreate, esc(phrases().NotifyEventCreateLabel), esc(phrases().NotifyEventCreateDesc)},
 		{ActionCurrent, esc(phrases().NotifyEventCurrentLabel), esc(phrases().NotifyEventCurrentDesc)},
@@ -366,6 +366,9 @@ func buildSettingsNotifyEventCheckboxes(current []string) string {
 		{ActionSkip, esc(phrases().NotifyEventSkipLabel), esc(phrases().NotifyEventSkipDesc)},
 		{ActionAPI, esc(phrases().NotifyEventAPILabel), esc(phrases().NotifyEventAPIDesc)},
 		{ActionServer, esc(phrases().NotifyEventServerLabel), esc(phrases().NotifyEventServerDesc)},
+		{ActionLogin, esc(phrases().NotifyEventLoginLabel), esc(phrases().NotifyEventLoginDesc)},
+		{ActionLoginFail, esc(phrases().NotifyEventLoginFailedLabel), esc(phrases().NotifyEventLoginFailedDesc)},
+		{ActionLogout, esc(phrases().NotifyEventLogoutLabel), esc(phrases().NotifyEventLogoutDesc)},
 	}
 
 	var out strings.Builder
@@ -3214,18 +3217,23 @@ func writeLogsCard(w io.Writer, logs []LogEntry, logTimeRange string) {
 				</span>
 			</div>
 			<div class="card-content">
-				<div class="log-filters">
-					<button class="filter-btn active" data-filter="all" data-click="filterLogs('all')">`+phrases().FilterAll+`</button>
-					<button class="filter-btn" data-filter="ERR" data-click="filterLogs('ERR')">`+phrases().FilterErrors+`</button>
-					<button class="filter-btn" data-filter="WARN" data-click="filterLogs('WARN')">`+phrases().FilterWarnings+`</button>
-					<button class="filter-btn" data-filter="UPDATE" data-click="filterLogs('UPDATE')">`+phrases().FilterUpdates+`</button>
-					<button class="filter-btn" data-filter="START" data-click="filterLogs('START')">`+phrases().FilterStarts+`</button>
-					<button class="filter-btn" data-filter="STOP" data-click="filterLogs('STOP')">`+phrases().FilterStop+`</button>
-					<button class="filter-btn" data-filter="CREATE" data-click="filterLogs('CREATE')">`+phrases().FilterCreated+`</button>
-					<button class="filter-btn" data-filter="CLEANUP" data-click="filterLogs('CLEANUP')">`+phrases().FilterCleanup+`</button>
-					<button class="filter-btn" data-filter="SKIP" data-click="filterLogs('SKIP')">`+phrases().FilterSkip+`</button>
-					<button class="filter-btn" data-filter="CONFIG" data-click="filterLogs('CONFIG')">`+phrases().FilterConfig+`</button>
-					<button class="filter-btn" data-filter="INFO" data-click="filterLogs('INFO')">`+phrases().FilterInfo+`</button>
+       			<div class="log-filters">
+					<select id="logFilterSelect" class="log-filter-select" data-change="filterLogs(this.value)">
+						<option value="all">`+phrases().FilterAll+`</option>
+						<option value="ERR">`+phrases().FilterErrors+`</option>
+						<option value="WARN">`+phrases().FilterWarnings+`</option>
+						<option value="LOGIN">`+phrases().FilterLogin+`</option>
+						<option value="LOGOUT">`+phrases().FilterLogout+`</option>
+						<option value="LOGINFAILED">`+phrases().FilterLoginFailed+`</option>
+						<option value="UPDATE">`+phrases().FilterUpdates+`</option>
+						<option value="START">`+phrases().FilterStarts+`</option>
+						<option value="STOP">`+phrases().FilterStop+`</option>
+						<option value="CREATE">`+phrases().FilterCreated+`</option>
+						<option value="CLEANUP">`+phrases().FilterCleanup+`</option>
+						<option value="SKIP">`+phrases().FilterSkip+`</option>
+						<option value="CONFIG">`+phrases().FilterConfig+`</option>
+						<option value="INFO">`+phrases().FilterInfo+`</option>
+					</select>
 					<button class="filter-btn filter-btn--export" data-click="exportLogs('txt')">📄 TXT</button>
 					<button class="filter-btn" data-click="exportLogs('json')">📋 JSON</button>
 				</div>
