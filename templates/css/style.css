@@ -634,6 +634,20 @@ summary:focus-visible {
   color: white;
 }
 
+.log-filter-select {
+  padding: 6px 12px;
+  background: var(--border);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.log-filter-select:hover {
+  border-color: var(--success);
+}
+
 .copy-btn {
   background: transparent;
   border: 1px solid var(--border);
@@ -4337,4 +4351,4 @@ body.auth-page .dashboard-footer {
   .audit-actions .copy-btn {
     padding: 5px 6px;
   }
-   }
+}
