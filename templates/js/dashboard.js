@@ -95,7 +95,7 @@ const DECLARATIVE_ACTIONS = Object.freeze({
 	exportLogs: ({ args }) => exportLogs(args[0]),
 	filterDebugLog: ({ element }) => filterDebugLog(element.value),
 	filterDomains: ({ element }) => filterDomains(element.value),
-	filterLogs: ({ args }) => filterLogs(args[0]),
+	filterLogs: ({ element }) => filterLogs(element.value),
 	changeUserRole: ({ args, element }) => changeUserRole(args[0], element.value),
 	ipv64AddDomain: () => ipv64AddDomain(),
 	ipv64DeleteDomain: () => ipv64DeleteDomain(),
@@ -1293,7 +1293,8 @@ function copyIP(text) {
 }
 
 function filterLogs(filter) {
-	document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.filter === filter));
+	const select = document.getElementById('logFilterSelect');
+	if (select && select.value !== filter) select.value = filter;
 	const entries = document.querySelectorAll('.log-entry');
 	const f = filter.toUpperCase();
 
@@ -3640,4 +3641,4 @@ function restoreFullBackup() {
 			}
 			showToast(tr('backup_restore_failed', '❌ Restore failed'), 'error');
 		});
-}
+	}
