@@ -314,13 +314,6 @@ func buildChartTooltipPoints(points [][2]float64, values []float64, unit string)
 // DASHBOARD HTTP HANDLER
 // ============================================================================
 
-func buildSettingsInlineSection(title, body string) string {
-	return `<div class="s-section s-section--spaced">` +
-		`<div class="s-section-label s-section-label--heading">` + title + `</div>` +
-		body +
-		`</div>`
-}
-
 func buildSettingsSubSection(id, title, body string) string {
 	idAttr := ""
 	if id != "" {
@@ -350,7 +343,7 @@ func buildSettingsNotifyEventCheckboxes(current []string) string {
 		active[strings.ToUpper(strings.TrimSpace(e))] = true
 	}
 
-events := []struct{ code, label, desc string }{
+	events := []struct{ code, label, desc string }{
 		{ActionUpdate, esc(phrases().NotifyEventUpdateLabel), esc(phrases().NotifyEventUpdateDesc)},
 		{ActionCreate, esc(phrases().NotifyEventCreateLabel), esc(phrases().NotifyEventCreateDesc)},
 		{ActionCurrent, esc(phrases().NotifyEventCurrentLabel), esc(phrases().NotifyEventCurrentDesc)},
@@ -725,11 +718,6 @@ type safeSystemConfig struct {
 	DryRun          bool           `json:"dry_run"`
 }
 
-type dashboardConfigPayload struct {
-	DomainConfigs []safeDomainConfig `json:"domain_configs"`
-	System        safeSystemConfig   `json:"system"`
-}
-
 func safeDomainConfigs(dcs []DomainConfig) []safeDomainConfig {
 	out := make([]safeDomainConfig, len(dcs))
 	for i, dc := range dcs {
@@ -853,7 +841,9 @@ func registerAPIroutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/page", handleAPIPageSection)
 	mux.HandleFunc("/api/config", handleAPIConfig)
 	mux.HandleFunc("/api/languages", handleAPILanguages)
-	mux.HandleFunc("/api/save-config", handleAPISaveConfig)
+	mux.HandleFunc("/api/settings/system/save", handleAPISaveSystemSettings)
+	mux.HandleFunc("/api/settings/notify/save", handleAPISaveNotifySettings)
+	mux.HandleFunc("/api/settings/domains/save", handleAPISaveDomainSettings)
 	mux.HandleFunc("/api/set-language", handleAPISetLanguage)
 	mux.HandleFunc("/api/domain/delete", handleAPIDomainDelete)
 	mux.HandleFunc("/api/ipv64/domain", handleAPIIPv64Domain)
@@ -1158,12 +1148,25 @@ func handleAPIPageSection(w http.ResponseWriter, r *http.Request) {
 		"debug": func() {
 			writeDebugSection(&fragment, snapshotConfig())
 		},
-		"settings": func() {
+		"settings-security": func() {
+			writeSettingsSecuritySubpage(&fragment)
+		},
+		"settings-system": func() {
 			config := snapshotConfig()
 			if !isAdmin {
 				config = maskDashboardConfigSecrets(config)
 			}
-			writeSettingsSection(&fragment, config)
+			writeSettingsSystemSubpage(&fragment, config)
+		},
+		"settings-domains": func() {
+			writeSettingsDomainsSubpage(&fragment)
+		},
+		"settings-notify": func() {
+			config := snapshotConfig()
+			if !isAdmin {
+				config = maskDashboardConfigSecrets(config)
+			}
+			writeSettingsNotifySubpage(&fragment, config)
 		},
 		"totp": func() {
 			isAuthenticated := authEnabled && sess != nil
@@ -1332,7 +1335,7 @@ func handleAPILanguages(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, entries)
 }
 
-func handleAPISaveConfig(w http.ResponseWriter, r *http.Request) {
+func handleAPISaveSystemSettings(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodPOST {
 		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
 
@@ -1344,8 +1347,8 @@ func handleAPISaveConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var payload dashboardConfigPayload
-	if err := decodeJSONBody(w, r, &payload); err != nil {
+	var sys safeSystemConfig
+	if err := decodeJSONBody(w, r, &sys); err != nil {
 		http.Error(w, esc(phrases().JSONParseError), http.StatusBadRequest)
 
 		return
@@ -1354,20 +1357,11 @@ func handleAPISaveConfig(w http.ResponseWriter, r *http.Request) {
 	configUpdateMu.Lock()
 	defer configUpdateMu.Unlock()
 
-	var validationErr error
 	cfgMu.Lock()
 	oldCfg := cfg
 	oldMaxConcurrent := cfg.MaxConcurrent
-	applySystemConfigPayload(payload.System)
-	cfg.DomainConfigs = mergeDomainConfigs(cfg.DomainConfigs, payload.DomainConfigs)
-	validationErr = validateDomainConfigList(cfg.DomainConfigs)
-	if validationErr != nil {
-		cfg = oldCfg
-		cfgMu.Unlock()
-		http.Error(w, validationErr.Error(), http.StatusUnprocessableEntity)
-
-		return
-	}
+	applySystemCoreConfig(sys)
+	applySystemRuntimeConfig(sys)
 	newMaxConcurrent := cfg.MaxConcurrent
 	newDebugEnabled := cfg.DebugEnabled
 	newDebugHTTPRaw := cfg.DebugHTTPRaw
@@ -1378,7 +1372,6 @@ func handleAPISaveConfig(w http.ResponseWriter, r *http.Request) {
 		cfg = oldCfg
 		cfgMu.Unlock()
 		ResetHTTPClient()
-		invalidateSecretReplacer()
 
 		http.Error(w, esc(phrases().SaveFailed), http.StatusInternalServerError)
 
@@ -1391,19 +1384,111 @@ func handleAPISaveConfig(w http.ResponseWriter, r *http.Request) {
 	setAtomicDebugFlags(newDebugEnabled, newDebugHTTPRaw)
 
 	ResetHTTPClient()
-	invalidateSecretReplacer()
-	go initNotifiers()
 	forceNextUpdate.Store(true)
-	lastCleanupNano.Store(0)
 
-	debugLog("API", getClientIP(r), esc(phrases().ConfigHeading))
+	debugLog("API", getClientIP(r), esc(phrases().SettingsSystem))
 	writeJSON(w, http.StatusOK, map[string]string{status: "saved"})
 }
 
-func applySystemConfigPayload(sys safeSystemConfig) {
-	applySystemCoreConfig(sys)
-	applySystemRuntimeConfig(sys)
+func handleAPISaveNotifySettings(w http.ResponseWriter, r *http.Request) {
+	if r.Method != MethodPOST {
+		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
+		return
+	}
+	if !validateTriggerToken(r) {
+		w.WriteHeader(http.StatusUnauthorized)
+
+		return
+	}
+
+	var sys safeSystemConfig
+	if err := decodeJSONBody(w, r, &sys); err != nil {
+		http.Error(w, esc(phrases().JSONParseError), http.StatusBadRequest)
+
+		return
+	}
+
+	configUpdateMu.Lock()
+	defer configUpdateMu.Unlock()
+
+	cfgMu.Lock()
+	oldCfg := cfg
 	applyNotificationConfig(sys)
+	cfgMu.Unlock()
+
+	if err := saveConfigToFile(); err != nil {
+		cfgMu.Lock()
+		cfg = oldCfg
+		cfgMu.Unlock()
+		invalidateSecretReplacer()
+
+		http.Error(w, esc(phrases().SaveFailed), http.StatusInternalServerError)
+
+		return
+	}
+
+	invalidateSecretReplacer()
+	go initNotifiers()
+
+	debugLog("API", getClientIP(r), esc(phrases().SettingsNotify))
+	writeJSON(w, http.StatusOK, map[string]string{status: "saved"})
+}
+
+func handleAPISaveDomainSettings(w http.ResponseWriter, r *http.Request) {
+	if r.Method != MethodPOST {
+		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
+		return
+	}
+	if !validateTriggerToken(r) {
+		w.WriteHeader(http.StatusUnauthorized)
+
+		return
+	}
+
+	var payload struct {
+		DomainConfigs []safeDomainConfig `json:"domain_configs"`
+	}
+	if err := decodeJSONBody(w, r, &payload); err != nil {
+		http.Error(w, esc(phrases().JSONParseError), http.StatusBadRequest)
+
+		return
+	}
+
+	configUpdateMu.Lock()
+	defer configUpdateMu.Unlock()
+
+	cfgMu.Lock()
+	oldCfg := cfg
+	cfg.DomainConfigs = mergeDomainConfigs(cfg.DomainConfigs, payload.DomainConfigs)
+	validationErr := validateDomainConfigList(cfg.DomainConfigs)
+	if validationErr != nil {
+		cfg = oldCfg
+		cfgMu.Unlock()
+		http.Error(w, validationErr.Error(), http.StatusUnprocessableEntity)
+
+		return
+	}
+	cfgMu.Unlock()
+
+	if err := saveConfigToFile(); err != nil {
+		cfgMu.Lock()
+		cfg = oldCfg
+		cfgMu.Unlock()
+		invalidateSecretReplacer()
+
+		http.Error(w, esc(phrases().SaveFailed), http.StatusInternalServerError)
+
+		return
+	}
+
+	invalidateSecretReplacer()
+	forceNextUpdate.Store(true)
+	lastCleanupNano.Store(0)
+
+	debugLog("API", getClientIP(r), esc(phrases().SettingsDomains))
+	writeJSON(w, http.StatusOK, map[string]string{status: "saved"})
 }
 
 func applySystemCoreConfig(sys safeSystemConfig) {
@@ -2389,7 +2474,10 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 		"logs",
 		"debug",
 		"backup",
-		"settings",
+		"settings-security",
+		"settings-system",
+		"settings-domains",
+		"settings-notify",
 		"totp",
 		"users",
 	} {
@@ -2779,9 +2867,24 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 			`+auditPage+`
 
 			<div class="nav-section-label">`+t(phrases().NavConfig, "Config")+`</div>
-			<button type="button" class="nav-item" data-page="settings" data-click="navTo('settings')">
+			<button type="button" class="nav-item nav-item--group" id="settings-group-toggle" data-click="toggleSettingsSubmenu()" aria-expanded="false" aria-controls="settings-submenu">
 				<span class="nav-item-icon">⚙️</span> `+phrases().SettingsTitle+`
+				<span class="nav-item-chevron">▾</span>
 			</button>
+			<div class="nav-submenu" id="settings-submenu">
+				<button type="button" class="nav-item nav-item--sub" data-page="settings-security" data-click="navTo('settings-security')">
+					`+phrases().SettingsSecurity+`
+				</button>
+				<button type="button" class="nav-item nav-item--sub" data-page="settings-system" data-click="navTo('settings-system')">
+					`+phrases().SettingsSystem+`
+				</button>
+				<button type="button" class="nav-item nav-item--sub" data-page="settings-domains" data-click="navTo('settings-domains')">
+					`+phrases().SettingsDomains+`
+				</button>
+				<button type="button" class="nav-item nav-item--sub" data-page="settings-notify" data-click="navTo('settings-notify')">
+					`+phrases().SettingsNotify+`
+				</button>
+			</div>
 			%s
 			%s
 
@@ -2806,7 +2909,7 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 						data-tooltip="`+esc(phrases().SettingsSaveHint)+`"
 						data-mouseenter="showNotifierTooltip()"
 						data-focus="showNotifierTooltip()"
-						data-click="saveFullConfig()">`+phrases().SettingsSaveBtn+`</button>
+						data-click="saveCurrentSettingsSection()">`+phrases().SettingsSaveBtn+`</button>
 
 					<button class="action-btn topbar-action-btn"
 						id="update-button"
@@ -3356,21 +3459,60 @@ func writeDomainsCard(w io.Writer, data map[string]any) {
 	`)
 }
 
-func writeSettingsSection(w io.Writer, c Config) {
+func writeSettingsSecuritySubpage(w io.Writer) {
 	securitySection := buildSettingsSecuritySection()
+
+	_, _ = fmt.Fprint(w, `
+	<div class="page-section" data-section="settings-security">
+		<div class="card card--no-cv">
+			<div class="card-header">`+phrases().SettingsSecurity+`</div>
+			<div class="card-content">
+				`+securitySection+`
+			</div>
+		</div>
+	</div>
+	`)
+}
+
+func writeSettingsSystemSubpage(w io.Writer, c Config) {
 	systemSection := buildSettingsSystemSection(c)
+
+	_, _ = fmt.Fprint(w, `
+	<div class="page-section" data-section="settings-system">
+		<div class="card card--no-cv">
+			<div class="card-header">`+phrases().SettingsSystem+`</div>
+			<div class="card-content">
+				`+systemSection+`
+			</div>
+		</div>
+	</div>
+	`)
+}
+
+func writeSettingsDomainsSubpage(w io.Writer) {
 	domainsSection := buildSettingsDomainsSection()
+
+	_, _ = fmt.Fprint(w, `
+	<div class="page-section" data-section="settings-domains">
+		<div class="card card--no-cv">
+			<div class="card-header">`+phrases().SettingsDomains+`</div>
+			<div class="card-content">
+				`+domainsSection+`
+			</div>
+		</div>
+	</div>
+	`)
+}
+
+func writeSettingsNotifySubpage(w io.Writer, c Config) {
 	notifySection := buildSettingsNotifySection(c)
 
 	_, _ = fmt.Fprint(w, `
-	<div class="page-section" data-section="settings">
+	<div class="page-section" data-section="settings-notify">
 		<div class="card card--no-cv">
-			<div class="card-header">⚙️ `+phrases().SettingsTitle+`</div>
+			<div class="card-header">`+phrases().SettingsNotify+`</div>
 			<div class="card-content">
-				`+buildSettingsInlineSection(phrases().SettingsSecurity, securitySection)+`
-				`+buildSettingsInlineSection(phrases().SettingsSystem, systemSection)+`
-				`+buildSettingsInlineSection(phrases().SettingsDomains, domainsSection)+`
-				`+buildSettingsInlineSection(phrases().SettingsNotify, notifySection)+`
+				`+notifySection+`
 			</div>
 		</div>
 	</div>
