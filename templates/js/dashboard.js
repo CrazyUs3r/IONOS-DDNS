@@ -106,8 +106,9 @@ const DECLARATIVE_ACTIONS = Object.freeze({
 	runDNSPropagation: () => runDNSPropagation(),
 	resetMetrics: () => resetMetrics(),
 	restoreFullBackup: () => restoreFullBackup(),
-	saveFullConfig: () => saveFullConfig(),
+	saveCurrentSettingsSection: () => saveCurrentSettingsSection(),
 	saveToken: () => saveToken(),
+	toggleSettingsSubmenu: () => toggleSettingsSubmenu(),
 	sendNotifyTest: () => sendNotifyTest(),
 	showNotifierTooltip: ({ args, element }) => showNotifierTooltip(element, element.dataset.tooltip || args[1] || args[0] || ''),
 	toggleNotifCenter: () => toggleNotifCenter(),
@@ -264,7 +265,10 @@ const PAGE_CACHE_TTL = Object.freeze({
 	logs: 5000,
 	debug: 30000,
 	backup: Infinity,
-	settings: Infinity,
+	'settings-security': Infinity,
+	'settings-system': Infinity,
+	'settings-domains': Infinity,
+	'settings-notify': Infinity,
 	totp: 30000,
 	users: 10000,
 });
@@ -302,9 +306,21 @@ const PAGE_CONFIG = Object.freeze({
 		title: () => tr('nav_backup', '💾 Backup & Restore'),
 		onOpen: onlyWhenPageChanges(() => ensurePageLoaded('backup')),
 	}),
-	settings: Object.freeze({
-		title: () => tr('nav_settings', '⚙️ Settings'),
-		onOpen: () => openSettingsPage(),
+	'settings-security': Object.freeze({
+		title: () => tr('nav_settings_security', '🔒 Sicherheit'),
+		onOpen: () => openSettingsSubpage('settings-security'),
+	}),
+	'settings-system': Object.freeze({
+		title: () => tr('nav_settings_system', '⚙️ System'),
+		onOpen: () => openSettingsSubpage('settings-system'),
+	}),
+	'settings-domains': Object.freeze({
+		title: () => tr('nav_settings_domains', '🌐 Domains'),
+		onOpen: () => openSettingsSubpage('settings-domains'),
+	}),
+	'settings-notify': Object.freeze({
+		title: () => tr('nav_settings_notify', '🔔 Benachrichtigungen'),
+		onOpen: () => openSettingsSubpage('settings-notify'),
 	}),
 	totp: Object.freeze({
 		title: () => tr('nav_totp', '🔐 2FA / Account Security'),
@@ -494,13 +510,13 @@ function ensurePageLoaded(page, { force = false } = {}) {
 	return promise;
 }
 
-async function openSettingsPage() {
+async function openSettingsSubpage(page) {
 	try {
 		await Promise.all([
-			ensurePageLoaded('settings'),
+			ensurePageLoaded(page),
 			ensureInitialConfig(),
 		]);
-		if (currentPage === 'settings') _initSettingsFields();
+		if (currentPage === page) _initSettingsFields();
 	} catch (error) {
 		console.error('Settings load failed:', error);
 		showToast('❌ ' + tr('settings_reload_failed', 'Einstellungen konnten nicht geladen werden'), 'error');
@@ -556,11 +572,19 @@ function navTo(page) {
 		mainContent.dataset.activeSection = page;
 	}
 
-	isSettingsOpen = page === 'settings';
+	const isSettingsPage = page.startsWith('settings-');
+	isSettingsOpen = isSettingsPage;
 
 	document.querySelectorAll('.nav-item[data-page]').forEach(el => {
 		el.classList.toggle('nav-active', el.dataset.page === page);
 	});
+
+	const settingsToggle = document.getElementById('settings-group-toggle');
+	const settingsSubmenu = document.getElementById('settings-submenu');
+	if (settingsToggle && settingsSubmenu) {
+		settingsToggle.classList.toggle('nav-active', isSettingsPage);
+		if (isSettingsPage) setSettingsSubmenuOpen(true);
+	}
 
 	document.querySelectorAll('.page-section').forEach(el => {
 		el.style.display = el.dataset.section === page ? '' : 'none';
@@ -568,7 +592,7 @@ function navTo(page) {
 
 	const topbarSaveBtn = document.getElementById('topbar-save-config-button');
 	if (topbarSaveBtn) {
-		topbarSaveBtn.classList.toggle('is-hidden', page !== 'settings');
+		topbarSaveBtn.classList.toggle('is-hidden', !isSettingsPage || page === 'settings-security');
 	}
 
 	const titleEl = document.getElementById('page-title');
@@ -587,6 +611,20 @@ function navTo(page) {
 	} catch { }
 
 	if (window.innerWidth < 768) closeSidebar();
+}
+
+function setSettingsSubmenuOpen(open) {
+	const toggle = document.getElementById('settings-group-toggle');
+	const submenu = document.getElementById('settings-submenu');
+	if (!toggle || !submenu) return;
+	submenu.classList.toggle('nav-submenu--open', !!open);
+	toggle.setAttribute('aria-expanded', String(!!open));
+}
+
+function toggleSettingsSubmenu() {
+	const submenu = document.getElementById('settings-submenu');
+	const isOpen = submenu?.classList.contains('nav-submenu--open');
+	setSettingsSubmenuOpen(!isOpen);
 }
 
 function setSidebarOpen(open) {
@@ -747,10 +785,11 @@ document.addEventListener('DOMContentLoaded', () => {
 		}
 	});
 
-	const hashPage = (window.location.hash || '').replace(/^#/, '');
+	const migrateLegacySettingsPage = p => (p === 'settings' ? 'settings-security' : p);
+	const hashPage = migrateLegacySettingsPage((window.location.hash || '').replace(/^#/, ''));
 	const savedPage = PAGES.includes(hashPage)
 		? hashPage
-		: (localStorage.getItem('nav-page') || DEFAULT_PAGE);
+		: migrateLegacySettingsPage(localStorage.getItem('nav-page') || DEFAULT_PAGE);
 	navTo(savedPage);
 
 	document.addEventListener('click', event => {
@@ -2074,15 +2113,38 @@ function removeDomainFromList(index) {
 	renderSettingsDomainList();
 }
 
-async function saveFullConfig() {
-	if (!confirm(tr('save_config_confirm', 'Alle Einstellungen in config.json speichern?'))) return;
-
+async function postSettingsSave(endpoint, body) {
 	const token = sessionStorage.getItem('triggerToken') || '';
 
-	const notifyEvents = [...document.querySelectorAll('input[name="notify-event"]:checked')]
-		.map(cb => cb.value);
+	showLoadingToast(tr('loading_saving', '⏳ Speichere Konfiguration...'));
 
-	const system = {
+	try {
+		const r = await fetch(endpoint, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				...(token ? { 'X-Trigger-Token': token } : {})
+			},
+			body: JSON.stringify(body)
+		});
+
+		if (!r.ok) {
+			const txt = await r.text();
+			showToast(tr('error_prefix', '❌ Error: ') + txt, 'error');
+			return false;
+		}
+
+		return true;
+	} catch (e) {
+		showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error');
+		return false;
+	} finally {
+		hideLoadingToast();
+	}
+}
+
+function collectSystemFieldsPayload() {
+	return {
 		ip_mode: _getVal('cfg-ip-mode') || 'BOTH',
 		interval: parseInt(_getVal('cfg-interval'), 10) || 300,
 		health_port: _getVal('cfg-health-port') || '8080',
@@ -2096,6 +2158,16 @@ async function saveFullConfig() {
 		dry_run: _isChecked('cfg-dry-run'),
 		debug_enabled: _isChecked('cfg-debug'),
 		debug_http_raw: _isChecked('cfg-debug-http'),
+		ipv4_endpoints: _parseList(_getVal('cfg-ipv4_endpoints')),
+		ipv6_endpoints: _parseList(_getVal('cfg-ipv6_endpoints')),
+	};
+}
+
+function collectNotifyFieldsPayload() {
+	const notifyEvents = [...document.querySelectorAll('input[name="notify-event"]:checked')]
+		.map(cb => cb.value);
+
+	return {
 		notify_enabled: _isChecked('cfg-notify-enabled'),
 		notify_events: notifyEvents,
 		telegram_token: _getVal('cfg-tg-token'),
@@ -2128,44 +2200,53 @@ async function saveFullConfig() {
 			subject_prefix: _getVal('cfg-email-subject-prefix'),
 			tls_mode: _getVal('cfg-email-tls-mode') || 'starttls'
 		},
-		ipv4_endpoints: _parseList(_getVal('cfg-ipv4_endpoints')),
-		ipv6_endpoints: _parseList(_getVal('cfg-ipv6_endpoints')),
 	};
+}
 
-	showLoadingToast(tr('loading_saving', '⏳ Speichere Konfiguration...'));
+async function saveSystemSettings() {
+	if (!confirm(tr('save_config_confirm', 'Einstellungen speichern?'))) return;
 
-	try {
-		const r = await fetch('/api/save-config', {
+	const token = sessionStorage.getItem('triggerToken') || '';
+	const newLang = _getVal('cfg-lang');
+	const ok = await postSettingsSave('/api/settings/system/save', collectSystemFieldsPayload());
+	if (!ok) return;
+
+	if (newLang && newLang !== (initialSystem?.lang || 'de')) {
+		await fetch('/api/set-language?lang=' + encodeURIComponent(newLang), {
 			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				...(token ? { 'X-Trigger-Token': token } : {})
-			},
-			body: JSON.stringify({ domain_configs: tempDomainConfigs, system })
+			headers: token ? { 'X-Trigger-Token': token } : {}
 		});
-
-		if (!r.ok) {
-			const txt = await r.text();
-			showToast(tr('error_prefix', '❌ Error: ') + txt, 'error');
-			return;
-		}
-
-		const newLang = _getVal('cfg-lang');
-		if (newLang && newLang !== (initialSystem?.lang || 'de')) {
-			await fetch('/api/set-language?lang=' + encodeURIComponent(newLang), {
-				method: 'POST',
-				headers: token ? { 'X-Trigger-Token': token } : {}
-			});
-		}
-
-		showToast(tr('saved_reload', '✅ Gespeichert! Seite wird neu geladen...'), 'success');
-		setTimeout(() => location.reload(), 1500);
-
-	} catch (e) {
-		showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error');
-	} finally {
-		hideLoadingToast();
 	}
+
+	showToast(tr('saved_reload', '✅ Gespeichert! Seite wird neu geladen...'), 'success');
+	setTimeout(() => location.reload(), 1500);
+}
+
+async function saveNotifySettings() {
+	if (!confirm(tr('save_config_confirm', 'Einstellungen speichern?'))) return;
+
+	const ok = await postSettingsSave('/api/settings/notify/save', collectNotifyFieldsPayload());
+	if (!ok) return;
+
+	showToast(tr('saved_reload', '✅ Gespeichert! Seite wird neu geladen...'), 'success');
+	setTimeout(() => location.reload(), 1500);
+}
+
+async function saveDomainSettings() {
+	if (!confirm(tr('save_config_confirm', 'Einstellungen speichern?'))) return;
+
+	const ok = await postSettingsSave('/api/settings/domains/save', { domain_configs: tempDomainConfigs });
+	if (!ok) return;
+
+	showToast(tr('saved_reload', '✅ Gespeichert! Seite wird neu geladen...'), 'success');
+	setTimeout(() => location.reload(), 1500);
+}
+
+function saveCurrentSettingsSection() {
+	if (currentPage === 'settings-system') return saveSystemSettings();
+	if (currentPage === 'settings-notify') return saveNotifySettings();
+	if (currentPage === 'settings-domains') return saveDomainSettings();
+	// settings-security has no server-side save — token lives in sessionStorage via saveToken()
 }
 
 function resetMetrics() {
@@ -3098,7 +3179,7 @@ function initKeyboardShortcuts() {
 				event.preventDefault();
 				triggerUpdate();
 				break;
-			case 's': navTo('settings'); break;
+			case 's': navTo('settings-security'); break;
 			case 'd': navTo('dashboard'); break;
 			case 'm': navTo('metrics'); break;
 			case 'i': navTo('diagnose'); break;
@@ -3641,4 +3722,4 @@ function restoreFullBackup() {
 			}
 			showToast(tr('backup_restore_failed', '❌ Restore failed'), 'error');
 		});
-	}
+}
