@@ -196,6 +196,42 @@ body {
   flex-shrink: 0;
 }
 
+.nav-item--group {
+  position: relative;
+}
+
+.nav-item-chevron {
+  margin-left: auto;
+  font-size: 0.7rem;
+  transition: transform 0.15s;
+  flex-shrink: 0;
+}
+
+.nav-submenu {
+  display: block;
+  max-height: 0;
+  overflow: hidden;
+  flex-shrink: 0;
+  transition: max-height 0.18s ease;
+}
+
+.nav-submenu.nav-submenu--open {
+  max-height: 240px;
+}
+
+.nav-item--group[aria-expanded="true"] .nav-item-chevron {
+  transform: rotate(180deg);
+}
+
+.nav-item--sub {
+  padding-left: 44px;
+  font-size: 0.82rem;
+}
+
+.nav-item--sub .nav-item-icon {
+  font-size: 0.9rem;
+}
+
 .nav-spacer {
   flex: 1;
 }
@@ -2189,7 +2225,10 @@ body.auth-page .dashboard-footer {
   min-height: 0;
 }
 
-.page-section[data-section="settings"],
+.page-section[data-section="settings-security"],
+.page-section[data-section="settings-system"],
+.page-section[data-section="settings-domains"],
+.page-section[data-section="settings-notify"],
 .page-section[data-section="overview"],
 .page-section[data-section="dashboard"],
 .page-section[data-section="metrics"],
