@@ -198,21 +198,21 @@ type Phrases struct {
 	WriteFailed, FileSaved, EmbeddedFileUnreadable, CannotReadEmbeddedDir string
 
 	// Dashboard UI
-	DomainSearchPlaceholder, NoMoreEntries, ChecksLabel, EntriesLabel        string
-	BadgeChanged, FilterAll, FilterErrors, FilterWarnings                    string
-	FilterUpdates, FilterStarts, FilterStop, FilterCreated, FilterCleanup    string
-	FilterSkip, FilterConfig, FilterInfo, FilterLogin, FilterLogout          string
-	FilterLoginFailed, NoDomainsConfigured                                   string
-	DomainContext, ThemeLabelJS, NoIPToCopyJS, CopiedJS, CopyFailedJS        string
-	UpdateStartingJS, UpdateStartedJS, ConnectionErrorJS                     string
-	ExportStartedJS, ExportFailedJS, FQDNMissingJS                           string
-	SaveConfigConfirmJS, SavedReloadJS, ErrorPrefixJS                        string
-	ResetMetricsConfirmJS, MetricsResetOKJS, MetricsResetFailedJS            string
-	DeleteDomainConfirmJS, DomainRemovedJS, DeleteFailedJS                   string
-	TokenSavedJS, TokenDeletedJS, TokenSavedMaskedJS, TokenEnterJS           string
-	DomainUpdatedJS, ClearedJS, DomainHistorySummary                         string
-	CopyTitle, DeleteEntryTitle, HiddenEntriesFormat, FooterMadeWithByFormat string
-	AuditEntryDeleted, AuditDeleteFailed                                     string
+	DomainSearchPlaceholder, NoMoreEntries, ChecksLabel, EntriesLabel                  string
+	BadgeChanged, FilterAll, FilterErrors, FilterWarnings                              string
+	FilterUpdates, FilterStarts, FilterStop, FilterCreated, FilterCleanup              string
+	FilterSkip, FilterConfig, FilterInfo, FilterLogin, FilterLogout                    string
+	FilterLoginFailed, NoDomainsConfigured                                             string
+	DomainContext, ThemeLabelJS, NoIPToCopyJS, CopiedJS, CopyFailedJS                  string
+	UpdateStartingJS, UpdateStartedJS, ConnectionErrorJS                               string
+	ExportStartedJS, ExportFailedJS, FQDNMissingJS                                     string
+	SaveConfigConfirmJS, SavedReloadJS, ErrorPrefixJS                                  string
+	ResetMetricsConfirmJS, MetricsResetOKJS, MetricsResetFailedJS                      string
+	DeleteDomainConfirmJS, DomainRemovedJS, DeleteFailedJS                             string
+	TokenSavedJS, TokenDeletedJS, TokenSavedMaskedJS, TokenEnterJS                     string
+	DomainUpdatedJS, ClearedJS, DomainHistorySummary                                   string
+	CopyTitle, DeleteEntryTitle, HiddenEntriesFormat, FooterMadeWithByFormat           string
+	AuditEntryDeleted, AuditDeleteFailed, CNAMEProviderUnsupported, CNAMETargetMissing string
 
 	// Provider-Hinweise / Config
 	IonosAPIRequired, Ipv64TokenRequired, CloudflareAuthRequired, UnknownProvider  string
@@ -333,7 +333,7 @@ type Phrases struct {
 	NotifyEventDryRunLabel, NotifyEventDryRunDesc                                      string
 	NotifyEventSkipLabel, NotifyEventSkipDesc                                          string
 	NotifyEventAPILabel, NotifyEventAPIDesc                                            string
-  NotifyEventServerLabel, NotifyEventServerDesc                                      string
+	NotifyEventServerLabel, NotifyEventServerDesc                                      string
 	NotifyEventLoginLabel, NotifyEventLoginDesc                                        string
 	NotifyEventLoginFailedLabel, NotifyEventLoginFailedDesc                            string
 	NotifyEventLogoutLabel, NotifyEventLogoutDesc                                      string
