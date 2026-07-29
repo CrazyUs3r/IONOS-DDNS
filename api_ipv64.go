@@ -21,11 +21,14 @@ import (
 
 func splitIPv64FQDN(fqdn string) (baseDomain, praefix string) {
 	fqdn = normalizeIPv64FQDN(fqdn)
+	if fqdn == "" {
+		return "", ""
+	}
 
 	providerCache.RLock()
-	defer providerCache.RUnlock()
-
 	if _, exists := providerCache.ipv64Records[fqdn]; exists {
+		providerCache.RUnlock()
+
 		return fqdn, ""
 	}
 
@@ -34,8 +37,28 @@ func splitIPv64FQDN(fqdn string) (baseDomain, praefix string) {
 		possibleBase := strings.Join(parts[i:], ".")
 		if _, exists := providerCache.ipv64Records[possibleBase]; exists {
 			praefix = strings.Join(parts[:i], ".")
+			providerCache.RUnlock()
 
 			return possibleBase, praefix
+		}
+	}
+	providerCache.RUnlock()
+
+	// IPv64 domains consist of one account label in front of a service
+	// suffix. Any labels before that are DNS record prefixes. Knowing the
+	// suffixes makes this deterministic even before get_domains filled the
+	// provider cache.
+	if suffix, ok := ipv64ServiceDomainSuffix(fqdn); ok {
+		hostPart, found := strings.CutSuffix(fqdn, "."+suffix)
+		if found && hostPart != "" {
+			hostLabels := strings.Split(hostPart, ".")
+			baseLabel := hostLabels[len(hostLabels)-1]
+			if baseLabel != "" {
+				baseDomain = baseLabel + "." + suffix
+				praefix = strings.Join(hostLabels[:len(hostLabels)-1], ".")
+
+				return baseDomain, praefix
+			}
 		}
 	}
 
@@ -45,6 +68,33 @@ func splitIPv64FQDN(fqdn string) (baseDomain, praefix string) {
 	}
 
 	return fqdn, ""
+}
+
+func ipv64ServiceDomainSuffix(fqdn string) (string, bool) {
+	fqdn = normalizeIPv64FQDN(fqdn)
+
+	for _, suffix := range IPv64ServiceDomains {
+		if fqdn == suffix || strings.HasSuffix(fqdn, "."+suffix) {
+			return suffix, true
+		}
+	}
+
+	return "", false
+}
+
+func validateIPv64FQDN(fqdn string) error {
+	fqdn = normalizeIPv64FQDN(fqdn)
+	if fqdn == "" {
+		return errors.New(phrases().IPv64FQDNEmpty)
+	}
+	if len(fqdn) > 253 || !domainRegex.MatchString(fqdn) {
+		return fmt.Errorf("%s: %q", phrases().DNSInvalidDomainName, fqdn)
+	}
+	if suffix, ok := ipv64ServiceDomainSuffix(fqdn); ok && fqdn == suffix {
+		return fmt.Errorf("%s: %q", phrases().DNSInvalidDomainName, fqdn)
+	}
+
+	return nil
 }
 
 func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) ([]byte, error) {
@@ -714,6 +764,11 @@ func buildIPv64DomainSnapshot(resp IPv64Response) map[string]IPv64Domain {
 	domains := make(map[string]IPv64Domain, len(resp.Subdomains))
 
 	for domainName, subdomain := range resp.Subdomains {
+		domainName = normalizeIPv64FQDN(domainName)
+		if domainName == "" {
+			continue
+		}
+
 		domains[domainName] = IPv64Domain{
 			Domain:           domainName,
 			DomainUpdateHash: subdomain.DomainUpdateHash,
@@ -728,23 +783,25 @@ func buildIPv64DomainSnapshot(resp IPv64Response) map[string]IPv64Domain {
 }
 
 func loadIPv64InfrastructureRecords(z Zone) ([]Record, error) {
+	zoneName := normalizeIPv64FQDN(z.Name)
+
 	providerCache.RLock()
 	defer providerCache.RUnlock()
 
-	data, ok := providerCache.ipv64Records[z.Name]
+	data, ok := providerCache.ipv64Records[zoneName]
 	if !ok {
 		return nil, fmt.Errorf(
 			phrases().NoCachedIPv64InfrastructureRecords,
-			z.Name,
+			zoneName,
 		)
 	}
 
 	records := make([]Record, 0, len(data.Records))
 
 	for _, ir := range data.Records {
-		name := z.Name
+		name := zoneName
 		if ir.Praefix != "" {
-			name = ir.Praefix + "." + z.Name
+			name = ir.Praefix + "." + zoneName
 		}
 
 		records = append(records, Record{
@@ -1296,6 +1353,11 @@ func loadIPv64Domains(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
 
 	zones := make([]Zone, 0, len(resp.Subdomains))
 	for domainName := range resp.Subdomains {
+		domainName = normalizeIPv64FQDN(domainName)
+		if domainName == "" {
+			continue
+		}
+
 		zones = append(zones, Zone{
 			ID:   domainName,
 			Name: domainName,
@@ -1311,8 +1373,8 @@ func loadIPv64Domains(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
 
 func addIPv64Domain(ctx context.Context, dc *DomainConfig, fqdn string) error {
 	fqdn = normalizeIPv64FQDN(fqdn)
-	if fqdn == "" {
-		return errors.New("fqdn is empty")
+	if err := validateIPv64FQDN(fqdn); err != nil {
+		return err
 	}
 
 	params := map[string]string{
@@ -1336,8 +1398,8 @@ func addIPv64Domain(ctx context.Context, dc *DomainConfig, fqdn string) error {
 
 func deleteIPv64Domain(ctx context.Context, dc *DomainConfig, fqdn string) error {
 	fqdn = normalizeIPv64FQDN(fqdn)
-	if fqdn == "" {
-		return errors.New("fqdn is empty")
+	if err := validateIPv64FQDN(fqdn); err != nil {
+		return err
 	}
 
 	params := map[string]string{
@@ -1368,8 +1430,8 @@ func selectIPv64DomainConfigForAction(
 	fqdn = normalizeIPv64FQDN(fqdn)
 	apiToken = strings.TrimSpace(apiToken)
 
-	if fqdn == "" {
-		return nil, http.StatusBadRequest, fmt.Errorf("%s", phrases().IPv64FQDNEmpty)
+	if err := validateIPv64FQDN(fqdn); err != nil {
+		return nil, http.StatusBadRequest, err
 	}
 
 	if apiToken != "" {
@@ -1409,6 +1471,9 @@ func selectIPv64DomainConfigForAction(
 	}
 
 	dc := findIPv64DomainConfigForFQDN(fqdn)
+	if dc == nil {
+		dc = findSingleIPv64DomainConfig()
+	}
 	if dc == nil || strings.TrimSpace(dc.IPv64Token) == "" {
 		return nil, http.StatusBadRequest, fmt.Errorf(phrases().IPv64NoMatchingTokenConfigured, fqdn)
 	}
@@ -1452,6 +1517,50 @@ func findIPv64DomainConfigForFQDN(fqdn string) *DomainConfig {
 	}
 
 	return &best
+}
+
+// findSingleIPv64DomainConfig returns a configured IPv64 account when all
+// IPv64 entries use the same API token. This lets the dashboard create a new
+// domain under another IPv64 service suffix without duplicating the same token
+// in a placeholder config first. Multiple distinct tokens remain intentionally
+// ambiguous and require the token to be supplied explicitly.
+func findSingleIPv64DomainConfig() *DomainConfig {
+	cfgMu.RLock()
+	defer cfgMu.RUnlock()
+
+	var selected DomainConfig
+	selectedToken := ""
+	found := false
+
+	for _, dc := range cfg.DomainConfigs {
+		if dc.Provider != ProviderIPv64 {
+			continue
+		}
+
+		token := strings.TrimSpace(dc.IPv64Token)
+		if token == "" {
+			continue
+		}
+
+		if !found {
+			selected = dc
+			selected.IPv64Token = token
+			selectedToken = token
+			found = true
+
+			continue
+		}
+
+		if token != selectedToken {
+			return nil
+		}
+	}
+
+	if !found {
+		return nil
+	}
+
+	return &selected
 }
 
 func ipv64ConfigCoversFQDN(configFQDN, fqdn string) bool {
@@ -1528,8 +1637,8 @@ func ipv64DomainConfigsSnapshot() []DomainConfig {
 
 func ipv64TokenOwnsDomain(ctx context.Context, dc *DomainConfig, fqdn string) (bool, error) {
 	fqdn = normalizeIPv64FQDN(fqdn)
-	if fqdn == "" {
-		return false, fmt.Errorf("%s", phrases().IPv64FQDNEmpty)
+	if err := validateIPv64FQDN(fqdn); err != nil {
+		return false, err
 	}
 
 	if dc == nil || strings.TrimSpace(dc.IPv64Token) == "" {
@@ -1550,7 +1659,7 @@ func ipv64TokenOwnsDomain(ctx context.Context, dc *DomainConfig, fqdn string) (b
 		return false, fmt.Errorf("%s: %w", phrases().IPv64ParseError, err)
 	}
 
-	_, ok := resp.Subdomains[fqdn]
+	_, ok := buildIPv64DomainSnapshot(resp)[fqdn]
 
 	return ok, nil
 }
