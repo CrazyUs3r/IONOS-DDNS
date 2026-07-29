@@ -162,6 +162,31 @@ var (
 		"https://ipv6.myip.wtf/text",
 		"https://botwhatismyipaddress.com/",
 	}
+
+	// IPv64ServiceDomains contains all IPv64 DynDNS suffixes supported by
+	// the domain parser. Keep the API endpoint itself on ipv64.net; these
+	// values are the selectable/managed DNS suffixes, not API hosts.
+	IPv64ServiceDomains = [...]string{
+		"ipv64.net",
+		"ipv64.de",
+		"any64.de",
+		"eth64.de",
+		"home64.de",
+		"iot64.de",
+		"lan64.de",
+		"nas64.de",
+		"srv64.de",
+		"tcp64.de",
+		"udp64.de",
+		"vpn64.de",
+		"wan64.de",
+		"api64.de",
+		"dyndns64.de",
+		"dynipv6.de",
+		"dns64.de",
+		"root64.de",
+		"route64.de",
+	}
 )
 
 // ============================================================================
