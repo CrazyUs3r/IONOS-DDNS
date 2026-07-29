@@ -2873,16 +2873,16 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 			</button>
 			<div class="nav-submenu" id="settings-submenu">
 				<button type="button" class="nav-item nav-item--sub" data-page="settings-security" data-click="navTo('settings-security')">
-					`+phrases().SettingsSecurity+`
+					 `+phrases().SettingsSecurity+`
 				</button>
 				<button type="button" class="nav-item nav-item--sub" data-page="settings-system" data-click="navTo('settings-system')">
 					`+phrases().SettingsSystem+`
 				</button>
 				<button type="button" class="nav-item nav-item--sub" data-page="settings-domains" data-click="navTo('settings-domains')">
-					`+phrases().SettingsDomains+`
+					 `+phrases().SettingsDomains+`
 				</button>
 				<button type="button" class="nav-item nav-item--sub" data-page="settings-notify" data-click="navTo('settings-notify')">
-					`+phrases().SettingsNotify+`
+					 `+phrases().SettingsNotify+`
 				</button>
 			</div>
 			%s
@@ -3394,53 +3394,11 @@ func writeDomainsCard(w io.Writer, data map[string]any) {
 	configuredDomains := configuredDomainSet()
 	newestChange := newestDomainChange(data, keys)
 
-	hasIPv64 := false
-	cfgMu.RLock()
-	for _, dc := range cfg.DomainConfigs {
-		if dc.Provider == ProviderIPv64 {
-			hasIPv64 = true
-
-			break
-		}
-	}
-	cfgMu.RUnlock()
-
 	_, _ = fmt.Fprint(w, `
 	<div class="page-section" data-section="domains">
 		<input type="text" class="search-box" id="domainSearch" inputmode="search" autocomplete="off"
 			placeholder="`+phrases().DomainSearchPlaceholder+`" data-input="filterDomains(this.value)">
 	`)
-
-	if hasIPv64 {
-		_, _ = fmt.Fprint(w, `
-			<div class="card ipv64-mgmt-card">
-				<div class="card-content">
-					<div class="ipv64-mgmt-row">
-						<div class="ipv64-mgmt-input-wrap">
-							<label class="ipv64-mgmt-label">`+phrases().IPv64DomainFQDN+`</label>
-							<input type="text" id="ipv64-domain-input" class="search-box ipv64-mgmt-input" autocomplete="off"
-								placeholder="`+phrases().IPv64DomainPlaceholder+`">
-						</div>
-						<div class="ipv64-mgmt-input-wrap">
-							<label class="ipv64-mgmt-label">`+phrases().IPv64DomainAPITokenOptional+`</label>
-							<div class="input-with-action">
-								<input type="password" id="ipv64-api-token-input" class="search-box ipv64-mgmt-input" autocomplete="new-password"
-									placeholder="`+phrases().IPv64DomainPlaceholderToken+`">
-								<button type="button" class="input-action-btn" data-click="togglePassword('ipv64-api-token-input', this)">👁️</button>
-							</div>
-						</div>
-						<button class="action-btn btn--add-domain" data-click="ipv64AddDomain()">
-							➕ `+phrases().IPv64ActionAdd+`
-						</button>
-						<button class="action-btn btn--del-domain" data-click="ipv64DeleteDomain()">
-							🗑️ `+phrases().IPv64ActionDelete+`
-						</button>
-					</div>
-					<div id="ipv64-domain-result" class="ipv64-result"></div>
-				</div>
-			</div>
-		`)
-	}
 
 	_, _ = fmt.Fprint(w, `<div id="domainContainer">`)
 
@@ -3492,15 +3450,85 @@ func writeSettingsSystemSubpage(w io.Writer, c Config) {
 func writeSettingsDomainsSubpage(w io.Writer) {
 	domainsSection := buildSettingsDomainsSection()
 
+	cfgMu.RLock()
+	hasIPv64 := false
+	for _, dc := range cfg.DomainConfigs {
+		if dc.Provider == ProviderIPv64 {
+			hasIPv64 = true
+			break
+		}
+	}
+	cfgMu.RUnlock()
+
+	p := phrases()
+
 	_, _ = fmt.Fprint(w, `
-	<div class="page-section" data-section="settings-domains">
-		<div class="card card--no-cv">
-			<div class="card-header">`+phrases().SettingsDomains+`</div>
-			<div class="card-content">
-				`+domainsSection+`
+		<div class="page-section" data-section="settings-domains">
+	`)
+
+	if hasIPv64 {
+		_, _ = fmt.Fprint(w, `
+			<div class="card ipv64-mgmt-card">
+				<div class="card-content">
+					<div class="ipv64-mgmt-row">
+						<div class="ipv64-mgmt-input-wrap">
+							<label class="ipv64-mgmt-label" for="ipv64-domain-input">`+p.IPv64DomainFQDN+`</label>
+							<input
+								type="text"
+								id="ipv64-domain-input"
+								class="search-box ipv64-mgmt-input"
+								autocomplete="off"
+								placeholder="`+p.IPv64DomainPlaceholder+`">
+						</div>
+
+						<div class="ipv64-mgmt-input-wrap">
+							<label class="ipv64-mgmt-label" for="ipv64-api-token-input">`+p.IPv64DomainAPITokenOptional+`</label>
+							<div class="input-with-action">
+								<input
+									type="password"
+									id="ipv64-api-token-input"
+									class="search-box ipv64-mgmt-input"
+									autocomplete="new-password"
+									placeholder="`+p.IPv64DomainPlaceholderToken+`">
+
+								<button
+									type="button"
+									class="input-action-btn"
+									data-click="togglePassword('ipv64-api-token-input', this)">
+									👁️
+								</button>
+							</div>
+						</div>
+
+						<button
+							type="button"
+							class="action-btn btn--add-domain"
+							data-click="ipv64AddDomain()">
+							➕ `+p.IPv64ActionAdd+`
+						</button>
+
+						<button
+							type="button"
+							class="action-btn btn--del-domain"
+							data-click="ipv64DeleteDomain()">
+							🗑️ `+p.IPv64ActionDelete+`
+						</button>
+					</div>
+
+					<div id="ipv64-domain-result" class="ipv64-result"></div>
+				</div>
+			</div>
+		`)
+	}
+
+	_, _ = fmt.Fprint(w, `
+			<div class="card card--no-cv">
+				<div class="card-header">`+p.SettingsDomains+`</div>
+				<div class="card-content">
+					`+domainsSection+`
+				</div>
 			</div>
 		</div>
-	</div>
 	`)
 }
 
