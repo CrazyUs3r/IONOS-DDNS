@@ -3538,6 +3538,11 @@ function deleteAuditEntry(btn) {
 				if (next) next.classList.remove('no-hover');
 			}, 220);
 			showToast('🗑️ ' + tr('audit_entry_deleted', 'Audit-Eintrag gelöscht'), 'success');
+			const meta = document.getElementById('audit-summary-meta');
+			if (meta) {
+				const match = meta.textContent.match(/\d+/);
+				if (match) meta.textContent = meta.textContent.replace(/\d+/, String(Math.max(0, parseInt(match[0], 10) - 1)));
+			}
 		})
 		.catch(err => {
 			console.error('Audit delete failed:', err);
@@ -3555,11 +3560,28 @@ async function refreshAuditLog() {
 		const data = await response.json().catch(() => ({}));
 		if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
 		box.classList.remove('audit-loading');
-		renderAuditEntries(data.entries || []);
+		const entries = data.entries || [];
+		renderAuditEntries(entries);
+		updateAuditSummaryMeta(
+			data.total ?? entries.length,
+			data.oldest_timestamp,
+			data.latest_timestamp
+		);
 	} catch (error) {
 		box.classList.remove('audit-loading');
 		box.innerHTML = '<div class="diag-error-box">❌ ' + escHtml(error.message || tr('audit_load_failed', 'Audit-Log konnte nicht geladen werden.')) + '</div>';
 	}
+}
+
+function updateAuditSummaryMeta(count, oldestTimestamp = '', latestTimestamp = '') {
+	const meta = document.getElementById('audit-summary-meta');
+	if (!meta) return;
+
+	let summary = `(${count} ${tr('entries_label', 'Records')})`;
+	if (oldestTimestamp && latestTimestamp) {
+		summary += ` 🕒 ${formatAuditTimestamp(oldestTimestamp)} — ${formatAuditTimestamp(latestTimestamp)}`;
+	}
+	meta.textContent = summary;
 }
 
 function dnsValues(values) {
