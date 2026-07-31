@@ -5112,7 +5112,10 @@ func writeAuditDNSSection(w io.Writer, isAdmin bool) {
 	_, _ = fmt.Fprintf(w, `<div class="page-section" data-section="audit">
 		<div class="audit-dns-grid">
 			<div class="card audit-log-card audit-log-card-fixed">
-				<div class="card-header card-header--space-between"><span>`+phrases().AuditLogTitle+`</span><button class="action-btn topbar-action-btn" data-click="refreshAuditLog()">`+phrases().AuditRefreshBtn+`</button></div>
+				<div class="card-header card-header--space-between">
+   				 <span>`+phrases().AuditLogTitle+` <span class="logs-summary-meta" id="audit-summary-meta"></span></span>
+    				 <button class="action-btn topbar-action-btn" data-click="refreshAuditLog()">`+phrases().AuditRefreshBtn+`</button>
+				</div>
 				<div class="card-content"><div id="audit-log-content" class="audit-log-container audit-loading">`+phrases().AuditLoadingJS+`</div></div>
 			</div>
 			<div class="card card--no-cv dns-propagation-card">

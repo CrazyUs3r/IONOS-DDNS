@@ -485,6 +485,7 @@ func dashboardI18NJSON() string {
 		"page_reload_failed":            t(phrases().PageReloadFailedJS, "Seite konnte nicht aktualisiert werden"),
 		"password_reset":                t(phrases().PasswordResetJS, "Password changed"),
 		"provider_invalid":              t(phrases().ProviderInvalidJS, "Ungültiger Provider"),
+		"entries_label":                 t(phrases().EntriesLabel, "Records"),
 		"remove_btn":                    t(phrases().RemoveBtn, "🗑️ Remove"),
 		"reset_metrics_confirm":         t(phrases().ResetMetricsConfirmJS, "Clear all metrics?"),
 		"reset_password":                t(phrases().ResetPasswordJS, "Set password"),

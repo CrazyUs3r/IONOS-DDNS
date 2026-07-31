@@ -1837,13 +1837,13 @@ func appendAuditEntry(entry auditEntry) error {
 	return err
 }
 
-func readAuditEntries(limit int) ([]auditEntry, error) {
+func readAuditEntries(limit int) ([]auditEntry, int, string, string, error) {
 	if limit <= 0 || limit > auditReadLimit {
 		limit = auditReadLimit
 	}
 	path := auditLogFilePath()
 	if path == "" {
-		return []auditEntry{}, nil
+		return []auditEntry{}, 0, "", "", nil
 	}
 
 	auditLogMu.Lock()
@@ -1852,10 +1852,10 @@ func readAuditEntries(limit int) ([]auditEntry, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return []auditEntry{}, nil
+			return []auditEntry{}, 0, "", "", nil
 		}
 
-		return nil, err
+		return nil, 0, "", "", err
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
@@ -1865,6 +1865,8 @@ func readAuditEntries(limit int) ([]auditEntry, error) {
 
 	ring := make([]auditEntry, limit)
 	total := 0
+	oldestTimestamp := ""
+	latestTimestamp := ""
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 4096), 128<<10)
 	for scanner.Scan() {
@@ -1872,11 +1874,17 @@ func readAuditEntries(limit int) ([]auditEntry, error) {
 		if json.Unmarshal(scanner.Bytes(), &entry) != nil {
 			continue
 		}
+		if entry.Timestamp != "" {
+			if oldestTimestamp == "" {
+				oldestTimestamp = entry.Timestamp
+			}
+			latestTimestamp = entry.Timestamp
+		}
 		ring[total%limit] = entry
 		total++
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, err
+		return nil, 0, "", "", err
 	}
 
 	count := min(total, limit)
@@ -1886,7 +1894,7 @@ func readAuditEntries(limit int) ([]auditEntry, error) {
 		entries = append(entries, ring[index])
 	}
 
-	return entries, nil
+	return entries, total, oldestTimestamp, latestTimestamp, nil
 }
 
 func handleAPIAudit(w http.ResponseWriter, r *http.Request) {
@@ -1899,14 +1907,19 @@ func handleAPIAudit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entries, err := readAuditEntries(auditReadLimit)
+	entries, total, oldestTimestamp, latestTimestamp, err := readAuditEntries(auditReadLimit)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"entries":          entries,
+		"total":            total,
+		"oldest_timestamp": oldestTimestamp,
+		"latest_timestamp": latestTimestamp,
+	})
 }
 
 func deleteAuditEntry(id string) error {
@@ -1990,7 +2003,7 @@ func authPageShell(title, body string) string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>` + esc((title)) + ` · DynDNS</title>
+<title>` + esc(title) + ` · DynDNS</title>
 <link rel="stylesheet" href="/assets/style.css">
 </head>
 
