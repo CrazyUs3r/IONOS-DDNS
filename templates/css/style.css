@@ -3820,6 +3820,12 @@ body.auth-page .dashboard-footer {
   gap: 12px;
 }
 
+.audit-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .dns-propagation-card>.card-content {
   display: block;
   width: 100%;
