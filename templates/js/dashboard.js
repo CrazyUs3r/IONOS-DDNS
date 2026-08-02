@@ -103,6 +103,7 @@ const DECLARATIVE_ACTIONS = Object.freeze({
 	removeDomainFromList: ({ args }) => removeDomainFromList(Number(args[0])),
 	refreshDiagnosis: () => refreshDiagnosis(),
 	refreshAuditLog: () => refreshAuditLog(),
+	onAuditGenChange: ({ element }) => onAuditGenChange(element.value),
 	runDNSPropagation: () => runDNSPropagation(),
 	resetMetrics: () => resetMetrics(),
 	restoreFullBackup: () => restoreFullBackup(),
@@ -3463,7 +3464,7 @@ function formatAuditTimestamp(value) {
 	return date.toLocaleString();
 }
 
-function renderAuditEntries(entries) {
+function renderAuditEntries(entries, gen = 0) {
 	const box = document.getElementById('audit-log-content');
 	if (!box) return;
 	if (!Array.isArray(entries) || entries.length === 0) {
@@ -3490,6 +3491,9 @@ function renderAuditEntries(entries) {
 		const ip = entry.ip || '-';
 		const copyText = [time, actor, role, method, path, status, ip].filter(Boolean).join(' ');
 		const actionTitle = [method, path].filter(Boolean).join(' ');
+		const deleteBtn = gen === 0
+			? `<button class="copy-btn log-delete-btn" data-click="deleteAuditEntry(this)" title="${escHtml(tr('delete_entry_title', 'Eintrag löschen'))}">🗑️</button>`
+			: '';
 
 		return `<tr class="audit-entry-row" data-audit-id="${escHtml(entry.id || '')}" data-copy="${escHtml(copyText)}">
 			<td title="${escHtml(time)}">${escHtml(time)}</td>
@@ -3499,7 +3503,7 @@ function renderAuditEntries(entries) {
 			<td><code class="audit-ip">${escHtml(ip)}</code></td>
 			<td class="audit-actions"><span class="audit-action-buttons">
 				<button class="copy-btn log-copy-btn" data-click="copyAuditEntry(this)" title="${escHtml(tr('copy_title', 'Kopieren'))}">📋</button>
-				<button class="copy-btn log-delete-btn" data-click="deleteAuditEntry(this)" title="${escHtml(tr('delete_entry_title', 'Eintrag löschen'))}">🗑️</button>
+				${deleteBtn}
 			</span></td>
 		</tr>`;
 	}).join('');
@@ -3550,27 +3554,52 @@ function deleteAuditEntry(btn) {
 		});
 }
 
-async function refreshAuditLog() {
+async function refreshAuditLog(gen = 0) {
 	const box = document.getElementById('audit-log-content');
 	if (!box) return;
 	box.textContent = tr('audit_loading', 'Audit-Einträge werden geladen…');
 	box.classList.add('audit-loading');
 	try {
-		const response = await fetch('/api/audit', { cache: 'no-store' });
+		const response = await fetch(`/api/audit?gen=${encodeURIComponent(gen)}`, { cache: 'no-store' });
 		const data = await response.json().catch(() => ({}));
 		if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
 		box.classList.remove('audit-loading');
 		const entries = data.entries || [];
-		renderAuditEntries(entries);
+		renderAuditEntries(entries, gen);
 		updateAuditSummaryMeta(
 			data.total ?? entries.length,
 			data.oldest_timestamp,
 			data.latest_timestamp
 		);
+		updateAuditGenSelect(data.generations || [], data.selected_gen ?? gen);
 	} catch (error) {
 		box.classList.remove('audit-loading');
 		box.innerHTML = '<div class="diag-error-box">❌ ' + escHtml(error.message || tr('audit_load_failed', 'Audit-Log konnte nicht geladen werden.')) + '</div>';
 	}
+}
+
+function updateAuditGenSelect(generations, selectedGen) {
+	const select = document.getElementById('audit-gen-select');
+	if (!select) return;
+
+	if (!Array.isArray(generations) || generations.length <= 1) {
+		select.hidden = true;
+		select.innerHTML = '';
+		return;
+	}
+
+	select.innerHTML = generations.map(g => {
+		const label = g.gen === 0
+			? tr('audit_gen_current', 'Aktuell')
+			: `${tr('audit_gen_archive', 'Archiv')} .${g.gen} (${formatAuditTimestamp(g.mod_time)})`;
+		return `<option value="${g.gen}">${escHtml(label)}</option>`;
+	}).join('');
+	select.value = String(selectedGen);
+	select.hidden = false;
+}
+
+function onAuditGenChange(value) {
+	refreshAuditLog(parseInt(value, 10) || 0);
 }
 
 function updateAuditSummaryMeta(count, oldestTimestamp = '', latestTimestamp = '') {
