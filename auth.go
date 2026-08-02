@@ -42,6 +42,7 @@ const (
 	dummyPbkd2Hash          = "pbkdf2-sha256$600000$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA$iJ2gtxNOzRbKDl2b9Rs/8uLh+TzpRSvl/xFJIkTRrA4"
 	setupTokenLength        = 32
 	maxAuthRequestBody      = 64 << 10
+	auditLogMaxBackups      = 5
 )
 
 type UserRole string
@@ -1811,8 +1812,7 @@ func appendAuditEntry(entry auditEntry) error {
 		return err
 	}
 	if st, err := os.Stat(path); err == nil && st.Size() >= auditLogMaxBytes {
-		_ = os.Remove(path + ".1")
-		if err := os.Rename(path, path+".1"); err != nil {
+		if err := rotateAuditFile(path); err != nil {
 			return err
 		}
 	}
@@ -1837,13 +1837,26 @@ func appendAuditEntry(entry auditEntry) error {
 	return err
 }
 
-func readAuditEntries(limit int) ([]auditEntry, int, string, string, error) {
+func rotateAuditFile(path string) error {
+	oldest := fmt.Sprintf("%s.%d", path, auditLogMaxBackups)
+	_ = os.Remove(oldest)
+
+	for i := auditLogMaxBackups - 1; i >= 1; i-- {
+		src := fmt.Sprintf("%s.%d", path, i)
+		dst := fmt.Sprintf("%s.%d", path, i+1)
+		if _, err := os.Stat(src); err == nil {
+			if err := os.Rename(src, dst); err != nil {
+				return err
+			}
+		}
+	}
+
+	return os.Rename(path, path+".1")
+}
+
+func readAuditEntries(path string, limit int) ([]auditEntry, int, string, string, error) {
 	if limit <= 0 || limit > auditReadLimit {
 		limit = auditReadLimit
-	}
-	path := auditLogFilePath()
-	if path == "" {
-		return []auditEntry{}, 0, "", "", nil
 	}
 
 	auditLogMu.Lock()
@@ -1897,6 +1910,43 @@ func readAuditEntries(limit int) ([]auditEntry, int, string, string, error) {
 	return entries, total, oldestTimestamp, latestTimestamp, nil
 }
 
+func auditGenerationPath(gen int) (string, error) {
+	base := auditLogFilePath()
+	if base == "" {
+		return "", errors.New("audit path unavailable")
+	}
+	if gen <= 0 {
+		return base, nil
+	}
+	return fmt.Sprintf("%s.%d", base, gen), nil
+}
+
+type auditGenerationInfo struct {
+	Gen     int       `json:"gen"`
+	ModTime time.Time `json:"mod_time"`
+	Size    int64     `json:"size"`
+}
+
+func listAuditGenerations() []auditGenerationInfo {
+	base := auditLogFilePath()
+	if base == "" {
+		return nil
+	}
+
+	var out []auditGenerationInfo
+	if st, err := os.Stat(base); err == nil {
+		out = append(out, auditGenerationInfo{Gen: 0, ModTime: st.ModTime(), Size: st.Size()})
+	}
+	for i := 1; i <= auditLogMaxBackups; i++ {
+		p := fmt.Sprintf("%s.%d", base, i)
+		if st, err := os.Stat(p); err == nil {
+			out = append(out, auditGenerationInfo{Gen: i, ModTime: st.ModTime(), Size: st.Size()})
+		}
+	}
+
+	return out
+}
+
 func handleAPIAudit(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
@@ -1907,7 +1957,20 @@ func handleAPIAudit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entries, total, oldestTimestamp, latestTimestamp, err := readAuditEntries(auditReadLimit)
+	gen := 0
+	if v := r.URL.Query().Get("gen"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed >= 0 {
+			gen = parsed
+		}
+	}
+	path, err := auditGenerationPath(gen)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+
+		return
+	}
+
+	entries, total, oldestTimestamp, latestTimestamp, err := readAuditEntries(path, auditReadLimit)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 
@@ -1919,6 +1982,8 @@ func handleAPIAudit(w http.ResponseWriter, r *http.Request) {
 		"total":            total,
 		"oldest_timestamp": oldestTimestamp,
 		"latest_timestamp": latestTimestamp,
+		"generations":      listAuditGenerations(),
+		"selected_gen":     gen,
 	})
 }
 
