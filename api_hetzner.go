@@ -154,13 +154,7 @@ func buildHetznerRequest(
 }
 
 func hetznerToken(dc *DomainConfig) string {
-	for _, candidate := range []string{dc.APISecret, dc.APIPrefix, dc.CFToken, dc.IPv64Token} {
-		if token := strings.TrimSpace(candidate); token != "" {
-			return token
-		}
-	}
-
-	return ""
+	return strings.TrimSpace(dc.HetznerToken)
 }
 
 func handleHetznerResponse(
@@ -369,7 +363,7 @@ func updateHetznerDNS(
 		return false, nil
 	}
 	if dryRunEnabled() {
-		log(LogContext{Level: LogWarn, Action: ActionDryRun, Domain: fqdn, Message: fmt.Sprintf("⚠️ Would set %s %s", recordType, newIP)})
+		log(LogContext{Level: LogWarn, Action: ActionDryRun, Domain: fqdn, Message: fmt.Sprintf("⚠️ %s %s %s", phrases().WouldSet, recordType, newIP)})
 
 		return true, nil
 	}
@@ -396,7 +390,7 @@ func updateHetznerDNS(
 		return false, err
 	}
 
-	log(LogContext{Level: LogInfo, Action: action, Domain: fqdn, Message: fmt.Sprintf("🔄 %s -> %s Update", recordType, newIP)})
+	log(LogContext{Level: LogInfo, Action: action, Domain: fqdn, Message: fmt.Sprintf("🔄 %s -> %s %s", recordType, newIP, phrases().Update)})
 	updateHetznerRecordCache(cache, zoneID, recordName, recordType, newIP, existing)
 
 	return true, nil
@@ -457,7 +451,7 @@ func updateHetznerCloudDNS(
 		return false, err
 	}
 
-	log(LogContext{Level: LogInfo, Action: action, Domain: fqdn, Message: fmt.Sprintf("🔄 %s -> %s Update", recordType, newIP)})
+	log(LogContext{Level: LogInfo, Action: action, Domain: fqdn, Message: fmt.Sprintf("🔄 %s -> %s %s", recordType, newIP, phrases().Update)})
 	updateHetznerRecordCache(cache, zoneID, recordName, recordType, newIP, existing)
 
 	return true, nil
@@ -484,7 +478,7 @@ func findHetznerExistingRecord(records []Record, fqdn, zoneName, recordName, rec
 func shouldSkipHetznerUpdate(providerName, fqdn, recordType, newIP string, existing *Record) bool {
 	if existing != nil && dnsRecordContentEqual(recordType, existing.Content, newIP) {
 		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("✅ %s current: %s = %s", providerName, recordType, newIP))
-		log(LogContext{Level: LogInfo, Action: ActionCurrent, Domain: fqdn, Message: fmt.Sprintf("%-4s %s Current", recordType, newIP)})
+		log(LogContext{Level: LogInfo, Action: ActionCurrent, Domain: fqdn, Message: fmt.Sprintf("%-4s %s %s", recordType, newIP, phrases().Current)})
 
 		return true
 	}
@@ -571,7 +565,7 @@ func cleanupHetznerRecords(
 func cleanupSingleHetznerRecord(ctx context.Context, dc *DomainConfig, provider ProviderType, zone Zone, rec Record, fqdn string) {
 	debugLog("MAINTENANCE", fqdn, fmt.Sprintf("cleanup orphaned %s record", rec.Type))
 	if dryRunEnabled() {
-		log(LogContext{Level: LogInfo, Action: ActionCleanup, Domain: fqdn, Message: "Cleanup dry-run"})
+		log(LogContext{Level: LogInfo, Action: ActionCleanup, Domain: fqdn, Message: phrases().CleanupDryRun})
 
 		return
 	}
@@ -596,7 +590,7 @@ func cleanupSingleHetznerRecord(ctx context.Context, dc *DomainConfig, provider 
 		return
 	}
 
-	log(LogContext{Level: LogInfo, Action: ActionCleanup, Domain: fqdn, Message: rec.Type + " record removed"})
+	log(LogContext{Level: LogInfo, Action: ActionCleanup, Domain: fqdn, Message: fmt.Sprintf(phrases().CleanupRecordRemoved, rec.Type)})
 }
 
 func shouldCleanupHetznerRecord(zoneName string, rec Record, configRecords, managedDomains map[string]struct{}) (string, bool) {

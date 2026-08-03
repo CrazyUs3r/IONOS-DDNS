@@ -528,6 +528,7 @@ type DomainConfig struct {
 	Provider       ProviderType `json:"provider"`
 	APIPrefix      string       `json:"api_prefix,omitempty"`
 	APISecret      string       `json:"api_secret,omitempty"`
+	HetznerToken   string       `json:"hetzner_token,omitempty"`
 	CFToken        string       `json:"cf_token,omitempty"`
 	CFEmail        string       `json:"cf_email,omitempty"`
 	CFSecret       string       `json:"cf_secret,omitempty"`

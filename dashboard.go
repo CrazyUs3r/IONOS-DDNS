@@ -651,6 +651,7 @@ type safeDomainConfig struct {
 	IPv64Token     string `json:"ipv64_token,omitempty"`
 	APIPrefix      string `json:"api_prefix,omitempty"`
 	APISecret      string `json:"api_secret,omitempty"`
+	HetznerToken   string `json:"hetzner_token,omitempty"`
 	CFToken        string `json:"cf_token,omitempty"`
 	CFEmail        string `json:"cf_email,omitempty"`
 	Provider       string `json:"provider"`
@@ -726,6 +727,7 @@ func safeDomainConfigs(dcs []DomainConfig) []safeDomainConfig {
 			Provider:       string(dc.Provider),
 			APIPrefix:      dc.APIPrefix,
 			APISecret:      dc.APISecret,
+			HetznerToken:   dc.HetznerToken,
 			CFToken:        dc.CFToken,
 			CFEmail:        dc.CFEmail,
 			CFSecret:       dc.CFSecret,
@@ -1269,6 +1271,7 @@ func maskSafeSystemConfigSecrets(sys *safeSystemConfig) {
 func maskSafeDomainConfigSecrets(domains []safeDomainConfig) {
 	for i := range domains {
 		domains[i].APISecret = maskSecret(domains[i].APISecret)
+		domains[i].HetznerToken = maskSecret(domains[i].HetznerToken)
 		domains[i].CFToken = maskSecret(domains[i].CFToken)
 		domains[i].CFSecret = maskSecret(domains[i].CFSecret)
 		domains[i].IPv64Token = maskSecret(domains[i].IPv64Token)
@@ -1633,11 +1636,17 @@ func mergeExistingDomainConfig(found DomainConfig, incoming safeDomainConfig) Do
 	if strings.TrimSpace(incoming.Provider) != "" {
 		newProvider = normalizeProviderName(incoming.Provider)
 	}
+
+	if newProvider != oldProvider {
+		clearForeignProviderSecrets(&found, newProvider)
+	}
+
 	newRecordMode := strings.ToUpper(strings.TrimSpace(incoming.RecordMode))
 	newCNAMETarget := normalizeDomain(incoming.CNAMETarget)
 
 	applyNonEmptyDashboardValue(&found.APIPrefix, incoming.APIPrefix)
 	applyDashboardSecret(&found.APISecret, incoming.APISecret)
+	applyDashboardSecret(&found.HetznerToken, incoming.HetznerToken)
 	applyDashboardSecret(&found.CFToken, incoming.CFToken)
 	applyNonEmptyDashboardValue(&found.CFEmail, incoming.CFEmail)
 	applyDashboardSecret(&found.CFSecret, incoming.CFSecret)
@@ -1664,6 +1673,30 @@ func mergeExistingDomainConfig(found DomainConfig, incoming safeDomainConfig) Do
 	return found
 }
 
+func clearForeignProviderSecrets(dc *DomainConfig, newProvider ProviderType) {
+	if newProvider != ProviderIONOS {
+		dc.APIPrefix = ""
+		dc.APISecret = ""
+	}
+	if newProvider != ProviderHetzner && newProvider != ProviderHetznerCloud {
+		dc.HetznerToken = ""
+	}
+	if newProvider != ProviderCloudflare {
+		dc.CFToken = ""
+		dc.CFEmail = ""
+		dc.CFSecret = ""
+	}
+	if newProvider != ProviderIPv64 {
+		dc.IPv64Token = ""
+	}
+	if newProvider != ProviderFebas {
+		dc.FebasUpdateURL = ""
+	}
+	if newProvider != ProviderDNScale {
+		dc.APIKey = ""
+	}
+}
+
 func applyNonEmptyDashboardValue(destination *string, incoming string) {
 	if incoming != "" {
 		*destination = incoming
@@ -1684,6 +1717,7 @@ func newDomainConfig(fqdn string, incoming safeDomainConfig) DomainConfig {
 		Provider:       normalizeProviderName(incoming.Provider),
 		APIPrefix:      incoming.APIPrefix,
 		APISecret:      clearDashboardSecretMask(incoming.APISecret),
+		HetznerToken:   clearDashboardSecretMask(incoming.HetznerToken),
 		CFToken:        clearDashboardSecretMask(incoming.CFToken),
 		CFEmail:        incoming.CFEmail,
 		CFSecret:       clearDashboardSecretMask(incoming.CFSecret),
@@ -4754,6 +4788,14 @@ func providerCredentialWarning(dc DomainConfig) string {
 		if strings.TrimSpace(dc.APIKey) == "" {
 			return fmt.Sprintf(
 				t(phrases().DiagnoseDNScaleAPIKeyMissingFormat, "%s: DNScale API Key missing."),
+				fqdn,
+			)
+		}
+
+	case ProviderHetzner, ProviderHetznerCloud:
+		if hetznerToken(&dc) == "" {
+			return fmt.Sprintf(
+				t(phrases().DiagnoseHetznerTokenMissingFormat, "%s: Hetzner token missing."),
 				fqdn,
 			)
 		}

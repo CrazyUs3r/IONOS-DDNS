@@ -365,8 +365,7 @@ func removeConflictingIonosRecords(
 				Level:  LogWarn,
 				Action: ActionDryRun,
 				Domain: fqdn,
-				Message: fmt.Sprintf(
-					"⚠️ Würde inkompatiblen %s-Record vor Wechsel auf %s entfernen",
+				Message: fmt.Sprintf(phrases().IonosConflictWouldRemoveFormat,
 					record.Type,
 					wantedType,
 				),
@@ -409,8 +408,7 @@ func removeConflictingIonosRecords(
 			Level:  LogInfo,
 			Action: ActionUpdate,
 			Domain: fqdn,
-			Message: fmt.Sprintf(
-				"🗑️ %s-Record vor Wechsel auf %s entfernt",
+			Message: fmt.Sprintf(phrases().IonosConflictRemovedFormat,
 				record.Type,
 				wantedType,
 			),

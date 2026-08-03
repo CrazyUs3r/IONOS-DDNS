@@ -79,7 +79,7 @@ type Phrases struct {
 	DiagnoseNoDomainsConfigured, DiagnoseDomainWithoutFQDN                         string
 	DiagnoseTTLTooLowFormat, DiagnoseIonosCredentialsIncompleteFormat              string
 	DiagnoseCloudflareCredentialsIncompleteFormat, DiagnoseIpv64TokenMissingFormat string
-	DiagnoseDNScaleAPIKeyMissingFormat                                             string
+	DiagnoseDNScaleAPIKeyMissingFormat, DiagnoseHetznerTokenMissingFormat          string
 	DiagnoseUnknownDomain, DiagnoseDryRunActive, DiagnoseDebugActive               string
 	DiagnoseHTTPRawDebugActive, DiagnoseIntervalLow, DiagnosePathEmpty             string
 
@@ -117,20 +117,28 @@ type Phrases struct {
 	MetricIPLatency, MetricLastCheck, MetricAvgFrom, MetricsResetBtn, MetricsResetNotification string
 
 	// Validierung & allgemeine Fehler
-	NoDomains, InvalidPort, IntervalTooSmall, ShortIntervalWarning                           string
-	InvalidIPMode, InvalidToken, ConfigErrorPrefix                                           string
-	DomainIsEmpty, DomainTooLong, InvalidDomainFormat                                        string
-	LabelTooLong, InvalidLabel                                                               string
-	APIErrorBadRequest, APIErrorUnauthorized, APIErrorForbidden                              string
-	APIErrorNotFound, APIErrorUnprocessableEntity, APIErrorRateLimitExceeded                 string
-	APIErrorInternalServerError, APIErrorBadGateway, APIErrorServiceUnavailable              string
-	APIErrorGatewayTimeout, APIErrorMethodNotAllowed, APIErrorRequestTimeout                 string
-	APIErrorConflict, APIErrorGone, APIErrorPreconditionFailed                               string
-	APIErrorPayloadTooLarge, APIErrorUnsupportedMediaType, APIErrorTooEarly                  string
-	APIErrorPreconditionRequired, APIErrorRequestHeaderFieldsTooLarge                        string
-	APIErrorUnavailableForLegalReasons, APIErrorNotImplemented                               string
-	APIErrorInsufficientStorage, APIErrorLoopDetected, APIErrorNetworkAuthenticationRequired string
-	APIErrorServerErrorGeneric, APIErrorClientErrorGeneric                                   string
+	NoDomains, InvalidPort, IntervalTooSmall, ShortIntervalWarning                             string
+	InvalidIPMode, InvalidToken, ConfigErrorPrefix                                             string
+	DomainIsEmpty, DomainTooLong, InvalidDomainFormat                                          string
+	LabelTooLong, InvalidLabel                                                                 string
+	APIErrorBadRequest, APIErrorUnauthorized, APIErrorPaymentRequired                          string
+	APIErrorForbidden, APIErrorNotFound, APIErrorMethodNotAllowed                              string
+	APIErrorNotAcceptable, APIErrorProxyAuthenticationRequired, APIErrorRequestTimeout         string
+	APIErrorConflict, APIErrorGone, APIErrorLengthRequired                                     string
+	APIErrorPreconditionFailed, APIErrorPayloadTooLarge, APIErrorURITooLong                    string
+	APIErrorUnsupportedMediaType, APIErrorRangeNotSatisfiable, APIErrorExpectationFailed       string
+	APIErrorImATeapot, APIErrorMisdirectedRequest, APIErrorUnprocessableEntity                 string
+	APIErrorLocked, APIErrorFailedDependency, APIErrorTooEarly                                 string
+	APIErrorUpgradeRequired, APIErrorPreconditionRequired, APIErrorRateLimitExceeded           string
+	APIErrorRequestHeaderFieldsTooLarge, APIErrorUnavailableForLegalReasons                    string
+	APIErrorInternalServerError, APIErrorNotImplemented, APIErrorBadGateway                    string
+	APIErrorServiceUnavailable, APIErrorGatewayTimeout, APIErrorHTTPVersionNotSupported        string
+	APIErrorVariantAlsoNegotiates, APIErrorInsufficientStorage, APIErrorLoopDetected           string
+	APIErrorBandwidthLimitExceeded, APIErrorNotExtended, APIErrorNetworkAuthenticationRequired string
+	APIErrorWebServerUnknownError, APIErrorWebServerDown, APIErrorConnectionTimedOut           string
+	APIErrorOriginUnreachable, APIErrorTimeoutOccurred, APIErrorSSLHandshakeFailed             string
+	APIErrorInvalidSSLCertificate, APIErrorOriginDNSError                                      string
+	APIErrorServerErrorGeneric, APIErrorClientErrorGeneric                                     string
 
 	// Logging
 	LogRotated, LogRotationError                                    string
@@ -240,7 +248,7 @@ type Phrases struct {
 	IonosAPIError, IonosAPIErrorWithIP, IonosZonesLoadFailed, IonosEmptyAPIResponse            string
 	IonosZonesParseFailed, IonosZonesFiltered, IonosCacheMissingRealRecordID                   string
 	IonosCleanupInvalidCachedRecordID, IonosCreateReconciliationFailed                         string
-	UpdateFailedWithError                                                                      string
+	UpdateFailedWithError, IonosConflictWouldRemoveFormat, IonosConflictRemovedFormat          string
 
 	// Febas
 	FebasZoneNameEmpty, FebasDomainConfigNil, FebasCreateRequest       string
