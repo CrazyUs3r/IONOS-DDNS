@@ -1952,9 +1952,9 @@ function editDomain(index) {
 	} else if (d.provider === 'IPV64') {
 		_setVal('new-ipv64-token', d.ipv64_token || '');
 	} else if (d.provider === 'HETZNER') {
-		_setVal('new-hetzner-token', d.api_secret || d.api_prefix || '');
+		_setVal('new-hetzner-token', d.hetzner_token || '');
 	} else if (d.provider === 'HETZNERCLOUD') {
-		_setVal('new-hcloud-token', d.api_secret || d.api_prefix || '');
+		_setVal('new-hcloud-token', d.hetzner_token || '');
 	} else if (d.provider === 'FEBAS') {
 		_setVal('new-febas-update-url', d.febas_update_url || '');
 	} else if (d.provider === 'DNSCALE') {
@@ -2054,9 +2054,9 @@ function addDomainToList() {
 	} else if (provider === 'IPV64') {
 		entry.ipv64_token = _getVal('new-ipv64-token');
 	} else if (provider === 'HETZNER') {
-		entry.api_secret = _getVal('new-hetzner-token');
+		entry.hetzner_token = _getVal('new-hetzner-token');
 	} else if (provider === 'HETZNERCLOUD') {
-		entry.api_secret = _getVal('new-hcloud-token');
+		entry.hetzner_token = _getVal('new-hcloud-token');
 	} else if (provider === 'FEBAS') {
 		entry.febas_update_url = _getVal('new-febas-update-url').trim();
 		if (!entry.febas_update_url) {
