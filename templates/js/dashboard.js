@@ -2406,7 +2406,7 @@ function deleteDomain(domain, btn) {
 	})
 		.then(r => r.json().then(j => ({ status: r.status, json: j })))
 		.then(({ status, json: j }) => {
-			if (status === 200) {
+			if (status === 200 || status === 202) {
 				const card = btn.closest('.domain-item');
 				if (card) { card.style.transition = 'opacity 0.4s'; card.style.opacity = '0'; setTimeout(() => card.remove(), 400); }
 				showToast(trf('domain_removed', { domain }, '🗑️ {domain} entfernt'), 'success');
