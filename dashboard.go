@@ -1914,7 +1914,7 @@ func handleAPIDomainDelete(w http.ResponseWriter, r *http.Request) {
 			delete(domains, statusKey)
 			if writeErr := writeStatusDomainsLocked(domains); writeErr != nil {
 				statusMutex.Unlock()
-				debugLog("API", getClientIP(r), fmt.Sprintf("Failed to persist status.json after removing %s: %v", statusKey, writeErr))
+				debugLog("API", getClientIP(r), fmt.Sprintf("Failed to persist update.json after removing %s: %v", statusKey, writeErr))
 				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": esc(phrases().SaveFailed)})
 
 				return
@@ -1936,7 +1936,7 @@ func handleAPIDomainDelete(w http.ResponseWriter, r *http.Request) {
 	forceNextUpdate.Store(true)
 	lastCleanupNano.Store(0)
 
-	debugLog("API", getClientIP(r), fmt.Sprintf("Removed %s from status.json; provider cleanup queued", statusKey))
+	debugLog("API", getClientIP(r), fmt.Sprintf("Removed %s from update.json; provider cleanup queued", statusKey))
 	broadcastNotification("Provider cleanup queued for "+statusKey, "info")
 
 	writeJSON(w, http.StatusAccepted, map[string]string{
