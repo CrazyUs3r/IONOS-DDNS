@@ -421,15 +421,26 @@ body {
   right: -50%;
   bottom: -38%;
   height: 78%;
+  overflow: hidden;
+  transform: perspective(520px) rotateX(64deg);
+  transform-origin: center top;
+  box-shadow: inset 0 18px 45px var(--horizon);
+  opacity: 0.7;
+}
+
+/* Move the repeated grid texture with transform instead of background-position.
+   Firefox can composite this far more cheaply than repainting the full layer. */
+.auth-grid-floor::before {
+  content: "";
+  position: absolute;
+  inset: -70px 0 0;
   background-image:
     linear-gradient(var(--grid-color) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
   background-size: 70px 70px;
-  transform: perspective(520px) rotateX(64deg);
-  transform-origin: center top;
-  box-shadow: inset 0 18px 45px var(--horizon);
+  will-change: transform;
+  transform: translate3d(0, -70px, 0);
   animation: gridMove 4s linear infinite;
-  opacity: 0.7;
 }
 
 .auth-bg::after {
@@ -447,11 +458,28 @@ body {
 }
 
 @keyframes gridMove {
-  to {
-    background-position:
-      0 70px,
-      0 70px;
+  from {
+    transform: translate3d(0, -70px, 0);
   }
+
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+
+/* Dashboard performance mode:
+   keep the retro artwork, but avoid a permanent fullscreen compositor layer.
+   Login/setup pages are unaffected because only the normal dashboard body gets
+   the .dashboard-runtime class from dashboard.go. */
+body.dashboard-runtime .auth-grid-floor::before {
+  animation: none;
+  will-change: auto;
+  transform: translate3d(0, 0, 0);
+}
+
+body.dashboard-runtime .auth-mountains {
+  filter: none;
 }
 
 /* --------------------------------------------------------------------------
@@ -913,7 +941,7 @@ summary:focus-visible {
 }
 
 .dot-recent {
-  animation: dot-pulse 1.4s ease-in-out infinite;
+  animation: dot-pulse 1.4s ease-in-out 4s;
 }
 
 .changed-badge {
@@ -4395,5 +4423,134 @@ body.auth-page .dashboard-footer {
 
   .audit-actions .copy-btn {
     padding: 5px 6px;
+  }
+}
+
+/* ============================================================================
+   DASHBOARD – container / system resource stats
+   ============================================================================ */
+.system-stats-updated {
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.system-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.system-metric {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+[data-theme="light"] .system-metric {
+  background: rgba(15, 23, 42, 0.02);
+}
+
+.system-metric-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.system-metric-head strong {
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 1rem;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.system-progress {
+  width: 100%;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
+  margin-bottom: 8px;
+}
+
+.system-progress-bar {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--success);
+  transition: width 0.35s ease, background-color 0.2s ease;
+}
+
+.system-progress-bar.is-warn {
+  background: var(--warning);
+}
+
+.system-progress-bar.is-hot {
+  background: var(--error);
+}
+
+.system-metric-sub {
+  min-height: 1.15em;
+  font-size: 0.7rem;
+  color: #94a3b8;
+  overflow-wrap: anywhere;
+}
+
+.system-details-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px 14px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.system-details-grid>div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.system-details-grid span {
+  font-size: 0.67rem;
+  color: #94a3b8;
+}
+
+.system-details-grid strong {
+  min-width: 0;
+  font-size: 0.78rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1050px) {
+
+  .system-metrics-grid,
+  .system-details-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+
+  .system-metrics-grid,
+  .system-details-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .system-stats-card .card-header--space-between {
+    align-items: flex-start;
+    gap: 5px;
+    flex-direction: column;
   }
 }
