@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release-Version (z.B. 2.5.1)"
+        description: "Release-Version (z.B. 2.5.7)"
         required: true
-        default: "2.5.1"
+        default: "2.5.7"
 
       prerelease:
         description: "Als Prerelease veröffentlichen?"
