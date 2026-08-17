@@ -258,13 +258,13 @@ function onlyWhenPageChanges(handler) {
 }
 
 const PAGE_CACHE_TTL = Object.freeze({
-	dashboard: 15000,
-	domains: 15000,
-	metrics: 15000,
+	dashboard: 60000,
+	domains: 60000,
+	metrics: 60000,
 	diagnose: 0,
-	audit: 5000,
-	logs: 5000,
-	debug: 30000,
+	audit: 15000,
+	logs: 15000,
+	debug: 60000,
 	backup: Infinity,
 	'settings-security': Infinity,
 	'settings-system': Infinity,
@@ -389,6 +389,8 @@ function initializeLoadedPage(page, section, state) {
 	if (page === 'dashboard') {
 		restoreDashboardState(section, state);
 		renderEndpointStatus();
+		ensureSystemStatsTicker();
+		refreshSystemStats();
 		return;
 	}
 
@@ -605,6 +607,9 @@ function navTo(page) {
 		changed,
 	});
 
+	// Keep periodic dashboard work alive only while the dashboard is actually visible.
+	syncDashboardActivity();
+
 	try { localStorage.setItem('nav-page', page); } catch { }
 	try {
 		const newHash = '#' + page;
@@ -778,8 +783,21 @@ document.addEventListener('DOMContentLoaded', () => {
 	setBlinking(savedTheme, currentLevel);
 
 	document.addEventListener('visibilitychange', () => {
-		if (document.visibilityState !== 'visible' || !shouldRunDashboardBoot()) return;
+		if (!shouldRunDashboardBoot()) return;
+
+		if (document.hidden) {
+			syncDashboardActivity();
+			return;
+		}
+
+		syncDashboardActivity();
 		dashboardTick();
+		refreshSystemStats();
+		if (pageLoadedAt.get(currentPage) === 0) {
+			ensurePageLoaded(currentPage).catch(error =>
+				console.error('stale page refresh failed:', error)
+			);
+		}
 		if (!ws || ws.readyState === WebSocket.CLOSED) {
 			reconnectDelay = 1000;
 			connectWS();
@@ -811,6 +829,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	initKeyboardShortcuts();
 	initChangedBadges();
 	startClock();
+	ensureSystemStatsTicker();
 	connectWS();
 
 
@@ -847,9 +866,16 @@ function setBlinking(theme, level) {
 	if (level !== 'err') return;
 
 	let on = false;
+	let blinkCount = 0;
 	blinkTimer = setInterval(() => {
 		on = !on;
 		applyFavicon(theme, 'err', on);
+		blinkCount++;
+		if (blinkCount >= 8) {
+			clearInterval(blinkTimer);
+			blinkTimer = null;
+			applyFavicon(theme, 'err', false);
+		}
 	}, 700);
 }
 
@@ -884,17 +910,35 @@ function toNum(v, fallback = 0) {
 	return Number.isFinite(n) ? n : fallback;
 }
 
+function ensureIPTimeline(details) {
+	if (!details || details.dataset.timelineReady === '1') return;
+
+	details.dataset.timelineReady = '1';
+	buildIPTimeline(details);
+}
+
 function initDomainDetailsState() {
 	document.querySelectorAll('details.domain-item').forEach(details => {
-		if (details.dataset.detailsBound === '1') return;
 		const domain = details.dataset.domain;
 		if (!domain) return;
+
 		const key = 'domain-open-' + domain;
 		if (localStorage.getItem(key) === '1') {
 			details.open = true;
 		}
+
+		// Build the expensive IP timeline only for cards that are actually open.
+		if (details.open) {
+			ensureIPTimeline(details);
+		}
+
+		if (details.dataset.detailsBound === '1') return;
+
 		details.addEventListener('toggle', () => {
 			localStorage.setItem(key, details.open ? '1' : '0');
+			if (details.open) {
+				ensureIPTimeline(details);
+			}
 		});
 		details.dataset.detailsBound = '1';
 	});
@@ -921,13 +965,257 @@ function calcLevelFromMetrics(m) {
 	return 'ok';
 }
 
+
+let _systemStatsTimer = null;
+let _systemStatsInFlight = false;
+
+function formatSystemBytes(value) {
+	let bytes = Number(value);
+	if (!Number.isFinite(bytes) || bytes < 0) return '--';
+	const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
+	let unit = 0;
+	while (bytes >= 1024 && unit < units.length - 1) {
+		bytes /= 1024;
+		unit++;
+	}
+	const digits = unit === 0 || bytes >= 100 ? 0 : bytes >= 10 ? 1 : 2;
+	return bytes.toFixed(digits) + ' ' + units[unit];
+}
+
+function formatSystemRate(value) {
+	return formatSystemBytes(Math.max(0, Number(value) || 0)) + '/s';
+}
+
+function formatSystemDuration(seconds) {
+	const value = Math.max(0, Number(seconds) || 0);
+	if (value < 1) return Math.round(value * 1000) + ' ms';
+	if (value < 60) return value.toFixed(value < 10 ? 2 : 1) + ' s';
+	const minutes = Math.floor(value / 60);
+	const rest = Math.round(value % 60);
+	return minutes + 'm ' + rest + 's';
+}
+
+function setSystemText(id, value) {
+	const el = document.getElementById(id);
+	if (el) el.textContent = value;
+}
+
+function setSystemProgress(id, percent) {
+	const el = document.getElementById(id);
+	if (!el) return;
+	const value = Number(percent);
+	const width = Number.isFinite(value) && value >= 0 ? Math.max(0, Math.min(100, value)) : 0;
+	el.style.width = width.toFixed(1) + '%';
+	el.classList.toggle('is-warn', width >= 70 && width < 90);
+	el.classList.toggle('is-hot', width >= 90);
+}
+
+function localizeSystemEnvironment(value) {
+	const raw = String(value || '').trim();
+	const normalized = raw.toLowerCase();
+
+	switch (normalized) {
+		case 'kubernetes / container':
+		case 'kubernetes':
+			return tr('system_stats_env_kubernetes', 'Kubernetes / container');
+		case 'containerd / container':
+		case 'containerd':
+			return tr('system_stats_env_containerd', 'containerd / container');
+		case 'docker':
+			return tr('system_stats_env_docker', 'Docker');
+		case 'container':
+			return tr('system_stats_env_container', 'Container');
+		case 'host / prozess':
+		case 'host / process':
+		case 'host':
+			return tr('system_stats_env_host_process', 'Host / process');
+		default:
+			return raw || tr('system_stats_unknown', 'Unknown');
+	}
+}
+
+function renderSystemStats(data) {
+	if (!data || !document.getElementById('system-stats-card')) return;
+
+	const cpu = data.cpu || {};
+	const memory = data.memory || {};
+	const network = data.network || {};
+	const io = data.io || {};
+	const pids = data.pids || {};
+	const pressure = data.pressure || {};
+	const processStats = data.process || {};
+
+	const cpuPercent = Number(cpu.percent);
+	if (Number.isFinite(cpuPercent) && cpuPercent >= 0) {
+		setSystemText('sysCpu', cpuPercent.toFixed(1) + '%');
+		setSystemProgress('sysCpuBar', cpuPercent);
+	} else {
+		setSystemText('sysCpu', '…');
+		setSystemProgress('sysCpuBar', 0);
+	}
+
+	const cpuLimit = Number(cpu.limit_cores);
+	setSystemText(
+		'sysCpuLimit',
+		cpuLimit > 0
+			? cpuLimit.toFixed(cpuLimit < 10 ? 2 : 1) + ' CPU'
+			: tr('system_stats_no_cgroup_limit', 'No cgroup limit')
+	);
+	setSystemText(
+		'sysCpuSub',
+		trf(
+			'system_stats_cpu_usage_total_format',
+			{ duration: formatSystemDuration(cpu.usage_seconds) },
+			'Total usage {duration}'
+		)
+	);
+
+	const memUsed = Number(memory.used_bytes) || 0;
+	const memLimit = Number(memory.limit_bytes) || 0;
+	const memPercent = Number(memory.percent);
+	if (Number.isFinite(memPercent) && memPercent >= 0) {
+		setSystemText('sysMem', memPercent.toFixed(1) + '%');
+		setSystemProgress('sysMemBar', memPercent);
+	} else {
+		setSystemText('sysMem', formatSystemBytes(memUsed));
+		setSystemProgress('sysMemBar', 0);
+	}
+	setSystemText(
+		'sysMemSub',
+		memLimit > 0
+			? trf(
+				'system_stats_memory_with_limit_format',
+				{
+					used: formatSystemBytes(memUsed),
+					limit: formatSystemBytes(memLimit),
+					cache: formatSystemBytes(memory.cache_bytes)
+				},
+				'{used} / {limit} · Cache {cache}'
+			)
+			: trf(
+				'system_stats_memory_no_limit_format',
+				{
+					used: formatSystemBytes(memUsed),
+					cache: formatSystemBytes(memory.cache_bytes)
+				},
+				'{used} · no limit · Cache {cache}'
+			)
+	);
+
+	const rxRate = formatSystemRate(network.rx_bytes_per_second);
+	const txRate = formatSystemRate(network.tx_bytes_per_second);
+	const rxTotal = formatSystemBytes(network.rx_bytes);
+	const txTotal = formatSystemBytes(network.tx_bytes);
+	setSystemText(
+		'sysNet',
+		trf('system_stats_network_rate_format', { rx: rxRate, tx: txRate }, '↓ {rx} · ↑ {tx}')
+	);
+	setSystemText('sysNetSub', tr('system_stats_network_namespace', 'RX/TX in the network namespace'));
+	setSystemText(
+		'sysNetTotal',
+		trf('system_stats_network_total_format', { rx: rxTotal, tx: txTotal }, '↓ {rx} · ↑ {tx}')
+	);
+
+	const ioReadRate = formatSystemRate(io.read_bytes_per_second);
+	const ioWriteRate = formatSystemRate(io.write_bytes_per_second);
+	const ioReadTotal = formatSystemBytes(io.read_bytes);
+	const ioWriteTotal = formatSystemBytes(io.write_bytes);
+	setSystemText(
+		'sysIO',
+		trf('system_stats_io_rate_format', { read: ioReadRate, write: ioWriteRate }, 'R {read} · W {write}')
+	);
+	setSystemText('sysIOSub', tr('system_stats_block_io_cgroup', 'Block I/O from cgroup'));
+	setSystemText(
+		'sysIOTotal',
+		trf('system_stats_io_total_format', { read: ioReadTotal, write: ioWriteTotal }, 'R {read} · W {write}')
+	);
+
+	const cgroup = Number(data.cgroup_version) > 0 ? ' · cgroup v' + data.cgroup_version : '';
+	const host = String(data.hostname || '').trim();
+	setSystemText('sysEnvironment', localizeSystemEnvironment(data.environment) + cgroup + (host ? ' · ' + host : ''));
+
+	const pidCurrent = Number(pids.current);
+	const pidLimit = Number(pids.limit);
+	setSystemText(
+		'sysPids',
+		pidCurrent >= 0 ? String(pidCurrent) + (pidLimit > 0 ? ' / ' + pidLimit : ' / ∞') : '--'
+	);
+	setSystemText(
+		'sysProcess',
+		trf(
+			'system_stats_process_format',
+			{
+				heap: formatSystemBytes(processStats.heap_bytes),
+				goroutines: Number(processStats.goroutines) || 0
+			},
+			'{heap} Heap · {goroutines} Goroutines'
+		)
+	);
+	setSystemText(
+		'sysThrottle',
+		(Number(cpu.throttled_periods) || 0) + '× · ' + formatSystemDuration(cpu.throttled_seconds)
+	);
+	setSystemText(
+		'sysPressure',
+		'CPU ' + (Number(pressure.cpu_avg10) || 0).toFixed(2) + '% · RAM ' +
+		(Number(pressure.memory_avg10) || 0).toFixed(2) + '% · I/O ' +
+		(Number(pressure.io_avg10) || 0).toFixed(2) + '%'
+	);
+
+	const collected = new Date(data.collected_at);
+	setSystemText(
+		'systemStatsUpdated',
+		Number.isNaN(collected.getTime())
+			? tr('system_stats_live', 'Live')
+			: trf(
+				'system_stats_live_with_time_format',
+				{ time: collected.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) },
+				'Live · {time}'
+			)
+	);
+}
+
+async function refreshSystemStats() {
+	if (_systemStatsInFlight || document.hidden || currentPage !== 'dashboard') return;
+	if (!document.getElementById('system-stats-card')) return;
+
+	_systemStatsInFlight = true;
+	try {
+		const response = await fetch('/api/system-stats', { cache: 'no-store' });
+		if (!response.ok) throw new Error('HTTP ' + response.status);
+		renderSystemStats(await response.json());
+	} catch (error) {
+		console.error('system stats failed:', error);
+		setSystemText('systemStatsUpdated', tr('system_stats_unavailable', 'Unavailable'));
+	} finally {
+		_systemStatsInFlight = false;
+	}
+}
+
+function stopSystemStatsTicker() {
+	if (!_systemStatsTimer) return;
+	clearInterval(_systemStatsTimer);
+	_systemStatsTimer = null;
+}
+
+function ensureSystemStatsTicker() {
+	if (document.hidden || currentPage !== 'dashboard') {
+		stopSystemStatsTicker();
+		return;
+	}
+
+	refreshSystemStats();
+	if (_systemStatsTimer) return;
+	_systemStatsTimer = setInterval(refreshSystemStats, 15000);
+}
+
 let _dashboardTickTimer = null;
 let _lastSlowTick = 0;
 let _statusUptimeBaseSeconds = null;
 let _statusUptimeReceivedAt = 0;
 
 function dashboardTick() {
-	if (document.hidden) return;
+	if (document.hidden || currentPage !== 'dashboard') return;
 
 	renderClock();
 	renderStatusUptime();
@@ -940,11 +1228,34 @@ function dashboardTick() {
 	}
 }
 
+function stopDashboardTicker() {
+	if (!_dashboardTickTimer) return;
+	clearInterval(_dashboardTickTimer);
+	_dashboardTickTimer = null;
+}
+
 function ensureDashboardTicker() {
+	if (document.hidden || currentPage !== 'dashboard') {
+		stopDashboardTicker();
+		return;
+	}
+
 	dashboardTick();
 	if (!_dashboardTickTimer) {
 		_dashboardTickTimer = setInterval(dashboardTick, 1000);
 	}
+}
+
+function syncDashboardActivity() {
+	const active = !document.hidden && currentPage === 'dashboard';
+	if (!active) {
+		stopDashboardTicker();
+		stopSystemStatsTicker();
+		return;
+	}
+
+	ensureDashboardTicker();
+	ensureSystemStatsTicker();
 }
 
 function formatStatusUptime(totalSeconds) {
@@ -961,7 +1272,7 @@ function formatStatusUptime(totalSeconds) {
 }
 
 function renderStatusUptime() {
-	if (!Number.isFinite(_statusUptimeBaseSeconds)) return;
+	if (document.hidden || currentPage !== 'dashboard' || !Number.isFinite(_statusUptimeBaseSeconds)) return;
 
 	const uptime = document.getElementById('uptime');
 	if (!uptime) return;
@@ -987,7 +1298,22 @@ function startStatusUptimeClock() {
 
 function updateMetrics(m) {
 	const setTxt = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-	setTxt('lastUpdate', new Date().toLocaleTimeString());
+
+	// Keep lightweight state current, but do not repaint hidden page content.
+	setStatusUptime(m.uptime_secs);
+	if (document.hidden) {
+		if (currentPage === 'metrics') pageLoadedAt.set('metrics', 0);
+		return;
+	}
+
+	if (currentPage === 'dashboard') {
+		setTxt('lastUpdate', new Date().toLocaleTimeString());
+	}
+
+	if (currentPage !== 'metrics') {
+		return;
+	}
+
 	setTxt('mTotal', m.total_requests);
 	setTxt('mSuccess', m.success_rate);
 	setTxt('mLatency', m.avg_latency);
@@ -1011,8 +1337,6 @@ function updateMetrics(m) {
 	setTxt('mIPLatency', m.ip_latency_avg);
 	setTxt('mIPCount', m.ip_latency_count);
 	setTxt('mLastIPCheck', m.last_ip_check);
-
-	setStatusUptime(m.uptime_secs);
 }
 
 let _chartTooltip = null;
@@ -1062,6 +1386,8 @@ function initChartTooltips(root = document) {
 		const chartHeight = viewBox && viewBox.height ? viewBox.height : 60;
 
 		let hideTimer = null;
+		let pointerMoveRAF = 0;
+		let pendingPointerEvent = null;
 
 		const nearestPoint = event => {
 			const rect = svg.getBoundingClientRect();
@@ -1132,10 +1458,23 @@ function initChartTooltips(root = document) {
 		});
 		svg.addEventListener('pointermove', event => {
 			if (event.pointerType === 'touch') return;
-			showFromEvent(event);
+			pendingPointerEvent = event;
+			if (pointerMoveRAF) return;
+
+			pointerMoveRAF = requestAnimationFrame(() => {
+				pointerMoveRAF = 0;
+				const pending = pendingPointerEvent;
+				pendingPointerEvent = null;
+				if (pending) showFromEvent(pending);
+			});
 		});
 		svg.addEventListener('pointerleave', event => {
 			if (event.pointerType === 'touch') return;
+			if (pointerMoveRAF) {
+				cancelAnimationFrame(pointerMoveRAF);
+				pointerMoveRAF = 0;
+			}
+			pendingPointerEvent = null;
 			hide();
 		});
 
@@ -1246,7 +1585,7 @@ function connectWS() {
 			appendDebugLog(msg.data);
 		}
 
-		if (!isSettingsOpen && msg.data && msg.data.provider_status) {
+		if (!document.hidden && !isSettingsOpen && msg.data && msg.data.provider_status) {
 			updateProviderStatusIndicators(msg.data.provider_status).catch(err =>
 				console.error('provider_status error:', err)
 			);
@@ -1636,6 +1975,16 @@ function updateLiveIP(element, value) {
 }
 
 async function updateDomainDisplay(data) {
+	if (document.hidden) {
+		pageLoadedAt.set('domains', 0);
+		return;
+	}
+	if (currentPage !== 'domains') {
+		pageLoadedAt.set('domains', 0);
+		showToast(trf('domain_updated', { domain: data.domain }, '✓ {domain} updated'));
+		return;
+	}
+
 	const safeID = await makeSafeID(data.domain);
 	if (Object.prototype.hasOwnProperty.call(data, 'ipv4')) {
 		updateLiveIP(document.getElementById('ip4-' + safeID), data.ipv4);
@@ -1651,7 +2000,7 @@ async function updateDomainDisplay(data) {
 		if (dotEl._recentTimer) clearTimeout(dotEl._recentTimer);
 		dotEl._recentTimer = setTimeout(() => {
 			if (dotEl.isConnected) dotEl.classList.remove('dot-recent');
-		}, 15 * 60 * 1000);
+		}, 10 * 1000);
 	}
 
 	const uptimeEl = document.getElementById('uptime-' + safeID);
@@ -2528,6 +2877,11 @@ function updateCheckboxLabel(cb) {
 }
 
 function appendDebugLog(entry) {
+	if (document.hidden || currentPage !== 'debug') {
+		pageLoadedAt.set('debug', 0);
+		return;
+	}
+
 	const container = document.getElementById('debug-log-container');
 	if (!container) return;
 
@@ -2582,7 +2936,7 @@ function appendDebugLog(entry) {
 
 	container.appendChild(line);
 
-	while (container.children.length > 500) {
+	while (container.children.length > 250) {
 		container.removeChild(container.firstChild);
 	}
 
@@ -2862,7 +3216,7 @@ function updateEndpointStatus(data) {
 	const url = String(data?.url || '').trim();
 	if (!url) return;
 	endpointStatus[url] = { ok: Boolean(data.ok), ts: Date.now() };
-	renderEndpointStatus(url);
+	if (currentPage === 'dashboard' && !document.hidden) renderEndpointStatus(url);
 }
 
 function renderEndpointStatus(changedURL = '') {
@@ -3160,7 +3514,9 @@ function buildIPTimeline(domainEl) {
 }
 
 function initIPTimelines() {
-	document.querySelectorAll('.domain-item[data-ip-history]').forEach(buildIPTimeline);
+	document
+		.querySelectorAll('details.domain-item[open][data-ip-history]')
+		.forEach(ensureIPTimeline);
 }
 
 function initKeyboardShortcuts() {
