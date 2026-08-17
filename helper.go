@@ -579,7 +579,11 @@ func collectNetworkNamespaceStats(raw *dashboardSystemRawStats) {
 	if err != nil {
 		return
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			debugLog("HELPER", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
+		}
+	}()
 
 	var rxBytesTotal, rxPacketsTotal, txBytesTotal, txPacketsTotal uint64
 	scanner := bufio.NewScanner(file)
@@ -669,7 +673,11 @@ func readLines(path string) []string {
 	if err != nil {
 		return nil
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			debugLog("HELPER", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
+		}
+	}()
 
 	lines := make([]string, 0, 16)
 	scanner := bufio.NewScanner(file)
