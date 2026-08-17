@@ -117,7 +117,6 @@ func updateStatusFileBatch(updates []statusUpdate) error {
 		)
 	}
 
-	// Nur Änderungen broadcasten.
 	for _, u := range changedUpdates {
 		broadcastUpdate("domain_update", map[string]any{
 			"domain": u.FQDN,

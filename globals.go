@@ -163,9 +163,6 @@ var (
 		"https://botwhatismyipaddress.com/",
 	}
 
-	// IPv64ServiceDomains contains all IPv64 DynDNS suffixes supported by
-	// the domain parser. Keep the API endpoint itself on ipv64.net; these
-	// values are the selectable/managed DNS suffixes, not API hosts.
 	IPv64ServiceDomains = [...]string{
 		"ipv64.net",
 		"ipv64.de",
@@ -417,6 +414,10 @@ const (
 	status    = "status"
 	healthy   = "healthy"
 	starting  = "starting"
+
+	PlatformLinux   = "linux"
+	PlatformWindows = "windows"
+	PlatformDarwin  = "darwin"
 )
 
 const (

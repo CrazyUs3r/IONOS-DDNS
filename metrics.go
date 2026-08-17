@@ -780,16 +780,35 @@ func setLatestMetrics(stats map[string]any) {
 
 func metricsBroadcasterLoop() {
 	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+
+		dirty := false
+
+		publish := func() {
+			stats := apiMetrics.GetStats()
+
+			latestMetricsMu.Lock()
+			latestMetrics = stats
+			latestMetricsMu.Unlock()
+
+			broadcastUpdate("metrics", stats)
+		}
+
 		for {
 			select {
 			case <-metricsSignal:
-				stats := apiMetrics.GetStats()
+				// Coalesce bursts of API completions into at most two UI updates/second.
+				dirty = true
 
-				latestMetricsMu.Lock()
-				latestMetrics = stats
-				latestMetricsMu.Unlock()
+			case <-ticker.C:
+				if !dirty {
+					continue
+				}
 
-				broadcastUpdate("metrics", stats)
+				dirty = false
+				publish()
+
 			case <-shutdownCtx.Done():
 				return
 			}

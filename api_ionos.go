@@ -196,7 +196,8 @@ func updateIonosDNS(
 		liveRecords, err := loadIonosInfrastructureRecords(ctx, dc, zoneID)
 		if err != nil {
 			return false, fmt.Errorf(
-				"IONOS-Records nach Typwechsel konnten nicht neu geladen werden: %w",
+				"%s: %w",
+				phrases().IonosReloadAfterTypeChangeFailed,
 				err,
 			)
 		}
@@ -365,7 +366,8 @@ func removeConflictingIonosRecords(
 				Level:  LogWarn,
 				Action: ActionDryRun,
 				Domain: fqdn,
-				Message: fmt.Sprintf(phrases().IonosConflictWouldRemoveFormat,
+				Message: fmt.Sprintf(
+					phrases().IonosConflictWouldRemoveFormat,
 					record.Type,
 					wantedType,
 				),
@@ -408,7 +410,8 @@ func removeConflictingIonosRecords(
 			Level:  LogInfo,
 			Action: ActionUpdate,
 			Domain: fqdn,
-			Message: fmt.Sprintf(phrases().IonosConflictRemovedFormat,
+			Message: fmt.Sprintf(
+				phrases().IonosConflictRemovedFormat,
 				record.Type,
 				wantedType,
 			),

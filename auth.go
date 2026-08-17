@@ -2064,33 +2064,28 @@ func handleAPIAuditDelete(w http.ResponseWriter, r *http.Request) {
 
 func authPageShell(title, body string) string {
 	return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>` + esc(title) + ` · DynDNS</title>
-<link rel="stylesheet" href="/assets/style.css">
-</head>
-
-<body class="auth-page">
-
-<div class="auth-bg">
-	<div class="auth-sun"></div>
-	<div class="auth-mountains"></div>
-	<div class="auth-grid-floor"></div>
-</div>
-
-<div class="auth-wrap">
-	<div class="auth-card">
-		` + body + `
-	</div>
-</div>
-
-` + appFooterHTML() + `
-
-<script src="/assets/auth.js" defer></script>
-</body>
-</html>`
+	<html>
+	<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>` + esc(title) + ` · DynDNS</title>
+	<link rel="stylesheet" href="` + assetURL("/assets/style.css", dashboardCSSETag) + `">
+	</head>
+		<body class="auth-page">
+			<div class="auth-bg">
+				<div class="auth-sun"></div>
+				<div class="auth-mountains"></div>
+				<div class="auth-grid-floor"></div>
+			</div>
+			<div class="auth-wrap">
+				<div class="auth-card">
+					` + body + `
+				</div>
+			</div>
+			` + appFooterHTML() + `
+			<script src="` + assetURL("/assets/auth.js", authJSETag) + `" defer></script>
+		</body>
+	</html>`
 }
 
 func buildLoginPage(errMsg, redirect string) string {
@@ -2101,25 +2096,25 @@ func buildLoginPage(errMsg, redirect string) string {
 
 	action := "/login?redirect=" + url.QueryEscape(safeLocalRedirect(redirect))
 	body := `
-<div class="auth-logo">🌐</div>
-<div class="auth-title">` + phrases().DashboardTitle + `</div>
-<div class="auth-sub">` + phrases().LoginSubtitle + `</div>
-` + errHTML + `
-<form method="POST" action="` + esc(action) + `">
-	<div class="auth-field">
-		<label class="auth-label">` + phrases().Username + `</label>
-		<input class="auth-input" type="text" name="username" autofocus autocomplete="username" required>
-	</div>
-	<div class="auth-field">
-		<label class="auth-label">` + phrases().Password + `</label>
-		<div class="input-with-action">
-			<input id="login-password" class="auth-input" type="password" name="password" autocomplete="current-password" required>
-			<button type="button" class="input-action-btn" data-toggle-password="login-password" aria-label="Passwort anzeigen" aria-pressed="false">👁️</button>
+	<div class="auth-logo">🌐</div>
+	<div class="auth-title">` + phrases().DashboardTitle + `</div>
+	<div class="auth-sub">` + phrases().LoginSubtitle + `</div>
+	` + errHTML + `
+	<form method="POST" action="` + esc(action) + `">
+		<div class="auth-field">
+			<label class="auth-label">` + phrases().Username + `</label>
+			<input class="auth-input" type="text" name="username" autofocus autocomplete="username" required>
 		</div>
-	</div>
-	<button class="auth-btn" type="submit">🔐 ` + phrases().LoginButton + `</button>
-</form>
-<div class="auth-hint">` + phrases().LoginHint + `</div>`
+		<div class="auth-field">
+			<label class="auth-label">` + phrases().Password + `</label>
+			<div class="input-with-action">
+				<input id="login-password" class="auth-input" type="password" name="password" autocomplete="current-password" required>
+				<button type="button" class="input-action-btn" data-toggle-password="login-password" aria-label="Passwort anzeigen" aria-pressed="false">👁️</button>
+			</div>
+		</div>
+		<button class="auth-btn" type="submit">🔐 ` + phrases().LoginButton + `</button>
+	</form>
+	<div class="auth-hint">` + phrases().LoginHint + `</div>`
 
 	return authPageShell(phrases().LoginTitle, body)
 }
@@ -2131,37 +2126,37 @@ func buildSetupPage(errMsg string) string {
 	}
 
 	body := `
-<div class="auth-logo">🔐</div>
-<div class="auth-title">` + phrases().SetupHeading + `</div>
-<div class="auth-sub">` + phrases().SetupSubtitle + `</div>
-` + errHTML + `
-<form method="POST" action="/setup">
-	<div class="auth-field">
-		<label class="auth-label">` + phrases().SetupToken + `</label>
-		<input class="auth-input" type="text" name="setup_token" autofocus autocomplete="off" required
-			style="font-family:monospace;font-size:0.8rem;">
-	</div>
-	<div class="auth-field">
-		<label class="auth-label">` + phrases().Username + `</label>
-		<input class="auth-input" type="text" name="username" autocomplete="username" required>
-	</div>
-	<div class="auth-field">
-		<label class="auth-label">` + phrases().Password + ` <small style="opacity:0.5">(` + phrases().PasswordMinHint + `)</small></label>
-		<div class="input-with-action">
-			<input id="setup-password" class="auth-input" type="password" name="password" autocomplete="new-password" required>
-			<button type="button" class="input-action-btn" data-toggle-password="setup-password" aria-label="Passwort anzeigen" aria-pressed="false">👁️</button>
+	<div class="auth-logo">🔐</div>
+	<div class="auth-title">` + phrases().SetupHeading + `</div>
+	<div class="auth-sub">` + phrases().SetupSubtitle + `</div>
+	` + errHTML + `
+	<form method="POST" action="/setup">
+		<div class="auth-field">
+			<label class="auth-label">` + phrases().SetupToken + `</label>
+			<input class="auth-input" type="text" name="setup_token" autofocus autocomplete="off" required
+				style="font-family:monospace;font-size:0.8rem;">
 		</div>
-	</div>
-	<div class="auth-field">
-		<label class="auth-label">` + phrases().PasswordConfirm + `</label>
-		<div class="input-with-action">
-			<input id="setup-password2" class="auth-input" type="password" name="password2" autocomplete="new-password" required>
-			<button type="button" class="input-action-btn" data-toggle-password="setup-password2" aria-label="Passwort anzeigen" aria-pressed="false">👁️</button>
+		<div class="auth-field">
+			<label class="auth-label">` + phrases().Username + `</label>
+			<input class="auth-input" type="text" name="username" autocomplete="username" required>
 		</div>
-	</div>
-	<button class="auth-btn" type="submit">✅ ` + phrases().SetupButton + `</button>
-</form>
-<div class="auth-hint">` + phrases().SetupHint + `</div>`
+		<div class="auth-field">
+			<label class="auth-label">` + phrases().Password + ` <small style="opacity:0.5">(` + phrases().PasswordMinHint + `)</small></label>
+			<div class="input-with-action">
+				<input id="setup-password" class="auth-input" type="password" name="password" autocomplete="new-password" required>
+				<button type="button" class="input-action-btn" data-toggle-password="setup-password" aria-label="Passwort anzeigen" aria-pressed="false">👁️</button>
+			</div>
+		</div>
+		<div class="auth-field">
+			<label class="auth-label">` + phrases().PasswordConfirm + `</label>
+			<div class="input-with-action">
+				<input id="setup-password2" class="auth-input" type="password" name="password2" autocomplete="new-password" required>
+				<button type="button" class="input-action-btn" data-toggle-password="setup-password2" aria-label="Passwort anzeigen" aria-pressed="false">👁️</button>
+			</div>
+		</div>
+		<button class="auth-btn" type="submit">✅ ` + phrases().SetupButton + `</button>
+	</form>
+	<div class="auth-hint">` + phrases().SetupHint + `</div>`
 
 	return authPageShell(phrases().SetupTitle, body)
 }

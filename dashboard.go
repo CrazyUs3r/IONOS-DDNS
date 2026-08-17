@@ -4,6 +4,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -40,12 +41,76 @@ var (
 	dashboardCSSETag = contentETag(cssData)
 	dashboardJSETag  = contentETag(jsData)
 	authJSETag       = contentETag(authJSData)
+
+	dashboardCSSGzip = gzipStatic(cssData)
+	dashboardJSGzip  = gzipStatic(jsData)
+	authJSGzip       = gzipStatic(authJSData)
 )
 
 func contentETag(content string) string {
 	sum := sha256.Sum256([]byte(content))
 
 	return `"` + hex.EncodeToString(sum[:]) + `"`
+}
+
+func gzipStatic(content string) []byte {
+	var buf bytes.Buffer
+
+	zw, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+	if err != nil {
+		return nil
+	}
+
+	if _, err := zw.Write([]byte(content)); err != nil {
+		_ = zw.Close()
+		return nil
+	}
+	if err := zw.Close(); err != nil {
+		return nil
+	}
+
+	return buf.Bytes()
+}
+
+func acceptsGzip(r *http.Request) bool {
+	for token := range strings.SplitSeq(r.Header.Get("Accept-Encoding"), ",") {
+		parts := strings.Split(token, ";")
+		if !strings.EqualFold(strings.TrimSpace(parts[0]), "gzip") {
+			continue
+		}
+
+		quality := 1.0
+		for _, param := range parts[1:] {
+			key, value, ok := strings.Cut(strings.TrimSpace(param), "=")
+			if !ok || !strings.EqualFold(strings.TrimSpace(key), "q") {
+				continue
+			}
+			if q, err := strconv.ParseFloat(strings.TrimSpace(value), 64); err == nil {
+				quality = q
+			}
+		}
+
+		return quality > 0
+	}
+
+	return false
+}
+
+func encodedETag(etag string, gzipEncoded bool) string {
+	if !gzipEncoded {
+		return etag
+	}
+
+	return strings.TrimSuffix(etag, `"`) + `-gzip"`
+}
+
+func assetURL(path, etag string) string {
+	version := strings.Trim(etag, `"`)
+	if len(version) > 12 {
+		version = version[:12]
+	}
+
+	return path + "?v=" + version
 }
 
 // ============================================================================
@@ -842,6 +907,7 @@ func registerAPIroutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/domains/html", handleAPIDomainsHTML)
 	mux.HandleFunc("/api/page", handleAPIPageSection)
 	mux.HandleFunc("/api/config", handleAPIConfig)
+	mux.HandleFunc("/api/system-stats", handleAPISystemStats)
 	mux.HandleFunc("/api/languages", handleAPILanguages)
 	mux.HandleFunc("/api/settings/system/save", handleAPISaveSystemSettings)
 	mux.HandleFunc("/api/settings/notify/save", handleAPISaveNotifySettings)
@@ -923,18 +989,46 @@ func securityHeaders(next http.Handler) http.Handler {
 }
 
 func handleDashboardCSS(w http.ResponseWriter, r *http.Request) {
-	serveDashboardAsset(w, r, "text/css; charset=utf-8", dashboardCSSETag, cssData)
+	serveDashboardAsset(
+		w,
+		r,
+		"text/css; charset=utf-8",
+		dashboardCSSETag,
+		cssData,
+		dashboardCSSGzip,
+	)
 }
 
 func handleDashboardJS(w http.ResponseWriter, r *http.Request) {
-	serveDashboardAsset(w, r, "text/javascript; charset=utf-8", dashboardJSETag, jsData)
+	serveDashboardAsset(
+		w,
+		r,
+		"text/javascript; charset=utf-8",
+		dashboardJSETag,
+		jsData,
+		dashboardJSGzip,
+	)
 }
 
 func handleAuthJS(w http.ResponseWriter, r *http.Request) {
-	serveDashboardAsset(w, r, "text/javascript; charset=utf-8", authJSETag, authJSData)
+	serveDashboardAsset(
+		w,
+		r,
+		"text/javascript; charset=utf-8",
+		authJSETag,
+		authJSData,
+		authJSGzip,
+	)
 }
 
-func serveDashboardAsset(w http.ResponseWriter, r *http.Request, contentType, etag, content string) {
+func serveDashboardAsset(
+	w http.ResponseWriter,
+	r *http.Request,
+	contentType string,
+	etag string,
+	content string,
+	gzipped []byte,
+) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
 		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
@@ -942,16 +1036,24 @@ func serveDashboardAsset(w http.ResponseWriter, r *http.Request, contentType, et
 		return
 	}
 
+	useGzip := len(gzipped) > 0 && acceptsGzip(r)
+	selectedETag := encodedETag(etag, useGzip)
+
 	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.Header().Set("ETag", selectedETag)
+	w.Header().Set("Vary", "Accept-Encoding")
+
 	if strings.Contains(contentType, "javascript") {
 		w.Header().Set("Content-Disposition", "inline")
 	}
-	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-	w.Header().Set("ETag", etag)
+	if useGzip {
+		w.Header().Set("Content-Encoding", "gzip")
+	}
 
 	for candidate := range strings.SplitSeq(r.Header.Get("If-None-Match"), ",") {
 		candidate = strings.TrimSpace(candidate)
-		if candidate == etag || candidate == "*" {
+		if candidate == selectedETag || candidate == "*" {
 			w.WriteHeader(http.StatusNotModified)
 
 			return
@@ -961,6 +1063,11 @@ func serveDashboardAsset(w http.ResponseWriter, r *http.Request, contentType, et
 	if r.Method == http.MethodHead {
 		return
 	}
+	if useGzip {
+		_, _ = w.Write(gzipped)
+		return
+	}
+
 	_, _ = io.WriteString(w, content)
 }
 
@@ -1052,8 +1159,6 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
-
-	conn.SetReadLimit(wsMaxInboundMessageSize)
 
 	client := &WSClient{
 		conn: conn,
@@ -1194,6 +1299,24 @@ func handleAPIPageSection(w http.ResponseWriter, r *http.Request) {
 		"page": page,
 		"html": fragment.String(),
 	})
+}
+
+func handleAPISystemStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
+		return
+	}
+	if authEnabled {
+		if sess, ok := sessionFromRequest(r); !ok || sess == nil {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required"})
+
+			return
+		}
+	}
+
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, getDashboardSystemStats())
 }
 
 func handleAPIConfig(w http.ResponseWriter, r *http.Request) {
@@ -2867,11 +2990,11 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 		`+csrfMeta+`
 		<title>%s</title>
 		<link id="favicon" rel="icon" type="image/svg+xml" href="/favicon.svg?theme=dark">
-		<link rel="stylesheet" href="/assets/style.css">
+		<link rel="stylesheet" href="`+assetURL("/assets/style.css", dashboardCSSETag)+`">
 	</head>
-	<body>
+	<body class="dashboard-runtime">
 
-	<div class="auth-bg">
+	<div class="auth-bg" aria-hidden="true">
 		<div class="auth-sun"></div>
 		<div class="auth-mountains"></div>
 		<div class="auth-grid-floor"></div>
@@ -3101,6 +3224,46 @@ func writeDashboardTop(w io.Writer, statusClass, statusText string, config Confi
 			</div>
 		</div>
 
+		<div class="card system-stats-card" id="system-stats-card">
+			<div class="card-header card-header--space-between">
+				<span>🖥️ `+t(phrases().SystemStatsTitle, "System load")+`</span>
+				<span id="systemStatsUpdated" class="system-stats-updated">`+t(phrases().SystemStatsLoading, "Loading …")+`</span>
+			</div>
+			<div class="card-content">
+				<div class="system-metrics-grid">
+					<div class="system-metric">
+						<div class="system-metric-head"><span>`+t(phrases().SystemStatsCPU, "CPU")+`</span><strong id="sysCpu">--</strong></div>
+						<div class="system-progress"><div id="sysCpuBar" class="system-progress-bar"></div></div>
+						<div id="sysCpuSub" class="system-metric-sub">`+t(phrases().SystemStatsCPUDetecting, "Detecting CPU usage")+`</div>
+					</div>
+					<div class="system-metric">
+						<div class="system-metric-head"><span>`+t(phrases().SystemStatsMemory, "RAM")+`</span><strong id="sysMem">--</strong></div>
+						<div class="system-progress"><div id="sysMemBar" class="system-progress-bar"></div></div>
+						<div id="sysMemSub" class="system-metric-sub">`+t(phrases().SystemStatsMemoryDetecting, "Detecting memory usage")+`</div>
+					</div>
+					<div class="system-metric">
+						<div class="system-metric-head"><span>`+t(phrases().SystemStatsNetwork, "Network")+`</span><strong id="sysNet">--</strong></div>
+						<div id="sysNetSub" class="system-metric-sub">`+t(phrases().SystemStatsNetworkContainer, "RX / TX in the container network")+`</div>
+					</div>
+					<div class="system-metric">
+						<div class="system-metric-head"><span>`+t(phrases().SystemStatsBlockIO, "Block I/O")+`</span><strong id="sysIO">--</strong></div>
+						<div id="sysIOSub" class="system-metric-sub">`+t(phrases().SystemStatsIOCgroup, "Read / write via cgroup")+`</div>
+					</div>
+				</div>
+
+				<div class="system-details-grid">
+					<div><span>`+t(phrases().SystemStatsEnvironment, "Environment")+`</span><strong id="sysEnvironment">--</strong></div>
+					<div><span>`+t(phrases().SystemStatsCPULimit, "CPU limit")+`</span><strong id="sysCpuLimit">--</strong></div>
+					<div><span>`+t(phrases().SystemStatsPIDs, "PIDs")+`</span><strong id="sysPids">--</strong></div>
+					<div><span>`+t(phrases().SystemStatsGoProcess, "Go process")+`</span><strong id="sysProcess">--</strong></div>
+					<div><span>`+t(phrases().SystemStatsCPUThrottling, "CPU throttling")+`</span><strong id="sysThrottle">--</strong></div>
+					<div><span>`+t(phrases().SystemStatsPressureAvg10, "Pressure avg10")+`</span><strong id="sysPressure">--</strong></div>
+					<div><span>`+t(phrases().SystemStatsNetworkTotal, "Network total")+`</span><strong id="sysNetTotal">--</strong></div>
+					<div><span>`+t(phrases().SystemStatsIOTotal, "I/O total")+`</span><strong id="sysIOTotal">--</strong></div>
+				</div>
+			</div>
+		</div>
+
 		<div class="card" id="endpoint-card">
 			<div class="card-header">`+phrases().IPEndpointStatusTitle+`</div>
 			<div class="card-content">
@@ -3166,128 +3329,128 @@ func writeDashboardMetricsCard(
 	}
 	_, _ = fmt.Fprintf(
 		w, `
-<div class="page-section" data-section="metrics">
-	<div class="card" id="metrics-card">
-		<div class="card-header card-header--space-between">
-			📊 %s`+resetBtn+`
-		</div>
-		<div class="card-content">
-			<!-- TOP STATS -->
-			<div class="metrics-top-grid">
-				<div>
-					<strong>`+phrases().TotalRequests+`:</strong>
-					<span id="mTotal">%v</span>
-				</div>
-				<div>
-					<strong>`+phrases().SuccessRate+`:</strong>
-					<span id="mSuccess" class="metric-success">%v</span>
-				</div>
-				<div>
-					<strong>`+phrases().AvgLatency+`:</strong>
-					<span id="mLatency">%v</span>
-				</div>
-				<div title="`+phrases().ClientErrors+` / `+phrases().ServerErrors+`">
-					<strong>`+phrases().Errors+`:</strong>
-					<span id="mErrors">%v / %v</span>
-				</div>
+	<div class="page-section" data-section="metrics">
+		<div class="card" id="metrics-card">
+			<div class="card-header card-header--space-between">
+				📊 %s`+resetBtn+`
 			</div>
+			<div class="card-content">
+				<!-- TOP STATS -->
+				<div class="metrics-top-grid">
+					<div>
+						<strong>`+phrases().TotalRequests+`:</strong>
+						<span id="mTotal">%v</span>
+					</div>
+					<div>
+						<strong>`+phrases().SuccessRate+`:</strong>
+						<span id="mSuccess" class="metric-success">%v</span>
+					</div>
+					<div>
+						<strong>`+phrases().AvgLatency+`:</strong>
+						<span id="mLatency">%v</span>
+					</div>
+					<div title="`+phrases().ClientErrors+` / `+phrases().ServerErrors+`">
+						<strong>`+phrases().Errors+`:</strong>
+						<span id="mErrors">%v / %v</span>
+					</div>
+				</div>
 
-			<!-- LATENCY PERCENTILES -->
-			<div class="latency-box">
-				<div class="latency-box-label">
-					`+phrases().MetricLatencyPercentile+`
-				</div>
-				<div class="latency-grid">
-					<div class="latency-cell latency-cell--p50">
-						<div class="latency-cell-label">P50</div>
-						<div id="mP50" class="latency-cell-value">%v</div>
+				<!-- LATENCY PERCENTILES -->
+				<div class="latency-box">
+					<div class="latency-box-label">
+						`+phrases().MetricLatencyPercentile+`
 					</div>
-					<div class="latency-cell latency-cell--p85">
-						<div class="latency-cell-label">P85</div>
-						<div id="mP85" class="latency-cell-value">%v</div>
-					</div>
-					<div class="latency-cell latency-cell--p99">
-						<div class="latency-cell-label">P99</div>
-						<div id="mP99" class="latency-cell-value">%v</div>
-					</div>
-				</div>
-			</div>
-
-			<!-- USAGE -->
-			<div class="usage-section">
-				<div class="usage-header">
-					<span class="usage-limit-label">`+phrases().HourlyLimitEst+`</span>
-					<span id="mUsage" class="usage-count">
-						%v / %v `+phrases().RequestsLabel+`
-					</span>
-				</div>
-				<div class="usage-track">
-					<div id="mUsageBar" class="usage-bar" style="--usage-width:%v%%;--usage-color:%s;"></div>
-				</div>
-				<div class="usage-hint">
-					`+phrases().UsageLast60Min+`
-				</div>
-			</div>
-
-			<!-- BOTTOM GRID -->
-			<div class="metrics-bottom-grid">
-				<!-- HTTP METHODS -->
-				<div class="http-methods-box">
-					<div class="http-methods-label">
-						`+phrases().MetricHTTPMethods+`
-					</div>
-					<div class="http-methods-grid">
-						<div class="http-method-row http-method-row--get">
-							<span class="http-method-key">GET</span>
-							<span id="mDailyGET" class="http-method-val">%v</span>
+					<div class="latency-grid">
+						<div class="latency-cell latency-cell--p50">
+							<div class="latency-cell-label">P50</div>
+							<div id="mP50" class="latency-cell-value">%v</div>
 						</div>
-						<div class="http-method-row http-method-row--post">
-							<span class="http-method-key">POST</span>
-							<span id="mDailyPOST" class="http-method-val">%v</span>
+						<div class="latency-cell latency-cell--p85">
+							<div class="latency-cell-label">P85</div>
+							<div id="mP85" class="latency-cell-value">%v</div>
 						</div>
-						<div class="http-method-row http-method-row--put">
-							<span class="http-method-key">PUT</span>
-							<span id="mDailyPUT" class="http-method-val">%v</span>
-						</div>	
-						<div class="http-method-row http-method-row--del">
-							<span class="http-method-key">DEL</span>
-							<span id="mDailyDELETE" class="http-method-val">%v</span>
-						</div>
-
-						%s
-
-					</div>
-				</div>
-
-				<!-- IP LATENCY -->
-				<div class="ip-latency-box">
-					<div class="ip-latency-label">
-						`+phrases().MetricIPLatency+`
-					</div>
-					<div class="ip-latency-center">
-						<div id="mIPLatency" class="ip-latency-value">
-							%v
-						</div>
-						<div class="ip-latency-meta">
-							`+phrases().MetricAvgFrom+`
-							<span id="mIPCount">%v</span>
-							`+phrases().ChecksLabel+`
-						</div>
-						<div class="ip-latency-meta">
-							`+phrases().MetricLastCheck+`
-							<span id="mLastIPCheck">%v</span>
+						<div class="latency-cell latency-cell--p99">
+							<div class="latency-cell-label">P99</div>
+							<div id="mP99" class="latency-cell-value">%v</div>
 						</div>
 					</div>
 				</div>
-			</div> <!-- metrics-bottom-grid -->
-		</div> <!-- card-content -->
-	</div> <!-- card -->
 
-	%s
-	%s
+				<!-- USAGE -->
+				<div class="usage-section">
+					<div class="usage-header">
+						<span class="usage-limit-label">`+phrases().HourlyLimitEst+`</span>
+						<span id="mUsage" class="usage-count">
+							%v / %v `+phrases().RequestsLabel+`
+						</span>
+					</div>
+					<div class="usage-track">
+						<div id="mUsageBar" class="usage-bar" style="--usage-width:%v%%;--usage-color:%s;"></div>
+					</div>
+					<div class="usage-hint">
+						`+phrases().UsageLast60Min+`
+					</div>
+				</div>
 
-</div> <!-- page-section -->
-`,
+				<!-- BOTTOM GRID -->
+				<div class="metrics-bottom-grid">
+					<!-- HTTP METHODS -->
+					<div class="http-methods-box">
+						<div class="http-methods-label">
+							`+phrases().MetricHTTPMethods+`
+						</div>
+						<div class="http-methods-grid">
+							<div class="http-method-row http-method-row--get">
+								<span class="http-method-key">GET</span>
+								<span id="mDailyGET" class="http-method-val">%v</span>
+							</div>
+							<div class="http-method-row http-method-row--post">
+								<span class="http-method-key">POST</span>
+								<span id="mDailyPOST" class="http-method-val">%v</span>
+							</div>
+							<div class="http-method-row http-method-row--put">
+								<span class="http-method-key">PUT</span>
+								<span id="mDailyPUT" class="http-method-val">%v</span>
+							</div>	
+							<div class="http-method-row http-method-row--del">
+								<span class="http-method-key">DEL</span>
+								<span id="mDailyDELETE" class="http-method-val">%v</span>
+							</div>
+
+							%s
+
+						</div>
+					</div>
+
+					<!-- IP LATENCY -->
+					<div class="ip-latency-box">
+						<div class="ip-latency-label">
+							`+phrases().MetricIPLatency+`
+						</div>
+						<div class="ip-latency-center">
+							<div id="mIPLatency" class="ip-latency-value">
+								%v
+							</div>
+							<div class="ip-latency-meta">
+								`+phrases().MetricAvgFrom+`
+								<span id="mIPCount">%v</span>
+								`+phrases().ChecksLabel+`
+							</div>
+							<div class="ip-latency-meta">
+								`+phrases().MetricLastCheck+`
+								<span id="mLastIPCheck">%v</span>
+							</div>
+						</div>
+					</div>
+				</div> <!-- metrics-bottom-grid -->
+			</div> <!-- card-content -->
+		</div> <!-- card -->
+
+		%s
+		%s
+
+	</div> <!-- page-section -->
+	`,
 		phrases().APIPerformance,
 
 		stats["total_requests"],
@@ -3441,10 +3604,39 @@ func writeLogsCard(w io.Writer, logs []LogEntry, logTimeRange string) {
 	`)
 }
 
+type dashboardDomainRow struct {
+	Name    string
+	History DomainHistory
+}
+
 func writeDomainsCard(w io.Writer, data map[string]any) {
 	keys := domainKeysFromStatusData(data)
-	configuredDomains := configuredDomainSet()
-	newestChange := newestDomainChange(data, keys)
+	configuredDomains, ipModes := configuredDomainMeta()
+	rows := make([]dashboardDomainRow, 0, len(keys))
+
+	var newestChange time.Time
+	for _, domain := range keys {
+		history, err := parseDomainHistory(data[domain])
+		if err != nil {
+			continue
+		}
+
+		rows = append(rows, dashboardDomainRow{
+			Name:    domain,
+			History: history,
+		})
+
+		if history.LastChanged == "" {
+			continue
+		}
+		if changedAt, err := time.ParseInLocation(
+			statusTimestampLayout,
+			history.LastChanged,
+			time.Local,
+		); err == nil && changedAt.After(newestChange) {
+			newestChange = changedAt
+		}
+	}
 
 	_, _ = fmt.Fprint(w, `
 	<div class="page-section" data-section="domains">
@@ -3454,13 +3646,15 @@ func writeDomainsCard(w io.Writer, data map[string]any) {
 
 	_, _ = fmt.Fprint(w, `<div id="domainContainer">`)
 
-	for _, k := range keys {
-		h, err := parseDomainHistory(data[k])
-		if err != nil {
-			continue
-		}
-
-		writeSingleDomainCard(w, k, h, configuredDomains, newestChange)
+	for _, row := range rows {
+		writeSingleDomainCard(
+			w,
+			row.Name,
+			row.History,
+			configuredDomains,
+			ipModes,
+			newestChange,
+		)
 	}
 
 	_, _ = fmt.Fprint(w, `
@@ -3648,13 +3842,20 @@ func domainKeysFromStatusData(data map[string]any) []string {
 	return keys
 }
 
-func configuredDomainSet() map[string]struct{} {
-	configured := make(map[string]struct{})
-	for _, dc := range snapshotDomainConfigs() {
-		configured[strings.ToLower(strings.TrimSuffix(dc.FQDN, "."))] = struct{}{}
+func configuredDomainMeta() (map[string]struct{}, map[string]string) {
+	configs := snapshotDomainConfigs()
+	configured := make(map[string]struct{}, len(configs))
+	ipModes := make(map[string]string, len(configs))
+
+	for _, dc := range configs {
+		key := strings.ToLower(strings.TrimSuffix(dc.FQDN, "."))
+		configured[key] = struct{}{}
+		if dc.IPMode != "" {
+			ipModes[key] = dc.IPMode
+		}
 	}
 
-	return configured
+	return configured, ipModes
 }
 
 func newestDomainChange(data map[string]any, keys []string) time.Time {
@@ -3697,7 +3898,14 @@ func parseDomainHistory(v any) (DomainHistory, error) {
 	return h, nil
 }
 
-func writeSingleDomainCard(w io.Writer, domain string, h DomainHistory, configuredDomains map[string]struct{}, newestChange time.Time) {
+func writeSingleDomainCard(
+	w io.Writer,
+	domain string,
+	h DomainHistory,
+	configuredDomains map[string]struct{},
+	ipModes map[string]string,
+	newestChange time.Time,
+) {
 	latest := IPEntry{}
 	if len(h.IPs) > 0 {
 		latest = h.IPs[len(h.IPs)-1]
@@ -3714,19 +3922,16 @@ func writeSingleDomainCard(w io.Writer, domain string, h DomainHistory, configur
 	}
 
 	safeID := sanitizeIDWithHash(domain)
-	_, isActive := configuredDomains[strings.ToLower(strings.TrimSuffix(domain, "."))]
+	domainKey := strings.ToLower(strings.TrimSuffix(domain, "."))
+	_, isActive := configuredDomains[domainKey]
 	isOrphan := !isActive
 
 	dotClass, dotTitle, changedBadge := buildDomainStatusVisuals(h, safeID, newestChange)
 	orphanStyle, orphanLabel, deleteBtn := buildOrphanDomainVisuals(isOrphan, domain)
 
 	ipModeLabel := ""
-	for _, dc := range snapshotDomainConfigs() {
-		if strings.EqualFold(dc.FQDN, domain) && dc.IPMode != "" {
-			ipModeLabel = " · " + dc.IPMode
-
-			break
-		}
+	if mode := ipModes[domainKey]; mode != "" {
+		ipModeLabel = " · " + mode
 	}
 
 	_, _ = fmt.Fprintf(
@@ -3921,7 +4126,7 @@ func writeDashboardFooter(w http.ResponseWriter) {
 
 	_, _ = fmt.Fprint(w, `
 	<script src="/assets/i18n.js" defer></script>
-	<script src="/assets/dashboard.js" defer></script>
+	<script src="`+assetURL("/assets/dashboard.js", dashboardJSETag)+`" defer></script>
 	</body>
 	</html>
 	`)

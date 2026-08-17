@@ -37,16 +37,15 @@ func (h *WSHub) run() {
 				delete(h.clients, c)
 				removed = true
 				n = len(h.clients)
-
-				func() {
-					defer func() { _ = recover() }()
-					c.closeSend()
-				}()
 			}
 			h.mu.Unlock()
 
 			if removed {
-				debugLog("WS", "", fmt.Sprintf("Client disconnected (total: %d)", n))
+				c.closeSend()
+				debugLog("WS", "", fmt.Sprintf(
+					"Client disconnected (total: %d)",
+					n,
+				))
 				_ = c.conn.Close()
 			}
 
@@ -181,14 +180,18 @@ func broadcastNotification(message, level string) {
 }
 
 func (h *WSHub) forceRemoveClient(c *WSClient) {
+	removed := false
+
 	h.mu.Lock()
 	if _, ok := h.clients[c]; ok {
 		delete(h.clients, c)
-		func() {
-			defer func() { _ = recover() }()
-			c.closeSend()
-		}()
+		removed = true
 	}
 	h.mu.Unlock()
+
+	if removed {
+		c.closeSend()
+	}
+
 	_ = c.conn.Close()
 }

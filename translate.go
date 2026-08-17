@@ -116,6 +116,22 @@ type Phrases struct {
 	TotalRequests, ClientErrors, ServerErrors, MetricLatencyPercentile, MetricHTTPMethods      string
 	MetricIPLatency, MetricLastCheck, MetricAvgFrom, MetricsResetBtn, MetricsResetNotification string
 
+	// Systemauslastung
+	SystemStatsTitle, SystemStatsLoading, SystemStatsCPU, SystemStatsMemory                   string
+	SystemStatsNetwork, SystemStatsBlockIO, SystemStatsEnvironment, SystemStatsCPULimit       string
+	SystemStatsPIDs, SystemStatsGoProcess, SystemStatsCPUThrottling, SystemStatsPressureAvg10 string
+	SystemStatsNetworkTotal, SystemStatsIOTotal, SystemStatsCPUDetecting                      string
+	SystemStatsMemoryDetecting, SystemStatsNetworkContainer, SystemStatsIOCgroup              string
+	SystemStatsNoCgroupLimit, SystemStatsCPUUsageTotalFormat                                  string
+	SystemStatsMemoryWithLimitFormat, SystemStatsMemoryNoLimitFormat                          string
+	SystemStatsNetworkNamespace, SystemStatsBlockIOCgroup, SystemStatsUnknown                 string
+	SystemStatsLive, SystemStatsUnavailable                                                   string
+	SystemStatsEnvKubernetes, SystemStatsEnvContainerd, SystemStatsEnvDocker                  string
+	SystemStatsEnvContainer, SystemStatsEnvHostProcess                                        string
+	SystemStatsNetworkRateFormat, SystemStatsNetworkTotalFormat                               string
+	SystemStatsIORateFormat, SystemStatsIOTotalFormat, SystemStatsProcessFormat               string
+	SystemStatsLiveWithTimeFormat                                                             string
+
 	// Validierung & allgemeine Fehler
 	NoDomains, InvalidPort, IntervalTooSmall, ShortIntervalWarning                             string
 	InvalidIPMode, InvalidToken, ConfigErrorPrefix                                             string
@@ -401,6 +417,7 @@ type Phrases struct {
 	IonosAPIFailed, IonosMaxAttempts                                 string
 	IonosCacheZoneNotFound, IonosCacheUpdated, IonosCacheRecordAdded string
 	IonosPayload, IonosRecordArrow, IonosRetryable, IonosErrDetail   string
+	IonosReloadAfterTypeChangeFailed                                 string
 
 	// Cloudflare
 	CFNoCredentials, CFTokenEmpty, CFHTMLResponse string
@@ -423,8 +440,11 @@ type Phrases struct {
 	IPv64NoMatchingTokenConfigured, IPv64AnyTokenVerifyFailed           string
 	IPv64OwnershipCheckFailed, IPv64TokenMissing                        string
 
+	// HETZNER
+	HetznerAPIFailed, HetznerTokenMissing string
+
 	// Retry attempts
-	CFAttempt, IPv64Attempt, IonosAttempt string
+	CFAttempt, IPv64Attempt, IonosAttempt, HetznerAttempt string
 
 	// Settings Modal
 	SettingsTitle, SettingsSecurity, SettingsTriggerToken                      string

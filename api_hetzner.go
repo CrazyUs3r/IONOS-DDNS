@@ -57,7 +57,7 @@ func hetznerAPI(
 	method, endpoint string,
 	body any,
 ) ([]byte, error) {
-	return apiWithRetry(ctx, providerName, providerName+" API failed after %d attempts", func(attempt, maxRetries int) ([]byte, bool, error) {
+	return apiWithRetry(ctx, providerName, phrases().HetznerAPIFailed, func(attempt, maxRetries int) ([]byte, bool, error) {
 		return hetznerAPIAttempt(ctx, dc, providerName, authMode, method, endpoint, body, attempt, maxRetries)
 	})
 }
@@ -71,7 +71,7 @@ func hetznerAPIAttempt(
 	body any,
 	attempt, maxRetries int,
 ) ([]byte, bool, error) {
-	debugLog("HTTP", "", fmt.Sprintf("%s attempt %d/%d: %s %s", providerName, attempt+1, maxRetries, method, endpoint))
+	debugLog("HTTP", "", fmt.Sprintf(phrases().HetznerAttempt, phrases().Attempt, attempt+1, maxRetries, method, endpoint))
 
 	bodyBytes, err := marshalHetznerBody(body)
 	if err != nil {
@@ -107,9 +107,9 @@ func marshalHetznerBody(body any) ([]byte, error) {
 	}
 	bodyBytes, err := json.Marshal(body)
 	if err != nil {
-		return nil, fmt.Errorf("json marshal: %w", err)
+		return nil, fmt.Errorf("%s: %w", phrases().ErrJSONMarshal, err)
 	}
-	debugLog("HTTP", "", "📤 Payload: "+string(bodyBytes))
+	debugLog("HTTP", "", fmt.Sprintf("📤 %s: %s", phrases().PayloadSent, string(bodyBytes)))
 
 	return bodyBytes, nil
 }
@@ -124,7 +124,7 @@ func buildHetznerRequest(
 ) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, method, endpoint, bytes.NewReader(bodyBytes))
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		return nil, fmt.Errorf("%s: %w", phrases().ErrRequestCreate, err)
 	}
 
 	if body != nil {
@@ -136,7 +136,7 @@ func buildHetznerRequest(
 
 	token := hetznerToken(dc)
 	if token == "" {
-		return nil, errors.New("missing Hetzner API token in api_secret")
+		return nil, errors.New(phrases().HetznerTokenMissing)
 	}
 
 	switch authMode {
@@ -416,7 +416,7 @@ func updateHetznerCloudDNS(
 		return false, nil
 	}
 	if dryRunEnabled() {
-		log(LogContext{Level: LogWarn, Action: ActionDryRun, Domain: fqdn, Message: fmt.Sprintf("⚠️ Would set %s %s", recordType, newIP)})
+		log(LogContext{Level: LogWarn, Action: ActionDryRun, Domain: fqdn, Message: fmt.Sprintf("⚠️ %s %s %s", phrases().WouldSet, recordType, newIP)})
 
 		return true, nil
 	}

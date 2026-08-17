@@ -44,10 +44,6 @@ func splitIPv64FQDN(fqdn string) (baseDomain, praefix string) {
 	}
 	providerCache.RUnlock()
 
-	// IPv64 domains consist of one account label in front of a service
-	// suffix. Any labels before that are DNS record prefixes. Knowing the
-	// suffixes makes this deterministic even before get_domains filled the
-	// provider cache.
 	if suffix, ok := ipv64ServiceDomainSuffix(fqdn); ok {
 		hostPart, found := strings.CutSuffix(fqdn, "."+suffix)
 		if found && hostPart != "" {
@@ -337,6 +333,15 @@ func handleIPv64APIError(
 	attempt, maxAttempts int,
 ) (bool, error) {
 	apiMetrics.RecordError(method, statusCode, apiErr, duration)
+	lastErrorMsg.Set(sanitizeError(apiErr))
+
+	if statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden {
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: fmt.Sprintf("🚨 IPv64 auth error: %v", apiErr),
+		})
+	}
 
 	if apiErr.Retryable && canRetryAPIAttempt(attempt, maxAttempts) {
 		wait := apiErr.RetryAfter
@@ -1519,11 +1524,6 @@ func findIPv64DomainConfigForFQDN(fqdn string) *DomainConfig {
 	return &best
 }
 
-// findSingleIPv64DomainConfig returns a configured IPv64 account when all
-// IPv64 entries use the same API token. This lets the dashboard create a new
-// domain under another IPv64 service suffix without duplicating the same token
-// in a placeholder config first. Multiple distinct tokens remain intentionally
-// ambiguous and require the token to be supplied explicitly.
 func findSingleIPv64DomainConfig() *DomainConfig {
 	cfgMu.RLock()
 	defer cfgMu.RUnlock()

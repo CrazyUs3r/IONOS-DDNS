@@ -163,7 +163,7 @@ func handleCloudflareResponse(ctx context.Context, res *http.Response, method, f
 
 	effectiveStatus := res.StatusCode
 	if jsonErr == nil && !cfResp.Success && effectiveStatus >= 200 && effectiveStatus < 300 {
-		effectiveStatus = http.StatusUnprocessableEntity // CF meldet Business-Fehler oft mit HTTP 200
+		effectiveStatus = http.StatusUnprocessableEntity
 	}
 
 	if jsonErr == nil && cfResp.Success && effectiveStatus >= 200 && effectiveStatus < 300 {
@@ -182,7 +182,7 @@ func handleCloudflareResponse(ctx context.Context, res *http.Response, method, f
 
 	apiErr := classifyAPIErrorWithHeaders(effectiveStatus, method, fullURL, msg, res.Header)
 	if apiErr == nil {
-		apiErr = &APIError{StatusCode: res.StatusCode, Method: method, URL: fullURL, Message: msg}
+		apiErr = &APIError{StatusCode: res.StatusCode, Method: method, URL: fullURL, Message: msg, Retryable: true}
 	}
 	apiErr.StatusCode = res.StatusCode
 
