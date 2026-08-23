@@ -115,6 +115,15 @@ func loadZoneCache(
 	for providerStr, zones := range zonesByProvider {
 		provider := ProviderType(providerStr)
 
+		if providerZoneFailureActive(provider) {
+			debugLog(
+				"CACHE",
+				"",
+				fmt.Sprintf("Provider %s zone API unavailable; record refresh skipped", provider),
+			)
+			continue
+		}
+
 		if provider == ProviderIPv64 {
 			loadIPv64ZoneCache(cache, zones)
 

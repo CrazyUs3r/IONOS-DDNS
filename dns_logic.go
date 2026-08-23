@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -362,6 +363,16 @@ func processDomainWorkerJob(
 		}
 	}()
 
+	if providerZoneFailureActive(domainConfig.Provider) {
+		debugLog(
+			"DNS-LOGIC",
+			domainConfig.FQDN,
+			fmt.Sprintf("Provider %s zone API unavailable; domain update skipped", domainConfig.Provider),
+		)
+
+		return result, nil
+	}
+
 	if err := ctx.Err(); err != nil {
 		result.Error = fmt.Errorf(
 			"domain update cancelled before start: %w",
@@ -504,17 +515,25 @@ func finalizeDomainResults(results <-chan domainUpdateResult, totalDomains int) 
 	errorCount := 0
 	receivedCount := 0
 
+	type groupedError struct {
+		message string
+		domains []string
+	}
+	errorGroups := make(map[string]*groupedError)
+
 	for result := range results {
 		receivedCount++
 		if result.Error != nil {
 			errorCount++
-			log(LogContext{
-				Level:   LogError,
-				Action:  ActionError,
-				Domain:  result.Domain,
-				Message: fmt.Sprintf("%s: %v", phrases().UpdateFailed, result.Error),
-			})
-
+			key := result.Error.Error()
+			group, exists := errorGroups[key]
+			if !exists {
+				group = &groupedError{message: key}
+				errorGroups[key] = group
+			}
+			if result.Domain != "" {
+				group.domains = append(group.domains, result.Domain)
+			}
 			continue
 		}
 		if result.Changed {
@@ -522,18 +541,58 @@ func finalizeDomainResults(results <-chan domainUpdateResult, totalDomains int) 
 		}
 	}
 
+	if len(errorGroups) > 0 {
+		keys := make([]string, 0, len(errorGroups))
+		for key := range errorGroups {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+
+		for _, key := range keys {
+			group := errorGroups[key]
+			sort.Strings(group.domains)
+
+			if len(group.domains) == 1 {
+				log(LogContext{
+					Level:   LogError,
+					Action:  ActionError,
+					Domain:  group.domains[0],
+					Message: fmt.Sprintf("%s: %s", phrases().UpdateFailed, group.message),
+				})
+				continue
+			}
+
+			domainSummary := strings.Join(group.domains, ", ")
+			if len(group.domains) > 8 {
+				domainSummary = strings.Join(group.domains[:8], ", ") + fmt.Sprintf(", +%d more", len(group.domains)-8)
+			}
+
+			log(LogContext{
+				Level:  LogError,
+				Action: ActionError,
+				Message: fmt.Sprintf(
+					"%s for %d domains (%s): %s",
+					phrases().UpdateFailed,
+					len(group.domains),
+					domainSummary,
+					group.message,
+				),
+			})
+		}
+	}
+
 	missingResults := totalDomains - receivedCount
 	if missingResults > 0 {
 		errorCount += missingResults
-		log(LogContext{
-			Level:   LogError,
-			Action:  ActionError,
-			Message: fmt.Sprintf("%d domain worker result(s) missing", missingResults),
-		})
+		log(LogContext{Level: LogError, Action: ActionError, Message: fmt.Sprintf("%d domain worker result(s) missing", missingResults)})
 	}
 
 	if totalDomains > 0 {
-		lastOk.Store(errorCount == 0 && receivedCount == totalDomains)
+		lastOk.Store(
+			errorCount == 0 &&
+				receivedCount == totalDomains &&
+				!hasActiveProviderZoneFailures(),
+		)
 	}
 	schedulerRanOnce.Store(true)
 

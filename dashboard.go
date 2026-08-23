@@ -5100,10 +5100,11 @@ func formatDiagnosisTime(t time.Time) string {
 func diagnosisFileInfos() []map[string]any {
 	return []map[string]any{
 		diagnoseFileInfo("config.json", configPath),
-		diagnoseFileInfo("status/update.json", updatePath),
-		diagnoseFileInfo("logs", logPath),
 		diagnoseFileInfo("users.json", usersFilePath),
-		diagnoseFileInfo("audit.json", auditLogFilePath()),
+		diagnoseFileInfo("logs", logPath),
+		diagnoseFileInfo("logs/metrics.json", metricsPersistPath),
+		diagnoseFileInfo("logs/update.json", updatePath),
+		diagnoseFileInfo("logs/audit.json", auditLogFilePath()),
 	}
 }
 

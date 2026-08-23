@@ -220,18 +220,42 @@ func loadRunUpdateZones(ctx context.Context, forced bool) (map[string][]Zone, bo
 }
 
 func logMissingProviderZones(zonesByProvider map[string][]Zone, domainConfigs []DomainConfig) {
+	missingCounts := make(map[string]int)
+
 	for i := range domainConfigs {
 		providerKey := string(domainConfigs[i].Provider)
 		zones, exists := zonesByProvider[providerKey]
 		if exists && len(zones) > 0 {
 			continue
 		}
+		missingCounts[providerKey]++
+	}
+
+	if len(missingCounts) == 0 {
+		return
+	}
+
+	providers := make([]string, 0, len(missingCounts))
+	for provider := range missingCounts {
+		providers = append(providers, provider)
+	}
+	sort.Strings(providers)
+
+	for _, provider := range providers {
+		if providerZoneFailureActive(ProviderType(provider)) {
+			// The provider-level outage tracker already owns persistent logging
+			// for this condition. Avoid a duplicate warning every scheduler run.
+			continue
+		}
 
 		log(LogContext{
-			Level:   LogWarn,
-			Action:  ActionZone,
-			Domain:  domainConfigs[i].FQDN,
-			Message: fmt.Sprintf(phrases().ProviderReturnedNoZonesCheckAPIKey, providerKey),
+			Level:  LogWarn,
+			Action: ActionZone,
+			Message: fmt.Sprintf(
+				"Provider %s has no usable zones; %d configured domain(s) affected",
+				provider,
+				missingCounts[provider],
+			),
 		})
 	}
 }
@@ -480,12 +504,54 @@ func setCachedRecords(cache *ZoneRecordCache) {
 	lastRecordLoad = loadedAt
 }
 
+func cloneZonesByProvider(src map[string][]Zone) map[string][]Zone {
+	out := make(map[string][]Zone, len(src))
+	for provider, zones := range src {
+		out[provider] = append([]Zone(nil), zones...)
+	}
+	return out
+}
+
+func mergeFailedProviderZoneFallbacks(
+	fresh map[string][]Zone,
+	cached map[string][]Zone,
+	failures map[string]error,
+) map[string][]Zone {
+	merged := cloneZonesByProvider(fresh)
+
+	for provider := range failures {
+		if zones := cached[provider]; len(zones) > 0 {
+			merged[provider] = append([]Zone(nil), zones...)
+			debugLog("CACHE", "", fmt.Sprintf("Using stale in-memory zones for provider %s after API failure", provider))
+			continue
+		}
+
+		zones, ok := loadProviderZonesFromDisk(ProviderType(provider))
+		if !ok || len(zones) == 0 {
+			continue
+		}
+
+		merged[provider] = append([]Zone(nil), zones...)
+		debugLog("CACHE", "", fmt.Sprintf("Using stale disk zones for provider %s after API failure", provider))
+	}
+
+	return merged
+}
+
+func failedProviderNames(failures map[string]error) []string {
+	names := make([]string, 0, len(failures))
+	for provider := range failures {
+		names = append(names, provider)
+	}
+	sort.Strings(names)
+	return names
+}
+
 func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zone, error) {
 	cached, cacheAge, hasCachedZones := getCachedZonesState()
 
 	if !forceRefresh && hasCachedZones && cacheAge < ZoneCacheTTL {
 		debugLog("SCHEDULER", "", fmt.Sprintf(phrases().UsingZoneCacheAge, cacheAge.Round(time.Second)))
-
 		return cached, nil
 	}
 
@@ -501,43 +567,62 @@ func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zo
 	if !forceRefresh && !hasCachedZones {
 		if zonesFromDisk, err := loadZonesFromDiskCache(); err == nil && len(zonesFromDisk) > 0 {
 			debugLog("SCHEDULER", "", phrases().ZonesLoadedFromDiskNoAPICall)
-
 			setCachedZonesAt(zonesFromDisk, time.Time{})
-
 			return zonesFromDisk, nil
 		}
 	}
 
-	loadedFromDisk := false
-
-	zonesByProvider, err := doSingleflight(
-		ctx, &zonesLoadGroup, "zones_api",
-		func() (map[string][]Zone, error) {
+	snapshot, err := doSingleflight(
+		ctx,
+		&zonesLoadGroup,
+		"zones_api",
+		func() (providerZoneLoadSnapshot, error) {
 			return loadAllProviderZones(ctx)
 		},
 	)
-
 	if err != nil {
 		debugLog("SCHEDULER", "", fmt.Sprintf(phrases().ZoneAPILoadFailed, err))
-		debugLog("SCHEDULER", "", phrases().TryingDiskCacheFallback)
 
-		zonesByProvider, err = loadZonesFromDiskCache()
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", phrases().APIAndDiskCacheFailed, err)
+		if hasCachedZones {
+			zonesByProvider := cloneZonesByProvider(cached)
+			setCachedZonesAt(zonesByProvider, time.Time{})
+			debugLog("SCHEDULER", "", "Using stale in-memory zone cache; retry on next scheduler run")
+			return zonesByProvider, nil
 		}
 
-		loadedFromDisk = true
-		debugLog("SCHEDULER", "", phrases().ZonesLoadedFromDisk)
-	} else {
-		debugLog("SCHEDULER", "", phrases().ZonesLoadedFromAPI)
-	}
+		debugLog("SCHEDULER", "", phrases().TryingDiskCacheFallback)
+		zonesByProvider, diskErr := loadZonesFromDiskCache()
+		if diskErr != nil {
+			return nil, fmt.Errorf("%s: %w", phrases().APIAndDiskCacheFailed, diskErr)
+		}
 
-	if loadedFromDisk {
 		setCachedZonesAt(zonesByProvider, time.Time{})
-	} else {
-		setCachedZones(zonesByProvider)
+		debugLog("SCHEDULER", "", phrases().ZonesLoadedFromDisk)
+		return zonesByProvider, nil
 	}
 
+	zonesByProvider := snapshot.Zones
+	if len(snapshot.Failures) > 0 {
+		zonesByProvider = mergeFailedProviderZoneFallbacks(zonesByProvider, cached, snapshot.Failures)
+
+		// Partial provider failures are intentionally kept stale. This makes the
+		// next normal scheduler run retry provider APIs instead of waiting for the
+		// healthy 60-minute ZoneCacheTTL.
+		setCachedZonesAt(zonesByProvider, time.Time{})
+
+		debugLog(
+			"SCHEDULER",
+			"",
+			fmt.Sprintf(
+				"Zone cache degraded; failed providers=%s; retry on next scheduler run",
+				strings.Join(failedProviderNames(snapshot.Failures), ","),
+			),
+		)
+		return zonesByProvider, nil
+	}
+
+	setCachedZones(zonesByProvider)
+	debugLog("SCHEDULER", "", phrases().ZonesLoadedFromAPI)
 	return zonesByProvider, nil
 }
 
@@ -548,9 +633,26 @@ func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zo
 func loadRecordsWithCache(ctx context.Context, zonesByProvider map[string][]Zone, forceRefresh bool) (*ZoneRecordCache, error) {
 	cached, cacheAge, hasCachedRecords := getCachedRecordsState()
 
+	// When at least one provider's zone API is degraded, keep the last known
+	// record cache instead of repeatedly refreshing healthy providers every
+	// scheduler interval. As soon as a provider recovers, noteProviderZoneSuccess
+	// marks lastRecordLoad stale so this function performs an immediate full
+	// refresh in that same run.
+	if hasActiveProviderZoneFailures() {
+		if hasCachedRecords {
+			debugLog("CACHE", "", "Provider zone API degraded; retaining last known record cache")
+			return cached, nil
+		}
+
+		if cacheFromDisk, err := loadRecordCacheFromDisk(zonesByProvider); err == nil && cacheFromDisk != nil {
+			debugLog("CACHE", "", "Provider zone API degraded; using record cache from disk")
+			setCachedRecords(cacheFromDisk)
+			return cacheFromDisk, nil
+		}
+	}
+
 	if !forceRefresh && hasCachedRecords && cacheAge < RecordCacheTTL {
 		debugLog("SCHEDULER", "", fmt.Sprintf(phrases().UsingRecordCacheAge, cacheAge.Round(time.Second)))
-
 		return cached, nil
 	}
 
@@ -566,9 +668,7 @@ func loadRecordsWithCache(ctx context.Context, zonesByProvider map[string][]Zone
 	if !forceRefresh && !hasCachedRecords {
 		if cacheFromDisk, err := loadRecordCacheFromDisk(zonesByProvider); err == nil && cacheFromDisk != nil {
 			debugLog("SCHEDULER", "", phrases().RecordCacheLoadedFromDiskNoAPICall)
-
 			setCachedRecords(cacheFromDisk)
-
 			return cacheFromDisk, nil
 		}
 	}
@@ -576,11 +676,15 @@ func loadRecordsWithCache(ctx context.Context, zonesByProvider map[string][]Zone
 	cache, err := doSingleflight(ctx, &recordsLoadGroup, "records_api", func() (*ZoneRecordCache, error) {
 		return loadZoneCache(ctx, zonesByProvider)
 	})
-
 	if err != nil {
 		debugLog("CACHE", "", fmt.Sprintf(phrases().RecordCacheError, err))
-		debugLog("CACHE", "", phrases().TryingLoadRecordCacheFromDisk)
 
+		if hasCachedRecords {
+			debugLog("CACHE", "", "Record API refresh failed; retaining stale in-memory record cache")
+			return cached, nil
+		}
+
+		debugLog("CACHE", "", phrases().TryingLoadRecordCacheFromDisk)
 		cache, err = loadRecordCacheFromDisk(zonesByProvider)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", phrases().RecordCacheCouldNotBeLoaded, err)
@@ -591,7 +695,6 @@ func loadRecordsWithCache(ctx context.Context, zonesByProvider map[string][]Zone
 	}
 
 	setCachedRecords(cache)
-
 	return cache, nil
 }
 

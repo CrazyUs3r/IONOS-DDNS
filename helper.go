@@ -1673,8 +1673,238 @@ func loadZonesForDomainConfig(ctx context.Context, dc *DomainConfig) ([]Zone, er
 	}
 }
 
-func loadAllProviderZones(ctx context.Context) (map[string][]Zone, error) {
-	zonesByProvider := make(map[string][]Zone)
+type providerZoneLoadSnapshot struct {
+	Zones    map[string][]Zone
+	Failures map[string]error
+}
+
+const providerZoneFailureReminder = time.Hour
+
+type providerZoneFailureState struct {
+	FirstSeen  time.Time
+	LastLogged time.Time
+	Attempts   int
+	LastError  string
+}
+
+var providerZoneFailureTracker = struct {
+	sync.Mutex
+	Active map[string]*providerZoneFailureState
+}{
+	Active: make(map[string]*providerZoneFailureState),
+}
+
+func noteProviderZoneFailure(provider string, err error) {
+	now := time.Now()
+	errText := sanitizeError(err)
+
+	providerZoneFailureTracker.Lock()
+	state, exists := providerZoneFailureTracker.Active[provider]
+	if !exists {
+		state = &providerZoneFailureState{FirstSeen: now}
+		providerZoneFailureTracker.Active[provider] = state
+	}
+
+	state.Attempts++
+	state.LastError = errText
+
+	shouldPersist := !exists || state.LastLogged.IsZero() || now.Sub(state.LastLogged) >= providerZoneFailureReminder
+	if shouldPersist {
+		state.LastLogged = now
+	}
+
+	firstSeen := state.FirstSeen
+	attempts := state.Attempts
+	providerZoneFailureTracker.Unlock()
+
+	if !shouldPersist {
+		debugLog(
+			"ZONE",
+			"",
+			fmt.Sprintf("Provider %s zones still unavailable (attempt %d): %s", provider, attempts, errText),
+		)
+		return
+	}
+
+	message := fmt.Sprintf("Provider %s zones unavailable: %s", provider, errText)
+	if attempts > 1 {
+		message = fmt.Sprintf(
+			"Provider %s zones still unavailable for %s (%d attempts): %s",
+			provider,
+			now.Sub(firstSeen).Round(time.Minute),
+			attempts,
+			errText,
+		)
+	}
+
+	log(LogContext{Level: LogWarn, Action: ActionZone, Message: message})
+}
+
+func noteProviderZoneSuccess(provider string) {
+	now := time.Now()
+
+	providerZoneFailureTracker.Lock()
+	state, exists := providerZoneFailureTracker.Active[provider]
+	if exists {
+		delete(providerZoneFailureTracker.Active, provider)
+	}
+	providerZoneFailureTracker.Unlock()
+
+	if !exists {
+		return
+	}
+
+	// A recovered provider should refresh its record cache immediately in the
+	// same scheduler run instead of waiting for RecordCacheTTL.
+	zoneCacheMutex.Lock()
+	lastRecordLoad = time.Time{}
+	zoneCacheMutex.Unlock()
+
+	log(LogContext{
+		Level:  LogInfo,
+		Action: ActionZone,
+		Message: fmt.Sprintf(
+			"Provider %s zones available again after %s (%d attempts)",
+			provider,
+			now.Sub(state.FirstSeen).Round(time.Second),
+			state.Attempts,
+		),
+	})
+}
+
+func pruneProviderZoneFailures(configured map[ProviderType]*DomainConfig) {
+	providerZoneFailureTracker.Lock()
+	defer providerZoneFailureTracker.Unlock()
+
+	for provider := range providerZoneFailureTracker.Active {
+		if _, exists := configured[ProviderType(provider)]; !exists {
+			delete(providerZoneFailureTracker.Active, provider)
+		}
+	}
+}
+
+func providerZoneFailureActive(provider ProviderType) bool {
+	providerZoneFailureTracker.Lock()
+	_, exists := providerZoneFailureTracker.Active[string(provider)]
+	providerZoneFailureTracker.Unlock()
+
+	return exists
+}
+
+func hasActiveProviderZoneFailures() bool {
+	providerZoneFailureTracker.Lock()
+	active := len(providerZoneFailureTracker.Active) > 0
+	providerZoneFailureTracker.Unlock()
+
+	return active
+}
+
+const ipCheckFailureReminder = time.Hour
+
+type ipCheckFailureState struct {
+	FirstSeen  time.Time
+	LastLogged time.Time
+	Attempts   int
+	LastError  string
+}
+
+var ipCheckFailureTracker = struct {
+	sync.Mutex
+	Active map[IPVersion]*ipCheckFailureState
+}{
+	Active: make(map[IPVersion]*ipCheckFailureState),
+}
+
+func ipVersionLabel(want IPVersion) string {
+	switch want {
+	case IPV4:
+		return "IPv4"
+	case IPV6:
+		return "IPv6"
+	default:
+		return fmt.Sprintf("IP(%d)", want)
+	}
+}
+
+func noteIPCheckFailure(want IPVersion, err error) {
+	now := time.Now()
+	errText := sanitizeError(err)
+	label := ipVersionLabel(want)
+
+	ipCheckFailureTracker.Lock()
+	state, exists := ipCheckFailureTracker.Active[want]
+	if !exists {
+		state = &ipCheckFailureState{FirstSeen: now}
+		ipCheckFailureTracker.Active[want] = state
+	}
+
+	state.Attempts++
+	state.LastError = errText
+
+	shouldPersist := !exists || state.LastLogged.IsZero() || now.Sub(state.LastLogged) >= ipCheckFailureReminder
+	if shouldPersist {
+		state.LastLogged = now
+	}
+
+	firstSeen := state.FirstSeen
+	attempts := state.Attempts
+	ipCheckFailureTracker.Unlock()
+
+	if !shouldPersist {
+		debugLog(
+			"IP-CHECK",
+			"",
+			fmt.Sprintf("%s check still failing (attempt %d): %s", label, attempts, errText),
+		)
+		return
+	}
+
+	message := fmt.Sprintf("%s check failed: %s", label, errText)
+	if attempts > 1 {
+		message = fmt.Sprintf(
+			"%s check still failing for %s (%d attempts): %s",
+			label,
+			now.Sub(firstSeen).Round(time.Minute),
+			attempts,
+			errText,
+		)
+	}
+
+	log(LogContext{Level: LogError, Action: ActionError, Message: message})
+}
+
+func noteIPCheckSuccess(want IPVersion) {
+	now := time.Now()
+	label := ipVersionLabel(want)
+
+	ipCheckFailureTracker.Lock()
+	state, exists := ipCheckFailureTracker.Active[want]
+	if exists {
+		delete(ipCheckFailureTracker.Active, want)
+	}
+	ipCheckFailureTracker.Unlock()
+
+	if !exists {
+		return
+	}
+
+	log(LogContext{
+		Level:  LogInfo,
+		Action: ActionInfo,
+		Message: fmt.Sprintf(
+			"%s check recovered after %s (%d attempts)",
+			label,
+			now.Sub(state.FirstSeen).Round(time.Second),
+			state.Attempts,
+		),
+	})
+}
+
+func loadAllProviderZones(ctx context.Context) (providerZoneLoadSnapshot, error) {
+	snapshot := providerZoneLoadSnapshot{
+		Zones:    make(map[string][]Zone),
+		Failures: make(map[string]error),
+	}
 	providerConfigs := make(map[ProviderType]*DomainConfig)
 
 	cfgMu.RLock()
@@ -1684,11 +1914,12 @@ func loadAllProviderZones(ctx context.Context) (map[string][]Zone, error) {
 
 	for i := range domainConfigs {
 		dc := &domainConfigs[i]
-
 		if _, exists := providerConfigs[dc.Provider]; !exists {
 			providerConfigs[dc.Provider] = dc
 		}
 	}
+
+	pruneProviderZoneFailures(providerConfigs)
 
 	type zoneResult struct {
 		err      error
@@ -1698,64 +1929,43 @@ func loadAllProviderZones(ctx context.Context) (map[string][]Zone, error) {
 
 	count := len(providerConfigs)
 	if count == 0 {
-		return zonesByProvider, nil
+		return snapshot, nil
 	}
 
 	results := make(chan zoneResult, count)
-
 	for provider, dc := range providerConfigs {
 		go func(p ProviderType, d *DomainConfig) {
 			zones, err := loadZonesForDomainConfig(ctx, d)
-
-			results <- zoneResult{
-				provider: string(p),
-				zones:    zones,
-				err:      err,
-			}
+			results <- zoneResult{provider: string(p), zones: zones, err: err}
 		}(provider, dc)
 	}
 
 	var loadErrors []error
-
 	for range count {
 		result := <-results
 
+		if result.err == nil && len(result.zones) == 0 {
+			result.err = errors.New("provider returned no zones")
+		}
+
 		if result.err != nil {
-			wrappedErr := fmt.Errorf(
-				"failed to load zones for %s: %w",
-				result.provider,
-				result.err,
-			)
-
+			wrappedErr := fmt.Errorf("failed to load zones for %s: %w", result.provider, result.err)
+			snapshot.Failures[result.provider] = wrappedErr
 			loadErrors = append(loadErrors, wrappedErr)
-
-			log(LogContext{
-				Level:   LogWarn,
-				Action:  ActionZone,
-				Message: wrappedErr.Error(),
-			})
-
+			noteProviderZoneFailure(result.provider, wrappedErr)
 			continue
 		}
 
-		zonesByProvider[result.provider] = result.zones
-
-		debugLog(
-			"ZONE",
-			"",
-			fmt.Sprintf(
-				"✅ Loaded %d zones for %s",
-				len(result.zones),
-				result.provider,
-			),
-		)
+		snapshot.Zones[result.provider] = result.zones
+		noteProviderZoneSuccess(result.provider)
+		debugLog("ZONE", "", fmt.Sprintf("✅ Loaded %d zones for %s", len(result.zones), result.provider))
 	}
 
-	if len(zonesByProvider) == 0 && len(loadErrors) > 0 {
-		return nil, errors.Join(loadErrors...)
+	if len(snapshot.Zones) == 0 && len(loadErrors) > 0 {
+		return snapshot, errors.Join(loadErrors...)
 	}
 
-	return zonesByProvider, nil
+	return snapshot, nil
 }
 
 func doSingleflight[T any](

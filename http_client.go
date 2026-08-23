@@ -193,7 +193,8 @@ func (t *httpTimings) String() string {
 	}
 
 	if !t.gotConn.IsZero() {
-		parts = append(parts,
+		parts = append(
+			parts,
 			fmt.Sprintf(phrases().HTTPTimingReused, t.connReused),
 			fmt.Sprintf(phrases().HTTPTimingIdle, t.connWasIdle),
 		)
@@ -866,8 +867,15 @@ func checkAPIRedirect(req *http.Request, via []*http.Request) error {
 }
 
 func normalizeDNSServers(servers []string) []string {
+	defaults := []string{
+		"1.1.1.1:53",
+		"8.8.8.8:53",
+		"[2606:4700:4700::1111]:53",
+		"[2001:4860:4860::8888]:53",
+	}
+
 	if len(servers) == 0 {
-		servers = []string{"1.1.1.1:53", "8.8.8.8:53"}
+		servers = defaults
 	}
 
 	out := make([]string, 0, len(servers))
@@ -891,9 +899,8 @@ func normalizeDNSServers(servers []string) []string {
 	}
 
 	if len(out) == 0 {
-		return []string{"1.1.1.1:53", "8.8.8.8:53"}
+		return append([]string(nil), defaults...)
 	}
-
 	return out
 }
 

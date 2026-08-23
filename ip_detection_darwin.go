@@ -119,6 +119,9 @@ func getPublicIPFromAny(parent context.Context, urls []string, want IPVersion) (
 	}
 
 	var lastErr error
+	attempted := 0
+	failed := 0
+	lastURL := ""
 
 	for _, rawURL := range urls {
 		u := strings.TrimSpace(rawURL)
@@ -126,34 +129,39 @@ func getPublicIPFromAny(parent context.Context, urls []string, want IPVersion) (
 			continue
 		}
 
+		attempted++
+		lastURL = u
+
 		ctx, cancel := context.WithTimeout(parent, IPCheckTimeout)
 		ip, err := getPublicIP(ctx, u, want)
 		cancel()
 
 		if err == nil {
-			broadcastUpdate("ip_check_result", map[string]any{
-				"url":  u,
-				"ok":   true,
-				"want": strconv.Itoa(int(want)),
-			})
-
+			broadcastUpdate("ip_check_result", map[string]any{"url": u, "ok": true, "want": strconv.Itoa(int(want))})
 			return ip, nil
 		}
 
-		broadcastUpdate("ip_check_result", map[string]any{
-			"url":  u,
-			"ok":   false,
-			"want": strconv.Itoa(int(want)),
-		})
+		failed++
 		lastErr = err
+		broadcastUpdate("ip_check_result", map[string]any{"url": u, "ok": false, "want": strconv.Itoa(int(want))})
 		debugLog("IP-CHECK", "", fmt.Sprintf(phrases().FallbackFailed, u, err))
 	}
 
+	if attempted == 0 {
+		return "", errors.New(phrases().NoIPEndpointsConfigured)
+	}
 	if lastErr == nil {
 		lastErr = errors.New(phrases().NoIPEndpointsConfigured)
 	}
 
-	return "", fmt.Errorf("%s: %w", phrases().AllIPEndpointsFailed, lastErr)
+	return "", fmt.Errorf(
+		"%s (attempted=%d failed=%d last=%s): %w",
+		phrases().AllIPEndpointsFailed,
+		attempted,
+		failed,
+		lastURL,
+		lastErr,
+	)
 }
 
 type darwinIPv6Candidate struct {
@@ -410,13 +418,10 @@ func fetchCurrentIPs(ctx context.Context) (ipv4, ipv6 string, err error) {
 		wg.Go(func() {
 			resV4, errV4 = getPublicIPFromAny(ctx, activeIPv4Endpoints(), IPV4)
 			if errV4 != nil {
-				log(LogContext{
-					Level:   LogError,
-					Action:  ActionError,
-					Message: phrases().IPv4CheckFailed,
-					Error:   errV4,
-				})
+				noteIPCheckFailure(IPV4, errV4)
+				return
 			}
+			noteIPCheckSuccess(IPV4)
 		})
 	}
 
@@ -425,18 +430,14 @@ func fetchCurrentIPs(ctx context.Context) (ipv4, ipv6 string, err error) {
 		wg.Go(func() {
 			resV6, errV6 = getIPv6(ctx, ifaceName)
 			if errV6 != nil {
-				log(LogContext{
-					Level:   LogError,
-					Action:  ActionError,
-					Message: phrases().IPv6CheckFailed,
-					Error:   errV6,
-				})
+				noteIPCheckFailure(IPV6, errV6)
+				return
 			}
+			noteIPCheckSuccess(IPV6)
 		})
 	}
 
 	wg.Wait()
-
 	return finalizeFetchedIPs(ipMode, resV4, resV6, errV4, errV6)
 }
 
