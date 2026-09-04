@@ -1,4 +1,5 @@
 // Package main
+
 package main
 
 import (
@@ -3272,6 +3273,7 @@ func writeDashboardTop(w io.Writer, statusClass, statusText string, config Confi
 				</div>
 			</div>
 		</div>
+
 		<div class="card">
 			<div class="card-header">⚙️ `+phrases().ConfigHeading+`</div>
 			<div class="card-content">
