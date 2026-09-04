@@ -1,11 +1,11 @@
 ﻿# =============================================================================
 # Builder Stage
 # =============================================================================
-FROM --platform=${BUILDPLATFORM} golang:1.27.0-alpine AS builder
+FROM --platform=${BUILDPLATFORM} golang:1.27.1-alpine AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
-ARG VERSION=2.5.7
+ARG VERSION=2.5.8
 ARG BUILD_DATE
 ARG VCS_REF
 
@@ -63,7 +63,7 @@ RUN apk add --no-cache \
 # =============================================================================
 FROM busybox:stable-musl
 
-ARG VERSION=2.5.7
+ARG VERSION=2.5.8
 ARG BUILD_DATE
 ARG VCS_REF
 
