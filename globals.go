@@ -315,14 +315,12 @@ const (
 // ============================================================================
 
 const (
-	APITimeout           = 25 * time.Second
 	BaseUpdateTimeout    = 50 * time.Second
 	PerDomainTimeout     = 10 * time.Second
 	UpdateBufferTimeout  = 30 * time.Second
 	MinUpdateTimeout     = 50 * time.Second
 	MaxUpdateTimeout     = 10 * time.Minute
 	IPCheckTimeout       = 10 * time.Second
-	DNSDialTimeout       = 3 * time.Second
 	DNSResolverTimeout   = 10 * time.Second
 	DNSKeepalive         = 30 * time.Second
 	ShutdownGraceTimeout = 5 * time.Second
