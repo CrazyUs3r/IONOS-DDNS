@@ -5,11 +5,12 @@
 [![License](https://img.shields.io/github/license/crazyUs3r/ionos-ddns?style=flat-square)](https://github.com/CrazyUs3r/IONOS-DDNS/blob/main/LICENSE)
 [![GitHub Downloads](https://img.shields.io/github/downloads/crazyus3r/ionos-ddns/total)](https://github.com/crazyUs3r/ionos-ddns/releases)
 [![GitHub Activity](https://img.shields.io/github/commit-activity/y/crazyUs3r/ionos-ddns?style=flat-square)](https://github.com/crazyUs3r/ionos-ddns/commits/main)
+[![GitHub last commit](https://img.shields.io/github/last-commit/CrazyUs3r/IONOS-DDNS?style=flat-square)](https://github.com/CrazyUs3r/IONOS-DDNS/commits/main)
 
 [![Docker Image Version](https://img.shields.io/docker/v/crazyus3r/ionos-ddns?label=docker%20image&logo=docker&style=flat-square)](https://hub.docker.com/r/crazyus3r/ionos-ddns/tags)
 [![Docker Pulls](https://img.shields.io/docker/pulls/crazyus3r/ionos-ddns?style=flat-square)](https://hub.docker.com/r/crazyus3r/ionos-ddns)
 [![Docker Stars](https://img.shields.io/docker/stars/crazyus3r/ionos-ddns?style=flat-square&logo=docker)](https://hub.docker.com/r/crazyus3r/ionos-ddns)
-[![Docker Last Updated](https://img.shields.io/docker/last-updated/crazyus3r/ionos-ddns?style=flat-square)](https://hub.docker.com/r/crazyus3r/ionos-ddns/tags)
+[![Docker Last Updated](https://img.shields.io/docker/last-updated/crazyus3r/ionos-ddns/latest?style=flat-square)](https://hub.docker.com/r/crazyus3r/ionos-ddns/tags)
 
 Ein hochperformanter, in Go geschriebener **Multi-Provider Dynamic DNS Client** mit vollwertigem Web-Dashboard. Unterstützt IONOS, Cloudflare, IPv64, Hetzner DNS, Hetzner Cloud Febas und DNScale — gleichzeitig, pro Domain konfigurierbar.
 
