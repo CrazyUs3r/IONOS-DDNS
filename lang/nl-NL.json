@@ -1290,5 +1290,12 @@
   "zone_singular": "zone",
   "zones_loaded_from_api": "✅ Zones succesvol geladen via API",
   "zones_loaded_from_disk": "✅ Zones succesvol geladen uit schijfcache",
-  "zones_loaded_from_disk_no_api_call": "✅ Zones geladen uit schijfcache (geen API-aanroep)"
+  "zones_loaded_from_disk_no_api_call": "✅ Zones geladen uit schijfcache (geen API-aanroep)",
+"tls_cert_regenerating":          "Nieuw zelfondertekend TLS-certificaat genereren (%s)",
+"tls_cert_generated":              "Zelfondertekend TLS-certificaat gegenereerd, geldig tot %s (hosts: %s)",
+"tls_cert_reason_unreadable":       "geen leesbaar certificaat beschikbaar",
+"tls_cert_reason_unparseable":      "bestaand certificaat kan niet worden verwerkt",
+"tls_cert_reason_not_yet_valid":      "bestaand certificaat is nog niet geldig",
+"tls_cert_reason_expiring_soon":     "vervalt binnenkort (%s)",
+"tls_cert_reason_hostname_mismatch": "dekt host/IP niet meer (%s)"
 }

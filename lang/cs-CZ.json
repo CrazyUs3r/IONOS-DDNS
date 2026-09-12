@@ -1290,5 +1290,12 @@
   "zone_singular": "zóna",
   "zones_loaded_from_api": "✅ Zóny byly úspěšně načteny z API",
   "zones_loaded_from_disk": "✅ Zóny byly úspěšně načteny z diskové mezipaměti",
-  "zones_loaded_from_disk_no_api_call": "✅ Zóny načteny z diskové mezipaměti (volání API není nutné)"
+  "zones_loaded_from_disk_no_api_call": "✅ Zóny načteny z diskové mezipaměti (volání API není nutné)",
+"tls_cert_regenerating":          "Generování nového TLS certifikátu podepsaného sám sebou (%s)",
+"tls_cert_generated":              "TLS certifikát podepsaný sám sebou byl vygenerován, platný do %s (hostitelé: %s)",
+"tls_cert_reason_unreadable":       "není k dispozici žádný čitelný certifikát",
+"tls_cert_reason_unparseable":      "stávající certifikát nelze zpracovat",
+"tls_cert_reason_not_yet_valid":      "stávající certifikát ještě není platný",
+"tls_cert_reason_expiring_soon":     "brzy vyprší (%s)",
+"tls_cert_reason_hostname_mismatch": "již nepokrývá hostitele/IP (%s)"
 }

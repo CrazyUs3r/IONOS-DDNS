@@ -1290,5 +1290,12 @@
   "zone_singular": "zone",
   "zones_loaded_from_api": "✅ Zones chargées avec succès via l'API",
   "zones_loaded_from_disk": "✅ Zones chargées avec succès depuis le cache disque",
-  "zones_loaded_from_disk_no_api_call": "✅ Zones chargées du cache disque (pas d'appel API)"
+  "zones_loaded_from_disk_no_api_call": "✅ Zones chargées du cache disque (pas d'appel API)",
+"tls_cert_regenerating":          "Génération d'un nouveau certificat TLS auto-signé (%s)",
+"tls_cert_generated":              "Certificat TLS auto-signé généré, valide jusqu'au %s (hôtes : %s)",
+"tls_cert_reason_unreadable":       "aucun certificat lisible disponible",
+"tls_cert_reason_unparseable":      "impossible d'analyser le certificat existant",
+"tls_cert_reason_not_yet_valid":      "le certificat existant n'est pas encore valide",
+"tls_cert_reason_expiring_soon":     "expire bientôt (%s)",
+"tls_cert_reason_hostname_mismatch": "ne couvre plus l'hôte/IP (%s)"
 }

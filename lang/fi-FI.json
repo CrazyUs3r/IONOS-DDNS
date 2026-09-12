@@ -1290,5 +1290,12 @@
   "zone_singular": "Vyöhyke",
   "zones_loaded_from_api": "✅ Vyöhykkeet ladattu onnistuneesti API:lta",
   "zones_loaded_from_disk": "✅ Vyöhykkeet ladattu onnistuneesti levyn välimuistista",
-  "zones_loaded_from_disk_no_api_call": "✅ Vyöhykkeet haettu levyn välimuistista (ei API-kutsua tarvita)"
+  "zones_loaded_from_disk_no_api_call": "✅ Vyöhykkeet haettu levyn välimuistista (ei API-kutsua tarvita)",
+"tls_cert_regenerating":          "Luodaan uutta itse allekirjoitettua TLS-varmennetta (%s)",
+"tls_cert_generated":              "Itse allekirjoitettu TLS-varmenne luotu, voimassa %s asti (isännät: %s)",
+"tls_cert_reason_unreadable":       "luettavaa varmennetta ei ole saatavilla",
+"tls_cert_reason_unparseable":      "olemassa olevaa varmennetta ei voi jäsentää",
+"tls_cert_reason_not_yet_valid":      "olemassa oleva varmenne ei ole vielä voimassa",
+"tls_cert_reason_expiring_soon":     "vanhentuu pian (%s)",
+"tls_cert_reason_hostname_mismatch": "ei kata enää isäntää/IP-osoitetta (%s)"
 }

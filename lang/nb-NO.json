@@ -1290,5 +1290,12 @@
   "zone_singular": "Sone",
   "zones_loaded_from_api": "✅ Soner vellykket lastet fra API",
   "zones_loaded_from_disk": "✅ Soner vellykket lastet fra diskbuffer",
-  "zones_loaded_from_disk_no_api_call": "✅ Soner overtatt fra diskbuffer (ingen API-kall nødvendig)"
+  "zones_loaded_from_disk_no_api_call": "✅ Soner overtatt fra diskbuffer (ingen API-kall nødvendig)",
+"tls_cert_regenerating":          "Genererer nytt selvsignert TLS-sertifikat (%s)",
+"tls_cert_generated":              "Selvsignert TLS-sertifikat generert, gyldig til %s (verter: %s)",
+"tls_cert_reason_unreadable":       "ingen lesbart sertifikat tilgjengelig",
+"tls_cert_reason_unparseable":      "eksisterende sertifikat kan ikke tolkes",
+"tls_cert_reason_not_yet_valid":      "eksisterende sertifikat er ikke gyldig ennå",
+"tls_cert_reason_expiring_soon":     "utløper snart (%s)",
+"tls_cert_reason_hostname_mismatch": "dekker ikke lenger vert/IP (%s)"
 }

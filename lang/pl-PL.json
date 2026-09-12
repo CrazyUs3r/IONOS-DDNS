@@ -1290,5 +1290,12 @@
   "zone_singular": "strefa",
   "zones_loaded_from_api": "✅ Strefy załadowane pomyślnie przez API",
   "zones_loaded_from_disk": "✅ Strefy załadowane pomyślnie z cache na dysku",
-  "zones_loaded_from_disk_no_api_call": "✅ Strefy załadowane z cache na dysku (brak wywołania API)"
+  "zones_loaded_from_disk_no_api_call": "✅ Strefy załadowane z cache na dysku (brak wywołania API)",
+"tls_cert_regenerating":          "Generowanie нового samopodpisanego certyfikatu TLS (%s)",
+"tls_cert_generated":              "Wygenerowano samopodpisany certyfikat TLS, ważny do %s (hosty: %s)",
+"tls_cert_reason_unreadable":       "brak czytelnego certyfikatu",
+"tls_cert_reason_unparseable":      "nie można przetworzyć istniejącego certyfikatu",
+"tls_cert_reason_not_yet_valid":      "istniejący certyfikat nie jest jeszcze ważny",
+"tls_cert_reason_expiring_soon":     "wkrótce wygasa (%s)",
+"tls_cert_reason_hostname_mismatch": "nie obejmuje już hosta/IP (%s)"
 }

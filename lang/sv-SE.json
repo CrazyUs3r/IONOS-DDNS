@@ -1290,5 +1290,12 @@
   "zone_singular": "zon",
   "zones_loaded_from_api": "✅ Zoner laddades framgångsrikt via API",
   "zones_loaded_from_disk": "✅ Zoner laddades framgångsrikt från disk-cache",
-  "zones_loaded_from_disk_no_api_call": "✅ Zoner laddade från disk-cache (inget API-anrop)"
+  "zones_loaded_from_disk_no_api_call": "✅ Zoner laddade från disk-cache (inget API-anrop)",
+"tls_cert_regenerating":          "Genererar nytt självsignerat TLS-certifikat (%s)",
+"tls_cert_generated":              "Självsignerat TLS-certifikat genererat, giltigt till %s (värdar: %s)",
+"tls_cert_reason_unreadable":       "inget läsbart certifikat tillgängligt",
+"tls_cert_reason_unparseable":      "det befintliga certifikatet kan inte tolkas",
+"tls_cert_reason_not_yet_valid":      "det befintliga certifikatet är inte giltigt än",
+"tls_cert_reason_expiring_soon":     "går ut snart (%s)",
+"tls_cert_reason_hostname_mismatch": "täcker inte längre värd/IP (%s)"
 }

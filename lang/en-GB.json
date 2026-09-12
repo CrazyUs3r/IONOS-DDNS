@@ -1290,5 +1290,12 @@
   "zone_singular": "zone",
   "zones_loaded_from_api": "✅ Zones loaded successfully from API",
   "zones_loaded_from_disk": "✅ Zones loaded successfully from disk cache",
-  "zones_loaded_from_disk_no_api_call": "✅ Zones loaded from disk cache (no API call needed)"
+  "zones_loaded_from_disk_no_api_call": "✅ Zones loaded from disk cache (no API call needed)",
+"tls_cert_regenerating":          "Generating new self-signed TLS certificate (%s)",
+"tls_cert_generated":              "Self-signed TLS certificate generated, valid until %s (hosts: %s)",
+"tls_cert_reason_unreadable":       "no readable certificate available",
+"tls_cert_reason_unparseable":      "existing certificate cannot be parsed",
+"tls_cert_reason_not_yet_valid":      "existing certificate is not yet valid",
+"tls_cert_reason_expiring_soon":     "expiring soon (%s)",
+"tls_cert_reason_hostname_mismatch": "no longer covers host/IP (%s)"
 }

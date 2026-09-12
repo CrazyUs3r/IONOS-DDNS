@@ -1290,5 +1290,12 @@
   "zone_singular": "zone",
   "zones_loaded_from_api": "✅ Zoner blev indlæst korrekt fra API",
   "zones_loaded_from_disk": "✅ Zoner blev indlæst korrekt fra disk-cache",
-  "zones_loaded_from_disk_no_api_call": "✅ Zoner indlæst fra disk-cache (API-kald ikke nødvendigt)"
+  "zones_loaded_from_disk_no_api_call": "✅ Zoner indlæst fra disk-cache (API-kald ikke nødvendigt)",
+"tls_cert_regenerating":          "Genererer nyt selvsigneret TLS-certifikat (%s)",
+"tls_cert_generated":              "Selvsigneret TLS-certifikat genereret, gyldigt indtil %s (værter: %s)",
+"tls_cert_reason_unreadable":       "intet læsbart certifikat tilgængeligt",
+"tls_cert_reason_unparseable":      "eksisterende certifikat kan ikke tolkes",
+"tls_cert_reason_not_yet_valid":      "eksisterende certifikat er endnu ikke gyldigt",
+"tls_cert_reason_expiring_soon":     "udløber snart (%s)",
+"tls_cert_reason_hostname_mismatch": "dækker ikke længere vært/IP (%s)"
 }
