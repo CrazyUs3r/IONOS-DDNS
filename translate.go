@@ -191,6 +191,9 @@ type Phrases struct {
 	DNSErrorEmptyHost, DNSErrorNoResolverConfigured, DNSErrorNilResolverForHost          string
 	DNSErrorNoIPsForHost, DNSFailoverLookupFailed, DNSResolverLabel                      string
 	DNSErrorAllResolversFailed, DNSErrorAllResolversFailedWithCause                      string
+	TLSCertRegenerating, TLSCertGenerated,	TLSCertReasonUnreadable     string
+	TLSCertReasonUnparseable, 	TLSCertReasonNotYetValid       string
+	TLSCertReasonExpiringSoon, TLSCertReasonHostnameMismatch  string
 
 	// Worker & Status
 	WorkerSlotAcquired, WorkerSlotReleased                                     string

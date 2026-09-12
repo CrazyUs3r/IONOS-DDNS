@@ -114,9 +114,16 @@ func addCertificateHost(raw string, dnsSet map[string]struct{}, ipSet map[string
 }
 
 func ensureSelfSignedCertificate(certFile, keyFile string, dnsNames []string, ipAddresses []net.IP) error {
-	if certificatePairIsUsable(certFile, keyFile, dnsNames, ipAddresses) {
+	usable, reason := certificatePairIsUsable(certFile, keyFile, dnsNames, ipAddresses)
+	if usable {
 		return nil
 	}
+
+	log(LogContext{
+		Level:   LogInfo,
+		Action:  ActionConfig,
+		Message: fmt.Sprintf(phrases().TLSCertRegenerating, reason),
+	})
 
 	if err := os.MkdirAll(filepath.Dir(certFile), 0o700); err != nil {
 		return fmt.Errorf("create TLS directory: %w", err)
@@ -196,37 +203,50 @@ func ensureSelfSignedCertificate(certFile, keyFile string, dnsNames []string, ip
 		return fmt.Errorf("verify generated TLS certificate: %w", err)
 	}
 
+	log(LogContext{
+		Level:  LogInfo,
+		Action: ActionConfig,
+		Message: fmt.Sprintf(
+			phrases().TLSCertGenerated,
+			template.NotAfter.Format(time.RFC3339),
+			strings.Join(dnsNames, ", "),
+		),
+	})
+
 	return nil
 }
 
-func certificatePairIsUsable(certFile, keyFile string, dnsNames []string, ipAddresses []net.IP) bool {
+func certificatePairIsUsable(certFile, keyFile string, dnsNames []string, ipAddresses []net.IP) (bool, string) {
 	pair, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil || len(pair.Certificate) == 0 {
-		return false
+		return false, phrases().TLSCertReasonUnreadable
 	}
 
 	certificate, err := x509.ParseCertificate(pair.Certificate[0])
 	if err != nil {
-		return false
+		return false, phrases().TLSCertReasonUnparseable
 	}
 
 	now := time.Now()
-	if now.Before(certificate.NotBefore) || certificate.NotAfter.Before(now.Add(30*24*time.Hour)) {
-		return false
+	if now.Before(certificate.NotBefore) {
+		return false, phrases().TLSCertReasonNotYetValid
+	}
+	if certificate.NotAfter.Before(now.Add(30 * 24 * time.Hour)) {
+		return false, fmt.Sprintf(phrases().TLSCertReasonExpiringSoon, certificate.NotAfter.Format(time.RFC3339))
 	}
 
 	for _, dnsName := range dnsNames {
 		if err := certificate.VerifyHostname(dnsName); err != nil {
-			return false
+			return false, fmt.Sprintf(phrases().TLSCertReasonHostnameMismatch, dnsName)
 		}
 	}
 	for _, ipAddress := range ipAddresses {
 		if err := certificate.VerifyHostname(ipAddress.String()); err != nil {
-			return false
+			return false, fmt.Sprintf(phrases().TLSCertReasonHostnameMismatch, ipAddress.String())
 		}
 	}
 
-	return true
+	return true, ""
 }
 
 func writeTLSFile(path string, data []byte, mode os.FileMode) error {
