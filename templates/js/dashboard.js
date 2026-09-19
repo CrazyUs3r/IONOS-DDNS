@@ -1,6 +1,7 @@
 // ============================================================================
 // SECURITY BOOTSTRAP — CSRF + declarative event handlers
 // ============================================================================
+
 const nativeFetch = window.fetch.bind(window);
 
 function currentCSRFToken() {
@@ -107,7 +108,6 @@ const DECLARATIVE_ACTIONS = Object.freeze({
 	runDNSPropagation: () => runDNSPropagation(),
 	resetMetrics: () => resetMetrics(),
 	restoreFullBackup: () => restoreFullBackup(),
-	saveCurrentSettingsSection: () => saveCurrentSettingsSection(),
 	saveToken: () => saveToken(),
 	toggleSettingsSubmenu: () => toggleSettingsSubmenu(),
 	sendNotifyTest: () => sendNotifyTest(),
@@ -251,6 +251,7 @@ function shouldRunDashboardBoot() {
 // ============================================================================
 // SIDEBAR NAVIGATION
 // ============================================================================
+
 function onlyWhenPageChanges(handler) {
 	return context => {
 		if (context.changed) return handler(context);
@@ -345,7 +346,6 @@ function captureDashboardState(section) {
 	if (!section) return null;
 
 	return {
-		endpointHTML: section.querySelector('#endpoint-status')?.innerHTML ?? '',
 		lastUpdateText: section.querySelector('#lastUpdate')?.textContent ?? '',
 		clockText: section.querySelector('#clock')?.textContent ?? '',
 		uptimeText: section.querySelector('#uptime')?.textContent ?? '',
@@ -354,11 +354,6 @@ function captureDashboardState(section) {
 
 function restoreDashboardState(section, state) {
 	if (!section || !state) return;
-
-	const endpointStatusElement = section.querySelector('#endpoint-status');
-	if (endpointStatusElement && state.endpointHTML && Object.keys(endpointStatus).length === 0) {
-		endpointStatusElement.innerHTML = state.endpointHTML;
-	}
 
 	const lastUpdate = section.querySelector('#lastUpdate');
 	if (lastUpdate && state.lastUpdateText) lastUpdate.textContent = state.lastUpdateText;
@@ -388,7 +383,6 @@ function capturePageState(page, section) {
 function initializeLoadedPage(page, section, state) {
 	if (page === 'dashboard') {
 		restoreDashboardState(section, state);
-		renderEndpointStatus();
 		ensureSystemStatsTicker();
 		refreshSystemStats();
 		return;
@@ -593,11 +587,6 @@ function navTo(page) {
 		el.style.display = el.dataset.section === page ? '' : 'none';
 	});
 
-	const topbarSaveBtn = document.getElementById('topbar-save-config-button');
-	if (topbarSaveBtn) {
-		topbarSaveBtn.classList.toggle('is-hidden', !isSettingsPage || page === 'settings-security');
-	}
-
 	const titleEl = document.getElementById('page-title');
 	if (titleEl) titleEl.textContent = pageConfig.title();
 
@@ -607,7 +596,6 @@ function navTo(page) {
 		changed,
 	});
 
-	// Keep periodic dashboard work alive only while the dashboard is actually visible.
 	syncDashboardActivity();
 
 	try { localStorage.setItem('nav-page', page); } catch { }
@@ -656,6 +644,7 @@ function closeSidebar() {
 // ============================================================================
 // 2FA SETTINGS INLINE SECTION
 // ============================================================================
+
 function initTOTPSettings(forceReload = false) {
 	const container = document.getElementById('totp-settings-content');
 	if (!container) return;
@@ -927,7 +916,6 @@ function initDomainDetailsState() {
 			details.open = true;
 		}
 
-		// Build the expensive IP timeline only for cards that are actually open.
 		if (details.open) {
 			ensureIPTimeline(details);
 		}
@@ -1299,7 +1287,6 @@ function startStatusUptimeClock() {
 function updateMetrics(m) {
 	const setTxt = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
 
-	// Keep lightweight state current, but do not repaint hidden page content.
 	setStatusUptime(m.uptime_secs);
 	if (document.hidden) {
 		if (currentPage === 'metrics') pageLoadedAt.set('metrics', 0);
@@ -1574,8 +1561,6 @@ function connectWS() {
 				updateDomainDisplay(msg.data).catch(err =>
 					console.error('domain_update error:', err)
 				);
-			} else if (msg.type === 'ip_check_result') {
-				updateEndpointStatus(msg.data);
 			}
 		}
 
@@ -2030,6 +2015,37 @@ function _parseList(raw) { return (raw || '').split(',').map(s => s.trim()).filt
 function _setVal(id, v) { const el = document.getElementById(id); if (!el || el === document.activeElement) return; const next = v != null ? String(v) : ''; if (el.value !== next) el.value = next; }
 function _setChk(id, v) { const el = document.getElementById(id); if (!el || el === document.activeElement) return; const next = !!v; if (el.checked !== next) el.checked = next; updateCheckboxLabel(el); }
 
+function debounce(fn, wait) {
+	let t;
+	return (...args) => {
+		clearTimeout(t);
+		t = setTimeout(() => fn(...args), wait);
+	};
+}
+
+const AUTOSAVE_DEBOUNCE_MS = 700;
+const autosaveSystem = debounce(() => saveSystemSettings(), AUTOSAVE_DEBOUNCE_MS);
+const autosaveNotify = debounce(() => saveNotifySettings(), AUTOSAVE_DEBOUNCE_MS);
+
+function wireAutosave(sectionAttr, handler) {
+	const container = document.querySelector(`.page-section[data-section="${sectionAttr}"]`);
+	if (!container || container.dataset.autosaveWired === '1') return;
+	container.dataset.autosaveWired = '1';
+
+	// Port-Felder lösen bei Änderung einen Server-Restart aus (der laufende
+	// Listener wird neu gebunden). Deshalb hier nicht auf jeden Tastendruck
+	// reagieren, sondern erst wenn das Feld verlassen/bestätigt wird.
+	const restartSensitiveIds = new Set(['cfg-http-port', 'cfg-https-port']);
+
+	const trigger = e => {
+		if (!e.target.matches('input, select, textarea')) return;
+		if (e.type === 'input' && restartSensitiveIds.has(e.target.id)) return;
+		handler();
+	};
+	container.addEventListener('input', trigger);
+	container.addEventListener('change', trigger);
+}
+
 function _initSettingsFields() {
 	isSettingsOpen = true;
 
@@ -2044,7 +2060,8 @@ function _initSettingsFields() {
 	const values = {
 		'cfg-ip-mode': sys.ip_mode || 'BOTH',
 		'cfg-interval': sys.interval || 300,
-		'cfg-health-port': sys.health_port || '8080',
+		'cfg-http-port': sys.http_port || '8080',
+		'cfg-https-port': sys.https_port || '8443',
 		'cfg-iface': sys.iface_name || '',
 		'cfg-dns': (sys.dns_servers || []).join(', '),
 		'cfg-max-log': sys.max_log_lines || 500,
@@ -2117,6 +2134,9 @@ function _initSettingsFields() {
 		else setTimeout(fn, 50);
 	};
 	deferRender(renderSettingsDomainList);
+
+	wireAutosave('settings-system', autosaveSystem);
+	wireAutosave('settings-notify', autosaveNotify);
 }
 
 function closeSettings() {
@@ -2427,6 +2447,7 @@ function addDomainToList() {
 
 	renderSettingsDomainList();
 	resetDomainForm();
+	saveDomainSettings();
 
 	fqdnInput.value = '';
 	[
@@ -2461,12 +2482,11 @@ function cancelEdit() {
 function removeDomainFromList(index) {
 	tempDomainConfigs.splice(index, 1);
 	renderSettingsDomainList();
+	saveDomainSettings();
 }
 
 async function postSettingsSave(endpoint, body) {
 	const token = sessionStorage.getItem('triggerToken') || '';
-
-	showLoadingToast(tr('loading_saving', '⏳ Speichere Konfiguration...'));
 
 	try {
 		const r = await fetch(endpoint, {
@@ -2488,8 +2508,6 @@ async function postSettingsSave(endpoint, body) {
 	} catch (e) {
 		showToast(tr('connection_error', '❌ Verbindungsfehler'), 'error');
 		return false;
-	} finally {
-		hideLoadingToast();
 	}
 }
 
@@ -2497,7 +2515,8 @@ function collectSystemFieldsPayload() {
 	return {
 		ip_mode: _getVal('cfg-ip-mode') || 'BOTH',
 		interval: parseInt(_getVal('cfg-interval'), 10) || 300,
-		health_port: _getVal('cfg-health-port') || '8080',
+		http_port: _getVal('cfg-http-port') || '8080',
+		https_port: _getVal('cfg-https-port') || '8443',
 		iface_name: _getVal('cfg-iface'),
 		dns_servers: _parseList(_getVal('cfg-dns')),
 		max_log_lines: parseInt(_getVal('cfg-max-log'), 10) || 500,
@@ -2554,49 +2573,42 @@ function collectNotifyFieldsPayload() {
 }
 
 async function saveSystemSettings() {
-	if (!confirm(tr('save_config_confirm', 'Einstellungen speichern?'))) return;
-
 	const token = sessionStorage.getItem('triggerToken') || '';
 	const newLang = _getVal('cfg-lang');
+	const langChanged = Boolean(newLang && newLang !== (initialSystem?.lang || 'de'));
+
 	const ok = await postSettingsSave('/api/settings/system/save', collectSystemFieldsPayload());
 	if (!ok) return;
 
-	if (newLang && newLang !== (initialSystem?.lang || 'de')) {
+	if (langChanged) {
 		await fetch('/api/set-language?lang=' + encodeURIComponent(newLang), {
 			method: 'POST',
 			headers: token ? { 'X-Trigger-Token': token } : {}
 		});
+		showToast(tr('saved_reload', '✅ Gespeichert! Seite wird neu geladen...'), 'success');
+		setTimeout(() => location.reload(), 1500);
+		return;
 	}
 
-	showToast(tr('saved_reload', '✅ Gespeichert! Seite wird neu geladen...'), 'success');
-	setTimeout(() => location.reload(), 1500);
+	await ensureInitialConfig({ force: true });
+	showToast(tr('autosaved', '💾 Automatisch gespeichert'), 'success');
 }
 
 async function saveNotifySettings() {
-	if (!confirm(tr('save_config_confirm', 'Einstellungen speichern?'))) return;
-
 	const ok = await postSettingsSave('/api/settings/notify/save', collectNotifyFieldsPayload());
 	if (!ok) return;
 
-	showToast(tr('saved_reload', '✅ Gespeichert! Seite wird neu geladen...'), 'success');
-	setTimeout(() => location.reload(), 1500);
+	await ensureInitialConfig({ force: true });
+	showToast(tr('autosaved', '💾 Automatisch gespeichert'), 'success');
 }
 
 async function saveDomainSettings() {
-	if (!confirm(tr('save_config_confirm', 'Einstellungen speichern?'))) return;
-
 	const ok = await postSettingsSave('/api/settings/domains/save', { domain_configs: tempDomainConfigs });
 	if (!ok) return;
 
-	showToast(tr('saved_reload', '✅ Gespeichert! Seite wird neu geladen...'), 'success');
-	setTimeout(() => location.reload(), 1500);
-}
-
-function saveCurrentSettingsSection() {
-	if (currentPage === 'settings-system') return saveSystemSettings();
-	if (currentPage === 'settings-notify') return saveNotifySettings();
-	if (currentPage === 'settings-domains') return saveDomainSettings();
-	// settings-security has no server-side save — token lives in sessionStorage via saveToken()
+	await ensureInitialConfig({ force: true });
+	renderSettingsDomainList();
+	showToast(tr('autosaved', '💾 Automatisch gespeichert'), 'success');
 }
 
 function resetMetrics() {
@@ -2772,8 +2784,11 @@ function deleteDomain(domain, btn) {
 // ============================================================================
 function _ipv64DomainAction(action) {
 	const input = document.getElementById('ipv64-domain-input');
+	const suffixSelect = document.getElementById('ipv64-domain-suffix');
 	const result = document.getElementById('ipv64-domain-result');
-	const fqdn = (input ? input.value : '').trim().toLowerCase();
+	const prefix = (input ? input.value : '').trim().toLowerCase();
+	const suffix = (suffixSelect ? suffixSelect.value : '').trim().toLowerCase();
+	const fqdn = prefix ? `${prefix}.${suffix}` : suffix;
 	const apiTokenInput = document.getElementById('ipv64-api-token-input');
 	const apiToken = (apiTokenInput ? apiTokenInput.value : '').trim();
 
@@ -2833,9 +2848,13 @@ function _ipv64DomainAction(action) {
 }
 
 function ipv64AddDomain() { _ipv64DomainAction('add'); }
+
 function ipv64DeleteDomain() {
 	const input = document.getElementById('ipv64-domain-input');
-	const fqdn = (input ? input.value : '').trim();
+	const suffixSelect = document.getElementById('ipv64-domain-suffix');
+	const prefix = (input ? input.value : '').trim().toLowerCase();
+	const suffix = (suffixSelect ? suffixSelect.value : '').trim().toLowerCase();
+	const fqdn = prefix ? `${prefix}.${suffix}` : suffix;
 	if (!fqdn) { showToast('❌ ' + tr('fqdn_missing', 'FQDN fehlt'), 'error'); return; }
 	if (!confirm(trf('ipv64_domain_delete_confirm', { fqdn }, 'IPv64 Domain "{fqdn}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.'))) return;
 	_ipv64DomainAction('delete');
@@ -2971,6 +2990,7 @@ function clearDebugLog() {
 // ============================================================================
 // USER MANAGEMENT
 // ============================================================================
+
 function loadUsers() {
 	const container = document.getElementById('users-list');
 	if (!container) return;
@@ -3175,68 +3195,6 @@ function trf(key, vars = {}, fallback = '') {
 	return text;
 }
 
-const endpointStatus = Object.create(null);
-const endpointChipElements = new Map();
-
-function endpointHost(url) {
-	try {
-		return new URL(url).hostname;
-	} catch {
-		return url;
-	}
-}
-
-function endpointAge(timestamp) {
-	const difference = Math.max(0, Date.now() - timestamp);
-	if (difference < 1000) return `${difference}ms`;
-	if (difference < 60000) return `${(difference / 1000).toFixed(0)}s`;
-	return `${Math.round(difference / 60000)}m`;
-}
-
-function updateEndpointChip(container, url, status) {
-	let chip = endpointChipElements.get(url);
-	if (!chip?.isConnected || chip.parentElement !== container) {
-		chip = document.createElement('span');
-		chip.className = 'endpoint-chip';
-		chip.dataset.endpointUrl = url;
-		endpointChipElements.set(url, chip);
-		container.appendChild(chip);
-	}
-
-	const ageElement = document.createElement('span');
-	ageElement.className = 'endpoint-chip-age';
-	ageElement.textContent = endpointAge(status.ts);
-	chip.replaceChildren(
-		document.createTextNode(`${status.ok ? '✅' : '❌'} ${endpointHost(url)} `),
-		ageElement,
-	);
-}
-
-function updateEndpointStatus(data) {
-	const url = String(data?.url || '').trim();
-	if (!url) return;
-	endpointStatus[url] = { ok: Boolean(data.ok), ts: Date.now() };
-	if (currentPage === 'dashboard' && !document.hidden) renderEndpointStatus(url);
-}
-
-function renderEndpointStatus(changedURL = '') {
-	const container = document.getElementById('endpoint-status');
-	if (!container) return;
-
-	const entries = Object.entries(endpointStatus);
-	if (entries.length === 0) return;
-	container.querySelector('.endpoint-waiting')?.remove();
-
-	if (changedURL && endpointStatus[changedURL]) {
-		updateEndpointChip(container, changedURL, endpointStatus[changedURL]);
-		return;
-	}
-
-	for (const [url, status] of entries) {
-		updateEndpointChip(container, url, status);
-	}
-}
-
 function showLoadingToast(text = '⏳ Speichere...') {
 	let el = document.getElementById('loading-toast');
 	if (!el) {
@@ -3277,6 +3235,7 @@ function hideLoadingToast() {
 // ============================================================================
 // ANIMATED BACKGROUND — sky/sun/moon init (mirrors auth page)
 // ============================================================================
+
 (function () {
 	const sun = document.querySelector('.auth-sun');
 	if (!sun) return;
