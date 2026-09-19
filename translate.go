@@ -7,14 +7,13 @@ package main
 
 type Phrases struct {
 	// Basis & Dashboard
-	Startup, Shutdown, NoZones, Update, Current, LoginSubtitle, Username                  string
-	DashboardTitle, StatusOk, StatusErr, LastUpdate, InfraHeading                         string
-	ServiceStarted, DashboardStarted, ServerError, SystemEvents, CriticalAPIError         string
-	PanicLoadingLanguage, TryingLoadLanguage, LanguageFileNotFound                        string
-	TryingFallbackEn, JSONParseError, LanguageLoaded, MissingTranslationKey               string
-	HTTPPool, HourlyLimitEst, RequestsLabel, UsageLast60Min                               string
+	Startup, Shutdown, Update, Current, LoginSubtitle, Username                           string
+	DashboardTitle, StatusOk, StatusErr, LastUpdate, InfraHeading, NavDashboard           string
+	ServiceStarted, DashboardStarted, ServerError, SystemEvents                           string
+	PanicLoadingLanguage, TryingLoadLanguage, JSONParseError, LanguageLoaded              string
+	MissingTranslationKey, HourlyLimitEst, RequestsLabel, UsageLast60Min, AutoSaved       string
 	MaxLogLines, MaxAPIRetries, MaxConcurrent, Interval, EmptyTranslationValue            string
-	IPEndpointStatusTitle, IPEndpointStatusWaiting, Password, LoginButton                 string
+	Password, LoginButton                                                                 string
 	DebugLogTitle, DebugLogLive, DebugFilterPlaceholder, LoginHint, LoginTitle            string
 	DebugClearBtn, DebugAutoscroll, DebugWaitingMsg, SetupHeading, SetupSubtitle          string
 	SettingsCFProxyLabel, SetupToken, PasswordMinHint, PasswordConfirm, SetupButton       string
@@ -32,9 +31,9 @@ type Phrases struct {
 	GenericErrorJS, RoleAdminJS, RoleEditorJS, RoleViewerJS, AuthUserMinJS, AuthPassMinJS string
 	UserLoading, UserNewTitle, UserPlaceholderName, UserPlaceholderPass                   string
 	UserRoleViewer, UserRoleEditor, UserRoleAdmin, UserBtnCreate, NotifyTestDesc          string
-	IPv64DomainManagement, IPv64DomainFQDN, IPv64DomainPlaceholder, IPv64ActionAdd        string
-	ProviderStatusOK, ProviderStatusError, IPv64DomainPlaceholderToken                    string
-	IPv64DomainAPITokenOptional, LogDeleteFailedJS, LogEntryDeletedJS                     string
+	IPv64DomainFQDN, IPv64DomainPlaceholder, IPv64ActionAdd                               string
+	IPv64DomainPlaceholderToken, IPv64DomainAPITokenOptional                              string
+	LogDeleteFailedJS, LogEntryDeletedJS                                                  string
 	NavAuditJS, PageReloadFailedJS, SettingsReloadFailedJS, ProviderInvalidJS             string
 	UpdateRunningJS, DNScaleAPIKeyMissingJS, FebasUpdateURLMissingJS                      string
 	SettingsCheckboxActiveJS, SettingsCheckboxInactiveJS                                  string
@@ -69,7 +68,7 @@ type Phrases struct {
 	// Diagnose / Backup
 	NavOverview, NavMonitoring, NavTools, NavConfig, NavDiagnoseJS, NavBackupJS string
 	NavDashboardJS, NavDomainsJS, NavMetricsJS, NavLogsJS, NavDebugJS           string
-	NavSettingsJS, NavDashboard, NavDomains, IPv64ActionDelete                  string
+	NavDomains, IPv64ActionDelete                                               string
 
 	DiagnoseTitle, DiagnoseRefreshBtn, DiagnoseLoading, DiagnoseLoadFailed         string
 	DiagnoseConnectionFailed                                                       string
@@ -96,19 +95,19 @@ type Phrases struct {
 	DiagnoseNoProviders, DiagnoseNoNotifiers, DiagnoseNoConfigWarnings             string
 	DiagnoseFileMissing, DiagnoseBytes, DiagnoseYes, DiagnoseNo                    string
 
-	BackupTitle, BackupCreateTitle, BackupCreateDesc, BackupDownloadBtn        string
-	BackupSecretsHint, BackupRestoreTitle, BackupRestoreDesc, BackupChooseFile string
-	BackupRestoreConfig, BackupRestoreStatus, BackupRestoreUsers               string
-	BackupRestoreStartBtn, BackupAdminOnly                                     string
-	BackupDownloadSuccess, BackupDownloadFailed, BackupSelectFile              string
-	BackupSelectArea, BackupConfirmTitle, BackupConfirmConfig                  string
-	BackupConfirmStatus, BackupConfirmUsers, BackupConfirmHint                 string
-	BackupRestoreRunning, BackupRestoreSuccessFormat, BackupRestoreFailed      string
-	BackupAdminRequired, BackupNothingSelected, BackupFileMissing              string
-	BackupInvalidJSONFormat, BackupContainsNoConfig, BackupContainsNoStatus    string
-	BackupContainsNoUsers, BackupConfigSaveFailedFormat                        string
-	BackupStatusRestoreFailedFormat, BackupUsersRestoreFailedFormat            string
-	BackupRestoredLogFormat                                                    string
+	BackupTitle, BackupCreateTitle, BackupCreateDesc, BackupDownloadBtn     string
+	BackupSecretsHint, BackupRestoreTitle, BackupRestoreDesc                string
+	BackupRestoreConfig, BackupRestoreStatus, BackupRestoreUsers            string
+	BackupRestoreStartBtn, BackupAdminOnly                                  string
+	BackupDownloadSuccess, BackupDownloadFailed, BackupSelectFile           string
+	BackupSelectArea, BackupConfirmTitle, BackupConfirmConfig               string
+	BackupConfirmStatus, BackupConfirmUsers, BackupConfirmHint              string
+	BackupRestoreRunning, BackupRestoreSuccessFormat, BackupRestoreFailed   string
+	BackupAdminRequired, BackupNothingSelected, BackupFileMissing           string
+	BackupInvalidJSONFormat, BackupContainsNoConfig, BackupContainsNoStatus string
+	BackupConfigSaveFailedFormat                                            string
+	BackupStatusRestoreFailedFormat, BackupUsersRestoreFailedFormat         string
+	BackupRestoredLogFormat                                                 string
 
 	// Statistiken & Metriken
 	SuccessRate, AvgLatency, Errors, RequestHistory, LatencyHistory, APIPerformance            string
@@ -134,8 +133,7 @@ type Phrases struct {
 	// Validierung & allgemeine Fehler
 	NoDomains, InvalidPort, IntervalTooSmall, ShortIntervalWarning                             string
 	InvalidIPMode, InvalidToken, ConfigErrorPrefix                                             string
-	DomainIsEmpty, DomainTooLong, InvalidDomainFormat                                          string
-	LabelTooLong, InvalidLabel                                                                 string
+	DomainIsEmpty, DomainTooLong, InvalidDomainFormat, LabelTooLong, InvalidLabel              string
 	APIErrorBadRequest, APIErrorUnauthorized, APIErrorPaymentRequired                          string
 	APIErrorForbidden, APIErrorNotFound, APIErrorMethodNotAllowed                              string
 	APIErrorNotAcceptable, APIErrorProxyAuthenticationRequired, APIErrorRequestTimeout         string
@@ -156,25 +154,21 @@ type Phrases struct {
 	APIErrorServerErrorGeneric, APIErrorClientErrorGeneric                                     string
 
 	// Logging
-	LogRotated, LogRotationError                                    string
-	LogQueueFull, LogWriterPanic, LogCannotOpenFile, LogWriteFailed string
-	RotationWorkerPanic, LogFlushQueueNotEmptyWithN                 string
-	LogFileCloseFailed, RotationQueued, RotationQueueFull           string
-	RotationScannerError, NoLanguageDataLoaded                      string
+	LogRotated, LogQueueFull, LogCannotOpenFile, LogWriteFailed string
+	RotationWorkerPanic, RotationQueued, RotationQueueFull      string
 
 	// DNS & Netzwerk
 	RecordFound, RecordCurrent, NoRecordFound, RecordUpdateNeeded, WouldSet              string
 	APICall, PayloadSent, ReceivedIP, CheckingInterface, InterfaceNotFound               string
 	AddressesNotReadable, NoIPv6OnInterface                                              string
-	Attempt, NetworkError, RetryIn, Success, BodyReadError, NonRetryableError            string
-	MaxAttemptsReached, RetryScheduled, ContextCancelled, ContextExpired                 string
+	Attempt, RetryIn, Success, BodyReadError                                             string
 	RequestCreationFailed, HTTPError, FailedCloseResponseBody                            string
 	BadStatusCode, InvalidIPDetected, ExpectedIPv4ButGot, ExpectedIPv6ButGot             string
 	FallbackFailed, NoIPEndpointsConfigured, AllIPEndpointsFailed                        string
-	IPv6PublicFallback, IPv6FallbackEndpoints, IPv4CheckFailed, IPv6CheckFailed          string
+	IPv6PublicFallback, IPv6FallbackEndpoints                                            string
 	IPv4RequiredButFailed, IPv6RequiredButFailed, BothIPVersionsFailed                   string
 	PublicIPDetectedVia, IPv6ViaInterface, IPv4Current, IPv6Current                      string
-	DomainLoopCancelled, PanicOccurred, WorkerCancelledContext                           string
+	DomainLoopCancelled, PanicOccurred                                                   string
 	NoZonesFoundForProvider, NoZoneFound, MatchedZoneEmptyID                             string
 	NonRecoverableIPv64Error, NonRecoverableIPv4Error, NonRecoverableIPv6Error           string
 	HTTPTimingFormat, HTTPTimingRoundTrip, HTTPTimingDNS, HTTPTimingConnect              string
@@ -186,17 +180,16 @@ type Phrases struct {
 	HTTPDebugRequestDump, HTTPDebugResponseBodyTruncated, HTTPDebugResponseDump          string
 	HTTPDebugPeekResponseBodyFailed, HTTPDebugCloseResponseBodyFailed                    string
 	MQTTDebugPublishDump, HTTPDebugBodyTruncated, HTTPPoolConfigured                     string
-	DNSErrorNoMatchingIP, HTTPRedirectTooMany, HTTPRedirectCrossHostBlocked              string
+	DNSErrorNoMatchingIP, HTTPRedirectTooMany                                            string
 	DNSErrorDialNoIPs, HTTPDialAttemptFailed, HTTPDialAllFailed                          string
 	DNSErrorEmptyHost, DNSErrorNoResolverConfigured, DNSErrorNilResolverForHost          string
 	DNSErrorNoIPsForHost, DNSFailoverLookupFailed, DNSResolverLabel                      string
 	DNSErrorAllResolversFailed, DNSErrorAllResolversFailedWithCause                      string
-	TLSCertRegenerating, TLSCertGenerated,	TLSCertReasonUnreadable     string
-	TLSCertReasonUnparseable, 	TLSCertReasonNotYetValid       string
-	TLSCertReasonExpiringSoon, TLSCertReasonHostnameMismatch  string
+	TLSCertRegenerating, TLSCertGenerated, TLSCertReasonUnreadable                       string
+	TLSCertReasonUnparseable, TLSCertReasonNotYetValid                                   string
+	TLSCertReasonExpiringSoon, TLSCertReasonHostnameMismatch                             string
 
 	// Worker & Status
-	WorkerSlotAcquired, WorkerSlotReleased                                     string
 	NoZoneFoundForDomain, NoRecordsInCache, CheckingIPv4, CheckingIPv6         string
 	UpdateFailed, ChangesDetected, NoChangesNeeded                             string
 	SchedulerStarted, SchedulerCompleted                                       string
@@ -207,10 +200,10 @@ type Phrases struct {
 	HealthDegradedSuccessRate, HealthLastSchedulerFailed                       string
 
 	// Configuration
-	ConfigHeading, ConfigInterval, ConfigIPMode, ConfigInterface                        string
-	ConfigHealthPort, ConfigDryRun                                                      string
-	ConfigLogDir, ConfigLanguage, ConfigDir, ConfigLanguageDir, ConfigLogsDir           string
-	LanguageDirCreateFailed, LanguageFileLoadFailed, MetricsLoadFailed, InvalidInterval string
+	ConfigHeading, ConfigInterval, ConfigIPMode, ConfigInterface         string
+	ConfigHTTPPort, ConfigDryRun, ConfigLogDir, ConfigLanguage           string
+	ConfigDir, ConfigLanguageDir, ConfigLogsDir, LanguageDirCreateFailed string
+	LanguageFileLoadFailed, MetricsLoadFailed, InvalidInterval           string
 
 	// System
 	MaintenanceStarting, HTTPConnectionsClosed                            string
@@ -245,23 +238,21 @@ type Phrases struct {
 	HetznerAuthRequired, FebasUpdateURLRequired                                    string
 	DomainParamMissing, DomainStillActiveInConfig, NicIPv64Updates                 string
 	NoStatusFileFound, DomainNotFoundInStatus                                      string
-	DomainDeletedFromStatusLog, DomainRemovedFromStatus                            string
 	FailedToCreateConfigDirectoryFormat, CreateConfigDirectoryFormat               string
 	FailedToMarshalConfigFormat, MarshalConfigFormat                               string
-	FailedToWriteTempConfigFileFormat, WriteTempConfigFileFormat                   string
 	FailedToReplaceConfigFileFormat, ReplaceConfigFileFormat                       string
 	ConfigJSONMissingMigratingFromDomainsConfig, InvalidDomainsConfigJSONFormat    string
 	CouldNotCreateConfigJSONFormat, ConfigJSONSuccessfullyCreatedFromEnv           string
 	NoConfigJSONAndNoDomainsConfigFoundUsingLegacyMode                             string
 	IonosRequiresAPIPrefixAndAPISecret, CloudflareRequiresTokenOrEmailAndAPISecret string
 	Ipv64RequiresToken, UnknownProviderFormat                                      string
-	MultiProvider, DomainSingular, DomainPlural, ZoneSingular, ZonePlural          string
-	ProviderLabel, ZoneLabel, NoRelevantRecords, ConfigProviderCount               string
+	MultiProvider, DomainSingular, DomainPlural                                    string
+	ProviderLabel, ConfigProviderCount                                             string
 
 	// Ionos
 	HTTPStatusLatency, IonosNetworkErrorNoRetry, IonosRecordsLoadFailed                        string
 	IonosRecordsParseFailed, IonosInvalidCachedRecordID, IonosRefreshInvalidCachedRecordFailed string
-	IonosCreateReconciled, IonosCreateReconcileFailed, IonosSuccessResponseParseFailed         string
+	IonosCreateReconciled, IonosSuccessResponseParseFailed                                     string
 	IonosCreatedRecordIDLoadFailed, IonosCreatedRecordIDMissing, IonosUnexpectedResponseBody   string
 	IonosAPIError, IonosAPIErrorWithIP, IonosZonesLoadFailed, IonosEmptyAPIResponse            string
 	IonosZonesParseFailed, IonosZonesFiltered, IonosCacheMissingRealRecordID                   string
@@ -278,50 +269,25 @@ type Phrases struct {
 	FebasTemporaryRetry, FebasResponseClose, FebasDNSLookupFailed      string
 
 	// DNScale
-	DNScaleAPIKeyRequired      string
-	DNScaleCacheSaveFailed     string
-	DNScaleZonesLoadedFromDisk string
-	// DNScale API
-	DNScaleAPIFailed           string
-	DNScaleAttempt             string
-	DNScaleNetworkErrorNoRetry string
-	DNScaleMaxAttempts         string
-
-	// DNScale Zones
-	DNScaleZonesLoadFailed  string
-	DNScaleEmptyAPIResponse string
-	DNScaleZonesParseFailed string
-	DNScaleZonesFiltered    string
-
-	// DNScale Records
-	DNScaleRecordsLoadFailed          string
-	DNScaleRecordsParseFailed         string
-	DNScaleRecordArrow                string
-	DNScaleSuccessResponseParseFailed string
-
-	// DNScale Errors
-	DNScaleAPIError       string
-	DNScaleAPIErrorWithIP string
-
-	// DNScale Cache
-	DNScaleCacheZoneNotFound string
-	DNScaleCacheRecordAdded  string
-	DNScaleCacheUpdated      string
-
-	// DNScale Cleanup
-	CleanupStartDNScale    string
-	CleanupOrphanedDNScale string
+	DNScaleAPIKeyRequired, DNScaleCacheSaveFailed, DNScaleZonesLoadedFromDisk string
+	DNScaleAPIFailed, DNScaleAttempt, DNScaleNetworkErrorNoRetry              string
+	DNScaleMaxAttempts                                                        string
+	DNScaleZonesLoadFailed, DNScaleEmptyAPIResponse, DNScaleZonesParseFailed  string
+	DNScaleZonesFiltered, DNScaleRecordsLoadFailed, DNScaleRecordsParseFailed string
+	DNScaleRecordArrow, DNScaleSuccessResponseParseFailed                     string
+	DNScaleAPIError, DNScaleAPIErrorWithIP, DNScaleCacheZoneNotFound          string
+	DNScaleCacheRecordAdded, DNScaleCacheUpdated                              string
+	CleanupStartDNScale, CleanupOrphanedDNScale                               string
 
 	// Printing
-	IonosInfrastructureLoadFailed, LoadHetznerCloudZoneLoadFailed, LoadHetznerDNSZoneLoadFailed string
-	LoadCloudflareLoadFailed, LoadIPv64InfrastructureLoadFailed, MissingDomainConfigForProvider string
-	UnsupportedProvider, NoCachedIPv64InfrastructureRecords                                     string
-	DomainConfiguredMoreThanOnceFormat, InvalidDomainIPModeFormat, InvalidNegativeTTLFormat     string
-	MultipleProviderAccountsNotSupportedFormat, MissingDomainConfigurationFormat                string
-	InvalidDomainRecordModeFormat, CNAMETargetRequiredFormat                                    string
-	CNAMEUnsupportedProviderFormat, CNAMETargetInvalidFormat                                    string
-	UnsupportedInfrastructureProviderFormat, UpdateAlreadyRunning                               string
-	ProviderZonesFormat, ZoneFormat, NoRelevantRecordsFound                                     string
+	NoCachedIPv64InfrastructureRecords                                                      string
+	DomainConfiguredMoreThanOnceFormat, InvalidDomainIPModeFormat, InvalidNegativeTTLFormat string
+	MultipleProviderAccountsNotSupportedFormat, MissingDomainConfigurationFormat            string
+	InvalidDomainRecordModeFormat, CNAMETargetRequiredFormat                                string
+	CNAMEUnsupportedProviderFormat, CNAMETargetInvalidFormat                                string
+	UnsupportedInfrastructureProviderFormat, UpdateAlreadyRunning                           string
+	ProviderZonesFormat, ZoneFormat, NoRelevantRecordsFound                                 string
+
 	// MQTT
 	MqttCAFileReadError, MqttCAFileInvalid, MqttConnected, MqttConnectionLost                     string
 	MqttConnecting, MqttInitialConnectionPending, MqttConnectFailed, MqttSubscribeTimeout         string
@@ -364,8 +330,7 @@ type Phrases struct {
 	NotifyEventLoginFailedLabel, NotifyEventLoginFailedDesc                            string
 	NotifyEventLogoutLabel, NotifyEventLogoutDesc                                      string
 	NotifyTelegramActive, NotifyGotifyActive, NotifyWebhookActive                      string
-	NotifyNtfyActive                                                                   string
-	NotifyTestSuccess, NotifyTestUnauthorized, NotifyTestError                         string
+	NotifyNtfyActive, NotifyTestSuccess, NotifyTestUnauthorized, NotifyTestError       string
 	NotifyTestConnError, NotifyTestBody, NotifyBtnSending                              string
 	NotifyBtnTest, NotifyNoNotifier, NotifyStatSuccess                                 string
 	TgCmdStart, TgCmdStatus, TgCmdMetrics, TgCmdDomains                                string
@@ -393,12 +358,12 @@ type Phrases struct {
 
 	// Cache & persistence
 	ErrRecordCacheNil, ErrCacheDirCreate, ErrCacheMarshal               string
-	ErrCacheWrite, ErrCacheRename, FileCloseError, ScannerError         string
-	CacheSavedZones, CacheSavedDomains, ZoneCacheHitSkipAPI             string
+	ErrCacheWrite, FileCloseError, ScannerError                         string
+	CacheSavedZones, ZoneCacheHitSkipAPI                                string
 	CacheFileNotFound, CacheLoadedZones, CacheLoadedDomains             string
 	IPv64CacheNoData, CacheLoadError, CacheRecordsLoaded                string
 	IPv64CacheRecordsLoaded, IPv64CacheLoadDiskFailed                   string
-	ErrParseStatusFile, ErrMarshalStatusFile, ErrWriteTempStatusFile    string
+	ErrMarshalStatusFile, ErrWriteTempStatusFile                        string
 	ErrReplaceStatusFile, ErrUpdateDomainsCache, ErrMetricsCacheMarshal string
 	ErrResponseWrite, ErrPanicRecovered, CacheRefresherStopped          string
 	ErrPanicRefreshCycle, ErrDomainCacheRefresh, ErrMetricsCacheRefresh string
@@ -416,16 +381,14 @@ type Phrases struct {
 	CleanupSkipOrphaned, CleanupOrphanedCF, CleanupOrphanedIonos   string
 
 	// Ionos
-	IonosAPIFailed, IonosMaxAttempts                                 string
-	IonosCacheZoneNotFound, IonosCacheUpdated, IonosCacheRecordAdded string
-	IonosPayload, IonosRecordArrow, IonosRetryable, IonosErrDetail   string
-	IonosReloadAfterTypeChangeFailed                                 string
+	IonosAPIFailed, IonosMaxAttempts, IonosReloadAfterTypeChangeFailed string
+	IonosCacheZoneNotFound, IonosCacheUpdated, IonosCacheRecordAdded   string
+	IonosPayload, IonosRecordArrow, IonosErrDetail                     string
 
 	// Cloudflare
-	CFNoCredentials, CFTokenEmpty, CFHTMLResponse string
-	CFInvalidJSON, CFAPIFailed, CFZoneLoadError   string
-	CFZoneParseError, CFRecordsParseError         string
-	CFUnmanagedRecord                             string
+	CFNoCredentials, CFTokenEmpty, CFHTMLResponse, CFAPIFailed string
+	CFZoneLoadError, CFZoneParseError, CFRecordsParseError     string
+	CFUnmanagedRecord                                          string
 
 	// IPv64
 	IPv64BaseDomainNotFound, IPv64CDNIgnoredV4, IPv64CDNIgnoredV6       string
@@ -452,18 +415,17 @@ type Phrases struct {
 	SettingsTitle, SettingsSecurity, SettingsTriggerToken                      string
 	SettingsTokenPlaceholder, SettingsTokenSave                                string
 	SettingsSystem, SettingsIPMode, SettingsInterval                           string
-	SettingsHealthPort, SettingsIface, SettingsIfaceHint                       string
+	SettingsHTTPPort, SettingsHTTPSPort, SettingsIface, SettingsIfaceHint      string
 	SettingsDNS, SettingsMaxLog, SettingsMaxRetries                            string
 	SettingsMaxConcurrent, SettingsHourlyLimit                                 string
 	SettingsLanguage, SettingsDryRun, SettingsDryRunHint                       string
 	SettingsCheckboxActive, SettingsCheckboxDeactive, SettingsAddDomain        string
 	SettingsDomains, SettingsAddBtn, SettingsCancelBtn, SettingsCFOr           string
-	SettingsNotify, SettingsNotifyEnabled, SettingsNotifyOn                    string
+	SettingsNotify, SettingsNotifyEnabled                                      string
 	SettingsNotifyEvents, SettingsTGToken, SettingsTGChatID                    string
 	SettingsTokenUnchanged, SettingsDNSHint, SettingsOptionalPlaceholder       string
-	SettingsSaveBtn, SettingsSaveHint, SettingsRestartHint                     string
-	SettingsThemeHint, SettingsNotifierHint, SettingsUpdateHint                string
-	SettingsExportHint, SettingsNotifyHint                                     string
+	SettingsRestartHint, SettingsThemeHint, SettingsNotifierHint               string
+	SettingsExportHint, SettingsNotifyHint, SettingsUpdateHint                 string
 	SettingsDebugVerboseHint, SettingsDebugHTTPHint                            string
 	SettingsIfacePlaceholder, SettingsAPIPrefix, SettingsAPISecret             string
 	SettingsCFEmail, SettingsCFGlobalKey, NotifyMqttActive                     string
@@ -475,9 +437,8 @@ type Phrases struct {
 	SettingsNtfyURL, SettingsNtfyToken, SettingsNtfyTopic, SettingsNtfyHeading string
 	SettingsIPv4Endpoints, SettingsIPv6Endpoints                               string
 	SettingsAddBtnJS, NotifyEmailActive, SettingsEmailHeading                  string
-	EditDomainTitleJS, EditDomainSavedJS, EditDomainCancelledJS                string
-	SettingsUserManagement                                                     string
-	SettingsCNAMETargetPlaceholder                                             string
+	EditDomainSavedJS, EditDomainCancelledJS                                   string
+	SettingsUserManagement, SettingsCNAMETargetPlaceholder                     string
 
 	// Domain display
 	DotTitleNoUpdate, DotTitleChanged, DotTitleLast string
@@ -486,20 +447,20 @@ type Phrases struct {
 	NotConfiguredLabel, RemoveBtn                   string
 
 	// Scheduler / Cache / Cleanup
-	ContextTimeoutForDomains, IPFetchFailed, ZoneLoadingFailed, ProviderReturnedNoZonesCheckAPIKey string
-	CacheLoadFailed, IPv64CacheError, RecordCacheError, RecordCacheCouldNotBeLoaded                string
-	UsingZoneCacheAge, ForcedRefreshLoadZones, NoZoneCacheInitialLoad, ZoneCacheTooOldReload       string
-	ZonesLoadedFromDiskNoAPICall, ZoneAPILoadFailed, TryingDiskCacheFallback, ZonesLoadedFromDisk  string
-	ZonesLoadedFromAPI, UsingRecordCacheAge, ForcedRefreshLoadRecords, NoRecordCacheInitialLoad    string
-	RecordCacheTooOldReload, RecordCacheLoadedFromDiskNoAPICall, TryingLoadRecordCacheFromDisk     string
-	RecordCacheLoadedFromDisk, RecordsLoadedSuccessfully, RecordCacheErrorZone                     string
-	DiskCachePersistSkipped, CloudflareCacheSaveFailed, IonosCacheSaveFailed                       string
-	IPv64CacheSaveFailed, HetznerDNSCacheSaveFailed, HetznerCloudCacheSaveFailed                   string
-	CleanupSkippedLastRun, CleanupStartingLastRun, CheckingIPv64OrphanedRecords                    string
-	IPv64ZonesLoadedFromDisk, CloudflareZonesLoadedFromDisk, IonosZonesLoadedFromDisk              string
-	NoProviderCacheOnDiskFound, NoRecordCachesFound, APIAndDiskCacheFailed                         string
-	IPFetchFailedFallback, IPv4Changed, IPv6Changed, HetznerDNSZonesLoadedFromDisk                 string
-	HetznerCloudZonesLoadedFromDisk                                                                string
+	ContextTimeoutForDomains, IPFetchFailed, ZoneLoadingFailed                                    string
+	CacheLoadFailed, IPv64CacheError, RecordCacheError, RecordCacheCouldNotBeLoaded               string
+	UsingZoneCacheAge, ForcedRefreshLoadZones, NoZoneCacheInitialLoad, ZoneCacheTooOldReload      string
+	ZonesLoadedFromDiskNoAPICall, ZoneAPILoadFailed, TryingDiskCacheFallback, ZonesLoadedFromDisk string
+	ZonesLoadedFromAPI, UsingRecordCacheAge, ForcedRefreshLoadRecords, NoRecordCacheInitialLoad   string
+	RecordCacheTooOldReload, RecordCacheLoadedFromDiskNoAPICall, TryingLoadRecordCacheFromDisk    string
+	RecordCacheLoadedFromDisk, RecordsLoadedSuccessfully, RecordCacheErrorZone                    string
+	DiskCachePersistSkipped, CloudflareCacheSaveFailed, IonosCacheSaveFailed                      string
+	IPv64CacheSaveFailed, HetznerDNSCacheSaveFailed, HetznerCloudCacheSaveFailed                  string
+	CleanupSkippedLastRun, CleanupStartingLastRun, CheckingIPv64OrphanedRecords                   string
+	IPv64ZonesLoadedFromDisk, CloudflareZonesLoadedFromDisk, IonosZonesLoadedFromDisk             string
+	NoProviderCacheOnDiskFound, NoRecordCachesFound, APIAndDiskCacheFailed                        string
+	IPFetchFailedFallback, IPv4Changed, IPv6Changed, HetznerDNSZonesLoadedFromDisk                string
+	HetznerCloudZonesLoadedFromDisk                                                               string
 
 	// Main
 	MaxAPIRetriesInvalid, LogMaxLinesInvalid, ConfigJSONReadFailed, ProviderConfigFailed                   string
@@ -507,7 +468,7 @@ type Phrases struct {
 	LogDirCreateFailed, DomainCacheUpdateFailed, MetricCacheUpdateFailed, SchedulerIntervalChanged         string
 	WebSocketHubStarted, SchedulerShutdownActive, SchedulerIntervalReached, SchedulerPreviousUpdateRunning string
 	ShutdownSignalReceived, WaitingForRunningUpdates, AllUpdatesFinished, WaitForUpdatesTimeout            string
-	WaitingForLogQueue, MetricsSaveFailed, Providers                                                       string
+	WaitingForLogQueue, Providers                                                                          string
 
 	// TOTP
 	TotpSettingsPageTitle, TotpVerificationPageTitle, TotpTitle, TotpAccountMeta                      string

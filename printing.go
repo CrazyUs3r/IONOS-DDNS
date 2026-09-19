@@ -252,13 +252,29 @@ func logHTTPClientStats() {
 	interval := cfg.Interval
 	ipMode := cfg.IPMode
 	ifaceName := cfg.IfaceName
-	healthPort := cfg.HealthPort
+	httpPort := cfg.HTTPPort
 	dryRun := cfg.DryRun
 	logDir := cfg.LogDir
 	lang := cfg.Lang
+	maxloglines := cfg.MaxLogLines
+	maxapiretries := cfg.MaxAPIRetries
+	maxconcurrent := cfg.MaxConcurrent
 	cfgMu.RUnlock()
 
 	debugLog("CONFIG", "", "========== "+phrases().ConfigHeading+" ==========")
+
+	debugLog("CONFIG", "", fmt.Sprintf(t(phrases().DebugModeActive, "Debug mode active. Interval: %ds, mode: %s"), interval, ipMode))
+	debugLog("CONFIG", "", fmt.Sprintf("%s: %ds", phrases().ConfigInterval, interval))
+	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", phrases().ConfigIPMode, ipMode))
+	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", phrases().ConfigInterface, ifaceName))
+	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", phrases().ConfigHTTPPort, httpPort))
+	debugLog("CONFIG", "", fmt.Sprintf("%s: %v", phrases().ConfigDryRun, dryRun))
+	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", phrases().ConfigLogDir, logDir))
+	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", phrases().ConfigLanguage, lang))
+	debugLog("CONFIG", "", fmt.Sprintf(t(phrases().LoadedDomains, "Loaded domains: %d"), len(domainConfigs)))
+	debugLog("CONFIG", "", fmt.Sprintf(t(phrases().MaxLogLinesInfo, "Max log lines: %d"), maxloglines))
+	debugLog("CONFIG", "", fmt.Sprintf(t(phrases().MaxAPIRetriesInfo, "Max API retries: %d"), maxapiretries))
+	debugLog("CONFIG", "", fmt.Sprintf(t(phrases().MaxConcurrentInfo, "Max concurrent: %d"), maxconcurrent))
 
 	providerCounts := make(map[ProviderType]int)
 	for _, dc := range domainConfigs {
@@ -273,12 +289,8 @@ func logHTTPClientStats() {
 		))
 	}
 
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %ds", phrases().ConfigInterval, interval))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", phrases().ConfigIPMode, ipMode))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", phrases().ConfigInterface, ifaceName))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", phrases().ConfigHealthPort, healthPort))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %v", phrases().ConfigDryRun, dryRun))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", phrases().ConfigLogDir, logDir))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", phrases().ConfigLanguage, lang))
+	for _, dc := range cfg.DomainConfigs {
+		debugLog("CONFIG", "", fmt.Sprintf("  - %s (%s)", dc.FQDN, dc.Provider))
+	}
 	debugLog("CONFIG", "", "===================================")
 }

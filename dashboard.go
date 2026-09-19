@@ -533,7 +533,11 @@ func buildSettingsSystemSection(c Config) string {
 
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsInterval)+`</span><input type="number" id="cfg-interval" class="s-input s-input-sm-right" min="30" max="86400" value="%d"></div>`, c.Interval) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsHealthPort)+`</span><input type="text" id="cfg-health-port" class="s-input s-input-sm-right" value="%s"></div>`, esc(c.HealthPort)) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsHTTPPort)+`</span><input type="number" id="cfg-http-port" class="s-input s-input-sm-right" min="2" max="65534" value="%s"></div>`, esc(c.HTTPPort)) +
+
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsHTTPSPort)+`</span><input type="number" id="cfg-https-port" class="s-input s-input-sm-right" min="2" max="65534" value="%s"></div>`, esc(c.HTTPSPort)) +
+
+		`<div class="s-row"><small class="s-label-hint-inline">` + esc(phrases().SettingsRestartHint) + `</small></div>` +
 
 		`<div class="s-row"><span class="s-label">` + esc(phrases().SettingsIface) + ` <small class="s-label-hint-inline">` + esc(phrases().SettingsIfaceHint) + `</small></span><select id="cfg-iface" class="s-input s-input-md">` +
 		buildNetworkInterfaceOptions(c.IfaceName) +
@@ -601,9 +605,7 @@ func buildSettingsDomainsSection() string {
 }
 
 func buildSettingsNotifySection(c Config) string {
-	notifyEventsSection := `<div class="s-row s-row-stack s-gap-6"><span class="s-label">` + esc(phrases().SettingsNotifyEvents) + `</span>` +
-		buildSettingsNotifyEventCheckboxes(c.Notifications.Events) +
-		`</div>`
+	notifyEventsSection := buildSettingsNotifyEventCheckboxes(c.Notifications.Events)
 
 	telegramSection := `<div class="notify-box notify-telegram">` +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsTGChatID+`<small class="s-label-hint-block">(`+phrases().SettingsDNSHint+`)</small></span><input type="text" id="cfg-tg-chat-id" class="s-input s-input-lg" placeholder="123456789, -100xxxxxxxxx" value="%s"></div>`,
@@ -757,7 +759,8 @@ type safeSystemConfig struct {
 	Email           safeEmail      `json:"email"`
 	MQTT            safeMQTTConfig `json:"mqtt"`
 	WebhookURL      string         `json:"webhook_url"`
-	HealthPort      string         `json:"health_port"`
+	HTTPPort        string         `json:"http_port"`
+	HTTPSPort       string         `json:"https_port"`
 	IfaceName       string         `json:"iface_name"`
 	WebhookSecret   string         `json:"webhook_secret"`
 	TelegramToken   string         `json:"telegram_token"`
@@ -830,7 +833,8 @@ func currentSystemConfig() safeSystemConfig {
 	return safeSystemConfig{
 		IPMode:          config.IPMode,
 		IfaceName:       config.IfaceName,
-		HealthPort:      config.HealthPort,
+		HTTPPort:        config.HTTPPort,
+		HTTPSPort:       config.HTTPSPort,
 		DNSServers:      config.DNSServers,
 		Interval:        config.Interval,
 		DryRun:          config.DryRun,
@@ -1220,7 +1224,6 @@ func handleAPIPageSection(w http.ResponseWriter, r *http.Request) {
 				&fragment,
 				statusClass,
 				statusText,
-				snapshotConfig(),
 			)
 		},
 		"metrics": func() {
@@ -1475,7 +1478,8 @@ func handleAPISaveSystemSettings(w http.ResponseWriter, r *http.Request) {
 
 	var sys safeSystemConfig
 	if err := decodeJSONBody(w, r, &sys); err != nil {
-		http.Error(w, esc(phrases().JSONParseError), http.StatusBadRequest)
+		debugLog("API", getClientIP(r), fmt.Sprintf("system settings decode failed: %v", err))
+		http.Error(w, esc(fmt.Sprintf(phrases().JSONParseError, err)), http.StatusBadRequest)
 
 		return
 	}
@@ -1491,7 +1495,19 @@ func handleAPISaveSystemSettings(w http.ResponseWriter, r *http.Request) {
 	newMaxConcurrent := cfg.MaxConcurrent
 	newDebugEnabled := cfg.DebugEnabled
 	newDebugHTTPRaw := cfg.DebugHTTPRaw
+	newHTTPPort := cfg.HTTPPort
+	newHTTPSPort := cfg.HTTPSPort
 	cfgMu.Unlock()
+
+	if err := validateDashboardPorts(newHTTPPort, newHTTPSPort); err != nil {
+		cfgMu.Lock()
+		cfg = oldCfg
+		cfgMu.Unlock()
+
+		http.Error(w, esc(phrases().SaveFailed), http.StatusBadRequest)
+
+		return
+	}
 
 	if err := saveConfigToFile(); err != nil {
 		cfgMu.Lock()
@@ -1508,6 +1524,7 @@ func handleAPISaveSystemSettings(w http.ResponseWriter, r *http.Request) {
 		setWorkerConcurrencyLimit(newMaxConcurrent)
 	}
 	setAtomicDebugFlags(newDebugEnabled, newDebugHTTPRaw)
+	restartDashboardServersIfPortsChanged(activeDashboardServers, oldCfg.HTTPPort, oldCfg.HTTPSPort, newHTTPPort, newHTTPSPort)
 
 	ResetHTTPClient()
 	forceNextUpdate.Store(true)
@@ -1530,7 +1547,8 @@ func handleAPISaveNotifySettings(w http.ResponseWriter, r *http.Request) {
 
 	var sys safeSystemConfig
 	if err := decodeJSONBody(w, r, &sys); err != nil {
-		http.Error(w, esc(phrases().JSONParseError), http.StatusBadRequest)
+		debugLog("API", getClientIP(r), fmt.Sprintf("notify settings decode failed: %v", err))
+		http.Error(w, esc(fmt.Sprintf(phrases().JSONParseError, err)), http.StatusBadRequest)
 
 		return
 	}
@@ -1577,7 +1595,8 @@ func handleAPISaveDomainSettings(w http.ResponseWriter, r *http.Request) {
 		DomainConfigs []safeDomainConfig `json:"domain_configs"`
 	}
 	if err := decodeJSONBody(w, r, &payload); err != nil {
-		http.Error(w, esc(phrases().JSONParseError), http.StatusBadRequest)
+		debugLog("API", getClientIP(r), fmt.Sprintf("domain settings decode failed: %v", err))
+		http.Error(w, esc(fmt.Sprintf(phrases().JSONParseError, err)), http.StatusBadRequest)
 
 		return
 	}
@@ -1623,8 +1642,11 @@ func applySystemCoreConfig(sys safeSystemConfig) {
 	if sys.Interval >= 30 {
 		cfg.Interval = sys.Interval
 	}
-	if sys.HealthPort != "" {
-		cfg.HealthPort = sys.HealthPort
+	if sys.HTTPPort != "" {
+		cfg.HTTPPort = sys.HTTPPort
+	}
+	if sys.HTTPSPort != "" {
+		cfg.HTTPSPort = sys.HTTPSPort
 	}
 
 	cfg.IfaceName = sys.IfaceName
@@ -1832,6 +1854,86 @@ func applyDashboardSecret(destination *string, incoming string) {
 	}
 }
 
+func registerIPv64DomainConfig(dc *DomainConfig, fqdn string) error {
+	fqdn = strings.ToLower(strings.TrimSpace(fqdn))
+
+	configUpdateMu.Lock()
+	defer configUpdateMu.Unlock()
+
+	cfgMu.Lock()
+	for _, existing := range cfg.DomainConfigs {
+		if strings.EqualFold(existing.FQDN, fqdn) {
+			cfgMu.Unlock()
+
+			return nil
+		}
+	}
+
+	oldCfg := cfg
+	cfg.DomainConfigs = append(cfg.DomainConfigs, DomainConfig{
+		FQDN:       fqdn,
+		Provider:   ProviderIPv64,
+		IPv64Token: dc.IPv64Token,
+	})
+	cfgMu.Unlock()
+
+	if err := saveConfigToFile(); err != nil {
+		cfgMu.Lock()
+		cfg = oldCfg
+		cfgMu.Unlock()
+
+		return err
+	}
+
+	invalidateSecretReplacer()
+	forceNextUpdate.Store(true)
+	lastCleanupNano.Store(0)
+
+	return nil
+}
+
+func unregisterIPv64DomainConfig(fqdn string) error {
+	fqdn = strings.ToLower(strings.TrimSpace(fqdn))
+
+	configUpdateMu.Lock()
+	defer configUpdateMu.Unlock()
+
+	cfgMu.Lock()
+	found := false
+	filtered := make([]DomainConfig, 0, len(cfg.DomainConfigs))
+	for _, existing := range cfg.DomainConfigs {
+		if strings.EqualFold(existing.FQDN, fqdn) {
+			found = true
+
+			continue
+		}
+		filtered = append(filtered, existing)
+	}
+	if !found {
+		cfgMu.Unlock()
+
+		return nil
+	}
+
+	oldCfg := cfg
+	cfg.DomainConfigs = filtered
+	cfgMu.Unlock()
+
+	if err := saveConfigToFile(); err != nil {
+		cfgMu.Lock()
+		cfg = oldCfg
+		cfgMu.Unlock()
+
+		return err
+	}
+
+	invalidateSecretReplacer()
+	forceNextUpdate.Store(true)
+	lastCleanupNano.Store(0)
+
+	return nil
+}
+
 func newDomainConfig(fqdn string, incoming safeDomainConfig) DomainConfig {
 	recordMode := strings.ToUpper(strings.TrimSpace(incoming.RecordMode))
 
@@ -1981,8 +2083,18 @@ func handleAPIIPv64Domain(w http.ResponseWriter, r *http.Request) {
 	switch req.Action {
 	case MethodADD:
 		err = addIPv64Domain(ctx, dc, req.FQDN)
+		if err == nil {
+			if regErr := registerIPv64DomainConfig(dc, req.FQDN); regErr != nil {
+				debugLog("API", getClientIP(r), fmt.Sprintf("IPv64 domain %s added at provider but config save failed: %v", req.FQDN, regErr))
+			}
+		}
 	case MethodDELETE:
 		err = deleteIPv64Domain(ctx, dc, req.FQDN)
+		if err == nil {
+			if unregErr := unregisterIPv64DomainConfig(req.FQDN); unregErr != nil {
+				debugLog("API", getClientIP(r), fmt.Sprintf("IPv64 domain %s deleted at provider but config removal failed: %v", req.FQDN, unregErr))
+			}
+		}
 	}
 
 	if err != nil {
@@ -2628,7 +2740,6 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 
 	sess, _ := sessionFromRequest(r)
 	statusClass, statusText := dashboardStatus()
-	config := snapshotConfig()
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set(
@@ -2639,7 +2750,7 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Expires", "0")
 
 	writeDashboardHeader(w, sess)
-	writeDashboardTop(w, statusClass, statusText, config)
+	writeDashboardTop(w, statusClass, statusText)
 
 	for _, page := range []string{
 		"domains",
@@ -3079,13 +3190,6 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 				<button type="button" class="hamburger-btn" data-click="toggleSidebar()" aria-label="Menu" aria-controls="sidebar" aria-expanded="false">☰</button>
 				<span id="page-title" class="topbar-title">`+t(phrases().NavDashboardJS, "📊 Dashboard")+`</span>
 				<div class="topbar-right">
-					<button class="action-btn topbar-action-btn is-hidden"
-						id="topbar-save-config-button"
-						data-tooltip="`+esc(phrases().SettingsSaveHint)+`"
-						data-mouseenter="showNotifierTooltip()"
-						data-focus="showNotifierTooltip()"
-						data-click="saveCurrentSettingsSection()">`+phrases().SettingsSaveBtn+`</button>
-
 					<button class="action-btn topbar-action-btn"
 						id="update-button"
 						data-tooltip="`+esc(phrases().SettingsUpdateHint)+`"
@@ -3191,7 +3295,7 @@ func buildNotifierStatusHTML() string {
 	return sb.String()
 }
 
-func writeDashboardTop(w io.Writer, statusClass, statusText string, config Config) {
+func writeDashboardTop(w io.Writer, statusClass, statusText string) {
 	_, _ = fmt.Fprintf(
 		w, `
 	<div class="page-section" data-section="dashboard">
@@ -3263,27 +3367,6 @@ func writeDashboardTop(w io.Writer, statusClass, statusText string, config Confi
 				</div>
 			</div>
 		</div>
-
-		<div class="card" id="endpoint-card">
-			<div class="card-header">`+phrases().IPEndpointStatusTitle+`</div>
-			<div class="card-content">
-				<div id="endpoint-status" class="endpoint-status">
-					<span class="endpoint-waiting">`+phrases().IPEndpointStatusWaiting+`</span>
-				</div>
-			</div>
-		</div>
-
-		<div class="card">
-			<div class="card-header">⚙️ `+phrases().ConfigHeading+`</div>
-			<div class="card-content">
-				<div class="config-overview-grid">
-					<div><strong>`+phrases().MaxLogLines+`:</strong> %d</div>
-					<div><strong>`+phrases().MaxAPIRetries+`:</strong> %d</div>
-					<div><strong>`+phrases().MaxConcurrent+`:</strong> %d</div>
-					<div><strong>`+phrases().Interval+`:</strong> %ds</div>
-				</div>
-			</div>
-		</div>
 	</div><!-- end dashboard section -->
 	`,
 		statusClass,
@@ -3291,10 +3374,6 @@ func writeDashboardTop(w io.Writer, statusClass, statusText string, config Confi
 		phrases().LastUpdate,
 		time.Now().Format("15:04:05"),
 		buildNotifierStatusHTML(),
-		config.MaxLogLines,
-		config.MaxAPIRetries,
-		config.MaxConcurrent,
-		config.Interval,
 	)
 }
 
@@ -3694,6 +3773,14 @@ func writeSettingsSystemSubpage(w io.Writer, c Config) {
 	`)
 }
 
+func buildIPv64ServiceDomainOptions() string {
+	var out strings.Builder
+	for _, domain := range IPv64ServiceDomains {
+		fmt.Fprintf(&out, `<option value="%s">%s</option>`, esc(domain), esc(domain))
+	}
+	return out.String()
+}
+
 func writeSettingsDomainsSubpage(w io.Writer) {
 	domainsSection := buildSettingsDomainsSection()
 
@@ -3718,14 +3805,21 @@ func writeSettingsDomainsSubpage(w io.Writer) {
 			<div class="card ipv64-mgmt-card">
 				<div class="card-content">
 					<div class="ipv64-mgmt-row">
-						<div class="ipv64-mgmt-input-wrap">
+					<div class="ipv64-mgmt-input-wrap">
 							<label class="ipv64-mgmt-label" for="ipv64-domain-input">`+p.IPv64DomainFQDN+`</label>
-							<input
-								type="text"
-								id="ipv64-domain-input"
-								class="search-box ipv64-mgmt-input"
-								autocomplete="off"
-								placeholder="`+p.IPv64DomainPlaceholder+`">
+							<div class="ipv64-mgmt-domain-group">
+								<input
+									type="text"
+									id="ipv64-domain-input"
+									class="search-box ipv64-mgmt-input ipv64-mgmt-domain-prefix"
+									autocomplete="off"
+									placeholder="`+p.IPv64DomainPlaceholder+`">
+								<select
+									id="ipv64-domain-suffix"
+									class="search-box ipv64-mgmt-select ipv64-mgmt-domain-suffix">
+									`+buildIPv64ServiceDomainOptions()+`
+								</select>
+							</div>
 						</div>
 
 						<div class="ipv64-mgmt-input-wrap">

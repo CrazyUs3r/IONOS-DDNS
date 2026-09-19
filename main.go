@@ -10,9 +10,11 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -66,19 +68,18 @@ func run() (exitCode int) {
 	envCfg := readEnvConfig()
 
 	initDefaultConfig(paths.logsDir)
+	applyEnvOverrides(
+		paths.logsDir,
+		envCfg.interval,
+		envCfg.dnsList,
+		envCfg.maxAPIRetries,
+		envCfg.maxLogLines,
+		envCfg.hourlyLimit,
+		envCfg.maxConcurrent,
+	)
 
-	configLoaded := loadConfigFromFile()
-	if !configLoaded {
-		applyEnvOverrides(
-			paths.logsDir,
-			envCfg.interval,
-			envCfg.dnsList,
-			envCfg.maxAPIRetries,
-			envCfg.maxLogLines,
-			envCfg.hourlyLimit,
-			envCfg.maxConcurrent,
-		)
-	}
+	loadConfigFromFile()
+	applyPortEnvOverrides()
 
 	applyDebugOverrides()
 	if err := configureLanguage(paths.langDir); err != nil {
@@ -104,8 +105,6 @@ func run() (exitCode int) {
 	if err := initializeProvidersAndNotifiers(); err != nil {
 		return 1
 	}
-
-	logDebugConfiguration()
 
 	logHTTPClientStats()
 	metricsBroadcasterLoop()
@@ -146,6 +145,7 @@ func run() (exitCode int) {
 
 		return 1
 	}
+	activeDashboardServers = servers
 
 	startDashboardServers(servers)
 	startWebSocketHub()
@@ -372,7 +372,8 @@ func initDefaultConfig(logsDir string) {
 	cfg = Config{
 		Interval:        DefaultInterval,
 		IPMode:          "BOTH",
-		HealthPort:      "8080",
+		HTTPPort:        "8080",
+		HTTPSPort:       "8443",
 		LogDir:          logsDir,
 		HourlyRateLimit: DefaultHourlyRateLimit,
 		MaxConcurrent:   DefaultMaxConcurrent,
@@ -402,16 +403,99 @@ func loadConfigFromFile() bool {
 	applyLegacyNotificationDefault(data, &loaded)
 	applyConfigDefaults(&loaded)
 	normalizeLoadedConfig(&loaded)
+
+	needsRewrite := configNeedsRewrite(data, loaded)
 	storeLoadedConfig(loaded)
+
+	if needsRewrite {
+		if err := persistMigratedConfig(loaded); err != nil {
+			log(LogContext{
+				Level:   LogWarn,
+				Action:  ActionConfig,
+				Message: fmt.Sprintf("config.json migration could not be persisted: %v", err),
+			})
+		}
+	}
 
 	return true
 }
 
 func parseConfig(data []byte) (Config, error) {
-	var loaded Config
+	cfgMu.RLock()
+	loaded := cfg
+	loaded.DomainConfigs = append([]DomainConfig(nil), cfg.DomainConfigs...)
+	loaded.DNSServers = append([]string(nil), cfg.DNSServers...)
+	loaded.IPv4Endpoints = append([]string(nil), cfg.IPv4Endpoints...)
+	loaded.IPv6Endpoints = append([]string(nil), cfg.IPv6Endpoints...)
+	cfgMu.RUnlock()
+
 	err := json.Unmarshal(data, &loaded)
 
 	return loaded, err
+}
+
+func configNeedsRewrite(original []byte, loaded Config) bool {
+	var persisted any
+	if err := json.Unmarshal(original, &persisted); err != nil {
+		return false
+	}
+
+	canonicalJSON, err := json.Marshal(loaded)
+	if err != nil {
+		return false
+	}
+
+	var canonical any
+	if err := json.Unmarshal(canonicalJSON, &canonical); err != nil {
+		return false
+	}
+
+	return !reflect.DeepEqual(persisted, canonical)
+}
+
+func persistMigratedConfig(loaded Config) error {
+	data, err := json.MarshalIndent(loaded, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal migrated config: %w", err)
+	}
+	data = append(data, '\n')
+
+	dir := filepath.Dir(configPath)
+	tmp, err := os.CreateTemp(dir, ".config-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temporary config: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer func() {
+		_ = os.Remove(tmpName)
+	}()
+
+	mode := os.FileMode(0o600)
+	if info, statErr := os.Stat(configPath); statErr == nil {
+		mode = info.Mode().Perm()
+	}
+	if err := tmp.Chmod(mode); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("set temporary config permissions: %w", err)
+	}
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("write temporary config: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("sync temporary config: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close temporary config: %w", err)
+	}
+
+	if err := os.Rename(tmpName, configPath); err != nil {
+		return fmt.Errorf("replace config.json: %w", err)
+	}
+
+	return nil
 }
 
 func applyLegacyNotificationDefault(data []byte, loaded *Config) {
@@ -427,8 +511,11 @@ func applyConfigDefaults(loaded *Config) {
 	if loaded.Interval <= 0 {
 		loaded.Interval = DefaultInterval
 	}
-	if loaded.HealthPort == "" {
-		loaded.HealthPort = "8080"
+	if loaded.HTTPPort == "" {
+		loaded.HTTPPort = "8080"
+	}
+	if loaded.HTTPSPort == "" {
+		loaded.HTTPSPort = "8443"
 	}
 	if loaded.IPMode == "" {
 		loaded.IPMode = "BOTH"
@@ -554,25 +641,13 @@ func initializeProvidersAndNotifiers() error {
 	return nil
 }
 
-func logDebugConfiguration() {
-	if !cfg.DebugEnabled {
-		return
-	}
-
-	debugLog("CONFIG", "", fmt.Sprintf(t(phrases().DebugModeActive, "Debug mode active. Interval: %ds, mode: %s"), cfg.Interval, cfg.IPMode))
-	debugLog("CONFIG", "", fmt.Sprintf(t(phrases().LoadedDomains, "Loaded domains: %d"), len(cfg.DomainConfigs)))
-	debugLog("CONFIG", "", fmt.Sprintf(t(phrases().MaxLogLinesInfo, "Max log lines: %d"), cfg.MaxLogLines))
-	debugLog("CONFIG", "", fmt.Sprintf(t(phrases().MaxAPIRetriesInfo, "Max API retries: %d"), cfg.MaxAPIRetries))
-	debugLog("CONFIG", "", fmt.Sprintf(t(phrases().MaxConcurrentInfo, "Max concurrent: %d"), cfg.MaxConcurrent))
-
-	for _, dc := range cfg.DomainConfigs {
-		debugLog("CONFIG", "", fmt.Sprintf("  - %s (%s)", dc.FQDN, dc.Provider))
-	}
-}
-
 func ensureRuntimeDirs(paths runtimePaths) error {
-	if cfg.HealthPort == "" {
-		cfg.HealthPort = "8080"
+	if cfg.HTTPPort == "" {
+		cfg.HTTPPort = "8080"
+	}
+
+	if cfg.HTTPSPort == "" {
+		cfg.HTTPSPort = "8443"
 	}
 
 	if err := os.MkdirAll(paths.logsDir, 0o755); err != nil {
@@ -690,11 +765,21 @@ func startMaintenanceWorkers() {
 }
 
 type dashboardServers struct {
+	mu         sync.Mutex
 	http       *http.Server
 	https      *http.Server
 	certFile   string
 	keyFile    string
 	selfSigned bool
+}
+
+var activeDashboardServers *dashboardServers
+
+func (s *dashboardServers) snapshot() (httpSrv, httpsSrv *http.Server) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.http, s.https
 }
 
 func newDashboardHandler() http.Handler {
@@ -721,35 +806,40 @@ func newDashboardServer(addr string, handler http.Handler) *http.Server {
 
 func newDashboardServers() (*dashboardServers, error) {
 	handler := newDashboardHandler()
-	servers := &dashboardServers{
-		http: newDashboardServer(":"+cfg.HealthPort, handler),
-	}
 
 	certFile, keyFile, selfSigned, err := resolveDashboardTLSFiles()
 	if err != nil {
 		return nil, err
 	}
 
-	httpsPort := strings.TrimSpace(os.Getenv("DASHBOARD_HTTPS_PORT"))
-	if httpsPort == "" {
-		httpsPort = "8443"
-	}
-	if httpsPort == cfg.HealthPort {
-		return nil, fmt.Errorf("HTTP and HTTPS cannot use the same port %s", httpsPort)
+	if err := validateDashboardPorts(cfg.HTTPPort, cfg.HTTPSPort); err != nil {
+		return nil, err
 	}
 
-	servers.https = newDashboardServer(":"+httpsPort, handler)
-	servers.certFile = certFile
-	servers.keyFile = keyFile
-	servers.selfSigned = selfSigned
+	servers := &dashboardServers{
+		http:       newDashboardServer(":"+cfg.HTTPPort, handler),
+		https:      newDashboardServer(":"+cfg.HTTPSPort, handler),
+		certFile:   certFile,
+		keyFile:    keyFile,
+		selfSigned: selfSigned,
+	}
 
 	return servers, nil
 }
 
+func validateDashboardPorts(httpPort, httpsPort string) error {
+	if httpPort == httpsPort {
+		return fmt.Errorf("HTTP and HTTPS cannot use the same port %s", httpsPort)
+	}
+
+	return nil
+}
+
 func startDashboardServers(servers *dashboardServers) {
-	startHTTPServer(servers.http)
-	if servers.https != nil {
-		startHTTPSServer(servers.https, servers.certFile, servers.keyFile, servers.selfSigned)
+	httpSrv, httpsSrv := servers.snapshot()
+	startHTTPServer(httpSrv)
+	if httpsSrv != nil {
+		startHTTPSServer(httpsSrv, servers.certFile, servers.keyFile, servers.selfSigned)
 	}
 }
 
@@ -1004,7 +1094,8 @@ func shutdownDashboardServers(servers *dashboardServers) {
 	defer cancel()
 
 	debugLog("SYSTEM", "", phrases().ServerShuttingDown)
-	for _, srv := range []*http.Server{servers.http, servers.https} {
+	httpSrv, httpsSrv := servers.snapshot()
+	for _, srv := range []*http.Server{httpSrv, httpsSrv} {
 		if srv == nil {
 			continue
 		}
@@ -1039,9 +1130,6 @@ func applyCoreEnvOverrides(logsDir string, tempInterval int, dnsList []string) {
 	if v := os.Getenv("INTERFACE"); v != "" {
 		cfg.IfaceName = v
 	}
-	if v := os.Getenv("HEALTH_PORT"); v != "" {
-		cfg.HealthPort = v
-	}
 	if v := os.Getenv("DRY_RUN"); v != "" {
 		cfg.DryRun = v == constTrue
 	}
@@ -1059,6 +1147,41 @@ func applyCoreEnvOverrides(logsDir string, tempInterval int, dnsList []string) {
 	}
 }
 
+func applyPortEnvOverrides() {
+	changed := false
+
+	cfgMu.Lock()
+	if v := strings.TrimSpace(os.Getenv("HTTP_PORT")); v != "" && v != cfg.HTTPPort {
+		cfg.HTTPPort = v
+		changed = true
+	}
+	if v := strings.TrimSpace(os.Getenv("HTTPS_PORT")); v != "" && v != cfg.HTTPSPort {
+		cfg.HTTPSPort = v
+		changed = true
+	}
+	cfgMu.Unlock()
+
+	if !changed {
+		return
+	}
+
+	if err := saveConfigToFile(); err != nil {
+		log(LogContext{
+			Level:   LogWarn,
+			Action:  ActionConfig,
+			Message: fmt.Sprintf("Could not persist HTTP_PORT/HTTPS_PORT from environment to config.json: %v", err),
+		})
+
+		return
+	}
+
+	log(LogContext{
+		Level:   LogInfo,
+		Action:  ActionConfig,
+		Message: "HTTP_PORT/HTTPS_PORT from environment adopted into config.json",
+	})
+}
+
 func applyLimitEnvOverrides(maxAPIRetries, maxLogLines, hourlyLimit, maxConcurrent int) {
 	if os.Getenv("MAX_API_RETRIES") != "" {
 		cfg.MaxAPIRetries = maxAPIRetries
@@ -1071,5 +1194,100 @@ func applyLimitEnvOverrides(maxAPIRetries, maxLogLines, hourlyLimit, maxConcurre
 	}
 	if os.Getenv("MAX_CONCURRENT") != "" {
 		cfg.MaxConcurrent = maxConcurrent
+	}
+}
+
+func restartDashboardServersIfPortsChanged(servers *dashboardServers, oldHTTPPort, oldHTTPSPort, newHTTPPort, newHTTPSPort string) {
+	if servers == nil {
+		return
+	}
+	if oldHTTPPort == newHTTPPort && oldHTTPSPort == newHTTPSPort {
+		return
+	}
+
+	if err := validateDashboardPorts(newHTTPPort, newHTTPSPort); err != nil {
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: fmt.Sprintf("Dashboard server restart skipped: %v", err),
+		})
+
+		return
+	}
+
+	if newHTTPPort != oldHTTPPort {
+		restartHTTPServer(servers, newHTTPPort)
+	}
+	if newHTTPSPort != oldHTTPSPort {
+		restartHTTPSServer(servers, newHTTPSPort)
+	}
+}
+
+func restartHTTPServer(servers *dashboardServers, port string) {
+	newSrv := newDashboardServer(":"+port, newDashboardHandler())
+
+	servers.mu.Lock()
+	old := servers.http
+	servers.http = newSrv
+	servers.mu.Unlock()
+
+	startHTTPServer(newSrv)
+
+	log(LogContext{
+		Level:   LogInfo,
+		Action:  ActionServer,
+		Message: "HTTP listener restarted on port " + port,
+	})
+
+	go shutdownReplacedServer(old)
+}
+
+func restartHTTPSServer(servers *dashboardServers, port string) {
+	certFile, keyFile, selfSigned, err := resolveDashboardTLSFiles()
+	if err != nil {
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: fmt.Sprintf("HTTPS restart failed, keeping previous listener: %v", err),
+		})
+
+		return
+	}
+
+	newSrv := newDashboardServer(":"+port, newDashboardHandler())
+
+	servers.mu.Lock()
+	old := servers.https
+	servers.https = newSrv
+	servers.certFile = certFile
+	servers.keyFile = keyFile
+	servers.selfSigned = selfSigned
+	servers.mu.Unlock()
+
+	startHTTPSServer(newSrv, certFile, keyFile, selfSigned)
+
+	log(LogContext{
+		Level:   LogInfo,
+		Action:  ActionServer,
+		Message: "HTTPS listener restarted on port" + port,
+	})
+
+	go shutdownReplacedServer(old)
+}
+
+func shutdownReplacedServer(srv *http.Server) {
+	if srv == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), ShutdownGraceTimeout)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log(LogContext{
+			Level:   LogWarn,
+			Action:  ActionError,
+			Message: fmt.Sprintf("%s (%s): %v", phrases().ShutdownError, srv.Addr, err),
+		})
 	}
 }

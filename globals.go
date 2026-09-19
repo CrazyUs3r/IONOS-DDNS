@@ -592,7 +592,8 @@ type Config struct {
 	DomainConfigs   []DomainConfig `json:"DomainConfigs"`
 	IPMode          string         `json:"ip_mode"`
 	IfaceName       string         `json:"iface_name"`
-	HealthPort      string         `json:"health_port"`
+	HTTPPort        string         `json:"http_port"`
+	HTTPSPort       string         `json:"https_port"`
 	LogDir          string         `json:"log_dir"`
 	Lang            string         `json:"lang"`
 	DNSServers      []string       `json:"dns_servers"`
@@ -701,13 +702,6 @@ type CloudflareError struct {
 	Message string `json:"message"`
 }
 
-type CloudflareCache struct {
-	Version    int                 `json:"version"`
-	Zones      []Zone              `json:"zones"`
-	Records    map[string][]Record `json:"records"`
-	LastUpdate time.Time           `json:"last_update"`
-}
-
 type IPv64Response struct {
 	Subdomains map[string]IPv64Subdomain `json:"subdomains"`
 	Info       string                    `json:"info"`
@@ -745,12 +739,6 @@ type IPv64Domain struct {
 	Wildcard         int           `json:"wildcard"`
 	Deactivated      int           `json:"deactivated"`
 	Records          []IPv64Record `json:"records"`
-}
-
-type IONOSCache struct {
-	Zones      []Zone              `json:"zones"`
-	Records    map[string][]Record `json:"records"`
-	LastUpdate time.Time           `json:"last_update"`
 }
 
 type IPVersion int

@@ -5,7 +5,7 @@ FROM --platform=${BUILDPLATFORM} golang:1.27.1-alpine AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
-ARG VERSION=2.5.8
+ARG VERSION=2.5.9
 ARG BUILD_DATE
 ARG VCS_REF
 
@@ -63,7 +63,7 @@ RUN apk add --no-cache \
 # =============================================================================
 FROM busybox:stable-musl
 
-ARG VERSION=2.5.8
+ARG VERSION=2.5.9
 ARG BUILD_DATE
 ARG VCS_REF
 
@@ -75,8 +75,8 @@ LABEL org.opencontainers.image.title="Go-DynDNS" \
     org.opencontainers.image.created="${BUILD_DATE}"
 
 ENV CONFIG_DIR="/config" \
-    HEALTH_PORT="8080" \
-    DASHBOARD_HTTPS_PORT="8443" \
+    HTTP_PORT="8080" \
+    HTTPS_PORT="8443" \
     LANG="de" \
     DEBUG="false" \
     DEBUG_HTTP_RAW="false" \
@@ -119,6 +119,6 @@ HEALTHCHECK \
     --timeout=10s \
     --start-period=30s \
     --retries=3 \
-    CMD wget -q -O /dev/null "http://127.0.0.1:${HEALTH_PORT}/health" || exit 1
+    CMD wget -q -O /dev/null "http://127.0.0.1:${HTTP_PORT}/health" || exit 1
 
 ENTRYPOINT ["/docker-entrypoint.sh"]

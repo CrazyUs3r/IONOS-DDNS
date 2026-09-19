@@ -1093,6 +1093,7 @@ func dashboardI18NJSON() string {
 		"audit_loading":                         t(phrases().AuditLoadingJS, "Audit-Einträge werden geladen…"),
 		"auth_pass_min":                         t(phrases().AuthPassMinJS, "Password min. 8 characters"),
 		"auth_user_min":                         t(phrases().AuthUserMinJS, "Username min. 3 characters"),
+		"autosaved":                             t(phrases().AutoSaved, "💾 Automatisch gespeichert"),
 		"backup_confirm_config":                 t(phrases().BackupConfirmConfig, "• Config will be overwritten"),
 		"backup_confirm_hint":                   t(phrases().BackupConfirmHint, "This action may replace existing data."),
 		"backup_confirm_status":                 t(phrases().BackupConfirmStatus, "• Domain status will be overwritten"),

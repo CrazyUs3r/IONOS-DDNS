@@ -119,7 +119,7 @@ func initAuth(logsDir string) error {
 			ip := getLocalIP()
 			titleLine := phrases().SetupRequired
 			tokenLine := fmt.Sprintf("%s: %s", phrases().SetupTokenLabel, setupToken)
-			urlLine := fmt.Sprintf("%s: http://%s:%s/setup", phrases().SetupOpenURL, ip, cfg.HealthPort)
+			urlLine := fmt.Sprintf("%s: http://%s:%s/setup", phrases().SetupOpenURL, ip, cfg.HTTPPort)
 			width := maxLen(titleLine, tokenLine, urlLine)
 
 			logBoxBorder := func(left, mid, right string) {

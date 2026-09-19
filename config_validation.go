@@ -298,14 +298,24 @@ func validateConfig() error {
 		errs = append(errs, phrases().NoDomainsConfigured)
 	}
 
-	port, err := strconv.Atoi(cfg.HealthPort)
-	if err != nil || port < 1 || port > 65535 {
+	porthttp, err := strconv.Atoi(cfg.HTTPPort)
+	if err != nil || porthttp < 1 || porthttp > 65535 {
 		log(LogContext{
 			Level:   LogWarn,
 			Action:  ActionConfig,
-			Message: fmt.Sprintf(phrases().InvalidPort, cfg.HealthPort),
+			Message: fmt.Sprintf(phrases().InvalidPort, cfg.HTTPPort),
 		})
-		cfg.HealthPort = "8080"
+		cfg.HTTPPort = "8080"
+	}
+
+	porthttps, err := strconv.Atoi(cfg.HTTPSPort)
+	if err != nil || porthttps < 1 || porthttps > 65535 {
+		log(LogContext{
+			Level:   LogWarn,
+			Action:  ActionConfig,
+			Message: fmt.Sprintf(phrases().InvalidPort, cfg.HTTPSPort),
+		})
+		cfg.HTTPSPort = "8443"
 	}
 
 	if cfg.Interval < 60 {
