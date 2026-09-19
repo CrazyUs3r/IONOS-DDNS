@@ -428,8 +428,6 @@ body {
   opacity: 0.7;
 }
 
-/* Move the repeated grid texture with transform instead of background-position.
-   Firefox can composite this far more cheaply than repainting the full layer. */
 .auth-grid-floor::before {
   content: "";
   position: absolute;
@@ -467,11 +465,6 @@ body {
   }
 }
 
-
-/* Dashboard performance mode:
-   keep the retro artwork, but avoid a permanent fullscreen compositor layer.
-   Login/setup pages are unaffected because only the normal dashboard body gets
-   the .dashboard-runtime class from dashboard.go. */
 body.dashboard-runtime .auth-grid-floor::before {
   animation: none;
   will-change: auto;
@@ -800,7 +793,6 @@ summary:focus-visible {
 /* ============================================================================
    DOMAIN CARDS
    ============================================================================ */
-
 .domain-history-table {
   width: 100%;
   border-collapse: collapse;
@@ -1470,18 +1462,6 @@ summary:focus-visible {
 }
 
 /* ============================================================================
-   ENDPOINT STATUS
-   ============================================================================ */
-.endpoint-status {
-  font-size: 0.8rem;
-  opacity: 0.7;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 4px 0;
-}
-
-/* ============================================================================
    METRICS
    ============================================================================ */
 .metrics-bottom-grid {
@@ -1729,7 +1709,10 @@ select.s-input option {
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.02);
   overflow: hidden;
+
+  /* ENTFERNEN:
   contain: layout style paint;
+  */
 }
 
 .s-subsection-summary {
@@ -1751,8 +1734,10 @@ select.s-input option {
 .s-subsection-content {
   padding: 12px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
+  /* BEIDES ENTFERNEN:
   content-visibility: auto;
   contain-intrinsic-size: 800px;
+  */
 }
 
 .s-subsection-chevron {
@@ -2062,7 +2047,6 @@ select.s-input option {
 /* ============================================================================
    FOOTER
    ============================================================================ */
-
 [data-theme="light"] .dashboard-footer {
   color: #94a3b8;
 }
@@ -2427,7 +2411,6 @@ body.auth-page .dashboard-footer {
   display: none;
 }
 
-/* inline result spans */
 .notify-result--error {
   color: var(--text-error);
 }
@@ -2807,6 +2790,42 @@ body.auth-page .dashboard-footer {
   margin-bottom: 0;
 }
 
+.ipv64-mgmt-domain-group {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.ipv64-mgmt-domain-prefix {
+  flex: 1;
+  min-width: 0;
+  height: 42.75px;
+  box-sizing: border-box;
+}
+
+.ipv64-mgmt-select {
+  flex: 0 0 auto;
+  width: auto;
+  height: 42.75px;
+  box-sizing: border-box;
+  margin-bottom: 0;
+  line-height: normal;
+  appearance: none;
+  cursor: pointer;
+  padding-top: 0;
+  padding-bottom: 0;
+  padding-right: 28px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  color-scheme: dark;
+}
+
+[data-theme="light"] .ipv64-mgmt-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  color-scheme: light;
+}
+
 .btn--add-domain {
   background: rgba(74, 222, 128, 0.15);
   color: var(--text-success);
@@ -3001,7 +3020,10 @@ body.auth-page .dashboard-footer {
   position: absolute;
   right: 0;
   top: calc(100% + 8px);
-  width: min(320px, calc(100vw - 20px));
+  width: fit-content;
+  max-width: min(320px, calc(100vw - 20px));
+  min-width: 200px;
+  box-sizing: border-box;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -3104,15 +3126,6 @@ body.auth-page .dashboard-footer {
 }
 
 /* ============================================================================
-   DASHBOARD – config overview grid
-   ============================================================================ */
-.config-overview-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px;
-}
-
-/* ============================================================================
    FOOTER
    ============================================================================ */
 .dashboard-footer--positioned {
@@ -3151,7 +3164,6 @@ body.auth-page .dashboard-footer {
 /* ============================================================================
    DIAGNOSE / HEALTH CENTER
    ============================================================================ */
-
 .diag-loading {
   opacity: 0.65;
   font-size: 0.9rem;
@@ -3321,7 +3333,6 @@ body.auth-page .dashboard-footer {
 /* ============================================================================
    BACKUP & RESTORE
    ============================================================================ */
-
 .backup-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -3532,7 +3543,6 @@ body.auth-page .dashboard-footer {
 /* ============================================================================
    TOTP / 2FA – INLINE STYLE REPLACEMENTS
    ============================================================================ */
-
 .totp-qr-img {
   width: 220px;
   height: 220px;
@@ -4071,7 +4081,6 @@ body.auth-page .dashboard-footer {
 /* ============================================================================
    RESPONSIVE & ACCESSIBILITY QUERIES (CONSOLIDATED)
    ============================================================================ */
-
 @media (max-width: 768px) {
   :root {
     --sidebar-width: 240px;
