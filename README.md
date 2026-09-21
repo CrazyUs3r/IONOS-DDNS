@@ -2,31 +2,34 @@
 
 [![GitHub Release](https://img.shields.io/github/v/release/crazyUs3r/ionos-ddns?style=flat-square&color=blue)](https://github.com/crazyUs3r/ionos-ddns/releases/latest)
 [![GitHub Pre-Release](https://img.shields.io/github/v/release/crazyUs3r/ionos-ddns?include_prereleases&label=pre-release&color=orange&style=flat-square)](https://github.com/crazyUs3r/ionos-ddns/releases)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/crazyUs3r/ionos-ddns?style=flat-square&logo=go)](https://golang.org)
 [![License](https://img.shields.io/github/license/crazyUs3r/ionos-ddns?style=flat-square)](https://github.com/CrazyUs3r/IONOS-DDNS/blob/main/LICENSE)
 [![GitHub Downloads](https://img.shields.io/github/downloads/crazyus3r/ionos-ddns/total)](https://github.com/crazyUs3r/ionos-ddns/releases)
 [![GitHub Activity](https://img.shields.io/github/commit-activity/y/crazyUs3r/ionos-ddns?style=flat-square)](https://github.com/crazyUs3r/ionos-ddns/commits/main)
+[![GitHub last commit](https://img.shields.io/github/last-commit/CrazyUs3r/IONOS-DDNS?style=flat-square)](https://github.com/CrazyUs3r/IONOS-DDNS/commits/main)
 
 [![Docker Image Version](https://img.shields.io/docker/v/crazyus3r/ionos-ddns?label=docker%20image&logo=docker&style=flat-square)](https://hub.docker.com/r/crazyus3r/ionos-ddns/tags)
 [![Docker Pulls](https://img.shields.io/docker/pulls/crazyus3r/ionos-ddns?style=flat-square)](https://hub.docker.com/r/crazyus3r/ionos-ddns)
+[![Docker Image Size](https://img.shields.io/docker/image-size/crazyus3r/ionos-ddns/latest?style=flat-square&logo=docker)](https://hub.docker.com/r/crazyus3r/ionos-ddns)
 [![Docker Stars](https://img.shields.io/docker/stars/crazyus3r/ionos-ddns?style=flat-square&logo=docker)](https://hub.docker.com/r/crazyus3r/ionos-ddns)
-[![Docker Last Updated](https://img.shields.io/docker/last-updated/crazyus3r/ionos-ddns?style=flat-square)](https://hub.docker.com/r/crazyus3r/ionos-ddns/tags)
+[![Docker Last Updated](https://img.shields.io/docker/last-updated/crazyus3r/ionos-ddns/latest?style=flat-square)](https://hub.docker.com/r/crazyus3r/ionos-ddns/tags)
 
-Ein hochperformanter, in Go geschriebener **Multi-Provider Dynamic DNS Client** mit vollwertigem Web-Dashboard. Unterstützt IONOS, Cloudflare, IPv64, Hetzner DNS und Hetzner Cloud — gleichzeitig, pro Domain konfigurierbar.
+Ein hochperformanter, in Go geschriebener **Multi-Provider Dynamic DNS Client** mit vollwertigem Web-Dashboard. Unterstützt IONOS, Cloudflare, IPv64, Hetzner DNS, Hetzner Cloud Febas und DNScale — gleichzeitig, pro Domain konfigurierbar.
 
 ---
 
 ## ✨ Highlights
 
-- **Multi-Provider:** IONOS, Cloudflare, IPv64, Hetzner DNS und Hetzner Cloud — auch gemischt in einer Instanz
+- **Multi-Provider:** IONOS, Cloudflare, IPv64, Hetzner DNS, Hetzner Cloud, Febas und DNScale — auch gemischt in einer Instanz
 - **Web-Dashboard:** Echtzeit-Monitoring via WebSockets — IP-Historie, API-Metriken, Logs, Diagnose und Einstellungen
 - **Dashboard-Auth:** Rollenbasierte Benutzerverwaltung (Admin / Editor / Viewer) mit sicherem PBKDF2-Passwort-Hashing
 - **2FA / TOTP:** Optionale Zwei-Faktor-Authentifizierung per RFC-6238-konformem TOTP (Google Authenticator, Authy)
 - **Dual-Stack:** Gleichzeitige Aktualisierung von A (IPv4) und AAAA (IPv6) Records
-- **Pro Domain konfigurierbar:** IP-Modus (IPV4/IPV6/BOTH) und TTL lassen sich je Domain überschreiben
+- **Pro Domain konfigurierbar:** IP-Modus (IPV4/IPV6/BOTH/CNAME) und TTL lassen sich je Domain überschreiben
 - **Intelligente IPv6-Erkennung:** Direkt vom Interface (via netlink) oder über öffentliche Endpunkte als Fallback
 - **Cache-First:** Zonen- und Record-Caches werden auf Disk persistiert — kein unnötiger API-Call nach Neustart
 - **Cleanup:** Automatisches Entfernen verwaister DNS-Records, die nicht mehr in der Konfiguration stehen
-- **Benachrichtigungen:** Telegram (inkl. Bot-Commands), Gotify, Webhook, MQTT (inkl. Home Assistant Discovery) und E-Mail (SMTP)
+- **Benachrichtigungen:** Telegram (inkl. Bot-Commands), Gotify, Ntfy, Webhook, MQTT (inkl. Home Assistant Discovery) und E-Mail (SMTP)
 - **Backup & Restore:** Export/Import von Config, Status und Benutzern direkt aus dem Dashboard
 - **Diagnose / Health Center:** Übersicht über System-, Provider- und Notifier-Status mit konfigurierbaren Warnungen
 - **Prometheus-Metriken:** Endpunkt `/metrics/prometheus` für Grafana & Co.
@@ -75,25 +78,25 @@ Für den ersten Start oder automatisierte Deployments können Domains auch per E
 
 #### Allgemeine Variablen
 
-| Variable            | Beschreibung                               | Standard                |
-| :------------------ | :----------------------------------------- | :---------------------- |
-| `CONFIG_DIR`        | Verzeichnis für Config, Logs und Cache     | `/config`               |
-| `IP_MODE`           | `IPV4`, `IPV6` oder `BOTH`                 | `BOTH`                  |
-| `INTERVAL`          | Sekunden zwischen Prüfungen                | `300`                   |
-| `INTERFACE`         | Netzwerk-Interface für IPv6 (z. B. `eth0`) | —                       |
-| `DNS_SERVERS`       | Kommagetrennte DNS-Server                  | `1.1.1.1:53,8.8.8.8:53` |
-| `HTTP_PORT`         | Port für Dashboard und Healthcheck         | `8080`                  |
-| `HTTPS_PORT`        | Port für Dashboard                         | `8443`                  |
-| `LANG`              | Sprache der UI (`de` oder `en`)            | `de`                    |
-| `LOG_MAX_LINES`     | Maximale Log-Zeilen                        | `500`                   |
-| `MAX_CONCURRENT`    | Parallele API-Updates                      | `5`                     |
-| `MAX_API_RETRIES`   | Wiederholungsversuche bei API-Fehlern      | `3`                     |
-| `HOURLY_RATE_LIMIT` | Max. API-Anfragen pro Stunde               | `1200`                  |
-| `DRY_RUN`           | `true` → keine Änderungen bei Providern    | `false`                 |
-| `DEBUG`             | Erweitertes Logging                        | `false`                 |
-| `DEBUG_HTTP_RAW`    | HTTP-Traffic loggen (Achtung: Secrets!)    | `false`                 |
-| `DASHBOARD_AUTH`    | `false` → Dashboard ohne Login             | `true`                  |
-| `TRIGGER_TOKEN`     | Token für den `/api/trigger`-Endpunkt      | —                       |
+| Variable | Beschreibung | Standard |
+| :--- | :--- | :--- |
+| `CONFIG_DIR` | Verzeichnis für Config, Logs und Cache | `/config` |
+| `IP_MODE` | `IPV4`, `IPV6` oder `BOTH` | `BOTH` |
+| `INTERVAL` | Sekunden zwischen Prüfungen | `300` |
+| `INTERFACE` | Netzwerk-Interface für IPv6 (z. B. `eth0`) | — |
+| `DNS_SERVERS` | Kommagetrennte DNS-Server | `1.1.1.1:53,8.8.8.8:53` |
+| `HEALTH_PORT` | Port für Dashboard und Healthcheck | `8080` |
+| `DASHBOARD_HTTPS_PORT` | Port für https Dashboard | `8443` |
+| `LANG` | Sprache der UI (`de` oder `en`) | `de` |
+| `LOG_MAX_LINES` | Maximale Log-Zeilen | `500` |
+| `MAX_CONCURRENT` | Parallele API-Updates | `5` |
+| `MAX_API_RETRIES` | Wiederholungsversuche bei API-Fehlern | `3` |
+| `HOURLY_RATE_LIMIT` | Max. API-Anfragen pro Stunde | `1200` |
+| `DRY_RUN` | `true` → keine Änderungen bei Providern | `false` |
+| `DEBUG` | Erweitertes Logging | `false` |
+| `DEBUG_HTTP_RAW` | HTTP-Traffic loggen (Achtung: Secrets!) | `false` |
+| `DASHBOARD_AUTH` | `false` → Dashboard ohne Login | `true` |
+| `TRIGGER_TOKEN` | Token für den `/api/trigger`-Endpunkt | — |
 
 #### Single-Provider (Legacy)
 
@@ -123,6 +126,17 @@ DOMAINS=home.example.com
 PROVIDER=HETZNERCLOUD
 HCLOUD_TOKEN=dein_token
 DOMAINS=home.example.com
+
+# Febas
+PROVIDER=FEBAS
+FEBAS_UPDATE_URL=https://www.febas.de/api/dyndns.php?kundenid=DEINE_ID&token=DEIN_TOKEN
+DOMAINS=home.example.com
+
+# DNScale
+PROVIDER=DNSCALE
+DNSCALE_TOKEN=dein_api_key
+DOMAINS=home.example.com
+
 ```
 
 #### Multi-Provider via `DOMAINS_CONFIG`
@@ -157,23 +171,35 @@ DOMAINS_CONFIG='[
     "fqdn": "hc.example.com",
     "provider": "HETZNERCLOUD",
     "api_secret": "dein_hcloud_token"
+  },
+  {
+    "fqdn": "febas.example.com",
+    "provider": "FEBAS",
+    "febas_update_url": "https://www.febas.de/api/dyndns.php?kundenid=DEINE_ID&token=DEIN_TOKEN"
+  },
+  {
+    "fqdn": "dnscale.example.com",
+    "provider": "DNSCALE",
+    "dnscale_token": "dein_api_key"
   }
 ]'
 ```
 
-Unterstützte Felder je Eintrag: `fqdn`, `provider`, `api_prefix`, `api_secret`, `cf_token`, `cf_email`, `cf_secret`, `cf_proxied`, `ipv64_token`, `hetzner_token`, `hcloud_token`, `ttl`, `ip_mode`
+Unterstützte Felder je Eintrag: `fqdn`, `provider`, `api_prefix`, `api_secret`, `cf_token`, `cf_email`, `cf_secret`, `cf_proxied`, `ipv64_token`, `hetzner_token`, `hcloud_token`, `febas_update_url`, `dnscale_token`, `ttl`, `ip_mode`
 
 ---
 
 ## 📦 Unterstützte Provider
 
-| Provider              | Typ                   | Records |
-| :-------------------- | :-------------------- | :------ |
-| **IONOS**             | REST API              | A, AAAA |
-| **Cloudflare**        | REST API              | A, AAAA |
-| **IPv64**             | NIC-Update + REST API | A, AAAA |
-| **Hetzner DNS**       | REST API              | A, AAAA |
-| **Hetzner Cloud DNS** | REST API              | A, AAAA |
+| Provider | Typ | Records |
+| :--- | :--- | :--- |
+| **IONOS** | REST API | A, AAAA |
+| **Cloudflare** | REST API | A, AAAA |
+| **IPv64** | NIC-Update + REST API | A, AAAA |
+| **Hetzner DNS** | REST API | A, AAAA |
+| **Hetzner Cloud DNS** | REST API | A, AAAA |
+| **Febas** | NIC-Update (GET) | A, AAAA |
+| **DNScale** | REST API | A, AAAA |
 
 ---
 
@@ -193,11 +219,11 @@ Das Dashboard ist unter `http://server-ip:8080` erreichbar und bietet:
 
 ### Rollenmodell
 
-| Rolle    | Beschreibung                                                      |
-| :------- | :---------------------------------------------------------------- |
-| `admin`  | Vollzugriff inkl. Benutzerverwaltung, Backup und Config-Speichern |
-| `editor` | Lesen, Updates auslösen, Domains verwalten                        |
-| `viewer` | Nur lesen (GET-Requests, WebSocket)                               |
+| Rolle | Beschreibung |
+| :--- | :--- |
+| `admin` | Vollzugriff inkl. Benutzerverwaltung, Backup und Config-Speichern |
+| `editor` | Lesen, Updates auslösen, Domains verwalten |
+| `viewer` | Nur lesen (GET-Requests, WebSocket) |
 
 ---
 
@@ -205,13 +231,13 @@ Das Dashboard ist unter `http://server-ip:8080` erreichbar und bietet:
 
 Konfigurierbar über das Dashboard oder `config.json`:
 
-| Notifier     | Beschreibung                                                                            |
-| :----------- | :-------------------------------------------------------------------------------------- |
+| Notifier | Beschreibung |
+| :--- | :--- |
 | **Telegram** | Bot mit interaktiven Commands (`/status`, `/metrics`, `/domains`, `/update`, `/health`) |
-| **Gotify**   | Push-Nachrichten mit Prioritäten                                                        |
-| **Webhook**  | HTTP POST mit JSON-Payload                                                              |
-| **MQTT**     | Publish auf Topic, inkl. Home Assistant Auto Discovery                                  |
-| **E-Mail**   | SMTP mit STARTTLS, direktem TLS oder Plain                                              |
+| **Gotify** | Push-Nachrichten mit Prioritäten |
+| **Webhook** | HTTP POST mit JSON-Payload |
+| **MQTT** | Publish auf Topic, inkl. Home Assistant Auto Discovery |
+| **E-Mail** | SMTP mit STARTTLS, direktem TLS oder Plain |
 
 Für jeden Notifier lassen sich die gewünschten Events einzeln auswählen (Update, Create, Error, Start, Stop, Cleanup, …).
 
@@ -239,14 +265,17 @@ Die `/health`-Route liefert `200 OK`, `degraded` oder `503 Unhealthy`. Docker-HE
 │   ├── de.json
 │   └── en.json
 └── logs/
-    ├── dyndns.json         # Ereignis-Log (JSON Lines)
-    ├── update.json         # IP-Historie pro Domain
-    ├── metrics.json        # Persistierte Metriken
-    ├── ionos_cache.json    # Zonen-/Record-Cache IONOS
-    ├── cloudflare_cache.json
-    ├── ipv64_cache.json
-    ├── hetzner_dns_cache.json
-    └── hetzner_cloud_cache.json
+│   ├── dyndns.json         # Ereignis-Log (JSON Lines)
+│   ├── update.json         # IP-Historie pro Domain
+│   ├── metrics.json        # Persistierte Metriken
+│   ├── ionos_cache.json    # Zonen-/Record-Cache IONOS
+│   ├── cloudflare_cache.json
+│   ├── ipv64_cache.json
+│   ├── hetzner_dns_cache.json
+│   └── hetzner_cloud_cache.json
+└── tls/
+    ├── dashboard.crt
+    └── dashboard.key
 ```
 
 Beispiel `update.json`:
@@ -294,6 +323,16 @@ CONFIG_DIR=/pfad/zur/config ./go-dyndns
 **Hetzner DNS:** [dns.hetzner.com](https://dns.hetzner.com) → API-Tokens
 
 **Hetzner Cloud:** [console.hetzner.cloud](https://console.hetzner.cloud) → Projekt → API-Tokens
+
+**Febas:** Kundenbereich auf [febas.de](https://www.febas.de) → Update-URL mit `kundenid` und `token` aus dem DynDNS-Bereich kopieren
+
+**DNScale:** [dnscale.io](https://dnscale.io) → API-Bereich → Bearer-Token erstellen
+
+---
+
+Diagram
+---
+<img width="7429" height="4307" alt="image" src="https://github.com/user-attachments/assets/888b8bd2-9309-4f53-a7f3-43344b6c36c8" />
 
 ---
 
