@@ -3019,8 +3019,9 @@ body.auth-page .dashboard-footer {
   display: none;
   position: absolute;
   right: 0;
+  margin-left: auto;
   top: calc(100% + 8px);
-  width: fit-content;
+  width: max-content;
   max-width: min(320px, calc(100vw - 20px));
   min-width: 200px;
   box-sizing: border-box;
