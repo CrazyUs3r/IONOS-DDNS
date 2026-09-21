@@ -2267,8 +2267,36 @@ function openAddDomainSection() {
 	section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
+function _ipv64SuffixOptions() {
+	const sel = document.getElementById('new-domain-fqdn-suffix');
+	return sel ? Array.from(sel.options).map(o => o.value) : [];
+}
+
+function _splitIPv64FQDN(fqdn) {
+	const lower = String(fqdn || '').trim().toLowerCase();
+	const suffixes = _ipv64SuffixOptions().sort((a, b) => b.length - a.length);
+	for (const s of suffixes) {
+		if (lower === s) return { prefix: '', suffix: s };
+		if (lower.endsWith('.' + s)) return { prefix: lower.slice(0, -(s.length + 1)), suffix: s };
+	}
+	return { prefix: lower, suffix: '' };
+}
+
+function _readNewDomainFQDN(provider) {
+	if (provider !== 'IPV64') return _getVal('new-domain-fqdn').trim().toLowerCase();
+
+	const prefix = _getVal('new-domain-fqdn-prefix').trim().toLowerCase().replace(/^\.+|\.+$/g, '');
+	const suffix = _getVal('new-domain-fqdn-suffix').trim().toLowerCase();
+	if (!suffix) return '';
+
+	return prefix ? prefix + '.' + suffix : suffix;
+}
+
 function resetDomainForm() {
 	_setVal('new-domain-fqdn', '');
+	_setVal('new-domain-fqdn-prefix', '');
+	const suffixSel = document.getElementById('new-domain-fqdn-suffix');
+	if (suffixSel && suffixSel.options.length > 0) suffixSel.selectedIndex = 0;
 	_setVal('new-domain-ttl', '');
 	_setVal('new-domain-ip-mode', '');
 	_setVal('new-domain-cname-target', '');
@@ -2297,12 +2325,18 @@ function editDomain(index) {
 	editIndex = index;
 	resetDomainForm();
 
-	_setVal('new-domain-fqdn', d.fqdn || '');
-
 	const provSel = document.getElementById('new-domain-provider');
 	if (provSel) provSel.value = String(d.provider || '').toUpperCase() || 'IONOS';
 
 	toggleProviderFields();
+
+	if (String(d.provider || '').toUpperCase() === 'IPV64') {
+		const parts = _splitIPv64FQDN(d.fqdn || '');
+		_setVal('new-domain-fqdn-prefix', parts.prefix);
+		if (parts.suffix) _setVal('new-domain-fqdn-suffix', parts.suffix);
+	} else {
+		_setVal('new-domain-fqdn', d.fqdn || '');
+	}
 
 	_setVal('new-domain-ttl', d.ttl || '');
 
@@ -2334,7 +2368,10 @@ function editDomain(index) {
 	openAddDomainSection();
 	const addBtn = document.querySelector('#add-domain-section button[data-click="addDomainToList()"]');
 	if (addBtn) addBtn.textContent = tr('edit_domain_saved', 'Änderungen übernehmen');
-	document.getElementById('new-domain-fqdn')?.focus();
+	const focusId = String(d.provider || '').toUpperCase() === 'IPV64'
+		? 'new-domain-fqdn-prefix'
+		: 'new-domain-fqdn';
+	document.getElementById(focusId)?.focus();
 }
 
 function toggleProviderFields() {
@@ -2354,6 +2391,10 @@ function toggleProviderFields() {
 	show('fields-hetznercloud', p === 'HETZNERCLOUD');
 	show('fields-febas', p === 'FEBAS');
 	show('fields-dnscale', p === 'DNSCALE');
+	show('fqdn-plain', p !== 'IPV64');
+	show('fqdn-ipv64', p === 'IPV64');
+	show('fields-ttl', p !== 'IPV64');
+	if (p === 'IPV64') _setVal('new-domain-ttl', '');
 
 	const cnameCapable = ['CLOUDFLARE', 'IONOS', 'HETZNER', 'HETZNERCLOUD', 'DNSCALE'].includes(p);
 	const cnameOpt = document.getElementById('opt-ip-mode-cname');
@@ -2376,12 +2417,11 @@ function toggleRecordModeFields() {
 }
 
 function addDomainToList() {
-	const fqdnInput = document.getElementById('new-domain-fqdn');
 	const providerSelect = document.getElementById('new-domain-provider');
-	if (!fqdnInput || !providerSelect) return;
+	if (!providerSelect) return;
 
-	const fqdn = fqdnInput.value.trim().toLowerCase();
 	const provider = providerSelect.value;
+	const fqdn = _readNewDomainFQDN(provider);
 	const supportedProviders = new Set([
 		'IONOS', 'CLOUDFLARE', 'IPV64', 'HETZNER', 'HETZNERCLOUD', 'FEBAS', 'DNSCALE'
 	]);
@@ -2402,7 +2442,7 @@ function addDomainToList() {
 	let entry = {
 		fqdn: fqdn,
 		provider: provider,
-		ttl: Number.isFinite(ttl) && ttl > 0 ? ttl : 0,
+		ttl: (provider !== 'IPV64' && Number.isFinite(ttl) && ttl > 0) ? ttl : 0,
 		ip_mode: isCNAME ? '' : (ipModeRaw || ''),
 		record_mode: isCNAME ? 'CNAME' : ''
 	};
@@ -2451,6 +2491,8 @@ function addDomainToList() {
 
 	fqdnInput.value = '';
 	[
+		'new-domain-fqdn',
+		'new-domain-fqdn-prefix',
 		'new-domain-ttl',
 		'new-domain-cname-target',
 		'new-ionos-prefix',
