@@ -31,8 +31,7 @@ type Phrases struct {
 	GenericErrorJS, RoleAdminJS, RoleEditorJS, RoleViewerJS, AuthUserMinJS, AuthPassMinJS string
 	UserLoading, UserNewTitle, UserPlaceholderName, UserPlaceholderPass                   string
 	UserRoleViewer, UserRoleEditor, UserRoleAdmin, UserBtnCreate, NotifyTestDesc          string
-	IPv64DomainFQDN, IPv64DomainPlaceholder, IPv64ActionAdd                               string
-	IPv64DomainPlaceholderToken, IPv64DomainAPITokenOptional                              string
+	IPv64DomainPlaceholder                                                                string
 	LogDeleteFailedJS, LogEntryDeletedJS                                                  string
 	NavAuditJS, PageReloadFailedJS, SettingsReloadFailedJS, ProviderInvalidJS             string
 	UpdateRunningJS, DNScaleAPIKeyMissingJS, FebasUpdateURLMissingJS                      string
@@ -68,7 +67,7 @@ type Phrases struct {
 	// Diagnose / Backup
 	NavOverview, NavMonitoring, NavTools, NavConfig, NavDiagnoseJS, NavBackupJS string
 	NavDashboardJS, NavDomainsJS, NavMetricsJS, NavLogsJS, NavDebugJS           string
-	NavDomains, IPv64ActionDelete                                               string
+	NavDomains                                                                  string
 
 	DiagnoseTitle, DiagnoseRefreshBtn, DiagnoseLoading, DiagnoseLoadFailed         string
 	DiagnoseConnectionFailed                                                       string

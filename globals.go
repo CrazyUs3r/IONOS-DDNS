@@ -337,7 +337,7 @@ const (
 	HTTPMaxConnsHost     = 20
 	HTTPIdleConnTimeout  = 60 * time.Second
 	HTTPTLSTimeout       = 10 * time.Second
-	HTTPResponseTimeout  = 10 * time.Second
+	HTTPResponseTimeout  = 25 * time.Second
 	HTTPExpectTimeout    = 1 * time.Second
 )
 

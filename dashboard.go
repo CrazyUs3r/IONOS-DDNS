@@ -593,15 +593,83 @@ func buildSettingsSystemSection(c Config) string {
 }
 
 func buildSettingsDomainsSection() string {
-	addDomainForm := `<div class="add-domain-box"><input type="text" id="new-domain-fqdn" class="s-input mb-8" placeholder="` + esc(phrases().SettingsDomainPlaceholder) + `"><input type="number" id="new-domain-ttl" class="s-input mb-8" placeholder="` + esc(phrases().SettingsTTLPlaceholder) + `" min="1" step="1"><select id="new-domain-ip-mode" class="s-input mb-8" data-change="toggleRecordModeFields()"><option value="">` + esc(phrases().SettingsIPMode) + ` (` + esc(phrases().SettingsIPModeGlobal) + `)</option><option value="BOTH">` + esc(phrases().SettingsIPModeBoth) + `</option><option value="IPV4">` + esc(phrases().SettingsIPModeIPv4Only) + `</option><option value="IPV6">` + esc(phrases().SettingsIPModeIPv6Only) + `</option><option id="opt-ip-mode-cname" value="CNAME">CNAME</option></select><div id="fields-cname-target" class="is-hidden"><input type="text" id="new-domain-cname-target" class="s-input mb-8" placeholder="` + esc(phrases().SettingsCNAMETargetPlaceholder) + `"></div><select id="new-domain-provider" class="s-input mb-8" data-change="toggleProviderFields()"><option value="IONOS">IONOS</option><option value="CLOUDFLARE">Cloudflare</option><option value="IPV64">IPv64</option><option value="HETZNER">Hetzner DNS</option><option value="HETZNERCLOUD">Hetzner Cloud DNS</option><option value="FEBAS">Febas DynDNS</option><option value="DNSCALE">DNScale</option></select><div id="fields-ionos"><input type="text" id="new-ionos-prefix" class="s-input mb-8" placeholder="` + esc(phrases().SettingsAPIPrefix) + `"><div class="input-with-action mt-8"><input type="password" id="new-ionos-secret" class="s-input" placeholder="` + esc(phrases().SettingsAPISecret) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-ionos-secret', this)">👁️</button></div></div><div id="fields-cloudflare" class="is-hidden"><input type="text" id="new-cf-token" class="s-input mb-8" placeholder="` + esc(phrases().SettingsCFTokenHint) + `"><div class="center-note">` + esc(phrases().SettingsCFOr) + `</div><input type="text" id="new-cf-email" class="s-input mb-8" placeholder="` + esc(phrases().SettingsCFEmail) + `"><div class="input-with-action mt-8"><input type="password" id="new-cf-secret" class="s-input" placeholder="` + esc(phrases().SettingsCFGlobalKey) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-cf-secret', this)">👁️</button></div><label class="inline-check"><input type="checkbox" id="new-cf-proxied"> ` + esc(phrases().SettingsCFProxyLabel) +
-		`</label></div><div id="fields-ipv64" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-ipv64-token" class="s-input" placeholder="` + esc(phrases().SettingsIPv64Token) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-ipv64-token', this)">👁️</button></div></div><div id="fields-hetzner" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-hetzner-token" class="s-input" placeholder="` + esc(phrases().SettingsHetznerDNSToken) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-hetzner-token', this)">👁️</button></div></div><div id="fields-hetznercloud" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-hcloud-token" class="s-input" placeholder="` + esc(phrases().SettingsHetznerCloudToken) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-hcloud-token', this)">👁️</button></div></div><div id="fields-febas" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-febas-update-url" class="s-input" placeholder="` + esc(phrases().SettingsFebasUpdateURL) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-febas-update-url', this)">👁️</button></div><small class="s-label-hint-block">` + esc(phrases().SettingsFebasUpdateURLHint) + `</small></div><div id="fields-dnscale" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-dnscale-api-key" class="s-input" placeholder="` + esc(phrases().SettingsDNScaleAPIKey) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-dnscale-api-key', this)">👁️</button></div><small class="s-label-hint-block">` + esc(phrases().SettingsDNScaleAPIKeyHint) + `</small></div><div class="s-btn-row"><button class="s-btn s-btn-success-full" data-click="addDomainToList()">` +
-		phrases().SettingsAddBtn +
+	p := phrases()
+
+	ipModeField := `<select id="new-domain-ip-mode" class="s-input mb-8" data-change="toggleRecordModeFields()">` +
+		`<option value="">` + esc(p.SettingsIPMode) + ` (` + esc(p.SettingsIPModeGlobal) + `)</option>` +
+		`<option value="BOTH">` + esc(p.SettingsIPModeBoth) + `</option>` +
+		`<option value="IPV4">` + esc(p.SettingsIPModeIPv4Only) + `</option>` +
+		`<option value="IPV6">` + esc(p.SettingsIPModeIPv6Only) + `</option>` +
+		`<option id="opt-ip-mode-cname" value="CNAME">CNAME</option></select>`
+
+	providerField := `<select id="new-domain-provider" class="s-input mb-8" data-change="toggleProviderFields()">` +
+		`<option value="IONOS">IONOS</option>` +
+		`<option value="CLOUDFLARE">Cloudflare</option>` +
+		`<option value="IPV64">IPv64</option>` +
+		`<option value="HETZNER">Hetzner DNS</option>` +
+		`<option value="HETZNERCLOUD">Hetzner Cloud DNS</option>` +
+		`<option value="FEBAS">Febas DynDNS</option>` +
+		`<option value="DNSCALE">DNScale</option></select>`
+
+	fqdnField := `<div id="fqdn-plain"><input type="text" id="new-domain-fqdn" class="s-input mb-8" placeholder="` +
+		esc(p.SettingsDomainPlaceholder) + `"></div>` +
+		`<div id="fqdn-ipv64" class="is-hidden"><div class="ipv64-mgmt-domain-group mb-8">` +
+		`<input type="text" id="new-domain-fqdn-prefix" class="s-input ipv64-mgmt-domain-prefix" autocomplete="off" placeholder="` +
+		esc(p.IPv64DomainPlaceholder) + `">` +
+		`<select id="new-domain-fqdn-suffix" class="s-input ipv64-mgmt-select">` +
+		buildIPv64ServiceDomainOptions() + `</select></div></div>`
+
+	ttlField := `<div id="fields-ttl"><input type="number" id="new-domain-ttl" class="s-input mb-8" placeholder="` +
+		esc(p.SettingsTTLPlaceholder) + `" min="1" step="1"></div>`
+
+	cnameField := `<div id="fields-cname-target" class="is-hidden"><input type="text" id="new-domain-cname-target" class="s-input mb-8" placeholder="` +
+		esc(p.SettingsCNAMETargetPlaceholder) + `"></div>`
+
+	providerFields := `<div id="fields-ionos"><input type="text" id="new-ionos-prefix" class="s-input mb-8" placeholder="` +
+		esc(p.SettingsAPIPrefix) + `"><div class="input-with-action mt-8"><input type="password" id="new-ionos-secret" class="s-input" placeholder="` +
+		esc(p.SettingsAPISecret) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-ionos-secret', this)">👁️</button></div></div>` +
+
+		`<div id="fields-cloudflare" class="is-hidden"><input type="text" id="new-cf-token" class="s-input mb-8" placeholder="` +
+		esc(p.SettingsCFTokenHint) + `"><div class="center-note">` + esc(p.SettingsCFOr) +
+		`</div><input type="text" id="new-cf-email" class="s-input mb-8" placeholder="` + esc(p.SettingsCFEmail) +
+		`"><div class="input-with-action mt-8"><input type="password" id="new-cf-secret" class="s-input" placeholder="` +
+		esc(p.SettingsCFGlobalKey) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-cf-secret', this)">👁️</button></div>` +
+		`<label class="inline-check"><input type="checkbox" id="new-cf-proxied"> ` + esc(p.SettingsCFProxyLabel) + `</label></div>` +
+
+		`<div id="fields-ipv64" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-ipv64-token" class="s-input" placeholder="` +
+		esc(p.SettingsIPv64Token) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-ipv64-token', this)">👁️</button></div></div>` +
+
+		`<div id="fields-hetzner" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-hetzner-token" class="s-input" placeholder="` +
+		esc(p.SettingsHetznerDNSToken) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-hetzner-token', this)">👁️</button></div></div>` +
+
+		`<div id="fields-hetznercloud" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-hcloud-token" class="s-input" placeholder="` +
+		esc(p.SettingsHetznerCloudToken) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-hcloud-token', this)">👁️</button></div></div>` +
+
+		`<div id="fields-febas" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-febas-update-url" class="s-input" placeholder="` +
+		esc(p.SettingsFebasUpdateURL) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-febas-update-url', this)">👁️</button></div>` +
+		`<small class="s-label-hint-block">` + esc(p.SettingsFebasUpdateURLHint) + `</small></div>` +
+
+		`<div id="fields-dnscale" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-dnscale-api-key" class="s-input" placeholder="` +
+		esc(p.SettingsDNScaleAPIKey) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-dnscale-api-key', this)">👁️</button></div>` +
+		`<small class="s-label-hint-block">` + esc(p.SettingsDNScaleAPIKeyHint) + `</small></div>`
+
+	buttons := `<div class="s-btn-row"><button class="s-btn s-btn-success-full" data-click="addDomainToList()">` +
+		p.SettingsAddBtn +
 		`</button><button type="button" class="s-btn s-btn--cancel" data-click="cancelEdit()">` +
-		phrases().SettingsCancelBtn +
+		p.SettingsCancelBtn +
 		`</button></div>`
 
+	addDomainForm := `<div class="add-domain-box">` +
+		ipModeField +
+		providerField +
+		fqdnField +
+		ttlField +
+		cnameField +
+		providerFields +
+		buttons
+
 	return `<div id="settings-domain-list" class="settings-domain-list"></div>` +
-		buildSettingsSubSection("add-domain-section", esc(phrases().SettingsAddDomain), addDomainForm)
+		buildSettingsSubSection("add-domain-section", esc(p.SettingsAddDomain), addDomainForm)
 }
 
 func buildSettingsNotifySection(c Config) string {
@@ -1631,6 +1699,12 @@ func handleAPISaveDomainSettings(w http.ResponseWriter, r *http.Request) {
 	invalidateSecretReplacer()
 	forceNextUpdate.Store(true)
 	lastCleanupNano.Store(0)
+
+	go func(oldConfigs, newConfigs []DomainConfig) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		syncIPv64ProviderDomains(ctx, oldConfigs, newConfigs)
+	}(oldCfg.DomainConfigs, cfg.DomainConfigs)
 
 	debugLog("API", getClientIP(r), esc(phrases().SettingsDomains))
 	writeJSON(w, http.StatusOK, map[string]string{status: "saved"})
@@ -3784,87 +3858,13 @@ func buildIPv64ServiceDomainOptions() string {
 func writeSettingsDomainsSubpage(w io.Writer) {
 	domainsSection := buildSettingsDomainsSection()
 
-	cfgMu.RLock()
-	hasIPv64 := false
-	for _, dc := range cfg.DomainConfigs {
-		if dc.Provider == ProviderIPv64 {
-			hasIPv64 = true
-			break
-		}
-	}
-	cfgMu.RUnlock()
-
-	p := phrases()
-
 	_, _ = fmt.Fprint(w, `
 		<div class="page-section" data-section="settings-domains">
 	`)
 
-	if hasIPv64 {
-		_, _ = fmt.Fprint(w, `
-			<div class="card ipv64-mgmt-card">
-				<div class="card-content">
-					<div class="ipv64-mgmt-row">
-					<div class="ipv64-mgmt-input-wrap">
-							<label class="ipv64-mgmt-label" for="ipv64-domain-input">`+p.IPv64DomainFQDN+`</label>
-							<div class="ipv64-mgmt-domain-group">
-								<input
-									type="text"
-									id="ipv64-domain-input"
-									class="search-box ipv64-mgmt-input ipv64-mgmt-domain-prefix"
-									autocomplete="off"
-									placeholder="`+p.IPv64DomainPlaceholder+`">
-								<select
-									id="ipv64-domain-suffix"
-									class="search-box ipv64-mgmt-select ipv64-mgmt-domain-suffix">
-									`+buildIPv64ServiceDomainOptions()+`
-								</select>
-							</div>
-						</div>
-
-						<div class="ipv64-mgmt-input-wrap">
-							<label class="ipv64-mgmt-label" for="ipv64-api-token-input">`+p.IPv64DomainAPITokenOptional+`</label>
-							<div class="input-with-action">
-								<input
-									type="password"
-									id="ipv64-api-token-input"
-									class="search-box ipv64-mgmt-input"
-									autocomplete="new-password"
-									placeholder="`+p.IPv64DomainPlaceholderToken+`">
-
-								<button
-									type="button"
-									class="input-action-btn"
-									data-click="togglePassword('ipv64-api-token-input', this)">
-									👁️
-								</button>
-							</div>
-						</div>
-
-						<button
-							type="button"
-							class="action-btn btn--add-domain"
-							data-click="ipv64AddDomain()">
-							➕ `+p.IPv64ActionAdd+`
-						</button>
-
-						<button
-							type="button"
-							class="action-btn btn--del-domain"
-							data-click="ipv64DeleteDomain()">
-							🗑️ `+p.IPv64ActionDelete+`
-						</button>
-					</div>
-
-					<div id="ipv64-domain-result" class="ipv64-result"></div>
-				</div>
-			</div>
-		`)
-	}
-
 	_, _ = fmt.Fprint(w, `
 			<div class="card card--no-cv">
-				<div class="card-header">`+p.SettingsDomains+`</div>
+				<div class="card-header">`+esc(phrases().SettingsDomains)+`</div>
 				<div class="card-content">
 					`+domainsSection+`
 				</div>

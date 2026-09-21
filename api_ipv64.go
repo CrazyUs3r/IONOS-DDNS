@@ -1663,3 +1663,72 @@ func ipv64TokenOwnsDomain(ctx context.Context, dc *DomainConfig, fqdn string) (b
 
 	return ok, nil
 }
+
+func syncIPv64ProviderDomains(ctx context.Context, oldConfigs, newConfigs []DomainConfig) {
+	oldIPv64 := indexIPv64DomainConfigs(oldConfigs)
+	newIPv64 := indexIPv64DomainConfigs(newConfigs)
+
+	for fqdn, dc := range newIPv64 {
+		if _, existed := oldIPv64[fqdn]; existed {
+			continue
+		}
+		if strings.TrimSpace(dc.IPv64Token) == "" {
+			debugLog("IPv64", fqdn, "skip auto-create: no token configured")
+			continue
+		}
+
+		dcCopy := dc
+
+		exists, checkErr := ipv64TokenOwnsDomain(ctx, &dcCopy, fqdn)
+		if checkErr != nil {
+			debugLog("IPv64", fqdn, fmt.Sprintf("existence check failed, trying create anyway: %v", checkErr))
+		}
+		if exists {
+			debugLog("IPv64", fqdn, "already present at provider, skipping create")
+			continue
+		}
+
+		if err := addIPv64Domain(ctx, &dcCopy, fqdn); err != nil {
+			debugLog("IPv64", fqdn, fmt.Sprintf("auto-create at provider failed: %v", err))
+			broadcastNotification(fmt.Sprintf("IPv64: %s konnte beim Provider nicht angelegt werden: %v", fqdn, err), "error")
+
+			continue
+		}
+		broadcastNotification(fmt.Sprintf("IPv64: %s beim Provider angelegt", fqdn), "info")
+	}
+
+	for fqdn, dc := range oldIPv64 {
+		if _, stillThere := newIPv64[fqdn]; stillThere {
+			continue
+		}
+		if strings.TrimSpace(dc.IPv64Token) == "" {
+			debugLog("IPv64", fqdn, "skip auto-delete: no token configured")
+			continue
+		}
+
+		dcCopy := dc
+		if err := deleteIPv64Domain(ctx, &dcCopy, fqdn); err != nil {
+			debugLog("IPv64", fqdn, fmt.Sprintf("auto-delete at provider failed: %v", err))
+			broadcastNotification(fmt.Sprintf("IPv64: %s konnte beim Provider nicht gelöscht werden: %v", fqdn, err), "error")
+
+			continue
+		}
+		broadcastNotification(fmt.Sprintf("IPv64: %s beim Provider gelöscht", fqdn), "info")
+	}
+}
+
+func indexIPv64DomainConfigs(configs []DomainConfig) map[string]DomainConfig {
+	out := make(map[string]DomainConfig, len(configs))
+	for _, dc := range configs {
+		if dc.Provider != ProviderIPv64 {
+			continue
+		}
+		fqdn := normalizeIPv64FQDN(dc.FQDN)
+		if fqdn == "" {
+			continue
+		}
+		out[fqdn] = dc
+	}
+
+	return out
+}
