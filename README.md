@@ -330,6 +330,12 @@ CONFIG_DIR=/pfad/zur/config ./go-dyndns
 
 ---
 
+Diagram
+---
+<img width="7429" height="4307" alt="image" src="https://github.com/user-attachments/assets/888b8bd2-9309-4f53-a7f3-43344b6c36c8" />
+
+---
+
 ## ⚖️ Lizenz
 
 Dieses Projekt steht unter der [MIT-Lizenz](https://github.com/CrazyUs3r/IONOS-DDNS/blob/main/LICENSE).
