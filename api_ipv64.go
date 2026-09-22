@@ -1373,7 +1373,7 @@ func loadIPv64Domains(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
 }
 
 // ============================================================================
-// DOMAIN MANAGEMENT (Dashboard UI only — not called from update loop)
+// DOMAIN MANAGEMENT
 // ============================================================================
 
 func addIPv64Domain(ctx context.Context, dc *DomainConfig, fqdn string) error {
@@ -1392,6 +1392,13 @@ func addIPv64Domain(ctx context.Context, dc *DomainConfig, fqdn string) error {
 	}
 
 	debugLog("IPv64", fqdn, "add_domain response: "+string(data))
+
+	log(LogContext{
+		Level:   LogInfo,
+		Action:  ActionCreate,
+		Domain:  fqdn,
+		Message: tf(phrases().IPv64ProviderDomainCreated, "IPv64: %s beim Provider angelegt", fqdn),
+	})
 
 	lastIPv64DomainsLoadNano.Store(0)
 	if err := loadAllIPv64Domains(ctx, dc); err != nil {
@@ -1413,10 +1420,21 @@ func deleteIPv64Domain(ctx context.Context, dc *DomainConfig, fqdn string) error
 
 	data, err := ipv64API(ctx, dc, params)
 	if err != nil {
-		return fmt.Errorf("del_domain %s: %w", fqdn, err)
+		if stillThere, checkErr := ipv64TokenOwnsDomain(ctx, dc, fqdn); checkErr == nil && !stillThere {
+			debugLog("IPv64", fqdn, tf(phrases().IPv64DeleteAlreadyGone, "del_domain reported %v, but domain is already gone at provider - treating as success", err))
+		} else {
+			return fmt.Errorf("del_domain %s: %w", fqdn, err)
+		}
+	} else {
+		debugLog("IPv64", fqdn, "del_domain response: "+string(data))
 	}
 
-	debugLog("IPv64", fqdn, "del_domain response: "+string(data))
+	log(LogContext{
+		Level:   LogInfo,
+		Action:  ActionCleanup,
+		Domain:  fqdn,
+		Message: tf(phrases().IPv64ProviderDomainDeleted, "IPv64: %s beim Provider gelöscht", fqdn),
+	})
 
 	providerCache.Lock()
 	delete(providerCache.ipv64Records, fqdn)
@@ -1673,7 +1691,7 @@ func syncIPv64ProviderDomains(ctx context.Context, oldConfigs, newConfigs []Doma
 			continue
 		}
 		if strings.TrimSpace(dc.IPv64Token) == "" {
-			debugLog("IPv64", fqdn, "skip auto-create: no token configured")
+			debugLog("IPv64", fqdn, t(phrases().IPv64SkipCreateNoToken, "skip auto-create: no token configured"))
 			continue
 		}
 
@@ -1681,20 +1699,20 @@ func syncIPv64ProviderDomains(ctx context.Context, oldConfigs, newConfigs []Doma
 
 		exists, checkErr := ipv64TokenOwnsDomain(ctx, &dcCopy, fqdn)
 		if checkErr != nil {
-			debugLog("IPv64", fqdn, fmt.Sprintf("existence check failed, trying create anyway: %v", checkErr))
+			debugLog("IPv64", fqdn, tf(phrases().IPv64ExistenceCheckFailed, "existence check failed, trying create anyway: %v", checkErr))
 		}
 		if exists {
-			debugLog("IPv64", fqdn, "already present at provider, skipping create")
+			debugLog("IPv64", fqdn, t(phrases().IPv64AlreadyPresentSkip, "already present at provider, skipping create"))
 			continue
 		}
 
 		if err := addIPv64Domain(ctx, &dcCopy, fqdn); err != nil {
-			debugLog("IPv64", fqdn, fmt.Sprintf("auto-create at provider failed: %v", err))
-			broadcastNotification(fmt.Sprintf("IPv64: %s konnte beim Provider nicht angelegt werden: %v", fqdn, err), "error")
+			debugLog("IPv64", fqdn, tf(phrases().IPv64AutoCreateFailed, "auto-create at provider failed: %v", err))
+			broadcastNotification(tf(phrases().IPv64CreateFailedNotify, "IPv64: %s konnte beim Provider nicht angelegt werden: %v", fqdn, err), "error")
 
 			continue
 		}
-		broadcastNotification(fmt.Sprintf("IPv64: %s beim Provider angelegt", fqdn), "info")
+		broadcastNotification(tf(phrases().IPv64ProviderDomainCreated, "IPv64: %s beim Provider angelegt", fqdn), "info")
 	}
 
 	for fqdn, dc := range oldIPv64 {
@@ -1702,18 +1720,18 @@ func syncIPv64ProviderDomains(ctx context.Context, oldConfigs, newConfigs []Doma
 			continue
 		}
 		if strings.TrimSpace(dc.IPv64Token) == "" {
-			debugLog("IPv64", fqdn, "skip auto-delete: no token configured")
+			debugLog("IPv64", fqdn, t(phrases().IPv64SkipDeleteNoToken, "skip auto-delete: no token configured"))
 			continue
 		}
 
 		dcCopy := dc
 		if err := deleteIPv64Domain(ctx, &dcCopy, fqdn); err != nil {
-			debugLog("IPv64", fqdn, fmt.Sprintf("auto-delete at provider failed: %v", err))
-			broadcastNotification(fmt.Sprintf("IPv64: %s konnte beim Provider nicht gelöscht werden: %v", fqdn, err), "error")
+			debugLog("IPv64", fqdn, tf(phrases().IPv64AutoDeleteFailed, "auto-delete at provider failed: %v", err))
+			broadcastNotification(tf(phrases().IPv64DeleteFailedNotify, "IPv64: %s konnte beim Provider nicht gelöscht werden: %v", fqdn, err), "error")
 
 			continue
 		}
-		broadcastNotification(fmt.Sprintf("IPv64: %s beim Provider gelöscht", fqdn), "info")
+		broadcastNotification(tf(phrases().IPv64ProviderDomainDeleted, "IPv64: %s beim Provider gelöscht", fqdn), "info")
 	}
 }
 
