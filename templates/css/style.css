@@ -2759,37 +2759,6 @@ body.auth-page .dashboard-footer {
 /* ============================================================================
    DOMAINS – IPv64 management card
    ============================================================================ */
-.ipv64-mgmt-card {
-  margin-bottom: 15px;
-}
-
-.ipv64-mgmt-card .card-content {
-  padding-top: 15px;
-}
-
-.ipv64-mgmt-row {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  align-items: flex-end;
-}
-
-.ipv64-mgmt-input-wrap {
-  flex: 1;
-  min-width: 200px;
-}
-
-.ipv64-mgmt-label {
-  font-size: 0.75rem;
-  opacity: 0.6;
-  display: block;
-  margin-bottom: 4px;
-}
-
-.ipv64-mgmt-input {
-  margin-bottom: 0;
-}
-
 .ipv64-mgmt-domain-group {
   display: flex;
   gap: 6px;
@@ -2824,20 +2793,6 @@ body.auth-page .dashboard-footer {
 [data-theme="light"] .ipv64-mgmt-select {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
   color-scheme: light;
-}
-
-.btn--add-domain {
-  background: rgba(74, 222, 128, 0.15);
-  color: var(--text-success);
-  border-color: #4ade8080;
-  white-space: nowrap;
-}
-
-.btn--del-domain {
-  background: rgba(248, 113, 113, 0.15);
-  color: var(--text-error);
-  border-color: #f8717180;
-  white-space: nowrap;
 }
 
 .ipv64-result {
