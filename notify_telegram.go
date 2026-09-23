@@ -814,12 +814,42 @@ func (t *telegramNotifier) sendMetrics(chatID string) {
 	fmt.Fprintf(&sb, "  %s <code>%v%%</code>\n", phrases().TgMetricsLoad, stats["usage_percent"])
 
 	fmt.Fprintf(&sb, "\n<b>%s</b>\n", phrases().TgMetricsTodayHTTP)
-	fmt.Fprintf(&sb, "  GET: <code>%v</code>  POST: <code>%v</code>  PUT: <code>%v</code>  DEL: <code>%v</code>",
-		stats["daily_get"], stats["daily_post"], stats["daily_put"], stats["daily_delete"])
+	fmt.Fprintf(&sb,
+		"  GET: <code>%v</code>  POST: <code>%v</code>  PUT: <code>%v</code>  DEL: <code>%v</code>",
+		stats["daily_get"],
+		stats["daily_post"],
+		stats["daily_put"],
+		stats["daily_delete"],
+	)
+
 	if v, ok := stats["daily_nic"]; ok {
 		fmt.Fprintf(&sb, "  NIC: <code>%v</code>", v)
 	}
-	fmt.Fprintf(&sb, "\n\n🕒 <i>%s</i>", time.Now().Format(statusTimestampLayout))
+
+	fmt.Fprintf(&sb, "\n")
+
+	if providers, ok := stats["provider_daily"].(map[string]ProviderDailyMetrics); ok {
+		fmt.Fprintf(&sb, "\n<b>Provider</b>\n")
+
+		for provider, data := range providers {
+			fmt.Fprintf(&sb,
+				"  <b>%s</b>: GET <code>%d</code>  POST <code>%d</code>  PUT <code>%d</code>  DEL <code>%d</code>",
+				provider,
+				data.GET,
+				data.POST,
+				data.PUT,
+				data.DELETE,
+			)
+
+			if data.NIC > 0 {
+				fmt.Fprintf(&sb, "  NIC <code>%d</code>", data.NIC)
+			}
+
+			fmt.Fprintf(&sb, "\n")
+		}
+	}
+
+	fmt.Fprintf(&sb, "\n🕒 <i>%s</i>", time.Now().Format(statusTimestampLayout))
 
 	t.enqueue(chatID, sb.String(), backKeyboard())
 }
