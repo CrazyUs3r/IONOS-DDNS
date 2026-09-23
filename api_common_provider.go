@@ -155,7 +155,7 @@ func handleProviderNetworkError(
 	serverBusy bool,
 ) (bool, error) {
 	debugLog("HTTP", "", fmt.Sprintf("❌ %s network error: %v | latency: %v", providerName, err, duration))
-	apiMetrics.RecordError(method, 0, err, duration)
+	apiMetrics.RecordError(providerName, method, 0, err, duration)
 
 	handledErr := fmt.Errorf("%s: %w", phrases().ErrNetworkError, err)
 	if !canRetryAPIAttempt(attempt, maxAttempts) {
@@ -181,7 +181,7 @@ func handleProviderReadError(
 	attempt, maxAttempts int,
 ) (bool, error) {
 	debugLog("HTTP", "", fmt.Sprintf("❌ %s body read error: %v", providerName, err))
-	apiMetrics.RecordError(method, statusCode, err, duration)
+	apiMetrics.RecordError(providerName, method, statusCode, err, duration)
 
 	handledErr := fmt.Errorf("%s: %w", phrases().ErrBodyRead, err)
 	if !canRetryAPIAttempt(attempt, maxAttempts) {
@@ -213,7 +213,7 @@ func handleProviderHTTPResponse(
 	}
 
 	if res.StatusCode >= 200 && res.StatusCode < 300 {
-		apiMetrics.RecordSuccess(method, duration)
+		apiMetrics.RecordSuccess(providerName, method, duration)
 		lastErrorMsg.Set("")
 		debugLog("HTTP", "", fmt.Sprintf("✅ %s success: %d bytes", providerName, len(respBody)))
 
@@ -236,7 +236,7 @@ func handleProviderAPIError(
 	duration time.Duration,
 	attempt, maxAttempts int,
 ) (bool, error) {
-	apiMetrics.RecordError(method, statusCode, apiErr, duration)
+	apiMetrics.RecordError(providerName, method, statusCode, apiErr, duration)
 	lastErrorMsg.Set(sanitizeError(apiErr))
 
 	if statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden {

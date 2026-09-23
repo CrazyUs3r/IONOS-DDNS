@@ -92,14 +92,14 @@ func validatePublicIP(ipStr string, want IPVersion) (string, error) {
 func getPublicIP(ctx context.Context, url string, want IPVersion) (string, error) {
 	ipStr, statusCode, duration, err := fetchIPResponse(ctx, url)
 	if err != nil {
-		apiMetrics.RecordError("IP", statusCode, err, duration)
+		apiMetrics.RecordError("IP", MethodGET, statusCode, err, duration)
 
 		return "", err
 	}
 
 	validatedIP, err := validatePublicIP(ipStr, want)
 	if err != nil {
-		apiMetrics.RecordError("IP", statusCode, err, duration)
+		apiMetrics.RecordError("IP", MethodGET, statusCode, err, duration)
 		debugLog("IP-CHECK", "", "❌ "+err.Error())
 
 		return "", err
@@ -108,7 +108,7 @@ func getPublicIP(ctx context.Context, url string, want IPVersion) (string, error
 	debugLog("IP-CHECK", "", fmt.Sprintf("✅ %s: %s | %s: %v", phrases().ReceivedIP, validatedIP, phrases().AvgLatency, duration))
 	ipLog(fmt.Sprintf(phrases().PublicIPDetectedVia, want, url, validatedIP, phrases().AvgLatency, duration))
 
-	apiMetrics.RecordSuccess("IP", duration)
+	apiMetrics.RecordSuccess("IP", MethodGET, duration)
 	apiMetrics.RecordIPLatency(duration)
 
 	return validatedIP, nil
