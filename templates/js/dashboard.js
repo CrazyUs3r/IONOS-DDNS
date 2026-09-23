@@ -1324,6 +1324,41 @@ function updateMetrics(m) {
 	setTxt('mIPLatency', m.ip_latency_avg);
 	setTxt('mIPCount', m.ip_latency_count);
 	setTxt('mLastIPCheck', m.last_ip_check);
+	renderProviderDaily(m.provider_daily);
+}
+
+function renderProviderDaily(providers) {
+	const container = document.getElementById('mProviderDaily');
+	if (!container) return;
+
+	const names = providers ? Object.keys(providers).sort() : [];
+	if (names.length === 0) {
+		container.innerHTML = '';
+		return;
+	}
+
+	const escName = (s) => String(s).replace(/[&<>"']/g, c => ({
+		'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+	}[c]));
+
+	let html = '';
+	for (const provider of names) {
+		const d = providers[provider] || {};
+		html += `
+			<div class="provider-method-row">
+				<div class="provider-method-name">${escName(provider)}</div>
+				<div class="provider-method-values">
+					<span class="provider-method-item provider-method-item--get">GET <strong>${d.get ?? 0}</strong></span>
+					<span class="provider-method-item provider-method-item--post">POST <strong>${d.post ?? 0}</strong></span>
+					<span class="provider-method-item provider-method-item--put">PUT <strong>${d.put ?? 0}</strong></span>
+					<span class="provider-method-item provider-method-item--delete">DEL <strong>${d.delete ?? 0}</strong></span>
+					<span class="provider-method-item provider-method-item--nic">NIC <strong>${d.nic ?? 0}</strong></span>
+				</div>
+			</div>
+		`;
+	}
+
+	container.innerHTML = html;
 }
 
 let _chartTooltip = null;
