@@ -16,41 +16,42 @@ import (
 )
 
 type apiMetricsSnapshot struct {
-	HourlyReset          time.Time   `json:"hourly_reset"`
-	LastIPCheckTime      time.Time   `json:"last_ip_check_at"`
-	LastErrorTime        time.Time   `json:"last_error_at"`
-	DailyReset           time.Time   `json:"daily_reset"`
-	SavedAt              time.Time   `json:"saved_at"`
-	LastSuccessTime      time.Time   `json:"last_success_at"`
-	LastError            string      `json:"last_error"`
-	RequestTimestamps    []time.Time `json:"request_timestamps"`
-	LatencySamples       [1000]int64 `json:"latency_samples"`
-	IPLatencySamples     [200]int64  `json:"ip_latency_samples"`
-	HourlyStats          [24]int     `json:"hourly_stats"`
-	HourlyLatencyMs      [24]int64   `json:"hourly_latency_ms"`
-	HourlyLatencySumMs   [24]int64   `json:"hourly_latency_sum_ms,omitempty"`
-	HourlyLatencyCount   [24]int64   `json:"hourly_latency_count,omitempty"`
-	DailyDELETE          int64       `json:"daily_delete"`
-	RateLimitHits        int64       `json:"rate_limit_hits"`
-	SuccessRequests      int64       `json:"success_requests"`
-	ClientErrors         int64       `json:"client_errors"`
-	DailyGET             int64       `json:"daily_get"`
-	DailyPOST            int64       `json:"daily_post"`
-	DailyPUT             int64       `json:"daily_put"`
-	LatencySumMs         int64       `json:"latency_sum_ms,omitempty"`
-	DailyNIC             int64       `json:"daily_nic"`
-	ServerErrors         int64       `json:"server_errors"`
-	TotalRequests        int64       `json:"total_requests"`
-	AverageLatencyMs     int64       `json:"avg_latency_ms"`
-	LatencySampleIdx     int         `json:"latency_sample_idx"`
-	LatencySampleCount   int         `json:"latency_sample_count"`
-	IPLatencySum         int64       `json:"ip_latency_sum_ms"`
-	IPLatencyCount       int64       `json:"ip_latency_count"`
-	IPLatencyAvgMs       int64       `json:"ip_latency_avg_ms"`
-	LatencyCount         int64       `json:"latency_count,omitempty"`
-	IPLatencySampleIdx   int         `json:"ip_latency_sample_idx"`
-	IPLatencySampleCount int         `json:"ip_latency_sample_count"`
-	FailedRequests       int64       `json:"failed_requests"`
+	HourlyReset          time.Time                       `json:"hourly_reset"`
+	LastIPCheckTime      time.Time                       `json:"last_ip_check_at"`
+	LastErrorTime        time.Time                       `json:"last_error_at"`
+	DailyReset           time.Time                       `json:"daily_reset"`
+	SavedAt              time.Time                       `json:"saved_at"`
+	LastSuccessTime      time.Time                       `json:"last_success_at"`
+	LastError            string                          `json:"last_error"`
+	RequestTimestamps    []time.Time                     `json:"request_timestamps"`
+	LatencySamples       [1000]int64                     `json:"latency_samples"`
+	IPLatencySamples     [200]int64                      `json:"ip_latency_samples"`
+	HourlyStats          [24]int                         `json:"hourly_stats"`
+	HourlyLatencyMs      [24]int64                       `json:"hourly_latency_ms"`
+	HourlyLatencySumMs   [24]int64                       `json:"hourly_latency_sum_ms,omitempty"`
+	HourlyLatencyCount   [24]int64                       `json:"hourly_latency_count,omitempty"`
+	DailyDELETE          int64                           `json:"daily_delete"`
+	RateLimitHits        int64                           `json:"rate_limit_hits"`
+	SuccessRequests      int64                           `json:"success_requests"`
+	ClientErrors         int64                           `json:"client_errors"`
+	DailyGET             int64                           `json:"daily_get"`
+	DailyPOST            int64                           `json:"daily_post"`
+	DailyPUT             int64                           `json:"daily_put"`
+	DailyNIC             int64                           `json:"daily_nic"`
+	ProviderDaily        map[string]ProviderDailyMetrics `json:"provider_daily,omitempty"`
+	LatencySumMs         int64                           `json:"latency_sum_ms,omitempty"`
+	ServerErrors         int64                           `json:"server_errors"`
+	TotalRequests        int64                           `json:"total_requests"`
+	AverageLatencyMs     int64                           `json:"avg_latency_ms"`
+	LatencySampleIdx     int                             `json:"latency_sample_idx"`
+	LatencySampleCount   int                             `json:"latency_sample_count"`
+	IPLatencySum         int64                           `json:"ip_latency_sum_ms"`
+	IPLatencyCount       int64                           `json:"ip_latency_count"`
+	IPLatencyAvgMs       int64                           `json:"ip_latency_avg_ms"`
+	LatencyCount         int64                           `json:"latency_count,omitempty"`
+	IPLatencySampleIdx   int                             `json:"ip_latency_sample_idx"`
+	IPLatencySampleCount int                             `json:"ip_latency_sample_count"`
+	FailedRequests       int64                           `json:"failed_requests"`
 }
 
 var percentileBufPool = sync.Pool{
@@ -59,6 +60,14 @@ var percentileBufPool = sync.Pool{
 
 		return &buf
 	},
+}
+
+type ProviderDailyMetrics struct {
+	GET    int64 `json:"get"`
+	POST   int64 `json:"post"`
+	PUT    int64 `json:"put"`
+	DELETE int64 `json:"delete"`
+	NIC    int64 `json:"nic"`
 }
 
 type APIMetrics struct {
@@ -76,7 +85,6 @@ type APIMetrics struct {
 	HourlyLatencyCount   [24]int64
 	HourlyLatency        [24]time.Duration
 	AverageLatency       time.Duration
-	DailyPUT             int64
 	LatencyCount         int64
 	LatencySum           time.Duration
 	ClientErrors         int64
@@ -84,11 +92,7 @@ type APIMetrics struct {
 	ServerErrors         int64
 	LatencySampleIdx     int
 	LatencySampleCount   int
-	DailyGET             int64
-	DailyPOST            int64
 	TotalRequests        int64
-	DailyDELETE          int64
-	DailyNIC             int64
 	RateLimitHits        int64
 	FailedRequests       int64
 	IPLatencySum         time.Duration
@@ -97,8 +101,28 @@ type APIMetrics struct {
 	SuccessRequests      int64
 	IPLatencySampleIdx   int
 	IPLatencySampleCount int
+	DailyGET             int64
+	DailyPOST            int64
+	DailyPUT             int64
+	DailyDELETE          int64
+	DailyNIC             int64
+	ProviderDaily        map[string]*ProviderDailyMetrics
 	sync.Mutex
 	providerAnyError atomic.Bool
+}
+
+func (m *APIMetrics) ensureProviderMetrics(provider string) *ProviderDailyMetrics {
+	if m.ProviderDaily == nil {
+		m.ProviderDaily = make(map[string]*ProviderDailyMetrics)
+	}
+
+	stats, ok := m.ProviderDaily[provider]
+	if !ok {
+		stats = &ProviderDailyMetrics{}
+		m.ProviderDaily[provider] = stats
+	}
+
+	return stats
 }
 
 func sameLocalDate(a, b time.Time) bool {
@@ -131,7 +155,7 @@ func (m *APIMetrics) resetHourlyMetricsIfNeeded(now time.Time) {
 // ============================================================================
 
 func (m *APIMetrics) RecordSuccess(
-	method string,
+	provider, method string,
 	duration time.Duration,
 ) {
 	now := time.Now()
@@ -154,6 +178,7 @@ func (m *APIMetrics) RecordSuccess(
 	}
 
 	m.incrementDailyMethod(method, now)
+	m.incrementProviderDailyMethod(provider, method, now)
 	m.providerAnyError.Store(false)
 
 	m.Unlock()
@@ -163,7 +188,7 @@ func (m *APIMetrics) RecordSuccess(
 }
 
 func (m *APIMetrics) RecordError(
-	method string,
+	provider, method string,
 	statusCode int,
 	err error,
 	duration time.Duration,
@@ -207,6 +232,7 @@ func (m *APIMetrics) RecordError(
 	}
 
 	m.incrementDailyMethod(method, now)
+	m.incrementProviderDailyMethod(provider, method, now)
 	m.providerAnyError.Store(true)
 
 	m.Unlock()
@@ -216,12 +242,19 @@ func (m *APIMetrics) RecordError(
 }
 
 func (m *APIMetrics) incrementDailyMethod(method string, now time.Time) {
-	if !m.DailyReset.IsZero() && !sameLocalDate(now, m.DailyReset) {
+	newDay := !m.DailyReset.IsZero() &&
+		!sameLocalDate(now, m.DailyReset)
+
+	if newDay {
 		m.DailyGET = 0
 		m.DailyPOST = 0
 		m.DailyPUT = 0
 		m.DailyDELETE = 0
 		m.DailyNIC = 0
+
+		for _, providerStats := range m.ProviderDaily {
+			*providerStats = ProviderDailyMetrics{}
+		}
 	}
 
 	m.DailyReset = now
@@ -237,6 +270,32 @@ func (m *APIMetrics) incrementDailyMethod(method string, now time.Time) {
 		m.DailyDELETE++
 	case MethodNIC:
 		m.DailyNIC++
+	}
+}
+
+func (m *APIMetrics) incrementProviderDailyMethod(
+	provider string,
+	method string,
+	_ time.Time,
+) {
+	provider = strings.TrimSpace(provider)
+	if provider == "" {
+		provider = "UNKNOWN"
+	}
+
+	stats := m.ensureProviderMetrics(provider)
+
+	switch method {
+	case MethodGET:
+		stats.GET++
+	case MethodPOST:
+		stats.POST++
+	case MethodPUT:
+		stats.PUT++
+	case MethodDELETE:
+		stats.DELETE++
+	case MethodNIC:
+		stats.NIC++
 	}
 }
 
@@ -450,6 +509,14 @@ func (m *APIMetrics) getStatsUnsafe() map[string]any {
 		lastIPCheck = m.LastIPCheckTime.Format("15:04:05")
 	}
 
+	providerDaily := make(map[string]ProviderDailyMetrics)
+
+	for provider, stats := range m.ProviderDaily {
+		if stats != nil {
+			providerDaily[provider] = *stats
+		}
+	}
+
 	return map[string]any{
 		"total_requests":        m.TotalRequests,
 		"success_rate":          fmt.Sprintf("%.2f%%", successRate),
@@ -477,6 +544,7 @@ func (m *APIMetrics) getStatsUnsafe() map[string]any {
 		"ip_latency_count":      m.IPLatencyCount,
 		"last_ip_check":         lastIPCheck,
 		"uptime_secs":           int64(time.Since(startTime).Seconds()),
+		"provider_daily":        providerDaily,
 	}
 }
 
@@ -580,6 +648,13 @@ func (m *APIMetrics) restoreSnapshot(snap apiMetricsSnapshot, now time.Time) {
 	m.restoreIPLatency(snap)
 	m.restoreRequestTimestamps(snap.RequestTimestamps, now)
 	m.lastHour = now.Unix() / 3600
+	for provider, stats := range m.ProviderDaily {
+		if stats == nil {
+			continue
+		}
+
+		snap.ProviderDaily[provider] = *stats
+	}
 }
 
 func (m *APIMetrics) restoreRequestTotals(snap apiMetricsSnapshot) {
@@ -609,6 +684,7 @@ func (m *APIMetrics) restoreDailyMetrics(snap apiMetricsSnapshot, now time.Time)
 	m.DailyPUT = 0
 	m.DailyDELETE = 0
 	m.DailyNIC = 0
+	m.ProviderDaily = make(map[string]*ProviderDailyMetrics)
 	m.DailyReset = time.Time{}
 
 	if snap.DailyReset.IsZero() || !sameLocalDate(snap.DailyReset, now) {
@@ -620,6 +696,11 @@ func (m *APIMetrics) restoreDailyMetrics(snap apiMetricsSnapshot, now time.Time)
 	m.DailyDELETE = snap.DailyDELETE
 	m.DailyNIC = snap.DailyNIC
 	m.DailyReset = snap.DailyReset
+
+	for provider, counts := range snap.ProviderDaily {
+		c := counts
+		m.ProviderDaily[provider] = &c
+	}
 }
 
 func (m *APIMetrics) restoreHourlyMetrics(snap apiMetricsSnapshot, now time.Time) {
@@ -705,6 +786,7 @@ func (m *APIMetrics) snapshotForPersistence() apiMetricsSnapshot {
 		DailyPUT:             m.DailyPUT,
 		DailyDELETE:          m.DailyDELETE,
 		DailyNIC:             m.DailyNIC,
+		ProviderDaily:        copyProviderDailyMetrics(m.ProviderDaily),
 		DailyReset:           m.DailyReset,
 		HourlyReset:          m.HourlyReset,
 		LatencySamples:       m.LatencySamples,
@@ -719,6 +801,14 @@ func (m *APIMetrics) snapshotForPersistence() apiMetricsSnapshot {
 		LastIPCheckTime:      m.LastIPCheckTime,
 	}
 
+	for provider, stats := range m.ProviderDaily {
+		if stats == nil {
+			continue
+		}
+
+		snap.ProviderDaily[provider] = *stats
+	}
+
 	for i := range len(m.HourlyLatency) {
 		snap.HourlyLatencyMs[i] = m.HourlyLatency[i].Milliseconds()
 		snap.HourlyLatencySumMs[i] = m.HourlyLatencySum[i].Milliseconds()
@@ -726,6 +816,22 @@ func (m *APIMetrics) snapshotForPersistence() apiMetricsSnapshot {
 	}
 
 	return snap
+}
+
+func copyProviderDailyMetrics(src map[string]*ProviderDailyMetrics) map[string]ProviderDailyMetrics {
+	if len(src) == 0 {
+		return nil
+	}
+
+	out := make(map[string]ProviderDailyMetrics, len(src))
+	for provider, counts := range src {
+		if counts == nil {
+			continue
+		}
+		out[provider] = *counts
+	}
+
+	return out
 }
 
 func startMetricsAutosave(interval time.Duration) {
@@ -798,7 +904,6 @@ func metricsBroadcasterLoop() {
 		for {
 			select {
 			case <-metricsSignal:
-				// Coalesce bursts of API completions into at most two UI updates/second.
 				dirty = true
 
 			case <-ticker.C:
@@ -862,6 +967,7 @@ func handleMetricsReset(w http.ResponseWriter, r *http.Request) {
 	apiMetrics.DailyPUT = 0
 	apiMetrics.DailyDELETE = 0
 	apiMetrics.DailyNIC = 0
+	apiMetrics.ProviderDaily = make(map[string]*ProviderDailyMetrics)
 	apiMetrics.DailyReset = time.Time{}
 	apiMetrics.HourlyReset = time.Time{}
 	apiMetrics.lastHour = 0

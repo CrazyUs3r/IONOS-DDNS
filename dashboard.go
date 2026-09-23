@@ -3477,10 +3477,56 @@ func writeDashboardMetricsCard(
 	nicHTML, chartSVG, latencySVG string,
 	isViewer bool,
 ) {
-	resetBtn := `<button class="action-btn metrics-reset-btn" data-click="event.preventDefault();resetMetrics()">🗑️ ` + esc(phrases().MetricsResetBtn) + `</button>`
+	resetBtn := `<button class="action-btn metrics-reset-btn" data-click="event.preventDefault();resetMetrics()">🗑️ ` +
+		esc(phrases().MetricsResetBtn) +
+		`</button>`
+
 	if isViewer {
 		resetBtn = ""
 	}
+
+	var providerHTML strings.Builder
+
+	if providers, ok := stats["provider_daily"].(map[string]ProviderDailyMetrics); ok {
+		for provider, data := range providers {
+			fmt.Fprintf(&providerHTML, `
+				<div class="provider-method-row">
+					<div class="provider-method-name">
+						%s
+					</div>
+
+					<div class="provider-method-values">
+						<span class="provider-method-item provider-method-item--get">
+							GET <strong>%d</strong>
+						</span>
+
+						<span class="provider-method-item provider-method-item--post">
+							POST <strong>%d</strong>
+						</span>
+
+						<span class="provider-method-item provider-method-item--put">
+							PUT <strong>%d</strong>
+						</span>
+
+						<span class="provider-method-item provider-method-item--delete">
+							DEL <strong>%d</strong>
+						</span>
+
+						<span class="provider-method-item provider-method-item--nic">
+							NIC <strong>%d</strong>
+						</span>
+					</div>
+				</div>
+			`,
+				esc(provider),
+				data.GET,
+				data.POST,
+				data.PUT,
+				data.DELETE,
+				data.NIC)
+		}
+	}
+
 	_, _ = fmt.Fprintf(
 		w, `
 	<div class="page-section" data-section="metrics">
@@ -3488,21 +3534,26 @@ func writeDashboardMetricsCard(
 			<div class="card-header card-header--space-between">
 				📊 %s`+resetBtn+`
 			</div>
+
 			<div class="card-content">
+
 				<!-- TOP STATS -->
 				<div class="metrics-top-grid">
 					<div>
 						<strong>`+phrases().TotalRequests+`:</strong>
 						<span id="mTotal">%v</span>
 					</div>
+
 					<div>
 						<strong>`+phrases().SuccessRate+`:</strong>
 						<span id="mSuccess" class="metric-success">%v</span>
 					</div>
+
 					<div>
 						<strong>`+phrases().AvgLatency+`:</strong>
 						<span id="mLatency">%v</span>
 					</div>
+
 					<div title="`+phrases().ClientErrors+` / `+phrases().ServerErrors+`">
 						<strong>`+phrases().Errors+`:</strong>
 						<span id="mErrors">%v / %v</span>
@@ -3514,15 +3565,18 @@ func writeDashboardMetricsCard(
 					<div class="latency-box-label">
 						`+phrases().MetricLatencyPercentile+`
 					</div>
+
 					<div class="latency-grid">
 						<div class="latency-cell latency-cell--p50">
 							<div class="latency-cell-label">P50</div>
 							<div id="mP50" class="latency-cell-value">%v</div>
 						</div>
+
 						<div class="latency-cell latency-cell--p85">
 							<div class="latency-cell-label">P85</div>
 							<div id="mP85" class="latency-cell-value">%v</div>
 						</div>
+
 						<div class="latency-cell latency-cell--p99">
 							<div class="latency-cell-label">P99</div>
 							<div id="mP99" class="latency-cell-value">%v</div>
@@ -3533,14 +3587,23 @@ func writeDashboardMetricsCard(
 				<!-- USAGE -->
 				<div class="usage-section">
 					<div class="usage-header">
-						<span class="usage-limit-label">`+phrases().HourlyLimitEst+`</span>
+						<span class="usage-limit-label">
+							`+phrases().HourlyLimitEst+`
+						</span>
+
 						<span id="mUsage" class="usage-count">
 							%v / %v `+phrases().RequestsLabel+`
 						</span>
 					</div>
+
 					<div class="usage-track">
-						<div id="mUsageBar" class="usage-bar" style="--usage-width:%v%%;--usage-color:%s;"></div>
+						<div
+							id="mUsageBar"
+							class="usage-bar"
+							style="--usage-width:%v%%;--usage-color:%s;">
+						</div>
 					</div>
+
 					<div class="usage-hint">
 						`+phrases().UsageLast60Min+`
 					</div>
@@ -3548,31 +3611,47 @@ func writeDashboardMetricsCard(
 
 				<!-- BOTTOM GRID -->
 				<div class="metrics-bottom-grid">
+
 					<!-- HTTP METHODS -->
 					<div class="http-methods-box">
 						<div class="http-methods-label">
 							`+phrases().MetricHTTPMethods+`
 						</div>
+
 						<div class="http-methods-grid">
+
 							<div class="http-method-row http-method-row--get">
 								<span class="http-method-key">GET</span>
 								<span id="mDailyGET" class="http-method-val">%v</span>
 							</div>
+
 							<div class="http-method-row http-method-row--post">
 								<span class="http-method-key">POST</span>
 								<span id="mDailyPOST" class="http-method-val">%v</span>
 							</div>
+
 							<div class="http-method-row http-method-row--put">
 								<span class="http-method-key">PUT</span>
 								<span id="mDailyPUT" class="http-method-val">%v</span>
-							</div>	
+							</div>
+
 							<div class="http-method-row http-method-row--del">
 								<span class="http-method-key">DEL</span>
 								<span id="mDailyDELETE" class="http-method-val">%v</span>
 							</div>
 
 							%s
+						</div>
 
+						<!-- PROVIDER METHODS -->
+						<div class="provider-methods">
+							<div class="http-methods-label">
+								Provider
+							</div>
+
+							<div id="mProviderDaily" class="provider-methods-grid">
+								%s
+							</div>
 						</div>
 					</div>
 
@@ -3581,29 +3660,33 @@ func writeDashboardMetricsCard(
 						<div class="ip-latency-label">
 							`+phrases().MetricIPLatency+`
 						</div>
+
 						<div class="ip-latency-center">
 							<div id="mIPLatency" class="ip-latency-value">
 								%v
 							</div>
+
 							<div class="ip-latency-meta">
 								`+phrases().MetricAvgFrom+`
 								<span id="mIPCount">%v</span>
 								`+phrases().ChecksLabel+`
 							</div>
+
 							<div class="ip-latency-meta">
 								`+phrases().MetricLastCheck+`
 								<span id="mLastIPCheck">%v</span>
 							</div>
 						</div>
 					</div>
-				</div> <!-- metrics-bottom-grid -->
-			</div> <!-- card-content -->
-		</div> <!-- card -->
+
+				</div>
+			</div>
+		</div>
 
 		%s
 		%s
 
-	</div> <!-- page-section -->
+	</div>
 	`,
 		phrases().APIPerformance,
 
@@ -3630,6 +3713,8 @@ func writeDashboardMetricsCard(
 		stats["daily_delete"],
 
 		nicHTML,
+
+		providerHTML.String(),
 
 		stats["ip_latency_avg"],
 		stats["ip_latency_count"],

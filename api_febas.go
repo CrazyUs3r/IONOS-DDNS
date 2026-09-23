@@ -72,7 +72,7 @@ func loadFebasZoneRecords(ctx context.Context, zone Zone) ([]Record, error) {
 	resolverCache := newDNSCacheWithServers(dnsServers, time.Minute)
 	addrs, err := resolverCache.getIPAddrs(ctx, fqdn)
 	if err != nil {
-		debugLog("FEBAS", fqdn, fmt.Sprintf(phrases().FebasDNSLookupFailed, err))
+		debugLog(sFebas, fqdn, fmt.Sprintf(phrases().FebasDNSLookupFailed, err))
 
 		return []Record{}, nil
 	}
@@ -164,7 +164,7 @@ func updateFebasDNS(
 	needV4 := ipv4 != "" && !febasRecordContains(records, RecordTypeA, ipv4)
 	needV6 := ipv6 != "" && !febasRecordContains(records, RecordTypeAAAA, ipv6)
 	if !needV4 && !needV6 {
-		debugLog("FEBAS", fqdn, phrases().FebasAlreadyCurrent)
+		debugLog(sFebas, fqdn, phrases().FebasAlreadyCurrent)
 
 		return false, nil
 	}
@@ -268,7 +268,7 @@ func setFebasCachedAddress(
 }
 
 func febasAPI(ctx context.Context, requestURL string) ([]byte, error) {
-	return apiWithRetry(ctx, "FEBAS", phrases().FebasAPIFailed, func(attempt, maxRetries int) ([]byte, bool, error) {
+	return apiWithRetry(ctx, sFebas, phrases().FebasAPIFailed, func(attempt, maxRetries int) ([]byte, bool, error) {
 		return febasAPIAttempt(ctx, requestURL, attempt, maxRetries)
 	})
 }
@@ -292,7 +292,7 @@ func febasAPIAttempt(
 	res, err := febasHTTPClient().Do(req)
 	duration := time.Since(start)
 	if err != nil {
-		retry, handledErr := handleProviderNetworkError(ctx, "FEBAS", MethodNIC, err, duration, attempt, maxRetries, false)
+		retry, handledErr := handleProviderNetworkError(ctx, sFebas, MethodNIC, err, duration, attempt, maxRetries, false)
 
 		return nil, retry, handledErr
 	}
@@ -304,7 +304,7 @@ func febasAPIAttempt(
 
 	respBody, readErr := io.ReadAll(io.LimitReader(res.Body, febasResponseBodyLimit))
 	if readErr != nil {
-		retry, handledErr := handleProviderReadError(ctx, "FEBAS", MethodNIC, res.StatusCode, readErr, duration, attempt, maxRetries)
+		retry, handledErr := handleProviderReadError(ctx, sFebas, MethodNIC, res.StatusCode, readErr, duration, attempt, maxRetries)
 
 		return nil, retry, handledErr
 	}
@@ -319,7 +319,7 @@ func febasAPIAttempt(
 		)
 		retry, handledErr := handleProviderAPIError(
 			ctx,
-			"FEBAS",
+			sFebas,
 			phrases().FebasAPIFailed,
 			apiErr,
 			MethodNIC,
@@ -333,7 +333,7 @@ func febasAPIAttempt(
 	}
 
 	if retryable, responseErr := febasResponseError(respBody); responseErr != nil {
-		apiMetrics.RecordError(MethodNIC, res.StatusCode, responseErr, duration)
+		apiMetrics.RecordError(sFebas, MethodNIC, res.StatusCode, responseErr, duration)
 		lastErrorMsg.Set(sanitizeError(responseErr))
 
 		if retryable && attempt < maxRetries-1 {
@@ -349,7 +349,7 @@ func febasAPIAttempt(
 		return nil, false, responseErr
 	}
 
-	apiMetrics.RecordSuccess(MethodNIC, duration)
+	apiMetrics.RecordSuccess(sFebas, MethodNIC, duration)
 	lastErrorMsg.Set("")
 	debugLog("HTTP", "", "✅ Febas success: "+sanitizeFebasText(strings.TrimSpace(string(respBody))))
 

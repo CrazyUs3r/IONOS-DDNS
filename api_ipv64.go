@@ -96,7 +96,7 @@ func validateIPv64FQDN(fqdn string) error {
 func ipv64API(ctx context.Context, dc *DomainConfig, params map[string]string) ([]byte, error) {
 	method, apiURL, bodyData := buildIPv64RequestData(params)
 
-	return apiWithRetry(ctx, "IPv64", phrases().IPv64APIFailed, func(attempt, maxRetries int) ([]byte, bool, error) {
+	return apiWithRetry(ctx, sIPv64, phrases().IPv64APIFailed, func(attempt, maxRetries int) ([]byte, bool, error) {
 		return ipv64APIAttempt(ctx, dc, method, apiURL, bodyData, attempt, maxRetries)
 	})
 }
@@ -177,7 +177,7 @@ func ipv64APIAttempt(
 	duration := time.Since(start)
 
 	if err != nil {
-		retry, handledErr := handleProviderNetworkError(ctx, "IPv64", method, err, duration, attempt, maxRetries, false)
+		retry, handledErr := handleProviderNetworkError(ctx, sIPv64, method, err, duration, attempt, maxRetries, false)
 
 		return nil, retry, handledErr
 	}
@@ -256,7 +256,7 @@ func handleIPv64Response(
 		return nil, false, err
 	}
 
-	apiMetrics.RecordSuccess(method, duration)
+	apiMetrics.RecordSuccess(sIPv64, method, duration)
 
 	return respBody, false, nil
 }
@@ -269,7 +269,7 @@ func handleIPv64ReadError(
 	duration time.Duration,
 	attempt, maxAttempts int,
 ) (bool, error) {
-	apiMetrics.RecordError(method, statusCode, readErr, duration)
+	apiMetrics.RecordError(sIPv64, method, statusCode, readErr, duration)
 
 	handledErr := fmt.Errorf("%s: %w", phrases().ErrBodyRead, readErr)
 	if !canRetryAPIAttempt(attempt, maxAttempts) {
@@ -294,7 +294,7 @@ func handleIPv64RateLimit(
 	duration time.Duration,
 	attempt, maxAttempts int,
 ) (bool, error) {
-	apiMetrics.RecordError(method, res.StatusCode, fmt.Errorf("%s", phrases().ErrRateLimit), duration)
+	apiMetrics.RecordError(sIPv64, method, res.StatusCode, fmt.Errorf("%s", phrases().ErrRateLimit), duration)
 
 	waitDuration := ipv64RateLimitWait(res.Header, attempt)
 	lastErr := fmt.Errorf("%s", phrases().ErrRateLimit)
@@ -332,7 +332,7 @@ func handleIPv64APIError(
 	duration time.Duration,
 	attempt, maxAttempts int,
 ) (bool, error) {
-	apiMetrics.RecordError(method, statusCode, apiErr, duration)
+	apiMetrics.RecordError(sIPv64, method, statusCode, apiErr, duration)
 	lastErrorMsg.Set(sanitizeError(apiErr))
 
 	if statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden {
@@ -368,7 +368,7 @@ func validateIPv64ResponseBody(
 ) error {
 	var ipv64Resp IPv64Response
 	if err := json.Unmarshal(respBody, &ipv64Resp); err != nil {
-		apiMetrics.RecordError(method, statusCode, err, duration)
+		apiMetrics.RecordError(sIPv64, method, statusCode, err, duration)
 
 		if len(respBody) > 0 && respBody[0] == '<' {
 			preview := sanitizeHTTPDebugBody(string(respBody))
@@ -395,7 +395,7 @@ func validateIPv64ResponseBody(
 			Message: fmt.Sprintf(phrases().IPv64APIError, ipv64Resp.Info),
 		})
 
-		apiMetrics.RecordError(method, statusCode, apiErr, duration)
+		apiMetrics.RecordError(sIPv64, method, statusCode, apiErr, duration)
 
 		return apiErr
 	}
@@ -419,11 +419,11 @@ type ipv64FileCacheRecordMeta struct {
 }
 
 func saveIPv64CacheToFile(zones []Zone, recordCache *ZoneRecordCache) error {
-	return saveProviderCacheToFile("IPv64", "ipv64_cache.json", zones, recordCache)
+	return saveProviderCacheToFile(sIPv64, "ipv64_cache.json", zones, recordCache)
 }
 
 func loadIPv64CacheFromFile() ([]Zone, *ZoneRecordCache, error) {
-	return loadProviderCacheFromFile("IPv64", "ipv64_cache.json")
+	return loadProviderCacheFromFile(sIPv64, "ipv64_cache.json")
 }
 
 func saveIPv64Cache() error {
@@ -450,7 +450,7 @@ func loadIPv64CacheFromDisk() error {
 	providerCache.ipv64Records = cached
 	providerCache.Unlock()
 
-	debugLog("CACHE", "", fmt.Sprintf(phrases().CacheLoadedDomains, "IPv64", len(cached)))
+	debugLog("CACHE", "", fmt.Sprintf(phrases().CacheLoadedDomains, sIPv64, len(cached)))
 	lastIPv64DomainsLoadNano.Store(time.Now().UnixNano())
 
 	return nil
@@ -848,10 +848,10 @@ func updateIPv64DNS(ctx context.Context, dc *DomainConfig, fqdn, ipv4, ipv6 stri
 
 	domain, err := getIPv64DomainFromCache(baseDomain)
 	if err != nil {
-		debugLog("IPv64", fqdn, fmt.Sprintf("domain %s not in cache, forcing refresh", baseDomain))
+		debugLog(sIPv64, fqdn, fmt.Sprintf("domain %s not in cache, forcing refresh", baseDomain))
 		lastIPv64DomainsLoadNano.Store(0)
 		if refreshErr := loadAllIPv64Domains(ctx, dc); refreshErr != nil {
-			debugLog("IPv64", fqdn, fmt.Sprintf("cache refresh failed: %v", refreshErr))
+			debugLog(sIPv64, fqdn, fmt.Sprintf("cache refresh failed: %v", refreshErr))
 		}
 		domain, err = getIPv64DomainFromCache(baseDomain)
 		if err != nil {
@@ -1003,7 +1003,7 @@ func performIPv64NICUpdate(
 	duration := time.Since(start)
 
 	if err != nil {
-		apiMetrics.RecordError(MethodNIC, 0, err, duration)
+		apiMetrics.RecordError(sIPv64, MethodNIC, 0, err, duration)
 
 		return err
 	}
@@ -1016,7 +1016,7 @@ func performIPv64NICUpdate(
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		apiMetrics.RecordError(MethodNIC, res.StatusCode, err, duration)
+		apiMetrics.RecordError(sIPv64, MethodNIC, res.StatusCode, err, duration)
 
 		return fmt.Errorf("%s: %w", phrases().IPv64ParseError, err)
 	}
@@ -1025,7 +1025,7 @@ func performIPv64NICUpdate(
 		return err
 	}
 
-	apiMetrics.RecordSuccess(MethodNIC, duration)
+	apiMetrics.RecordSuccess(sIPv64, MethodNIC, duration)
 
 	return nil
 }
@@ -1391,7 +1391,7 @@ func addIPv64Domain(ctx context.Context, dc *DomainConfig, fqdn string) error {
 		return fmt.Errorf("add_domain %s: %w", fqdn, err)
 	}
 
-	debugLog("IPv64", fqdn, "add_domain response: "+string(data))
+	debugLog(sIPv64, fqdn, "add_domain response: "+string(data))
 
 	log(LogContext{
 		Level:   LogInfo,
@@ -1402,7 +1402,7 @@ func addIPv64Domain(ctx context.Context, dc *DomainConfig, fqdn string) error {
 
 	lastIPv64DomainsLoadNano.Store(0)
 	if err := loadAllIPv64Domains(ctx, dc); err != nil {
-		debugLog("IPv64", fqdn, fmt.Sprintf("cache refresh after add_domain failed: %v", err))
+		debugLog(sIPv64, fqdn, fmt.Sprintf("cache refresh after add_domain failed: %v", err))
 	}
 
 	return nil
@@ -1421,12 +1421,12 @@ func deleteIPv64Domain(ctx context.Context, dc *DomainConfig, fqdn string) error
 	data, err := ipv64API(ctx, dc, params)
 	if err != nil {
 		if stillThere, checkErr := ipv64TokenOwnsDomain(ctx, dc, fqdn); checkErr == nil && !stillThere {
-			debugLog("IPv64", fqdn, tf(phrases().IPv64DeleteAlreadyGone, "del_domain reported %v, but domain is already gone at provider - treating as success", err))
+			debugLog(sIPv64, fqdn, tf(phrases().IPv64DeleteAlreadyGone, "del_domain reported %v, but domain is already gone at provider - treating as success", err))
 		} else {
 			return fmt.Errorf("del_domain %s: %w", fqdn, err)
 		}
 	} else {
-		debugLog("IPv64", fqdn, "del_domain response: "+string(data))
+		debugLog(sIPv64, fqdn, "del_domain response: "+string(data))
 	}
 
 	log(LogContext{
@@ -1614,7 +1614,7 @@ func findIPv64DomainConfigOwningFQDN(ctx context.Context, fqdn string) (*DomainC
 		owns, err := ipv64TokenOwnsDomain(ctx, &dcCopy, fqdn)
 		if err != nil {
 			lastErr = err
-			debugLog("IPv64", fqdn, fmt.Sprintf(phrases().IPv64OwnershipCheckFailed, err))
+			debugLog(sIPv64, fqdn, fmt.Sprintf(phrases().IPv64OwnershipCheckFailed, err))
 
 			continue
 		}
@@ -1691,7 +1691,7 @@ func syncIPv64ProviderDomains(ctx context.Context, oldConfigs, newConfigs []Doma
 			continue
 		}
 		if strings.TrimSpace(dc.IPv64Token) == "" {
-			debugLog("IPv64", fqdn, t(phrases().IPv64SkipCreateNoToken, "skip auto-create: no token configured"))
+			debugLog(sIPv64, fqdn, t(phrases().IPv64SkipCreateNoToken, "skip auto-create: no token configured"))
 			continue
 		}
 
@@ -1699,15 +1699,15 @@ func syncIPv64ProviderDomains(ctx context.Context, oldConfigs, newConfigs []Doma
 
 		exists, checkErr := ipv64TokenOwnsDomain(ctx, &dcCopy, fqdn)
 		if checkErr != nil {
-			debugLog("IPv64", fqdn, tf(phrases().IPv64ExistenceCheckFailed, "existence check failed, trying create anyway: %v", checkErr))
+			debugLog(sIPv64, fqdn, tf(phrases().IPv64ExistenceCheckFailed, "existence check failed, trying create anyway: %v", checkErr))
 		}
 		if exists {
-			debugLog("IPv64", fqdn, t(phrases().IPv64AlreadyPresentSkip, "already present at provider, skipping create"))
+			debugLog(sIPv64, fqdn, t(phrases().IPv64AlreadyPresentSkip, "already present at provider, skipping create"))
 			continue
 		}
 
 		if err := addIPv64Domain(ctx, &dcCopy, fqdn); err != nil {
-			debugLog("IPv64", fqdn, tf(phrases().IPv64AutoCreateFailed, "auto-create at provider failed: %v", err))
+			debugLog(sIPv64, fqdn, tf(phrases().IPv64AutoCreateFailed, "auto-create at provider failed: %v", err))
 			broadcastNotification(tf(phrases().IPv64CreateFailedNotify, "IPv64: %s konnte beim Provider nicht angelegt werden: %v", fqdn, err), "error")
 
 			continue
@@ -1720,13 +1720,13 @@ func syncIPv64ProviderDomains(ctx context.Context, oldConfigs, newConfigs []Doma
 			continue
 		}
 		if strings.TrimSpace(dc.IPv64Token) == "" {
-			debugLog("IPv64", fqdn, t(phrases().IPv64SkipDeleteNoToken, "skip auto-delete: no token configured"))
+			debugLog(sIPv64, fqdn, t(phrases().IPv64SkipDeleteNoToken, "skip auto-delete: no token configured"))
 			continue
 		}
 
 		dcCopy := dc
 		if err := deleteIPv64Domain(ctx, &dcCopy, fqdn); err != nil {
-			debugLog("IPv64", fqdn, tf(phrases().IPv64AutoDeleteFailed, "auto-delete at provider failed: %v", err))
+			debugLog(sIPv64, fqdn, tf(phrases().IPv64AutoDeleteFailed, "auto-delete at provider failed: %v", err))
 			broadcastNotification(tf(phrases().IPv64DeleteFailedNotify, "IPv64: %s konnte beim Provider nicht gelöscht werden: %v", fqdn, err), "error")
 
 			continue

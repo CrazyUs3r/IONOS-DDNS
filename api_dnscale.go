@@ -19,11 +19,11 @@ import (
 // ============================================================================
 
 func saveDNScaleCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error {
-	return saveProviderCacheToFile("DNScale", "dnscale_cache.json", zones, recordCache)
+	return saveProviderCacheToFile(sDNScale, "dnscale_cache.json", zones, recordCache)
 }
 
 func loadDNScaleCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
-	return loadProviderCacheFromFile("DNScale", "dnscale_cache.json")
+	return loadProviderCacheFromFile(sDNScale, "dnscale_cache.json")
 }
 
 // ============================================================================
@@ -33,7 +33,7 @@ func loadDNScaleCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
 func dnscaleAPI(ctx context.Context, dc *DomainConfig, method, url string, body any) ([]byte, error) {
 	allowRetry := method != MethodPOST
 
-	return apiWithRetry(ctx, "DNScale", phrases().DNScaleAPIFailed, func(attempt, maxRetries int) ([]byte, bool, error) {
+	return apiWithRetry(ctx, sDNScale, phrases().DNScaleAPIFailed, func(attempt, maxRetries int) ([]byte, bool, error) {
 		return dnscaleAPIAttempt(ctx, dc, method, url, body, attempt, maxRetries, allowRetry)
 	})
 }
@@ -65,12 +65,12 @@ func dnscaleAPIAttempt(
 	if err != nil {
 		if !allowRetry {
 			debugLog("HTTP", "", fmt.Sprintf(phrases().DNScaleNetworkErrorNoRetry, err, duration))
-			apiMetrics.RecordError(method, 0, err, duration)
+			apiMetrics.RecordError(sDNScale, method, 0, err, duration)
 
 			return nil, false, fmt.Errorf("%s: %w", phrases().ErrNetworkError, err)
 		}
 
-		retry, handledErr := handleProviderNetworkError(ctx, "DNScale", method, err, duration, attempt, maxRetries, false)
+		retry, handledErr := handleProviderNetworkError(ctx, sDNScale, method, err, duration, attempt, maxRetries, false)
 
 		return nil, retry, handledErr
 	}
@@ -146,7 +146,7 @@ func handleDNScaleResponse(
 	duration time.Duration,
 	attempt, maxAttempts int,
 ) ([]byte, bool, error) {
-	return handleProviderHTTPResponse(ctx, "DNScale", phrases().DNScaleMaxAttempts, res, method, url, duration, attempt, maxAttempts)
+	return handleProviderHTTPResponse(ctx, sDNScale, phrases().DNScaleMaxAttempts, res, method, url, duration, attempt, maxAttempts)
 }
 
 // ============================================================================

@@ -195,7 +195,7 @@ func initLegacyConfig() error {
 func legacyProviderEnv() string {
 	providerEnv := strings.ToUpper(os.Getenv("PROVIDER"))
 	if providerEnv == "" {
-		return "IONOS"
+		return sIONOS
 	}
 
 	return providerEnv
@@ -222,19 +222,19 @@ func legacyDomainsFromEnv() ([]string, error) {
 
 func buildLegacyDomainConfigs(providerEnv string, domains []string) ([]DomainConfig, error) {
 	switch string(normalizeProviderName(providerEnv)) {
-	case "IONOS":
+	case sIONOS:
 		return buildLegacyIONOSConfigs(domains)
-	case "CLOUDFLARE":
+	case sCloudflare:
 		return buildLegacyCloudflareConfigs(domains)
-	case "IPV64":
+	case sIPv64:
 		return buildLegacyIPv64Configs(domains)
-	case "HETZNER":
+	case sHetzner:
 		return buildLegacyHetznerDNSConfigs(domains)
-	case "HETZNERCLOUD":
+	case sHetznerCloud:
 		return buildLegacyHetznerCloudConfigs(domains)
-	case "FEBAS":
+	case sFebas:
 		return buildLegacyFebasConfigs(domains)
-	case "DNSCALE":
+	case sDNScale:
 		return buildLegacyDNScaleConfigs(domains)
 	default:
 		return nil, fmt.Errorf(phrases().UnknownProviderFormat, providerEnv)
