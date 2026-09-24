@@ -1341,24 +1341,32 @@ function renderProviderDaily(providers) {
 		'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 	}[c]));
 
+	const badge = (modifier, label, val) => {
+		const n = Number(val) || 0;
+		if (n <= 0) return '';
+		return `<span class="provider-method-item provider-method-item--${modifier}">${label} <strong>${n}</strong></span>`;
+	};
+
 	let html = '';
 	for (const provider of names) {
 		const d = providers[provider] || {};
+		const badges = badge('get', 'GET', d.get) +
+			badge('post', 'POST', d.post) +
+			badge('put', 'PUT', d.put) +
+			badge('delete', 'DEL', d.delete) +
+			badge('nic', 'NIC', d.nic);
+
+		if (!badges) continue;
+
 		html += `
 			<div class="provider-method-row">
 				<div class="provider-method-name">${escName(provider)}</div>
-				<div class="provider-method-values">
-					<span class="provider-method-item provider-method-item--get">GET <strong>${d.get ?? 0}</strong></span>
-					<span class="provider-method-item provider-method-item--post">POST <strong>${d.post ?? 0}</strong></span>
-					<span class="provider-method-item provider-method-item--put">PUT <strong>${d.put ?? 0}</strong></span>
-					<span class="provider-method-item provider-method-item--delete">DEL <strong>${d.delete ?? 0}</strong></span>
-					<span class="provider-method-item provider-method-item--nic">NIC <strong>${d.nic ?? 0}</strong></span>
-				</div>
+				<div class="provider-method-values">${badges}</div>
 			</div>
 		`;
 	}
 
-	container.innerHTML = html;
+	container.innerHTML = html || `<div class="provider-methods-empty">${tr('metric_no_provider_activity', 'Heute noch keine Provider-Aktivität')}</div>`;
 }
 
 let _chartTooltip = null;
