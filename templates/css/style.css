@@ -2800,6 +2800,14 @@ body.auth-page .dashboard-footer {
   color: #c084fc;
 }
 
+.provider-methods-empty {
+  padding: 12px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
 @media (max-width: 700px) {
   .provider-method-row {
     grid-template-columns: 1fr;
