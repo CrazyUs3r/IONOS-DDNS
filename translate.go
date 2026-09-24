@@ -13,7 +13,7 @@ type Phrases struct {
 	PanicLoadingLanguage, TryingLoadLanguage, JSONParseError, LanguageLoaded              string
 	MissingTranslationKey, HourlyLimitEst, RequestsLabel, UsageLast60Min, AutoSaved       string
 	MaxLogLines, MaxAPIRetries, MaxConcurrent, Interval, EmptyTranslationValue            string
-	Password, LoginButton                                                                 string
+	Password, LoginButton, MetricNoProviderActivity                                       string
 	DebugLogTitle, DebugLogLive, DebugFilterPlaceholder, LoginHint, LoginTitle            string
 	DebugClearBtn, DebugAutoscroll, DebugWaitingMsg, SetupHeading, SetupSubtitle          string
 	SettingsCFProxyLabel, SetupToken, PasswordMinHint, PasswordConfirm, SetupButton       string
@@ -235,7 +235,7 @@ type Phrases struct {
 	// Provider-Hinweise / Config
 	IonosAPIRequired, Ipv64TokenRequired, CloudflareAuthRequired, UnknownProvider  string
 	HetznerAuthRequired, FebasUpdateURLRequired                                    string
-	DomainParamMissing, DomainStillActiveInConfig, NicIPv64Updates                 string
+	DomainParamMissing, DomainStillActiveInConfig                                  string
 	NoStatusFileFound, DomainNotFoundInStatus                                      string
 	FailedToCreateConfigDirectoryFormat, CreateConfigDirectoryFormat               string
 	FailedToMarshalConfigFormat, MarshalConfigFormat                               string
@@ -378,6 +378,7 @@ type Phrases struct {
 	CleanupDryRun, CleanupDeleteError, CleanupRecordRemoved        string
 	CleanupSkipForeignBase, CleanupSkipCDN, CleanupSkipDeactivated string
 	CleanupSkipOrphaned, CleanupOrphanedCF, CleanupOrphanedIonos   string
+	OrphanNotYetCleanedUp                                          string
 
 	// Ionos
 	IonosAPIFailed, IonosMaxAttempts, IonosReloadAfterTypeChangeFailed string

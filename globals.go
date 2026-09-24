@@ -525,9 +525,11 @@ type IPEntry struct {
 }
 
 type DomainHistory struct {
-	IPs         []IPEntry `json:"ips"`
-	Provider    string    `json:"provider"`
-	LastChanged string    `json:"last_changed"`
+	IPs             []IPEntry `json:"ips"`
+	Provider        string    `json:"provider"`
+	LastChanged     string    `json:"last_changed"`
+	CNAMETarget     string    `json:"cname_target,omitempty"`
+	OrphanDeletedAt string    `json:"orphan_deleted_at,omitempty"`
 }
 
 type DomainConfig struct {
@@ -851,6 +853,7 @@ type domainUpdateResult struct {
 	Error   error
 	IPv4    string
 	IPv6    string
+	CNAME   string
 }
 
 type rotationJob struct {

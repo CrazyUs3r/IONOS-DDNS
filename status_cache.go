@@ -22,6 +22,7 @@ type statusUpdate struct {
 	IPv4     string
 	IPv6     string
 	Provider string
+	CNAME    string
 }
 
 func updateStatusFileBatch(updates []statusUpdate) error {
@@ -60,6 +61,9 @@ func updateStatusFileBatch(updates []statusUpdate) error {
 
 		history.Provider = u.Provider
 		history.LastChanged = now
+		if u.CNAME != "" {
+			history.CNAMETarget = u.CNAME
+		}
 		history.IPs = append(history.IPs, IPEntry{
 			Time: now,
 			IPv4: u.IPv4,
@@ -129,8 +133,38 @@ func updateStatusFileBatch(updates []statusUpdate) error {
 	return nil
 }
 
+func markOrphanRecordDeleted(fqdn string) error {
+	fqdn = strings.TrimSpace(fqdn)
+	if fqdn == "" {
+		return nil
+	}
+
+	statusMutex.Lock()
+	defer statusMutex.Unlock()
+
+	domains, err := currentStatusDomainsLocked()
+	if err != nil {
+		return err
+	}
+
+	key := existingStatusDomainKey(domains, fqdn)
+	if key == "" {
+		return nil
+	}
+
+	history := domains[key]
+	history.OrphanDeletedAt = time.Now().Format(statusTimestampLayout)
+	domains[key] = history
+
+	return writeStatusDomainsLocked(domains)
+}
+
 func statusUpdateUnchanged(history DomainHistory, update statusUpdate) bool {
 	if history.Provider != update.Provider {
+		return false
+	}
+
+	if history.CNAMETarget != update.CNAME {
 		return false
 	}
 

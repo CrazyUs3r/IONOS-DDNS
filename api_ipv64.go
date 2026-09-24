@@ -1246,6 +1246,9 @@ func cleanupSingleIPv64Record(
 		Domain:  fqdn,
 		Message: fmt.Sprintf(phrases().CleanupRecordRemoved, rec.Type),
 	})
+	if err := markOrphanRecordDeleted(fqdn); err != nil {
+		debugLog("MAINTENANCE", fqdn, fmt.Sprintf("failed to mark orphan-deleted timestamp: %v", err))
+	}
 }
 
 func shouldCleanupIPv64Record(
@@ -1435,6 +1438,9 @@ func deleteIPv64Domain(ctx context.Context, dc *DomainConfig, fqdn string) error
 		Domain:  fqdn,
 		Message: tf(phrases().IPv64ProviderDomainDeleted, "IPv64: %s beim Provider gelöscht", fqdn),
 	})
+	if err := markOrphanRecordDeleted(fqdn); err != nil {
+		debugLog("MAINTENANCE", fqdn, fmt.Sprintf("failed to mark orphan-deleted timestamp: %v", err))
+	}
 
 	providerCache.Lock()
 	delete(providerCache.ipv64Records, fqdn)

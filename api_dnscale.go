@@ -751,6 +751,9 @@ func cleanupSingleDNScaleRecord(
 		Domain:  fqdn,
 		Message: fmt.Sprintf(phrases().CleanupRecordRemoved, rec.Type),
 	})
+	if err := markOrphanRecordDeleted(fqdn); err != nil {
+		debugLog("MAINTENANCE", fqdn, fmt.Sprintf("failed to mark orphan-deleted timestamp: %v", err))
+	}
 }
 
 func shouldCleanupDNScaleRecord(

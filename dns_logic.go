@@ -230,6 +230,7 @@ func processCNAMEDomainUpdate(
 	}
 
 	result.Changed = changed
+	result.CNAME = target
 
 	if err := markCNAMEApplied(job.Domain, dc.Provider, target); err != nil {
 		result.Error = fmt.Errorf("CNAME was applied, but its pending state could not be saved: %w", err)
@@ -500,7 +501,7 @@ func handleDomainResultStatus(
 			v6 = ipv6
 		}
 
-		return result, &statusUpdate{FQDN: dc.FQDN, IPv4: v4, IPv6: v6, Provider: providerName}
+		return result, &statusUpdate{FQDN: dc.FQDN, IPv4: v4, IPv6: v6, Provider: providerName, CNAME: result.CNAME}
 	}
 
 	if result.Error == nil {

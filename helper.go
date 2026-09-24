@@ -1196,6 +1196,7 @@ func dashboardI18NJSON() string {
 		"log_entry_deleted":                     t(phrases().LogEntryDeletedJS, "Eintrag gelöscht:"),
 		"metrics_reset_failed":                  t(phrases().MetricsResetFailedJS, "❌ Reset failed"),
 		"metrics_reset_ok":                      t(phrases().MetricsResetOKJS, "✅ Metrics reset"),
+		"metric_no_provider_activity":           t(phrases().MetricNoProviderActivity, "Heute noch keine Provider-Aktivität"),
 		"nav_audit":                             t(phrases().NavAuditJS, "🛡️ Audit & DNS"),
 		"nav_backup":                            t(phrases().NavBackupJS, "💾 Backup & Restore"),
 		"nav_dashboard":                         t(phrases().NavDashboardJS, "🌐 Dashboard"),

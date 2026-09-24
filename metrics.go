@@ -150,6 +150,18 @@ func (m *APIMetrics) resetHourlyMetricsIfNeeded(now time.Time) {
 	m.HourlyReset = now
 }
 
+func (m *APIMetrics) resetDailyCountersLocked() {
+	m.DailyGET = 0
+	m.DailyPOST = 0
+	m.DailyPUT = 0
+	m.DailyDELETE = 0
+	m.DailyNIC = 0
+
+	for _, providerStats := range m.ProviderDaily {
+		*providerStats = ProviderDailyMetrics{}
+	}
+}
+
 // ============================================================================
 // METRICS
 // ============================================================================
@@ -246,15 +258,7 @@ func (m *APIMetrics) incrementDailyMethod(method string, now time.Time) {
 		!sameLocalDate(now, m.DailyReset)
 
 	if newDay {
-		m.DailyGET = 0
-		m.DailyPOST = 0
-		m.DailyPUT = 0
-		m.DailyDELETE = 0
-		m.DailyNIC = 0
-
-		for _, providerStats := range m.ProviderDaily {
-			*providerStats = ProviderDailyMetrics{}
-		}
+		m.resetDailyCountersLocked()
 	}
 
 	m.DailyReset = now
@@ -410,11 +414,7 @@ func (m *APIMetrics) refreshTimeWindows(now time.Time) {
 	m.cleanupOldTimestamps(now)
 
 	if !m.DailyReset.IsZero() && !sameLocalDate(now, m.DailyReset) {
-		m.DailyGET = 0
-		m.DailyPOST = 0
-		m.DailyPUT = 0
-		m.DailyDELETE = 0
-		m.DailyNIC = 0
+		m.resetDailyCountersLocked()
 		m.DailyReset = now
 	}
 

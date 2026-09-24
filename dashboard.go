@@ -2220,6 +2220,13 @@ func handleAPIDomainDelete(w http.ResponseWriter, r *http.Request) {
 	if statusCode == http.StatusOK {
 		domains, err := currentStatusDomainsLocked()
 		if err == nil {
+			if domains[statusKey].OrphanDeletedAt == "" {
+				statusMutex.Unlock()
+				writeJSON(w, http.StatusConflict, map[string]string{"error": esc(phrases().OrphanNotYetCleanedUp)})
+
+				return
+			}
+
 			delete(domains, statusKey)
 			if writeErr := writeStatusDomainsLocked(domains); writeErr != nil {
 				statusMutex.Unlock()
@@ -2925,21 +2932,13 @@ func buildDashboardMetricsParts(stats map[string]any) (string, string, string) {
 }
 
 func buildNICHTML(stats map[string]any) string {
-	config := snapshotConfig()
-	hasIPv64 := false
-	for _, dc := range config.DomainConfigs {
-		if dc.Provider == ProviderIPv64 {
-			hasIPv64 = true
-
-			break
-		}
-	}
-	if !hasIPv64 {
+	count, _ := stats["daily_nic"].(int64)
+	if count <= 0 {
 		return ""
 	}
 
-	return `<div class="nic-row"><span class="nic-label">NIC <span>(` + esc(phrases().NicIPv64Updates) + `)</span></span><span id="mDailyNIC" class="nic-value">` +
-		fmt.Sprintf("%v", stats["daily_nic"]) +
+	return `<div class="nic-row"><span class="nic-label">NIC</span><span id="mDailyNIC" class="nic-value">` +
+		strconv.FormatInt(count, 10) +
 		`</span></div>`
 }
 
@@ -3488,43 +3487,39 @@ func writeDashboardMetricsCard(
 	var providerHTML strings.Builder
 
 	if providers, ok := stats["provider_daily"].(map[string]ProviderDailyMetrics); ok {
-		for provider, data := range providers {
+		names := make([]string, 0, len(providers))
+		for provider := range providers {
+			names = append(names, provider)
+		}
+		sort.Strings(names)
+
+		for _, provider := range names {
+			data := providers[provider]
+
+			var badges strings.Builder
+			appendMethodBadge(&badges, "get", "GET", data.GET)
+			appendMethodBadge(&badges, "post", "POST", data.POST)
+			appendMethodBadge(&badges, "put", "PUT", data.PUT)
+			appendMethodBadge(&badges, "delete", "DEL", data.DELETE)
+			appendMethodBadge(&badges, "nic", "NIC", data.NIC)
+
+			if badges.Len() == 0 {
+				continue
+			}
+
 			fmt.Fprintf(&providerHTML, `
 				<div class="provider-method-row">
-					<div class="provider-method-name">
-						%s
-					</div>
-
-					<div class="provider-method-values">
-						<span class="provider-method-item provider-method-item--get">
-							GET <strong>%d</strong>
-						</span>
-
-						<span class="provider-method-item provider-method-item--post">
-							POST <strong>%d</strong>
-						</span>
-
-						<span class="provider-method-item provider-method-item--put">
-							PUT <strong>%d</strong>
-						</span>
-
-						<span class="provider-method-item provider-method-item--delete">
-							DEL <strong>%d</strong>
-						</span>
-
-						<span class="provider-method-item provider-method-item--nic">
-							NIC <strong>%d</strong>
-						</span>
-					</div>
+					<div class="provider-method-name">%s</div>
+					<div class="provider-method-values">%s</div>
 				</div>
-			`,
-				esc(provider),
-				data.GET,
-				data.POST,
-				data.PUT,
-				data.DELETE,
-				data.NIC)
+			`, esc(provider), badges.String())
 		}
+	}
+
+	if providerHTML.Len() == 0 {
+		providerHTML.WriteString(`<div class="provider-methods-empty">`)
+		providerHTML.WriteString(esc(phrases().MetricNoProviderActivity))
+		providerHTML.WriteString(`</div>`)
 	}
 
 	_, _ = fmt.Fprintf(
@@ -3723,6 +3718,14 @@ func writeDashboardMetricsCard(
 		chartSVG,
 		latencySVG,
 	)
+}
+
+func appendMethodBadge(b *strings.Builder, modifier, label string, count int64) {
+	if count <= 0 {
+		return
+	}
+
+	fmt.Fprintf(b, `<span class="provider-method-item provider-method-item--%s">%s <strong>%d</strong></span>`, modifier, label, count)
 }
 
 func writeDebugCard(w io.Writer) {
@@ -4105,9 +4108,10 @@ func writeSingleDomainCard(
 	domainKey := strings.ToLower(strings.TrimSuffix(domain, "."))
 	_, isActive := configuredDomains[domainKey]
 	isOrphan := !isActive
+	orphanConfirmed := isOrphan && h.OrphanDeletedAt != ""
 
 	dotClass, dotTitle, changedBadge := buildDomainStatusVisuals(h, safeID, newestChange)
-	orphanStyle, orphanLabel, deleteBtn := buildOrphanDomainVisuals(isOrphan, domain)
+	orphanStyle, orphanLabel, deleteBtn := buildOrphanDomainVisuals(orphanConfirmed, domain)
 
 	ipModeLabel := ""
 	if mode := ipModes[domainKey]; mode != "" {

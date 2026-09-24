@@ -872,8 +872,10 @@ func (t *telegramNotifier) sendDomains(chatID string) {
 
 	statusMutex.Lock()
 	statusData := make(map[string]DomainHistory)
-	if b, err := os.ReadFile(updatePath); err == nil {
-		_ = json.Unmarshal(b, &statusData)
+	if updatePath != "" {
+		if b, err := os.ReadFile(updatePath); err == nil {
+			_ = json.Unmarshal(b, &statusData)
+		}
 	}
 	statusMutex.Unlock()
 
