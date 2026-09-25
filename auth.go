@@ -741,6 +741,7 @@ func isPublicAuthPath(path string) bool {
 		"/health/live",
 		"/health/ready",
 		"/favicon.svg",
+		"/manifest.json",
 		"/assets/style.css",
 		"/assets/dashboard.js",
 		"/assets/auth.js",
@@ -2069,6 +2070,9 @@ func authPageShell(title, body string) string {
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title>` + esc(title) + ` · DynDNS</title>
+	<link id="favicon" rel="icon" type="image/svg+xml" href="/favicon.svg?theme=dark">
+	<link rel="manifest" href="/manifest.json">
+	<meta name="theme-color" content="#0f172a">
 	<link rel="stylesheet" href="` + assetURL("/assets/style.css", dashboardCSSETag) + `">
 	</head>
 		<body class="auth-page">
