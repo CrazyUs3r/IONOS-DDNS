@@ -966,6 +966,7 @@ func registerStaticRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/assets/auth.js", handleAuthJS)
 	mux.HandleFunc("/assets/i18n.js", handleDashboardI18NJS)
 	mux.HandleFunc("/favicon.svg", handleFavicon)
+	mux.HandleFunc("/manifest.json", handleManifest)
 	mux.HandleFunc("/ws", handleWS)
 	mux.HandleFunc("/metrics", handleMetrics)
 	mux.HandleFunc("/metrics/prometheus", handlePrometheusMetrics)
@@ -1198,6 +1199,32 @@ func handleFavicon(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "image/svg+xml; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	_, _ = w.Write([]byte(svg))
+}
+
+func handleManifest(w http.ResponseWriter, _ *http.Request) {
+	manifest := `{
+	"name": "DynDNS Dashboard",
+	"short_name": "DynDNS",
+	"description": "Multi-Provider Dynamic DNS Dashboard",
+	"start_url": "/",
+	"scope": "/",
+	"display": "standalone",
+	"orientation": "any",
+	"background_color": "#0f172a",
+	"theme_color": "#0f172a",
+	"icons": [
+		{
+			"src": "/favicon.svg?theme=dark",
+			"sizes": "any",
+			"type": "image/svg+xml",
+			"purpose": "any"
+		}
+	]
+}`
+
+	w.Header().Set("Content-Type", "application/manifest+json; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	_, _ = io.WriteString(w, manifest)
 }
 
 func validWebSocketOrigin(r *http.Request) bool {
@@ -3174,6 +3201,8 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 		`+csrfMeta+`
 		<title>%s</title>
 		<link id="favicon" rel="icon" type="image/svg+xml" href="/favicon.svg?theme=dark">
+		<link rel="manifest" href="/manifest.json">
+		<meta name="theme-color" content="#0f172a">
 		<link rel="stylesheet" href="`+assetURL("/assets/style.css", dashboardCSSETag)+`">
 	</head>
 	<body class="dashboard-runtime">
