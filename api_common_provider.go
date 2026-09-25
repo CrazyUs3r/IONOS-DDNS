@@ -137,7 +137,7 @@ func readResponseBody(res *http.Response) ([]byte, error) {
 }
 
 func providerRetryWait(apiErr *APIError, attempt, statusCode int) time.Duration {
-	if apiErr != nil && apiErr.RetryAfter > 0 {
+	if apiErr != nil && apiErr.RetryAfter > 0 && statusCode == http.StatusTooManyRequests {
 		return apiErr.RetryAfter
 	}
 
