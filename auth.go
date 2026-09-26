@@ -1776,7 +1776,7 @@ func auditHTTPRequest(r *http.Request, sess *Session, status int) {
 	}
 
 	result := "success"
-	if status >= 400 {
+	if status >= http.StatusBadRequest {
 		result = "error"
 	}
 	id, err := randomHexToken(8)
@@ -2068,7 +2068,16 @@ func authPageShell(title, body string) string {
 	<html>
 	<head>
 	<meta charset="utf-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+	<meta name="format-detection" content="telephone=no">
+	<meta name="robots" content="noindex, nofollow">
+	<meta name="color-scheme" content="dark">
+	<meta name="application-name" content="DynDNS">
+	<meta name="mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+	<meta name="apple-mobile-web-app-title" content="IONOS-DDNS">
+	<meta name="msapplication-TileColor" content="#0f172a">
 	<title>` + esc(title) + ` · DynDNS</title>
 	<link id="favicon" rel="icon" type="image/svg+xml" href="/favicon.svg?theme=dark">
 	<link rel="manifest" href="/manifest.json">

@@ -111,7 +111,7 @@ func (w *webhookNotifier) trySend(data []byte) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 

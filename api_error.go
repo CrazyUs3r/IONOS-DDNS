@@ -113,7 +113,7 @@ func parseRetryAfter(h http.Header) (time.Duration, bool) {
 }
 
 func classifyAPIErrorWithHeaders(statusCode int, method, url, responseBody string, headers http.Header) *APIError {
-	if statusCode >= 200 && statusCode < 300 {
+	if statusCode >= http.StatusOK && statusCode < http.StatusMultipleChoices {
 		return nil
 	}
 
@@ -150,7 +150,7 @@ func applyAPIErrorSpec(
 }
 
 func applyDefaultAPIErrorSpec(apiErr *APIError, statusCode int, responseBody string) {
-	if statusCode >= 500 {
+	if statusCode >= http.StatusInternalServerError {
 		apiErr.Message = withBody(
 			tf(phrases().APIErrorServerErrorGeneric, "Server Error %d", statusCode),
 			responseBody,
@@ -182,7 +182,7 @@ func resolveRetryAfter(spec apiErrorSpec, headers http.Header) time.Duration {
 }
 
 func defaultAction(statusCode int) string {
-	if statusCode >= 500 {
+	if statusCode >= http.StatusInternalServerError {
 		return ActionRetry
 	}
 

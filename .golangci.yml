@@ -1,3 +1,4 @@
+
 version: "2"
 
 run:
@@ -15,12 +16,12 @@ linters:
     - unused
     - bodyclose
     - misspell
+    - perfsprint
+    - godot
 
 linters-settings:
   errcheck:
     exclude-functions:
-
-      
   revive:
     ignore-generated-header: true
     severity: warning
@@ -34,12 +35,55 @@ linters-settings:
       - name: if-return
 
   gocritic:
+    #enable-all: true
     enabled-checks:
-      - ifElseChain
       - appendCombine
-      - badCond
-      - commentFormatting
+      #- unnamedResult
 
+  godot:
+    scope: toplevel
+    exclude:
+      # Exclude todo and fixme comments.
+      - "^fixme:"
+      - "^todo:"
+    period: false
+    capital: true
+
+  perfsprint:
+    # Enable/disable optimization of integer formatting.
+    # Default: true
+    integer-format: true
+    # Optimizes even if it requires an int or uint type cast.
+    # Default: true
+    int-conversion: true
+    # Enable/disable optimization of error formatting.
+    # Default: true
+    error-format: true
+    # Optimizes into `err.Error()` even if it is only equivalent for non-nil errors.
+    # Default: false
+    err-error: true
+    # Optimizes `fmt.Errorf`.
+    # Default: true
+    errorf: true
+    # Enable/disable optimization of string formatting.
+    # Default: true
+    string-format: true
+    # Optimizes `fmt.Sprintf` with only one argument.
+    # Default: true
+    sprintf1: true
+    # Optimizes into strings concatenation.
+    # Default: true
+    strconcat: true
+    # Enable/disable optimization of bool formatting.
+    # Default: true
+    bool-format: true
+    # Enable/disable optimization of hex formatting.
+    # Default: true
+    hex-format: true
+    # Enable/disable optimization of concat loop.
+    # Default: true
+    concat-loop: true
+    loop-other-ops: true
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0

@@ -162,11 +162,11 @@ func handleCloudflareResponse(ctx context.Context, res *http.Response, method, f
 	jsonErr := json.Unmarshal(respBody, &cfResp)
 
 	effectiveStatus := res.StatusCode
-	if jsonErr == nil && !cfResp.Success && effectiveStatus >= 200 && effectiveStatus < 300 {
+	if jsonErr == nil && !cfResp.Success && effectiveStatus >= http.StatusOK && effectiveStatus < http.StatusMultipleChoices {
 		effectiveStatus = http.StatusUnprocessableEntity
 	}
 
-	if jsonErr == nil && cfResp.Success && effectiveStatus >= 200 && effectiveStatus < 300 {
+	if jsonErr == nil && cfResp.Success && effectiveStatus >= http.StatusOK && effectiveStatus < http.StatusMultipleChoices {
 		apiMetrics.RecordSuccess(sCloudflare, method, duration)
 		lastErrorMsg.Set("")
 		return respBody, false, nil

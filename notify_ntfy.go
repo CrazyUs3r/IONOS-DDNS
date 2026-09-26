@@ -218,7 +218,7 @@ func (n *ntfyNotifier) doSend(msg ntfyQueuedMsg) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 
 		return fmt.Errorf(

@@ -5,7 +5,7 @@ FROM --platform=${BUILDPLATFORM} golang:1.27.1-alpine AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
-ARG VERSION=2.5.10rc1
+ARG VERSION=2.5.10rc4
 ARG BUILD_DATE
 ARG VCS_REF
 
@@ -41,7 +41,7 @@ RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
 # =============================================================================
 # Runtime tools for target platform
 # =============================================================================
-FROM alpine:3.24.1 AS runtime-tools
+FROM alpine:3.24.2 AS runtime-tools
 
 ARG SU_EXEC_COMMIT=89c016e6e08749d583efdeda04b9f73e1218e253
 
@@ -63,7 +63,7 @@ RUN apk add --no-cache \
 # =============================================================================
 FROM busybox:stable-musl
 
-ARG VERSION=2.5.10rc1
+ARG VERSION=2.5.10rc4
 ARG BUILD_DATE
 ARG VCS_REF
 

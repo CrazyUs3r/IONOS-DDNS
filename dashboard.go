@@ -1203,24 +1203,37 @@ func handleFavicon(w http.ResponseWriter, r *http.Request) {
 
 func handleManifest(w http.ResponseWriter, _ *http.Request) {
 	manifest := `{
-	"name": "DynDNS Dashboard",
-	"short_name": "DynDNS",
-	"description": "Multi-Provider Dynamic DNS Dashboard",
-	"start_url": "/",
-	"scope": "/",
-	"display": "standalone",
-	"orientation": "any",
-	"background_color": "#0f172a",
-	"theme_color": "#0f172a",
-	"icons": [
-		{
-			"src": "/favicon.svg?theme=dark",
-			"sizes": "any",
-			"type": "image/svg+xml",
-			"purpose": "any"
-		}
-	]
-}`
+		"id": "/",
+		"name": "DynDNS Dashboard",
+		"short_name": "DynDNS",
+		"description": "Multi-Provider Dynamic DNS Dashboard",
+		"start_url": "/",
+		"scope": "/",
+		"display": "standalone",
+		"orientation": "any",
+		"background_color": "#0f172a",
+		"theme_color": "#0f172a",
+		"icons": [
+			{
+				"src": "/favicon.svg?theme=dark",
+				"sizes": "any",
+				"type": "image/svg+xml",
+				"purpose": "any"
+			},
+			{
+				"src": "/apple-touch-icon.png",
+				"sizes": "192x192",
+				"type": "image/png",
+				"purpose": "maskable"
+			},
+			{
+				"src": "/apple-touch-icon-512.png",
+				"sizes": "512x512",
+				"type": "image/png",
+				"purpose": "maskable"
+			}
+		]
+	}`
 
 	w.Header().Set("Content-Type", "application/manifest+json; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
@@ -3193,11 +3206,16 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 	_, _ = fmt.Fprintf(
 		w, `<!DOCTYPE html><html><head>
 		<meta charset="utf-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 		<meta name="format-detection" content="telephone=no">
+		<meta name="robots" content="noindex, nofollow">
+		<meta name="color-scheme" content="dark">
+		<meta name="application-name" content="DynDNS">
+		<meta name="mobile-web-app-capable" content="yes">
 		<meta name="apple-mobile-web-app-capable" content="yes">
 		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 		<meta name="apple-mobile-web-app-title" content="IONOS-DDNS">
+		<meta name="msapplication-TileColor" content="#0f172a">
 		`+csrfMeta+`
 		<title>%s</title>
 		<link id="favicon" rel="icon" type="image/svg+xml" href="/favicon.svg?theme=dark">

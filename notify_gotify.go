@@ -198,7 +198,7 @@ func (g *gotifyNotifier) doSend(payload map[string]any) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 
 		return fmt.Errorf("gotify HTTP %d: %s", resp.StatusCode, string(b))

@@ -141,7 +141,7 @@ func providerRetryWait(apiErr *APIError, attempt, statusCode int) time.Duration 
 		return apiErr.RetryAfter
 	}
 
-	serverBusy := statusCode == http.StatusTooManyRequests || statusCode >= 500
+	serverBusy := statusCode == http.StatusTooManyRequests || statusCode >= http.StatusInternalServerError
 
 	return calculateRetryDelay(attempt, serverBusy)
 }
@@ -212,7 +212,7 @@ func handleProviderHTTPResponse(
 		return nil, retry, handledErr
 	}
 
-	if res.StatusCode >= 200 && res.StatusCode < 300 {
+	if res.StatusCode >= http.StatusOK && res.StatusCode < http.StatusMultipleChoices {
 		apiMetrics.RecordSuccess(providerName, method, duration)
 		lastErrorMsg.Set("")
 		debugLog("HTTP", "", fmt.Sprintf("✅ %s success: %d bytes", providerName, len(respBody)))
