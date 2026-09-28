@@ -468,13 +468,13 @@ const (
 	ProviderFebas        ProviderType = "FEBAS"
 	ProviderDNScale      ProviderType = "DNSCALE"
 
-	sIONOS        string = "IONOS"
-	sCloudflare   string = "CLOUDFLARE"
-	sIPv64        string = "IPv64"
-	sHetzner      string = "HETZNER"
-	sHetznerCloud string = "HETZNERCLOUD"
-	sFebas        string = "FEBAS"
-	sDNScale      string = "DNSCALE"
+	sIONOS        string = string(ProviderIONOS)
+	sCloudflare   string = string(ProviderCloudflare)
+	sIPv64        string = string(ProviderIPv64)
+	sHetzner      string = string(ProviderHetzner)
+	sHetznerCloud string = string(ProviderHetznerCloud)
+	sFebas        string = string(ProviderFebas)
+	sDNScale      string = string(ProviderDNScale)
 
 	ionosBaseURL        = "https://api.hosting.ionos.com/dns/v1/zones"
 	cloudflareAPIBase   = "https://api.cloudflare.com/client/v4"
