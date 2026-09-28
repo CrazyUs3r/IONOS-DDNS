@@ -4,6 +4,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -92,12 +93,11 @@ func parseRetryAfter(h http.Header) (time.Duration, bool) {
 		return 0, false
 	}
 
-	if secs, err := time.ParseDuration(ra + "s"); err == nil {
+	if secs, err := strconv.Atoi(ra); err == nil {
 		if secs < 0 {
 			return 0, false
 		}
-
-		return secs, true
+		return min(time.Duration(secs)*time.Second, maxRetryAfter), true
 	}
 
 	if t, err := http.ParseTime(ra); err == nil {
@@ -106,7 +106,7 @@ func parseRetryAfter(h http.Header) (time.Duration, bool) {
 			return 0, false
 		}
 
-		return d, true
+		return min(d, maxRetryAfter), true
 	}
 
 	return 0, false

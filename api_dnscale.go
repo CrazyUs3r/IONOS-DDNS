@@ -64,6 +64,7 @@ func dnscaleAPIAttempt(
 
 	if err != nil {
 		if !allowRetry {
+			err = redactNetworkError(err)
 			debugLog("HTTP", "", fmt.Sprintf(phrases().DNScaleNetworkErrorNoRetry, err, duration))
 			apiMetrics.RecordError(sDNScale, method, 0, err, duration)
 
@@ -217,13 +218,13 @@ func loadDNScaleZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
 		if dc.Provider != ProviderDNScale {
 			continue
 		}
-		dn := strings.TrimSuffix(strings.ToLower(dc.FQDN), ".")
+		dn := normalizeProviderFQDN(dc.FQDN)
 		needed[dn] = struct{}{}
 	}
 
 	filtered := allZones[:0]
 	for _, z := range allZones {
-		zn := strings.TrimSuffix(strings.ToLower(z.Name), ".")
+		zn := normalizeProviderFQDN(z.Name)
 		for dn := range needed {
 			if dn == zn || strings.HasSuffix(dn, "."+zn) {
 				filtered = append(filtered, z)
@@ -694,7 +695,7 @@ func cleanupDNScaleZoneRecords(
 		return
 	}
 
-	zoneName := strings.ToLower(strings.TrimSuffix(zone.Name, "."))
+	zoneName := normalizeProviderFQDN(zone.Name)
 
 	for _, rec := range records {
 		cleanupSingleDNScaleRecord(ctx, dc, zone, zoneName, rec, configRecords, managedDomains)
@@ -778,8 +779,8 @@ func shouldCleanupDNScaleRecord(
 }
 
 func dnscaleRecordFQDN(zoneName, recordName string) string {
-	name := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(recordName), "."))
-	zone := strings.ToLower(strings.TrimSuffix(zoneName, "."))
+	name := normalizeProviderFQDN(recordName)
+	zone := normalizeProviderFQDN(zoneName)
 
 	var fqdn string
 	switch {
@@ -795,5 +796,5 @@ func dnscaleRecordFQDN(zoneName, recordName string) string {
 		fqdn = name + "." + zone
 	}
 
-	return strings.ToLower(strings.TrimSuffix(fqdn, "."))
+	return normalizeProviderFQDN(fqdn)
 }

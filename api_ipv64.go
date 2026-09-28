@@ -20,7 +20,7 @@ import (
 // ============================================================================
 
 func splitIPv64FQDN(fqdn string) (baseDomain, praefix string) {
-	fqdn = normalizeIPv64FQDN(fqdn)
+	fqdn = normalizeProviderFQDN(fqdn)
 	if fqdn == "" {
 		return "", ""
 	}
@@ -67,7 +67,7 @@ func splitIPv64FQDN(fqdn string) (baseDomain, praefix string) {
 }
 
 func ipv64ServiceDomainSuffix(fqdn string) (string, bool) {
-	fqdn = normalizeIPv64FQDN(fqdn)
+	fqdn = normalizeProviderFQDN(fqdn)
 
 	for _, suffix := range IPv64ServiceDomains {
 		if fqdn == suffix || strings.HasSuffix(fqdn, "."+suffix) {
@@ -79,7 +79,7 @@ func ipv64ServiceDomainSuffix(fqdn string) (string, bool) {
 }
 
 func validateIPv64FQDN(fqdn string) error {
-	fqdn = normalizeIPv64FQDN(fqdn)
+	fqdn = normalizeProviderFQDN(fqdn)
 	if fqdn == "" {
 		return errors.New(phrases().IPv64FQDNEmpty)
 	}
@@ -230,11 +230,12 @@ func handleIPv64Response(
 	duration time.Duration,
 	attempt, maxAttempts int,
 ) ([]byte, bool, error) {
-	respBody, readErr := io.ReadAll(res.Body)
+	respBody, readErr := readResponseBody(res)
 
 	if readErr != nil {
-		retry, handledErr := handleIPv64ReadError(
-			ctx, method, res.StatusCode, readErr, duration, attempt, maxAttempts,
+		serverBusy := res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= http.StatusInternalServerError
+		retry, handledErr := handleProviderReadError(
+			ctx, sIPv64, method, res.StatusCode, readErr, duration, attempt, maxAttempts, serverBusy,
 		)
 
 		return nil, retry, handledErr
@@ -247,7 +248,7 @@ func handleIPv64Response(
 	}
 
 	if apiErr := classifyAPIErrorWithHeaders(res.StatusCode, method, apiURL, string(respBody), res.Header); apiErr != nil {
-		retry, handledErr := handleIPv64APIError(ctx, apiErr, method, res.StatusCode, duration, attempt, maxAttempts)
+		retry, handledErr := handleProviderAPIError(ctx, sIPv64, "", apiErr, method, res.StatusCode, duration, attempt, maxAttempts)
 
 		return nil, retry, handledErr
 	}
@@ -259,32 +260,6 @@ func handleIPv64Response(
 	apiMetrics.RecordSuccess(sIPv64, method, duration)
 
 	return respBody, false, nil
-}
-
-func handleIPv64ReadError(
-	ctx context.Context,
-	method string,
-	statusCode int,
-	readErr error,
-	duration time.Duration,
-	attempt, maxAttempts int,
-) (bool, error) {
-	apiMetrics.RecordError(sIPv64, method, statusCode, readErr, duration)
-
-	handledErr := fmt.Errorf("%s: %w", phrases().ErrBodyRead, readErr)
-	if !canRetryAPIAttempt(attempt, maxAttempts) {
-		return false, handledErr
-	}
-
-	serverBusy := statusCode == http.StatusTooManyRequests || statusCode >= 500
-	wait := calculateRetryDelay(attempt, serverBusy)
-	debugLog("HTTP", "", fmt.Sprintf(phrases().IPv64RetriableWait, wait))
-
-	if !sleepOrCancel(ctx, wait) {
-		return false, fmt.Errorf("%s: %w", phrases().ErrContextCancelled, ctx.Err())
-	}
-
-	return true, handledErr
 }
 
 func handleIPv64RateLimit(
@@ -322,42 +297,6 @@ func ipv64RateLimitWait(headers http.Header, attempt int) time.Duration {
 	debugLog("HTTP", "", fmt.Sprintf(phrases().IPv64RateLimitBackoff, baseWait))
 
 	return baseWait
-}
-
-func handleIPv64APIError(
-	ctx context.Context,
-	apiErr *APIError,
-	method string,
-	statusCode int,
-	duration time.Duration,
-	attempt, maxAttempts int,
-) (bool, error) {
-	apiMetrics.RecordError(sIPv64, method, statusCode, apiErr, duration)
-	lastErrorMsg.Set(sanitizeError(apiErr))
-
-	if statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden {
-		log(LogContext{
-			Level:   LogError,
-			Action:  ActionError,
-			Message: fmt.Sprintf("🚨 IPv64 auth error: %v", apiErr),
-		})
-	}
-
-	if apiErr.Retryable && canRetryAPIAttempt(attempt, maxAttempts) {
-		wait := apiErr.RetryAfter
-		if wait <= 0 {
-			wait = calculateRetryDelay(attempt, statusCode >= 500)
-		}
-		debugLog("HTTP", "", fmt.Sprintf(phrases().IPv64RetriableWait, wait))
-
-		if !sleepOrCancel(ctx, wait) {
-			return false, fmt.Errorf("%s: %w", phrases().ErrContextCancelled, ctx.Err())
-		}
-
-		return true, apiErr
-	}
-
-	return false, apiErr
 }
 
 func validateIPv64ResponseBody(
@@ -471,8 +410,8 @@ func buildIPv64FileCacheSnapshot() ([]Zone, *ZoneRecordCache) {
 
 	for _, domainName := range domainNames {
 		domain := providerCache.ipv64Records[domainName]
-		zoneID := normalizeIPv64FQDN(domainName)
-		zoneName := normalizeIPv64FQDN(domain.Domain)
+		zoneID := normalizeProviderFQDN(domainName)
+		zoneName := normalizeProviderFQDN(domain.Domain)
 		if zoneName == "" {
 			zoneName = zoneID
 		}
@@ -532,9 +471,9 @@ func buildIPv64DomainsFromFileCache(zones []Zone, recordCache *ZoneRecordCache) 
 	cached := make(map[string]IPv64Domain, len(zones))
 
 	for _, zone := range zones {
-		domainName := normalizeIPv64FQDN(zone.Name)
+		domainName := normalizeProviderFQDN(zone.Name)
 		if domainName == "" {
-			domainName = normalizeIPv64FQDN(zone.ID)
+			domainName = normalizeProviderFQDN(zone.ID)
 		}
 		if domainName == "" {
 			continue
@@ -631,8 +570,8 @@ func decodeIPv64FileCacheRecordMeta(comment string) ipv64FileCacheRecordMeta {
 }
 
 func ipv64PraefixFromCachedRecordName(domainName, recordName string) string {
-	domainName = normalizeIPv64FQDN(domainName)
-	recordName = normalizeIPv64FQDN(recordName)
+	domainName = normalizeProviderFQDN(domainName)
+	recordName = normalizeProviderFQDN(recordName)
 
 	if recordName == "" || recordName == "@" || recordName == domainName {
 		return ""
@@ -769,7 +708,7 @@ func buildIPv64DomainSnapshot(resp IPv64Response) map[string]IPv64Domain {
 	domains := make(map[string]IPv64Domain, len(resp.Subdomains))
 
 	for domainName, subdomain := range resp.Subdomains {
-		domainName = normalizeIPv64FQDN(domainName)
+		domainName = normalizeProviderFQDN(domainName)
 		if domainName == "" {
 			continue
 		}
@@ -788,7 +727,7 @@ func buildIPv64DomainSnapshot(resp IPv64Response) map[string]IPv64Domain {
 }
 
 func loadIPv64InfrastructureRecords(z Zone) ([]Record, error) {
-	zoneName := normalizeIPv64FQDN(z.Name)
+	zoneName := normalizeProviderFQDN(z.Name)
 
 	providerCache.RLock()
 	defer providerCache.RUnlock()
@@ -1003,6 +942,7 @@ func performIPv64NICUpdate(
 	duration := time.Since(start)
 
 	if err != nil {
+		err = redactNetworkError(err)
 		apiMetrics.RecordError(sIPv64, MethodNIC, 0, err, duration)
 
 		return err
@@ -1162,7 +1102,7 @@ func collectIPv64ConfiguredDomains() (map[string]struct{}, map[string]struct{}) 
 			continue
 		}
 
-		fqdn := normalizeIPv64FQDN(dc.FQDN)
+		fqdn := normalizeProviderFQDN(dc.FQDN)
 		configuredFQDNs[fqdn] = struct{}{}
 
 		base, _ := splitIPv64FQDN(fqdn)
@@ -1293,11 +1233,7 @@ func buildIPv64RecordFQDN(baseDomain, praefix string) string {
 		fqdn = praefix + "." + baseDomain
 	}
 
-	return normalizeIPv64FQDN(fqdn)
-}
-
-func normalizeIPv64FQDN(fqdn string) string {
-	return strings.ToLower(strings.TrimSuffix(strings.TrimSpace(fqdn), "."))
+	return normalizeProviderFQDN(fqdn)
 }
 
 func deleteIPv64Record(
@@ -1361,7 +1297,7 @@ func loadIPv64Domains(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
 
 	zones := make([]Zone, 0, len(resp.Subdomains))
 	for domainName := range resp.Subdomains {
-		domainName = normalizeIPv64FQDN(domainName)
+		domainName = normalizeProviderFQDN(domainName)
 		if domainName == "" {
 			continue
 		}
@@ -1380,7 +1316,7 @@ func loadIPv64Domains(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
 // ============================================================================
 
 func addIPv64Domain(ctx context.Context, dc *DomainConfig, fqdn string) error {
-	fqdn = normalizeIPv64FQDN(fqdn)
+	fqdn = normalizeProviderFQDN(fqdn)
 	if err := validateIPv64FQDN(fqdn); err != nil {
 		return err
 	}
@@ -1412,7 +1348,7 @@ func addIPv64Domain(ctx context.Context, dc *DomainConfig, fqdn string) error {
 }
 
 func deleteIPv64Domain(ctx context.Context, dc *DomainConfig, fqdn string) error {
-	fqdn = normalizeIPv64FQDN(fqdn)
+	fqdn = normalizeProviderFQDN(fqdn)
 	if err := validateIPv64FQDN(fqdn); err != nil {
 		return err
 	}
@@ -1456,7 +1392,7 @@ func selectIPv64DomainConfigForAction(
 	fqdn string,
 	apiToken string,
 ) (*DomainConfig, int, error) {
-	fqdn = normalizeIPv64FQDN(fqdn)
+	fqdn = normalizeProviderFQDN(fqdn)
 	apiToken = strings.TrimSpace(apiToken)
 
 	if err := validateIPv64FQDN(fqdn); err != nil {
@@ -1511,7 +1447,7 @@ func selectIPv64DomainConfigForAction(
 }
 
 func findIPv64DomainConfigForFQDN(fqdn string) *DomainConfig {
-	fqdn = normalizeIPv64FQDN(fqdn)
+	fqdn = normalizeProviderFQDN(fqdn)
 
 	cfgMu.RLock()
 	defer cfgMu.RUnlock()
@@ -1529,7 +1465,7 @@ func findIPv64DomainConfigForFQDN(fqdn string) *DomainConfig {
 			continue
 		}
 
-		configFQDN := normalizeIPv64FQDN(dc.FQDN)
+		configFQDN := normalizeProviderFQDN(dc.FQDN)
 		if !ipv64ConfigCoversFQDN(configFQDN, fqdn) {
 			continue
 		}
@@ -1588,8 +1524,8 @@ func findSingleIPv64DomainConfig() *DomainConfig {
 }
 
 func ipv64ConfigCoversFQDN(configFQDN, fqdn string) bool {
-	configFQDN = normalizeIPv64FQDN(configFQDN)
-	fqdn = normalizeIPv64FQDN(fqdn)
+	configFQDN = normalizeProviderFQDN(configFQDN)
+	fqdn = normalizeProviderFQDN(fqdn)
 
 	if configFQDN == "" || fqdn == "" {
 		return false
@@ -1599,7 +1535,7 @@ func ipv64ConfigCoversFQDN(configFQDN, fqdn string) bool {
 }
 
 func findIPv64DomainConfigOwningFQDN(ctx context.Context, fqdn string) (*DomainConfig, error) {
-	fqdn = normalizeIPv64FQDN(fqdn)
+	fqdn = normalizeProviderFQDN(fqdn)
 
 	configs := ipv64DomainConfigsSnapshot()
 	seenTokens := make(map[string]struct{})
@@ -1660,7 +1596,7 @@ func ipv64DomainConfigsSnapshot() []DomainConfig {
 }
 
 func ipv64TokenOwnsDomain(ctx context.Context, dc *DomainConfig, fqdn string) (bool, error) {
-	fqdn = normalizeIPv64FQDN(fqdn)
+	fqdn = normalizeProviderFQDN(fqdn)
 	if err := validateIPv64FQDN(fqdn); err != nil {
 		return false, err
 	}
@@ -1747,7 +1683,7 @@ func indexIPv64DomainConfigs(configs []DomainConfig) map[string]DomainConfig {
 		if dc.Provider != ProviderIPv64 {
 			continue
 		}
-		fqdn := normalizeIPv64FQDN(dc.FQDN)
+		fqdn := normalizeProviderFQDN(dc.FQDN)
 		if fqdn == "" {
 			continue
 		}

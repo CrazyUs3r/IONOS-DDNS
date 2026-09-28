@@ -304,6 +304,26 @@ func shouldSkipZoneCacheLoad(cache *ZoneRecordCache, z Zone) bool {
 	return true
 }
 
+func (c *ZoneRecordCache) Update(zoneID string, fn func([]Record) ([]Record, bool)) bool {
+	c.Lock()
+	defer c.Unlock()
+
+	entry, ok := c.data[zoneID]
+	if !ok {
+		return false
+	}
+
+	updated, changed := fn(slices.Clone(entry.records))
+	if !changed {
+		return false
+	}
+
+	entry.records = updated
+	c.data[zoneID] = entry
+
+	return true
+}
+
 func startZoneCacheLoad(
 	ctx context.Context,
 	cacheWg *sync.WaitGroup,

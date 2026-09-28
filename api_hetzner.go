@@ -87,6 +87,9 @@ func hetznerAPIAttempt(
 	res, err := getHTTPClient().Do(req)
 	duration := time.Since(start)
 	if err != nil {
+		if urlErr, ok := errors.AsType[*url.Error](err); ok {
+			err = fmt.Errorf("%s %s: %w", urlErr.Op, endpoint, urlErr.Err)
+		}
 		shouldRetry, retryErr := handleProviderNetworkError(ctx, providerName, method, err, duration, attempt, maxRetries, false)
 
 		return nil, shouldRetry, retryErr
@@ -458,7 +461,7 @@ func updateHetznerCloudDNS(
 }
 
 func findHetznerExistingRecord(records []Record, fqdn, zoneName, recordName, recordType string) *Record {
-	fqdn = strings.ToLower(strings.TrimSuffix(fqdn, "."))
+	fqdn = normalizeProviderFQDN(fqdn)
 	for i := range records {
 		if records[i].Type != recordType {
 			continue
@@ -551,7 +554,7 @@ func cleanupHetznerRecords(
 		if !ok {
 			continue
 		}
-		zoneName := strings.ToLower(strings.TrimSuffix(zone.Name, "."))
+		zoneName := normalizeProviderFQDN(zone.Name)
 		for _, rec := range records {
 			fqdn, shouldDelete := shouldCleanupHetznerRecord(zoneName, rec, configRecords, managedDomains)
 			if !shouldDelete {
@@ -628,8 +631,8 @@ func normalizeProviderName(provider string) ProviderType {
 }
 
 func hetznerRecordNameFromFQDN(fqdn, zoneName string) string {
-	fqdn = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(fqdn), "."))
-	zoneName = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(zoneName), "."))
+	fqdn = normalizeProviderFQDN(fqdn)
+	zoneName = normalizeProviderFQDN(zoneName)
 	if fqdn == "" {
 		return "@"
 	}
@@ -644,16 +647,15 @@ func hetznerRecordNameFromFQDN(fqdn, zoneName string) string {
 }
 
 func normalizeHetznerRelativeName(name string) string {
-	name = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(name), "."))
+	name = normalizeProviderFQDN(name)
 	if name == "" || name == "@" {
 		return "@"
 	}
-
 	return name
 }
 
 func hetznerRecordFQDN(zoneName, recordName string) string {
-	zoneName = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(zoneName), "."))
+	zoneName = normalizeProviderFQDN(zoneName)
 	recordName = normalizeHetznerRelativeName(recordName)
 	switch {
 	case recordName == "@" || recordName == zoneName:
@@ -670,7 +672,7 @@ func zoneIDOrName(zoneID, zoneName string) string {
 		return zoneID
 	}
 
-	return strings.TrimSuffix(strings.ToLower(strings.TrimSpace(zoneName)), ".")
+	return normalizeProviderFQDN(zoneName)
 }
 
 func escapePathSegment(s string) string {

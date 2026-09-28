@@ -1,4 +1,4 @@
-// Pachage main
+// Package main
 package main
 
 import (
@@ -10,10 +10,11 @@ import (
 )
 
 type dnsProviderFileCache struct {
-	LastUpdate time.Time           `json:"last_update"`
-	Records    map[string][]Record `json:"records"`
-	Zones      []Zone              `json:"zones"`
-	Version    int                 `json:"version"`
+	LastUpdate time.Time            `json:"last_update"`
+	StoredAt   map[string]time.Time `json:"stored_at,omitempty"`
+	Records    map[string][]Record  `json:"records"`
+	Zones      []Zone               `json:"zones"`
+	Version    int                  `json:"version"`
 }
 
 // ============================================================================
@@ -33,13 +34,15 @@ func saveDNSProviderCacheToFile(providerName, cachePath string, zones []Zone, re
 		Version:    1,
 		Zones:      zones,
 		Records:    make(map[string][]Record),
+		StoredAt:   make(map[string]time.Time),
 		LastUpdate: time.Now(),
 	}
 
 	totalRecords := 0
 	for _, zone := range zones {
-		if records, exists := recordCache.Get(zone.ID); exists {
+		if records, storedAt, exists := recordCache.GetWithStoredAt(zone.ID); exists {
 			cache.Records[zone.ID] = records
+			cache.StoredAt[zone.ID] = storedAt
 			totalRecords += len(records)
 		}
 	}
@@ -85,7 +88,11 @@ func loadDNSProviderCacheFromFile(providerName, cachePath string) ([]Zone, *Zone
 
 	recordCache := NewZoneRecordCache()
 	for zoneID, records := range cache.Records {
-		recordCache.SetAt(zoneID, records, cache.LastUpdate)
+		storedAt := cache.LastUpdate
+		if ts, ok := cache.StoredAt[zoneID]; ok && !ts.IsZero() {
+			storedAt = ts
+		}
+		recordCache.SetAt(zoneID, records, storedAt)
 	}
 
 	age := time.Since(cache.LastUpdate)

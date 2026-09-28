@@ -2171,7 +2171,7 @@ func handleAPIIPv64Domain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req.FQDN = normalizeIPv64FQDN(req.FQDN)
+	req.FQDN = normalizeProviderFQDN(req.FQDN)
 	if req.FQDN == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": esc(phrases().DomainIsEmpty)})
 
@@ -3342,7 +3342,7 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 						</div>
 					</div>
 
-					<button class="theme-toggle"
+					<button id="theme-toggle" class="theme-toggle"
 						data-tooltip="`+esc(phrases().SettingsThemeHint)+`"
 						data-mouseenter="showNotifierTooltip()"
 						data-focus="showNotifierTooltip()"

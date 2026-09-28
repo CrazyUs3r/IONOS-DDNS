@@ -14,7 +14,7 @@ import (
 )
 
 // ============================================================================
-// STATSU FILE
+// STATUS FILE
 // ============================================================================
 
 type statusUpdate struct {
@@ -61,9 +61,8 @@ func updateStatusFileBatch(updates []statusUpdate) error {
 
 		history.Provider = u.Provider
 		history.LastChanged = now
-		if u.CNAME != "" {
-			history.CNAMETarget = u.CNAME
-		}
+		history.CNAMETarget = u.CNAME
+
 		history.IPs = append(history.IPs, IPEntry{
 			Time: now,
 			IPv4: u.IPv4,
@@ -551,7 +550,7 @@ func serveCachedJSON(w http.ResponseWriter, r *http.Request, cache *CachedRespon
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("ETag", etag)
 	w.Header().Set("Last-Modified", lastMod.UTC().Format(http.TimeFormat))
-	w.Header().Set("Cache-Control", "public, max-age=5")
+	w.Header().Set("Cache-Control", "private, max-age=5")
 
 	if r.Header.Get("If-None-Match") == etag {
 		w.WriteHeader(http.StatusNotModified)

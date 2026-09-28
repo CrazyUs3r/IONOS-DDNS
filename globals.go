@@ -325,6 +325,7 @@ const (
 	DNSKeepalive         = 30 * time.Second
 	ShutdownGraceTimeout = 5 * time.Second
 	ShutdownWaitTimeout  = 10 * time.Second
+	maxRetryAfter        = 5 * time.Minute
 )
 
 // ============================================================================
@@ -469,7 +470,7 @@ const (
 
 	sIONOS        string = "IONOS"
 	sCloudflare   string = "CLOUDFLARE"
-	sIPv64        string = "IPV64"
+	sIPv64        string = "IPv64"
 	sHetzner      string = "HETZNER"
 	sHetznerCloud string = "HETZNERCLOUD"
 	sFebas        string = "FEBAS"

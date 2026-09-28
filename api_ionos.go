@@ -59,6 +59,7 @@ func ionosAPIAttempt(
 
 	if err != nil {
 		if !allowRetry {
+			err = redactNetworkError(err)
 			debugLog("HTTP", "", fmt.Sprintf(phrases().IonosNetworkErrorNoRetry, err, duration))
 			apiMetrics.RecordError(sIONOS, method, 0, err, duration)
 
@@ -854,13 +855,13 @@ func loadIONOSZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
 		if dc.Provider != ProviderIONOS {
 			continue
 		}
-		dn := strings.TrimSuffix(strings.ToLower(dc.FQDN), ".")
+		dn := normalizeProviderFQDN(dc.FQDN)
 		needed[dn] = struct{}{}
 	}
 
 	filtered := zones[:0]
 	for _, z := range zones {
-		zn := strings.TrimSuffix(strings.ToLower(z.Name), ".")
+		zn := normalizeProviderFQDN(z.Name)
 		for dn := range needed {
 			if dn == zn || strings.HasSuffix(dn, "."+zn) {
 				filtered = append(filtered, z)
@@ -995,7 +996,7 @@ func cleanupIONOSZoneRecords(
 		return
 	}
 
-	zoneName := strings.ToLower(strings.TrimSuffix(zone.Name, "."))
+	zoneName := normalizeProviderFQDN(zone.Name)
 
 	for _, rec := range records {
 		cleanupSingleIONOSRecord(ctx, ionosDC, zone, zoneName, rec, configRecords, managedDomains)
@@ -1089,5 +1090,5 @@ func ionosRecordFQDN(zoneName, recordName string) string {
 		fqdn = recordName + "." + zoneName
 	}
 
-	return strings.ToLower(strings.TrimSuffix(fqdn, "."))
+	return normalizeProviderFQDN(fqdn)
 }

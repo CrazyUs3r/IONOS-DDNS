@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -236,10 +237,20 @@ func updateFebasCache(
 		return
 	}
 
-	records, _ := cache.Get(zoneID)
-	records = setFebasCachedAddress(records, fqdn, RecordTypeA, ipv4)
-	records = setFebasCachedAddress(records, fqdn, RecordTypeAAAA, ipv6)
-	cache.Set(zoneID, records)
+	apply := func(records []Record) []Record {
+		records = setFebasCachedAddress(records, fqdn, RecordTypeA, ipv4)
+
+		return setFebasCachedAddress(records, fqdn, RecordTypeAAAA, ipv6)
+	}
+
+	updated := cache.Update(zoneID, func(records []Record) ([]Record, bool) {
+		return apply(records), true
+	})
+	if updated {
+		return
+	}
+
+	cache.Set(zoneID, apply(nil))
 }
 
 func setFebasCachedAddress(
@@ -292,6 +303,9 @@ func febasAPIAttempt(
 	res, err := febasHTTPClient().Do(req)
 	duration := time.Since(start)
 	if err != nil {
+		if urlErr, ok := errors.AsType[*url.Error](err); ok {
+			err = fmt.Errorf("%s %s: %w", urlErr.Op, redactedURL, urlErr.Err)
+		}
 		retry, handledErr := handleProviderNetworkError(ctx, sFebas, MethodNIC, err, duration, attempt, maxRetries, false)
 
 		return nil, retry, handledErr
@@ -304,7 +318,8 @@ func febasAPIAttempt(
 
 	respBody, readErr := io.ReadAll(io.LimitReader(res.Body, febasResponseBodyLimit))
 	if readErr != nil {
-		retry, handledErr := handleProviderReadError(ctx, sFebas, MethodNIC, res.StatusCode, readErr, duration, attempt, maxRetries)
+		serverBusy := res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= http.StatusInternalServerError
+		retry, handledErr := handleProviderReadError(ctx, sFebas, MethodNIC, res.StatusCode, readErr, duration, attempt, maxRetries, serverBusy)
 
 		return nil, retry, handledErr
 	}

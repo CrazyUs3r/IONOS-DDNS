@@ -28,8 +28,13 @@ func loadCloudflareCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
 
 func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint string, body any) ([]byte, error) {
 	fullURL := cloudflareAPIBase + endpoint
+	allowRetry := method != MethodPOST
 
 	return apiWithRetry(ctx, sCloudflare, phrases().CFAPIFailed, func(attempt, maxRetries int) ([]byte, bool, error) {
+		if !allowRetry {
+			attempt = maxRetries - 1
+		}
+
 		return cloudflareAPIAttempt(ctx, dc, method, fullURL, body, attempt, maxRetries)
 	})
 }
@@ -154,7 +159,8 @@ func normalizeCloudflareToken(token string) string {
 func handleCloudflareResponse(ctx context.Context, res *http.Response, method, fullURL string, duration time.Duration, attempt, maxAttempts int) ([]byte, bool, error) {
 	respBody, readErr := readResponseBody(res)
 	if readErr != nil {
-		retry, handledErr := handleProviderReadError(ctx, sCloudflare, method, res.StatusCode, readErr, duration, attempt, maxAttempts)
+		serverBusy := res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= http.StatusInternalServerError
+		retry, handledErr := handleProviderReadError(ctx, sCloudflare, method, res.StatusCode, readErr, duration, attempt, maxAttempts, serverBusy)
 		return nil, retry, handledErr
 	}
 
@@ -479,12 +485,12 @@ func recoverCloudflareMissingRecord(
 // ============================================================================
 
 func cloudflareDCForZone(zoneName string) *DomainConfig {
-	zoneName = strings.ToLower(strings.TrimSuffix(zoneName, "."))
+	zoneName = normalizeProviderFQDN(zoneName)
 	for _, dc := range snapshotDomainConfigs() {
 		if dc.Provider != ProviderCloudflare {
 			continue
 		}
-		fqdn := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(dc.FQDN), "."))
+		fqdn := normalizeProviderFQDN(dc.FQDN)
 		if fqdn == "" {
 			continue
 		}
@@ -528,7 +534,7 @@ func cleanupCloudflareZoneRecords(
 		return
 	}
 
-	zoneName := normalizeCloudflareName(zone.Name)
+	zoneName := normalizeProviderFQDN(zone.Name)
 
 	for _, rec := range records {
 		cleanupSingleCloudflareRecord(ctx, cfDC, zone, zoneName, rec, configRecords, managedDomains)
@@ -579,7 +585,7 @@ func shouldCleanupCloudflareRecord(
 		return "", false
 	}
 
-	fqdn := normalizeCloudflareName(rec.Name)
+	fqdn := normalizeProviderFQDN(rec.Name)
 	if fqdn == "" {
 		return "", false
 	}
@@ -621,10 +627,6 @@ func deleteCloudflareRecord(
 	if err := markOrphanRecordDeleted(fqdn); err != nil {
 		debugLog("MAINTENANCE", fqdn, fmt.Sprintf("failed to mark orphan-deleted timestamp: %v", err))
 	}
-}
-
-func normalizeCloudflareName(name string) string {
-	return strings.ToLower(strings.TrimSuffix(strings.TrimSpace(name), "."))
 }
 
 // ============================================================================

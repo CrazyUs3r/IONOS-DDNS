@@ -3,9 +3,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
@@ -132,18 +134,37 @@ func buildProviderManagedDomains(provider ProviderType) map[string]struct{} {
 // COMMON HTTP BODY / RETRY HANDLING
 // ============================================================================
 
+const maxProviderResponseBytes = 16 << 20
+
 func readResponseBody(res *http.Response) ([]byte, error) {
-	return io.ReadAll(res.Body)
+	body, err := io.ReadAll(io.LimitReader(res.Body, maxProviderResponseBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxProviderResponseBytes {
+		return nil, fmt.Errorf("response exceeds %d bytes", maxProviderResponseBytes)
+	}
+
+	return body, nil
 }
 
 func providerRetryWait(apiErr *APIError, attempt, statusCode int) time.Duration {
-	if apiErr != nil && apiErr.RetryAfter > 0 && statusCode == http.StatusTooManyRequests {
+	if apiErr != nil && apiErr.RetryAfter > 0 &&
+		(statusCode == http.StatusTooManyRequests || statusCode == http.StatusServiceUnavailable) {
 		return apiErr.RetryAfter
 	}
 
 	serverBusy := statusCode == http.StatusTooManyRequests || statusCode >= http.StatusInternalServerError
 
 	return calculateRetryDelay(attempt, serverBusy)
+}
+
+func redactNetworkError(err error) error {
+	if urlErr, ok := errors.AsType[*url.Error](err); ok {
+		return fmt.Errorf("%s %s: %w", urlErr.Op, sanitizeURLStringForLogging(urlErr.URL), urlErr.Err)
+	}
+
+	return err
 }
 
 func handleProviderNetworkError(
@@ -154,6 +175,7 @@ func handleProviderNetworkError(
 	attempt, maxAttempts int,
 	serverBusy bool,
 ) (bool, error) {
+	err = redactNetworkError(err)
 	debugLog("HTTP", "", fmt.Sprintf("❌ %s network error: %v | latency: %v", providerName, err, duration))
 	apiMetrics.RecordError(providerName, method, 0, err, duration)
 
@@ -179,6 +201,7 @@ func handleProviderReadError(
 	err error,
 	duration time.Duration,
 	attempt, maxAttempts int,
+	serverBusy bool,
 ) (bool, error) {
 	debugLog("HTTP", "", fmt.Sprintf("❌ %s body read error: %v", providerName, err))
 	apiMetrics.RecordError(providerName, method, statusCode, err, duration)
@@ -188,7 +211,7 @@ func handleProviderReadError(
 		return false, handledErr
 	}
 
-	wait := calculateRetryDelay(attempt, false)
+	wait := calculateRetryDelay(attempt, serverBusy)
 	if !sleepOrCancel(ctx, wait) {
 		return false, fmt.Errorf("%s: %w", phrases().ErrContextCancelled, ctx.Err())
 	}
@@ -207,7 +230,8 @@ func handleProviderHTTPResponse(
 ) ([]byte, bool, error) {
 	respBody, readErr := readResponseBody(res)
 	if readErr != nil {
-		retry, handledErr := handleProviderReadError(ctx, providerName, method, res.StatusCode, readErr, duration, attempt, maxAttempts)
+		serverBusy := res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= http.StatusInternalServerError
+		retry, handledErr := handleProviderReadError(ctx, providerName, method, res.StatusCode, readErr, duration, attempt, maxAttempts, serverBusy)
 
 		return nil, retry, handledErr
 	}
@@ -292,33 +316,22 @@ func updateCachedZoneRecord(
 		return false
 	}
 
-	records, ok := cache.Get(zoneID)
-	if !ok {
-		return false
-	}
-
-	for i := range records {
-		if match(records[i]) {
-			update(&records[i])
-			cache.Set(zoneID, records)
-
-			return true
+	return cache.Update(zoneID, func(records []Record) ([]Record, bool) {
+		for i := range records {
+			if match(records[i]) {
+				update(&records[i])
+				return records, true
+			}
 		}
-	}
+		if create == nil {
+			return records, false
+		}
+		if newRecord := create(records); newRecord != nil {
+			return append(records, *newRecord), true
+		}
+		return records, false
+	})
 
-	if create == nil {
-		return false
-	}
-
-	newRecord := create(records)
-	if newRecord == nil {
-		return false
-	}
-
-	records = append(records, *newRecord)
-	cache.Set(zoneID, records)
-
-	return true
 }
 
 func syntheticCachedRecordID(records []Record) string {
