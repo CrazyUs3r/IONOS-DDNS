@@ -15,11 +15,11 @@ import (
 )
 
 func saveCloudflareCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error {
-	return saveProviderCacheToFile(sCloudflare, "cloudflare_cache.json", zones, recordCache)
+	return saveProviderCacheToFile(string(ProviderCloudflare), "cloudflare_cache.json", zones, recordCache)
 }
 
 func loadCloudflareCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
-	return loadProviderCacheFromFile(sCloudflare, "cloudflare_cache.json")
+	return loadProviderCacheFromFile(string(ProviderCloudflare), "cloudflare_cache.json")
 }
 
 // ============================================================================
@@ -30,7 +30,7 @@ func cloudflareAPI(ctx context.Context, dc *DomainConfig, method, endpoint strin
 	fullURL := cloudflareAPIBase + endpoint
 	allowRetry := method != MethodPOST
 
-	return apiWithRetry(ctx, sCloudflare, phrases().CFAPIFailed, func(attempt, maxRetries int) ([]byte, bool, error) {
+	return apiWithRetry(ctx, string(ProviderCloudflare), phrases().CFAPIFailed, func(attempt, maxRetries int) ([]byte, bool, error) {
 		if !allowRetry {
 			attempt = maxRetries - 1
 		}
@@ -59,7 +59,7 @@ func cloudflareAPIAttempt(
 	duration := time.Since(start)
 
 	if err != nil {
-		retry, handledErr := handleProviderNetworkError(ctx, sCloudflare, method, err, duration, attempt, maxRetries, true)
+		retry, handledErr := handleProviderNetworkError(ctx, string(ProviderCloudflare), method, err, duration, attempt, maxRetries, true)
 
 		return nil, retry, handledErr
 	}
@@ -160,7 +160,7 @@ func handleCloudflareResponse(ctx context.Context, res *http.Response, method, f
 	respBody, readErr := readResponseBody(res)
 	if readErr != nil {
 		serverBusy := res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= http.StatusInternalServerError
-		retry, handledErr := handleProviderReadError(ctx, sCloudflare, method, res.StatusCode, readErr, duration, attempt, maxAttempts, serverBusy)
+		retry, handledErr := handleProviderReadError(ctx, string(ProviderCloudflare), method, res.StatusCode, readErr, duration, attempt, maxAttempts, serverBusy)
 		return nil, retry, handledErr
 	}
 
@@ -173,7 +173,7 @@ func handleCloudflareResponse(ctx context.Context, res *http.Response, method, f
 	}
 
 	if jsonErr == nil && cfResp.Success && effectiveStatus >= http.StatusOK && effectiveStatus < http.StatusMultipleChoices {
-		apiMetrics.RecordSuccess(sCloudflare, method, duration)
+		apiMetrics.RecordSuccess(string(ProviderCloudflare), method, duration)
 		lastErrorMsg.Set("")
 		return respBody, false, nil
 	}
@@ -192,7 +192,7 @@ func handleCloudflareResponse(ctx context.Context, res *http.Response, method, f
 	}
 	apiErr.StatusCode = res.StatusCode
 
-	retry, handledErr := handleProviderAPIError(ctx, sCloudflare, phrases().CFAPIFailed, apiErr, method, res.StatusCode, duration, attempt, maxAttempts)
+	retry, handledErr := handleProviderAPIError(ctx, string(ProviderCloudflare), phrases().CFAPIFailed, apiErr, method, res.StatusCode, duration, attempt, maxAttempts)
 	return nil, retry, handledErr
 }
 

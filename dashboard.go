@@ -602,14 +602,17 @@ func buildSettingsDomainsSection() string {
 		`<option value="IPV6">` + esc(p.SettingsIPModeIPv6Only) + `</option>` +
 		`<option id="opt-ip-mode-cname" value="CNAME">CNAME</option></select>`
 
+	var providerOpts strings.Builder
+	for _, d := range providers {
+		providerOpts.WriteString(`<option value="`)
+		providerOpts.WriteString(esc(string(d.ID)))
+		providerOpts.WriteString(`">`)
+		providerOpts.WriteString(esc(d.Label))
+		providerOpts.WriteString(`</option>`)
+	}
+
 	providerField := `<select id="new-domain-provider" class="s-input mb-8" data-change="toggleProviderFields()">` +
-		`<option value="IONOS">IONOS</option>` +
-		`<option value="CLOUDFLARE">Cloudflare</option>` +
-		`<option value="IPV64">IPv64</option>` +
-		`<option value="HETZNER">Hetzner DNS</option>` +
-		`<option value="HETZNERCLOUD">Hetzner Cloud DNS</option>` +
-		`<option value="FEBAS">Febas DynDNS</option>` +
-		`<option value="DNSCALE">DNScale</option></select>`
+		providerOpts.String() + `</select>`
 
 	fqdnField := `<div id="fqdn-plain"><input type="text" id="new-domain-fqdn" class="s-input mb-8" placeholder="` +
 		esc(p.SettingsDomainPlaceholder) + `"></div>` +
@@ -965,6 +968,7 @@ func registerStaticRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/assets/dashboard.js", handleDashboardJS)
 	mux.HandleFunc("/assets/auth.js", handleAuthJS)
 	mux.HandleFunc("/assets/i18n.js", handleDashboardI18NJS)
+	mux.HandleFunc("/assets/providers.js", handleDashboardProvidersJS)
 	mux.HandleFunc("/favicon.svg", handleFavicon)
 	mux.HandleFunc("/manifest.json", handleManifest)
 	mux.HandleFunc("/ws", handleWS)
@@ -1238,6 +1242,19 @@ func handleManifest(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/manifest+json; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	_, _ = io.WriteString(w, manifest)
+}
+
+func handleDashboardProvidersJS(w http.ResponseWriter, _ *http.Request) {
+	data, err := json.Marshal(providers)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = fmt.Fprintf(w, "window.PROVIDERS = %s;\n", data)
 }
 
 func validWebSocketOrigin(r *http.Request) bool {
@@ -3559,7 +3576,7 @@ func writeDashboardMetricsCard(
 					<div class="provider-method-name">%s</div>
 					<div class="provider-method-values">%s</div>
 				</div>
-			`, esc(provider), badges.String())
+			`, esc(ProviderType(provider).Label()), badges.String())
 		}
 	}
 
@@ -4357,6 +4374,7 @@ func writeDashboardFooter(w http.ResponseWriter) {
 
 	_, _ = fmt.Fprint(w, `
 	<script src="/assets/i18n.js" defer></script>
+	<script src="/assets/providers.js" defer></script>
 	<script src="`+assetURL("/assets/dashboard.js", dashboardJSETag)+`" defer></script>
 	</body>
 	</html>

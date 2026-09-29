@@ -15,19 +15,19 @@ import (
 )
 
 func saveHetznerDNSCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error {
-	return saveProviderCacheToFile(sHetzner, "hetzner_dns_cache.json", zones, recordCache)
+	return saveProviderCacheToFile(string(ProviderHetzner), "hetzner_dns_cache.json", zones, recordCache)
 }
 
 func loadHetznerDNSCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
-	return loadProviderCacheFromFile(sHetzner, "hetzner_dns_cache.json")
+	return loadProviderCacheFromFile(string(ProviderHetzner), "hetzner_dns_cache.json")
 }
 
 func saveHetznerCloudCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error {
-	return saveProviderCacheToFile(sHetznerCloud, "hetzner_cloud_cache.json", zones, recordCache)
+	return saveProviderCacheToFile(string(ProviderHetznerCloud), "hetzner_cloud_cache.json", zones, recordCache)
 }
 
 func loadHetznerCloudCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
-	return loadProviderCacheFromFile(sHetznerCloud, "hetzner_cloud_cache.json")
+	return loadProviderCacheFromFile(string(ProviderHetznerCloud), "hetzner_cloud_cache.json")
 }
 
 // ============================================================================
@@ -42,11 +42,11 @@ const (
 )
 
 func hetznerDNSAPI(ctx context.Context, dc *DomainConfig, method, endpoint string, body any) ([]byte, error) {
-	return hetznerAPI(ctx, dc, sHetzner, hetznerAuthAPIKey, method, endpoint, body)
+	return hetznerAPI(ctx, dc, string(ProviderHetzner), hetznerAuthAPIKey, method, endpoint, body)
 }
 
 func hetznerCloudAPI(ctx context.Context, dc *DomainConfig, method, endpoint string, body any) ([]byte, error) {
-	return hetznerAPI(ctx, dc, sHetznerCloud, hetznerAuthBearer, method, endpoint, body)
+	return hetznerAPI(ctx, dc, string(ProviderHetznerCloud), hetznerAuthBearer, method, endpoint, body)
 }
 
 func hetznerAPI(
@@ -362,7 +362,7 @@ func updateHetznerDNS(
 	recordName := hetznerRecordNameFromFQDN(fqdn, zoneName)
 	existing := findHetznerExistingRecord(records, fqdn, zoneName, recordName, recordType)
 
-	if shouldSkipHetznerUpdate(sHetzner, fqdn, recordType, newIP, existing) {
+	if shouldSkipHetznerUpdate(string(ProviderHetzner), fqdn, recordType, newIP, existing) {
 		return false, nil
 	}
 	if dryRunEnabled() {
@@ -415,7 +415,7 @@ func updateHetznerCloudDNS(
 	recordName := hetznerRecordNameFromFQDN(fqdn, zoneName)
 	existing := findHetznerExistingRecord(records, fqdn, zoneName, recordName, recordType)
 
-	if shouldSkipHetznerUpdate(sHetznerCloud, fqdn, recordType, newIP, existing) {
+	if shouldSkipHetznerUpdate(string(ProviderHetznerCloud), fqdn, recordType, newIP, existing) {
 		return false, nil
 	}
 	if dryRunEnabled() {
@@ -614,21 +614,6 @@ func shouldCleanupHetznerRecord(zoneName string, rec Record, configRecords, mana
 // ============================================================================
 // NAME HELPERS
 // ============================================================================
-
-func normalizeProviderName(provider string) ProviderType {
-	p := strings.ToUpper(strings.TrimSpace(provider))
-	p = strings.ReplaceAll(p, "-", "_")
-	p = strings.ReplaceAll(p, " ", "_")
-
-	switch p {
-	case "HETZNER_DNS", "HETZNERDNS", "HETZNER_LEGACY", "HETZNERLEGACY":
-		return ProviderHetzner
-	case "HETZNER_CLOUD", "HETZNERCLOUD", "HCLOUD", "HETZNER_CONSOLE", "HETZNERCONSOLE":
-		return ProviderHetznerCloud
-	default:
-		return ProviderType(p)
-	}
-}
 
 func hetznerRecordNameFromFQDN(fqdn, zoneName string) string {
 	fqdn = normalizeProviderFQDN(fqdn)

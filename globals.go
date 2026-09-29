@@ -462,19 +462,11 @@ const (
 const (
 	ProviderIONOS        ProviderType = "IONOS"
 	ProviderCloudflare   ProviderType = "CLOUDFLARE"
-	ProviderIPv64        ProviderType = "IPV64"
+	ProviderIPv64        ProviderType = "IPv64"
 	ProviderHetzner      ProviderType = "HETZNER"
 	ProviderHetznerCloud ProviderType = "HETZNERCLOUD"
 	ProviderFebas        ProviderType = "FEBAS"
 	ProviderDNScale      ProviderType = "DNSCALE"
-
-	sIONOS        string = string(ProviderIONOS)
-	sCloudflare   string = string(ProviderCloudflare)
-	sIPv64        string = string(ProviderIPv64)
-	sHetzner      string = string(ProviderHetzner)
-	sHetznerCloud string = string(ProviderHetznerCloud)
-	sFebas        string = string(ProviderFebas)
-	sDNScale      string = string(ProviderDNScale)
 
 	ionosBaseURL        = "https://api.hosting.ionos.com/dns/v1/zones"
 	cloudflareAPIBase   = "https://api.cloudflare.com/client/v4"
@@ -482,10 +474,54 @@ const (
 	ipv64APINIC         = "https://ipv64.net/nic/update?"
 	hetznerDNSBaseURL   = "https://dns.hetzner.com/api/v1"
 	hetznerCloudBaseURL = "https://api.hetzner.cloud/v1"
+	febasUpdateBaseURL  = "https://www.febas.de/api/dyndns.php?***"
 	dnscaleBaseURL      = "https://api.dnscale.eu/v1/zones"
 )
 
 type ProviderType string
+
+type providerDef struct {
+	ID      ProviderType `json:"id"`
+	Label   string       `json:"label"`
+	CNAME   bool         `json:"cname"`
+	Aliases []string     `json:"-"`
+}
+
+var providers = []providerDef{
+	{ID: ProviderIONOS, Label: "IONOS"},
+	{ID: ProviderCloudflare, Label: "Cloudflare"},
+	{ID: ProviderIPv64, Label: "IPv64"},
+	{ID: ProviderHetzner, Label: "Hetzner DNS", Aliases: []string{"HETZNER_DNS", "HETZNERDNS", "HETZNER_LEGACY", "HETZNERLEGACY"}},
+	{ID: ProviderHetznerCloud, Label: "Hetzner Cloud DNS", Aliases: []string{"HETZNER_CLOUD", "HCLOUD", "HETZNER_CONSOLE", "HETZNERCONSOLE"}},
+	{ID: ProviderFebas, Label: "Febas DynDNS"},
+	{ID: ProviderDNScale, Label: "DNScale"},
+}
+
+func (p ProviderType) def() (providerDef, bool) {
+	for _, d := range providers {
+		if d.ID == p {
+			return d, true
+		}
+	}
+
+	return providerDef{}, false
+}
+
+func (p ProviderType) Known() bool { _, ok := p.def(); return ok }
+
+func (p ProviderType) Label() string {
+	if d, ok := p.def(); ok {
+		return d.Label
+	}
+
+	return string(p)
+}
+
+func (p ProviderType) SupportsCNAME() bool {
+	d, _ := p.def()
+
+	return d.CNAME
+}
 
 // ============================================================================
 // STRUKTUREN

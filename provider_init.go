@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -61,6 +62,14 @@ func saveConfigToFile() error {
 
 func initProviderConfig() error {
 	if len(cfg.DomainConfigs) > 0 {
+		cfgMu.Lock()
+		for i := range cfg.DomainConfigs {
+			cfg.DomainConfigs[i].Provider = normalizeProviderName(
+				string(cfg.DomainConfigs[i].Provider),
+			)
+		}
+		cfgMu.Unlock()
+
 		if err := validateConfig(); err != nil {
 			return err
 		}
@@ -175,6 +184,19 @@ func normalizeDomain(d string) string {
 	return strings.TrimSuffix(d, ".")
 }
 
+func normalizeProviderName(provider string) ProviderType {
+	p := strings.ToUpper(strings.TrimSpace(provider))
+	p = strings.NewReplacer("-", "_", " ", "_").Replace(p)
+
+	for _, d := range providers {
+		if strings.EqualFold(string(d.ID), p) || slices.Contains(d.Aliases, p) {
+			return d.ID
+		}
+	}
+
+	return ProviderType(p)
+}
+
 func initLegacyConfig() error {
 	providerEnv := legacyProviderEnv()
 	domains, err := legacyDomainsFromEnv()
@@ -195,7 +217,7 @@ func initLegacyConfig() error {
 func legacyProviderEnv() string {
 	providerEnv := strings.ToUpper(os.Getenv("PROVIDER"))
 	if providerEnv == "" {
-		return sIONOS
+		return string(ProviderIONOS)
 	}
 
 	return providerEnv
@@ -221,20 +243,20 @@ func legacyDomainsFromEnv() ([]string, error) {
 }
 
 func buildLegacyDomainConfigs(providerEnv string, domains []string) ([]DomainConfig, error) {
-	switch string(normalizeProviderName(providerEnv)) {
-	case sIONOS:
+	switch normalizeProviderName(providerEnv) {
+	case ProviderIONOS:
 		return buildLegacyIONOSConfigs(domains)
-	case sCloudflare:
+	case ProviderCloudflare:
 		return buildLegacyCloudflareConfigs(domains)
-	case sIPv64:
+	case ProviderIPv64:
 		return buildLegacyIPv64Configs(domains)
-	case sHetzner:
+	case ProviderHetzner:
 		return buildLegacyHetznerDNSConfigs(domains)
-	case sHetznerCloud:
+	case ProviderHetznerCloud:
 		return buildLegacyHetznerCloudConfigs(domains)
-	case sFebas:
+	case ProviderFebas:
 		return buildLegacyFebasConfigs(domains)
-	case sDNScale:
+	case ProviderDNScale:
 		return buildLegacyDNScaleConfigs(domains)
 	default:
 		return nil, fmt.Errorf(phrases().UnknownProviderFormat, providerEnv)

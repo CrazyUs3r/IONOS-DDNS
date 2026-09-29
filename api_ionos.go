@@ -14,11 +14,11 @@ import (
 )
 
 func saveIONOSCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error {
-	return saveProviderCacheToFile(sIONOS, "ionos_cache.json", zones, recordCache)
+	return saveProviderCacheToFile(string(ProviderIONOS), "ionos_cache.json", zones, recordCache)
 }
 
 func loadIONOSCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
-	return loadProviderCacheFromFile(sIONOS, "ionos_cache.json")
+	return loadProviderCacheFromFile(string(ProviderIONOS), "ionos_cache.json")
 }
 
 // ============================================================================
@@ -28,7 +28,7 @@ func loadIONOSCacheFromFile() ([]Zone, *ZoneRecordCache, error) {
 func ionosAPI(ctx context.Context, dc *DomainConfig, method, url string, body any) ([]byte, error) {
 	allowRetry := method != MethodPOST
 
-	return apiWithRetry(ctx, sIONOS, phrases().IonosAPIFailed, func(attempt, maxRetries int) ([]byte, bool, error) {
+	return apiWithRetry(ctx, string(ProviderIONOS), phrases().IonosAPIFailed, func(attempt, maxRetries int) ([]byte, bool, error) {
 		return ionosAPIAttempt(ctx, dc, method, url, body, attempt, maxRetries, allowRetry)
 	})
 }
@@ -61,12 +61,12 @@ func ionosAPIAttempt(
 		if !allowRetry {
 			err = redactNetworkError(err)
 			debugLog("HTTP", "", fmt.Sprintf(phrases().IonosNetworkErrorNoRetry, err, duration))
-			apiMetrics.RecordError(sIONOS, method, 0, err, duration)
+			apiMetrics.RecordError(string(ProviderIONOS), method, 0, err, duration)
 
 			return nil, false, fmt.Errorf("%s: %w", phrases().ErrNetworkError, err)
 		}
 
-		retry, handledErr := handleProviderNetworkError(ctx, sIONOS, method, err, duration, attempt, maxRetries, false)
+		retry, handledErr := handleProviderNetworkError(ctx, string(ProviderIONOS), method, err, duration, attempt, maxRetries, false)
 
 		return nil, retry, handledErr
 	}
@@ -138,7 +138,7 @@ func handleIonosResponse(
 	duration time.Duration,
 	attempt, maxAttempts int,
 ) ([]byte, bool, error) {
-	return handleProviderHTTPResponse(ctx, sIONOS, phrases().IonosMaxAttempts, res, method, url, duration, attempt, maxAttempts)
+	return handleProviderHTTPResponse(ctx, string(ProviderIONOS), phrases().IonosMaxAttempts, res, method, url, duration, attempt, maxAttempts)
 }
 
 func loadIonosInfrastructureRecords(ctx context.Context, dc *DomainConfig, zoneID string) ([]Record, error) {
