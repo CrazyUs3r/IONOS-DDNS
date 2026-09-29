@@ -390,6 +390,7 @@ function initializeLoadedPage(page, section, state) {
 
 	if (page === 'metrics') {
 		initChartTooltips(section);
+		reconcileMetricsFields(section);
 		return;
 	}
 
@@ -1285,8 +1286,6 @@ function startStatusUptimeClock() {
 }
 
 function updateMetrics(m) {
-	const setTxt = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-
 	setStatusUptime(m.uptime_secs);
 	if (document.hidden) {
 		if (currentPage === 'metrics') pageLoadedAt.set('metrics', 0);
@@ -1294,20 +1293,40 @@ function updateMetrics(m) {
 	}
 
 	if (currentPage === 'dashboard') {
-		setTxt('lastUpdate', new Date().toLocaleTimeString());
+		setMetricText('lastUpdate', new Date().toLocaleTimeString());
 	}
 
 	if (currentPage !== 'metrics') {
 		return;
 	}
 
-	setTxt('mTotal', m.total_requests);
-	setTxt('mSuccess', m.success_rate);
-	setTxt('mLatency', m.avg_latency);
-	setTxt('mErrors', (m.client_errors || 0) + " / " + (m.server_errors || 0));
-	setTxt('mP50', m.p50_latency);
-	setTxt('mP85', m.p85_latency);
-	setTxt('mP99', m.p99_latency);
+	applyMetricsIfNewer(m);
+}
+
+let latestProviderDaily = null;
+
+function applyProviderDaily(providers, generatedAt) {
+	generatedAt = Number(generatedAt) || 0;
+	if (latestProviderDaily && generatedAt < latestProviderDaily.generatedAt) {
+		return;
+	}
+	latestProviderDaily = { generatedAt, providers };
+	renderProviderDaily(providers);
+}
+
+function setMetricText(id, val) {
+	const el = document.getElementById(id);
+	if (el) el.textContent = val;
+}
+
+function applyMetricsFields(m) {
+	setMetricText('mTotal', m.total_requests);
+	setMetricText('mSuccess', m.success_rate);
+	setMetricText('mLatency', m.avg_latency);
+	setMetricText('mErrors', (m.client_errors || 0) + " / " + (m.server_errors || 0));
+	setMetricText('mP50', m.p50_latency);
+	setMetricText('mP85', m.p85_latency);
+	setMetricText('mP99', m.p99_latency);
 
 	const bar = document.getElementById('mUsageBar');
 	if (bar) {
@@ -1316,15 +1335,38 @@ function updateMetrics(m) {
 		if (m.usage_color) bar.style.background = m.usage_color;
 	}
 
-	setTxt('mDailyGET', m.daily_get);
-	setTxt('mDailyPOST', m.daily_post);
-	setTxt('mDailyPUT', m.daily_put);
-	setTxt('mDailyDELETE', m.daily_delete);
-	setTxt('mDailyNIC', m.daily_nic);
-	setTxt('mIPLatency', m.ip_latency_avg);
-	setTxt('mIPCount', m.ip_latency_count);
-	setTxt('mLastIPCheck', m.last_ip_check);
+	setMetricText('mDailyGET', m.daily_get);
+	setMetricText('mDailyPOST', m.daily_post);
+	setMetricText('mDailyPUT', m.daily_put);
+	setMetricText('mDailyDELETE', m.daily_delete);
+	setMetricText('mDailyNIC', m.daily_nic);
+	setMetricText('mIPLatency', m.ip_latency_avg);
+	setMetricText('mIPCount', m.ip_latency_count);
+	setMetricText('mLastIPCheck', m.last_ip_check);
 	renderProviderDaily(m.provider_daily);
+
+	const card = document.getElementById('metrics-card');
+	if (card && m.generated_at) card.dataset.generatedAt = String(m.generated_at);
+}
+
+let latestMetricsSnapshot = null; // { generatedAt, data }
+
+function applyMetricsIfNewer(m) {
+	const generatedAt = Number(m.generated_at) || 0;
+	if (latestMetricsSnapshot && generatedAt < latestMetricsSnapshot.generatedAt) {
+	}
+	latestMetricsSnapshot = { generatedAt, data: m };
+	applyMetricsFields(m);
+}
+
+function reconcileMetricsFields(section) {
+	const card = section.querySelector('#metrics-card');
+	const serverGeneratedAt = Number(card?.dataset.generatedAt) || 0;
+	if (latestMetricsSnapshot && latestMetricsSnapshot.generatedAt > serverGeneratedAt) {
+		applyMetricsFields(latestMetricsSnapshot.data);
+	} else if (card) {
+		latestMetricsSnapshot = { generatedAt: serverGeneratedAt, data: latestMetricsSnapshot?.data ?? null };
+	}
 }
 
 const providerLabels = Object.fromEntries(
@@ -1365,6 +1407,7 @@ function renderProviderDaily(providers) {
 		html += `
 			<div class="provider-method-row">
 				<div class="provider-method-name">${escName(providerLabels[provider] || provider)}</div>
+				<div class="provider-method-values">${badges}</div>
 			</div>
 		`;
 	}
