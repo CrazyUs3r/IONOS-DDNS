@@ -545,6 +545,7 @@ func (m *APIMetrics) getStatsUnsafe() map[string]any {
 		"last_ip_check":         lastIPCheck,
 		"uptime_secs":           int64(time.Since(startTime).Seconds()),
 		"provider_daily":        providerDaily,
+		"generated_at":          time.Now().UnixMilli(),
 	}
 }
 

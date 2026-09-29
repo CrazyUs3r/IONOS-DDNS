@@ -3589,7 +3589,7 @@ func writeDashboardMetricsCard(
 	_, _ = fmt.Fprintf(
 		w, `
 	<div class="page-section" data-section="metrics">
-		<div class="card" id="metrics-card">
+		<div class="card" id="metrics-card" data-generated-at="%v">
 			<div class="card-header card-header--space-between">
 				📊 %s`+resetBtn+`
 			</div>
@@ -3747,6 +3747,7 @@ func writeDashboardMetricsCard(
 
 	</div>
 	`,
+		stats["generated_at"],
 		phrases().APIPerformance,
 
 		stats["total_requests"],
