@@ -1327,6 +1327,10 @@ function updateMetrics(m) {
 	renderProviderDaily(m.provider_daily);
 }
 
+const providerLabels = Object.fromEntries(
+	(window.PROVIDERS || []).map(p => [p.id, p.label])
+);
+
 function renderProviderDaily(providers) {
 	const container = document.getElementById('mProviderDaily');
 	if (!container) return;
@@ -1360,8 +1364,7 @@ function renderProviderDaily(providers) {
 
 		html += `
 			<div class="provider-method-row">
-				<div class="provider-method-name">${escName(provider)}</div>
-				<div class="provider-method-values">${badges}</div>
+				<div class="provider-method-name">${escName(providerLabels[provider] || provider)}</div>
 			</div>
 		`;
 	}
@@ -2216,7 +2219,7 @@ function renderSettingsDomainList() {
 	const providerColors = {
 		IONOS: '#3b82f6',
 		CLOUDFLARE: '#f97316',
-		IPV64: '#a855f7',
+		IPv64: '#a855f7',
 		HETZNER: '#14b8a6',
 		HETZNERCLOUD: '#06b6d4',
 		FEBAS: '#22c55e',
@@ -2326,7 +2329,7 @@ function _splitIPv64FQDN(fqdn) {
 }
 
 function _readNewDomainFQDN(provider) {
-	if (provider !== 'IPV64') return _getVal('new-domain-fqdn').trim().toLowerCase();
+	if (provider !== 'IPv64') return _getVal('new-domain-fqdn').trim().toLowerCase();
 
 	const prefix = _getVal('new-domain-fqdn-prefix').trim().toLowerCase().replace(/^\.+|\.+$/g, '');
 	const suffix = _getVal('new-domain-fqdn-suffix').trim().toLowerCase();
@@ -2369,11 +2372,11 @@ function editDomain(index) {
 	resetDomainForm();
 
 	const provSel = document.getElementById('new-domain-provider');
-	if (provSel) provSel.value = String(d.provider || '').toUpperCase() || 'IONOS';
+	if (provSel) provSel.value = d.provider || 'IONOS';
 
 	toggleProviderFields();
 
-	if (String(d.provider || '').toUpperCase() === 'IPV64') {
+	if (d.provider === 'IPv64') {
 		const parts = _splitIPv64FQDN(d.fqdn || '');
 		_setVal('new-domain-fqdn-prefix', parts.prefix);
 		if (parts.suffix) _setVal('new-domain-fqdn-suffix', parts.suffix);
@@ -2395,7 +2398,7 @@ function editDomain(index) {
 		_setVal('new-cf-email', d.cf_email || '');
 		_setVal('new-cf-secret', d.cf_secret || '');
 		_setChk('new-cf-proxied', d.cf_proxied || false);
-	} else if (d.provider === 'IPV64') {
+	} else if (d.provider === 'IPv64') {
 		_setVal('new-ipv64-token', d.ipv64_token || '');
 	} else if (d.provider === 'HETZNER') {
 		_setVal('new-hetzner-token', d.hetzner_token || '');
@@ -2411,7 +2414,7 @@ function editDomain(index) {
 	openAddDomainSection();
 	const addBtn = document.querySelector('#add-domain-section button[data-click="addDomainToList()"]');
 	if (addBtn) addBtn.textContent = tr('edit_domain_saved', 'Änderungen übernehmen');
-	const focusId = String(d.provider || '').toUpperCase() === 'IPV64'
+	const focusId = d.provider === 'IPv64'
 		? 'new-domain-fqdn-prefix'
 		: 'new-domain-fqdn';
 	document.getElementById(focusId)?.focus();
@@ -2429,15 +2432,15 @@ function toggleProviderFields() {
 
 	show('fields-ionos', p === 'IONOS');
 	show('fields-cloudflare', p === 'CLOUDFLARE');
-	show('fields-ipv64', p === 'IPV64');
+	show('fields-ipv64', p === 'IPv64');
 	show('fields-hetzner', p === 'HETZNER');
 	show('fields-hetznercloud', p === 'HETZNERCLOUD');
 	show('fields-febas', p === 'FEBAS');
 	show('fields-dnscale', p === 'DNSCALE');
-	show('fqdn-plain', p !== 'IPV64');
-	show('fqdn-ipv64', p === 'IPV64');
-	show('fields-ttl', p !== 'IPV64');
-	if (p === 'IPV64') _setVal('new-domain-ttl', '');
+	show('fqdn-plain', p !== 'IPv64');
+	show('fqdn-ipv64', p === 'IPv64');
+	show('fields-ttl', p !== 'IPv64');
+	if (p === 'IPv64') _setVal('new-domain-ttl', '');
 
 	const cnameCapable = ['CLOUDFLARE', 'IONOS', 'HETZNER', 'HETZNERCLOUD', 'DNSCALE'].includes(p);
 	const cnameOpt = document.getElementById('opt-ip-mode-cname');
@@ -2465,9 +2468,7 @@ function addDomainToList() {
 
 	const provider = providerSelect.value;
 	const fqdn = _readNewDomainFQDN(provider);
-	const supportedProviders = new Set([
-		'IONOS', 'CLOUDFLARE', 'IPV64', 'HETZNER', 'HETZNERCLOUD', 'FEBAS', 'DNSCALE'
-	]);
+	const supportedProviders = (window.PROVIDERS || []).map(p => p.id);
 	if (!supportedProviders.has(provider)) {
 		return showToast(tr('provider_invalid', 'Ungültiger Provider'), 'error');
 	}
@@ -2485,7 +2486,7 @@ function addDomainToList() {
 	let entry = {
 		fqdn: fqdn,
 		provider: provider,
-		ttl: (provider !== 'IPV64' && Number.isFinite(ttl) && ttl > 0) ? ttl : 0,
+		ttl: (provider !== 'IPv64' && Number.isFinite(ttl) && ttl > 0) ? ttl : 0,
 		ip_mode: isCNAME ? '' : (ipModeRaw || ''),
 		record_mode: isCNAME ? 'CNAME' : ''
 	};
@@ -2503,7 +2504,7 @@ function addDomainToList() {
 		entry.cf_email = _getVal('new-cf-email');
 		entry.cf_secret = _getVal('new-cf-secret');
 		entry.cf_proxied = document.getElementById('new-cf-proxied')?.checked || false;
-	} else if (provider === 'IPV64') {
+	} else if (provider === 'IPv64') {
 		entry.ipv64_token = _getVal('new-ipv64-token');
 	} else if (provider === 'HETZNER') {
 		entry.hetzner_token = _getVal('new-hetzner-token');
