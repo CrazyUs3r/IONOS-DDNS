@@ -549,6 +549,7 @@
   "ionos_zones_load_failed": "Impossible de charger les zones IONOS : %w",
   "ionos_zones_loaded_from_disk": "📂 IONOS : %d zones chargées depuis le disque",
   "ionos_zones_parse_failed": "Impossible d'analyser les zones IONOS : %w",
+  "ip_check_failed": "Échec de la vérification IP",
   "ip_fetch_failed": "Échec de la récupération de l'adresse IP : %v",
   "ip_fetch_failed_fallback": "Échec de la récupération de l'IP : %v – utilisation du dernier état connu comme solution de secours",
   "ip_rate_limit_exceeded": "Limite de débit dépassée pour l'adresse IP",

@@ -549,6 +549,7 @@
   "ionos_zones_load_failed": "IONOS-zones konden niet worden geladen: %w",
   "ionos_zones_loaded_from_disk": "📂 IONOS: %d zones geladen van schijf",
   "ionos_zones_parse_failed": "IONOS-zones konden niet worden verwerkt: %w",
+  "ip_check_failed": "IP-check mislukt",
   "ip_fetch_failed": "Ophalen IP-adres mislukt: %v",
   "ip_fetch_failed_fallback": "IP ophalen mislukt: %v – laatste bekende status wordt als fallback gebruikt",
   "ip_rate_limit_exceeded": "Rate-limit voor IP-adres overschreden",

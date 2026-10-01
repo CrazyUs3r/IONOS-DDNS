@@ -549,6 +549,7 @@
   "ionos_zones_load_failed": "IONOS-soner kunne ikke lastes: %w",
   "ionos_zones_loaded_from_disk": "📂 IONOS: %d soner lastet fra disk",
   "ionos_zones_parse_failed": "IONOS-soner kunne ikke behandles: %w",
+  "ip_check_failed": "IP-sjekk mislyktes",
   "ip_fetch_failed": "IP-henting feilet: %v",
   "ip_fetch_failed_fallback": "IP-henting feilet: %v – bruker siste kjente tilstand som fallback",
   "ip_rate_limit_exceeded": "Rate-grense for denne IP-en overskredet",

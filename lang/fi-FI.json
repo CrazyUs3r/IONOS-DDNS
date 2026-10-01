@@ -549,6 +549,7 @@
   "ionos_zones_load_failed": "IONOS-vyöhykkeitä ei voitu ladata: %w",
   "ionos_zones_loaded_from_disk": "📂 IONOS: %d vyöhykettä ladattu levyltä",
   "ionos_zones_parse_failed": "IONOS-vyöhykkeitä ei voitu käsitellä: %w",
+  "ip_check_failed": "IP-tarkistus epäonnistui",
   "ip_fetch_failed": "IP-haku epäonnistui: %v",
   "ip_fetch_failed_fallback": "IP-haku epäonnistui: %v – käytetään viimeisintä tunnettua tilaa",
   "ip_rate_limit_exceeded": "Nopeusrajoitus ylittyi tälle IP:lle",

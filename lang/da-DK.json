@@ -549,6 +549,7 @@
   "ionos_zones_load_failed": "IONOS-zoner kunne ikke indlæses: %w",
   "ionos_zones_loaded_from_disk": "📂 IONOS: %d zoner indlæst fra disk",
   "ionos_zones_parse_failed": "IONOS-zoner kunne ikke fortolkes: %w",
+  "ip_check_failed": "IP-tjek mislykkedes",
   "ip_fetch_failed": "Kunne ikke hente IP-adresse: %v",
   "ip_fetch_failed_fallback": "IP-hentning mislykkedes: %v – bruger sidst kendte tilstand som fallback",
   "ip_rate_limit_exceeded": "Hastighedsbegrænsning for IP-adressen er overskredet",

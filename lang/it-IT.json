@@ -549,6 +549,7 @@
   "ionos_zones_load_failed": "Impossibile caricare le zone IONOS: %w",
   "ionos_zones_loaded_from_disk": "📂 IONOS: %d zone caricate da disco",
   "ionos_zones_parse_failed": "Impossibile analizzare le zone IONOS: %w",
+  "ip_check_failed": "Controllo IP non riuscito",
   "ip_fetch_failed": "Recupero indirizzo IP fallito: %v",
   "ip_fetch_failed_fallback": "Recupero IP non riuscito: %v – uso dell'ultimo stato noto come fallback",
   "ip_rate_limit_exceeded": "Limite di velocità superato per l'indirizzo IP",

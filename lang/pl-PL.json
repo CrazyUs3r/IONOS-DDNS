@@ -549,6 +549,7 @@
   "ionos_zones_load_failed": "Nie udało się wczytać stref IONOS: %w",
   "ionos_zones_loaded_from_disk": "📂 IONOS: Załadowano %d stref z dysku",
   "ionos_zones_parse_failed": "Nie udało się przetworzyć stref IONOS: %w",
+  "ip_check_failed": "Sprawdzanie IP nie powiodło się",
   "ip_fetch_failed": "Pobieranie adresu IP nie powiodło się: %v",
   "ip_fetch_failed_fallback": "Nie udało się pobrać adresu IP: %v – używam ostatniego znanego stanu jako rozwiązania awaryjnego",
   "ip_rate_limit_exceeded": "Przekroczono limit zapytań dla adresu IP",

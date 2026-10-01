@@ -549,6 +549,7 @@
   "ionos_zones_load_failed": "IONOS-zoner kunde inte läsas in: %w",
   "ionos_zones_loaded_from_disk": "📂 IONOS: Laddade %d zoner från disk",
   "ionos_zones_parse_failed": "IONOS-zoner kunde inte tolkas: %w",
+  "ip_check_failed": "IP-kontroll misslyckades",
   "ip_fetch_failed": "Hämtning av IP-adress misslyckades: %v",
   "ip_fetch_failed_fallback": "IP-hämtning misslyckades: %v – använder senast kända tillstånd som fallback",
   "ip_rate_limit_exceeded": "Begäransgräns för IP-adress överskriden",

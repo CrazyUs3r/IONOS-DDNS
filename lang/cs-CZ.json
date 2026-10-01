@@ -549,6 +549,7 @@
   "ionos_zones_load_failed": "Zóny IONOS se nepodařilo načíst: %w",
   "ionos_zones_loaded_from_disk": "📂 IONOS: %d zón načteno z disku",
   "ionos_zones_parse_failed": "Zóny IONOS se nepodařilo zpracovat: %w",
+  "ip_check_failed": "Kontrola IP selhala",
   "ip_fetch_failed": "Nepodařilo se zjistit IP adresu: %v",
   "ip_fetch_failed_fallback": "No s'ha pogut obtenir la IP: %v – s'utilitza l'últim estat conegut com a alternativa",
   "ip_rate_limit_exceeded": "Limit požadavků na IP adresu byl překročen",

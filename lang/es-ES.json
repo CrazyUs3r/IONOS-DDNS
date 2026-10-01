@@ -549,6 +549,7 @@
   "ionos_zones_load_failed": "No se pudieron cargar las zonas de IONOS: %w",
   "ionos_zones_loaded_from_disk": "📂 IONOS: %d zonas cargadas desde el disco",
   "ionos_zones_parse_failed": "No se pudieron interpretar las zonas de IONOS: %w",
+  "ip_check_failed": "Verificación de IP fallida",
   "ip_fetch_failed": "No se pudo obtener la dirección IP: %v",
   "ip_fetch_failed_fallback": "Error al obtener la IP: %v – se usa el último estado conocido como alternativa",
   "ip_rate_limit_exceeded": "Se ha excedido el límite de solicitudes para la dirección IP",

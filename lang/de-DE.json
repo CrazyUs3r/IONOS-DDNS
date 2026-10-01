@@ -549,6 +549,7 @@
   "ionos_zones_load_failed": "IONOS-Zonen konnten nicht geladen werden: %w",
   "ionos_zones_loaded_from_disk": "📂 IONOS: %d Zonen von Disk geladen",
   "ionos_zones_parse_failed": "IONOS-Zonen konnten nicht verarbeitet werden: %w",
+  "ip_check_failed": "IP-Check fehlgeschlagen",
   "ip_fetch_failed": "IP-Abfrage fehlgeschlagen: %v",
   "ip_fetch_failed_fallback": "IP-Abfrage fehlgeschlagen: %v – nutze letzten bekannten Stand als Fallback",
   "ip_rate_limit_exceeded": "Rate-Limit für diese IP überschritten",
