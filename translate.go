@@ -167,7 +167,7 @@ type Phrases struct {
 	IPv6PublicFallback, IPv6FallbackEndpoints                                            string
 	IPv4RequiredButFailed, IPv6RequiredButFailed, BothIPVersionsFailed                   string
 	PublicIPDetectedVia, IPv6ViaInterface, IPv4Current, IPv6Current                      string
-	DomainLoopCancelled, PanicOccurred                                                   string
+	DomainLoopCancelled, PanicOccurred, IPCheckFailed                                    string
 	NoZonesFoundForProvider, NoZoneFound, MatchedZoneEmptyID                             string
 	NonRecoverableIPv64Error, NonRecoverableIPv4Error, NonRecoverableIPv6Error           string
 	HTTPTimingFormat, HTTPTimingRoundTrip, HTTPTimingDNS, HTTPTimingConnect              string

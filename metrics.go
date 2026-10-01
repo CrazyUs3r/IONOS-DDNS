@@ -18,25 +18,23 @@ import (
 type apiMetricsSnapshot struct {
 	HourlyReset          time.Time                       `json:"hourly_reset"`
 	LastIPCheckTime      time.Time                       `json:"last_ip_check_at"`
-	LastErrorTime        time.Time                       `json:"last_error_at"`
 	DailyReset           time.Time                       `json:"daily_reset"`
 	SavedAt              time.Time                       `json:"saved_at"`
 	LastSuccessTime      time.Time                       `json:"last_success_at"`
+	LastErrorTime        time.Time                       `json:"last_error_at"`
 	LastError            string                          `json:"last_error"`
 	RequestTimestamps    []time.Time                     `json:"request_timestamps"`
-	LatencySamples       [1000]int64                     `json:"latency_samples"`
-	IPLatencySamples     [200]int64                      `json:"ip_latency_samples"`
 	HourlyStats          [24]int                         `json:"hourly_stats"`
 	HourlyLatencyMs      [24]int64                       `json:"hourly_latency_ms"`
 	HourlyLatencySumMs   [24]int64                       `json:"hourly_latency_sum_ms,omitempty"`
 	HourlyLatencyCount   [24]int64                       `json:"hourly_latency_count,omitempty"`
-	DailyDELETE          int64                           `json:"daily_delete"`
 	RateLimitHits        int64                           `json:"rate_limit_hits"`
 	SuccessRequests      int64                           `json:"success_requests"`
 	ClientErrors         int64                           `json:"client_errors"`
 	DailyGET             int64                           `json:"daily_get"`
 	DailyPOST            int64                           `json:"daily_post"`
 	DailyPUT             int64                           `json:"daily_put"`
+	DailyDELETE          int64                           `json:"daily_delete"`
 	DailyNIC             int64                           `json:"daily_nic"`
 	ProviderDaily        map[string]ProviderDailyMetrics `json:"provider_daily,omitempty"`
 	LatencySumMs         int64                           `json:"latency_sum_ms,omitempty"`
@@ -52,6 +50,8 @@ type apiMetricsSnapshot struct {
 	IPLatencySampleIdx   int                             `json:"ip_latency_sample_idx"`
 	IPLatencySampleCount int                             `json:"ip_latency_sample_count"`
 	FailedRequests       int64                           `json:"failed_requests"`
+	LatencySamples       [1000]int64                     `json:"latency_samples"`
+	IPLatencySamples     [200]int64                      `json:"ip_latency_samples"`
 }
 
 var percentileBufPool = sync.Pool{
@@ -212,7 +212,7 @@ func (m *APIMetrics) RecordError(
 	m.TotalRequests++
 	m.FailedRequests++
 	if err != nil {
-		m.LastError = err.Error()
+		m.LastError = provider + ": " + err.Error()
 	} else {
 		m.LastError = ""
 	}

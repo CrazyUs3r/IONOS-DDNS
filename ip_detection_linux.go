@@ -92,6 +92,12 @@ func getPublicIP(ctx context.Context, url string, want IPVersion) (string, error
 	ipStr, statusCode, duration, err := fetchIPResponse(ctx, url)
 	if err != nil {
 		apiMetrics.RecordError("IP", MethodGET, statusCode, err, duration)
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: fmt.Sprintf("%s: %d %v", phrases().IPCheckFailed, statusCode, err),
+		})
+		debugLog("IP-CHECK", "", "❌ "+err.Error())
 
 		return "", err
 	}
@@ -99,6 +105,11 @@ func getPublicIP(ctx context.Context, url string, want IPVersion) (string, error
 	validatedIP, err := validatePublicIP(ipStr, want)
 	if err != nil {
 		apiMetrics.RecordError("IP", MethodGET, statusCode, err, duration)
+		log(LogContext{
+			Level:   LogError,
+			Action:  ActionError,
+			Message: fmt.Sprintf("%s: %d %v", phrases().IPCheckFailed, statusCode, err),
+		})
 		debugLog("IP-CHECK", "", "❌ "+err.Error())
 
 		return "", err
