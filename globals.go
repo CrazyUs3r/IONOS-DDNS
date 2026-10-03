@@ -106,7 +106,6 @@ var (
 
 	metricsPersistPath = ""
 
-	rotationQueue   = make(chan rotationJob, 4)
 	logWriteQueue   = make(chan LogEntry, 2000)
 	logFlushTimeout = 2 * time.Second
 
@@ -303,7 +302,6 @@ var actionIcons = map[string]string{
 // ============================================================================
 
 const (
-	DefaultMaxLogLines     = 500
 	DefaultHourlyRateLimit = 1200
 	DefaultMaxConcurrent   = 5
 	DefaultMaxAPIRetries   = 3
@@ -553,6 +551,7 @@ type LogEntry struct {
 	Action    string `json:"action"`
 	Domain    string `json:"domain"`
 	Message   string `json:"message"`
+	Gen       int    `json:"-"`
 }
 
 type IPEntry struct {
@@ -650,7 +649,8 @@ type Config struct {
 	DebugHTTPRaw    bool           `json:"debug_http_raw"`
 	HourlyRateLimit int            `json:"hourly_rate_limit"`
 	MaxConcurrent   int            `json:"max_concurrent"`
-	MaxLogLines     int            `json:"max_log_lines"`
+	MaxLogMB        int            `json:"max_log_mb"`
+	MaxLogBackups   int            `json:"max_log_backups"`
 	MaxAPIRetries   int            `json:"max_api_retries"`
 	Notifications   struct {
 		Enabled  bool     `json:"enabled"`
@@ -891,9 +891,4 @@ type domainUpdateResult struct {
 	IPv4    string
 	IPv6    string
 	CNAME   string
-}
-
-type rotationJob struct {
-	path     string
-	maxLines int
 }

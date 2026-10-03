@@ -4,12 +4,10 @@ package main
 import (
 	"bufio"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -18,6 +16,20 @@ const (
 	LogTInfo = "INFO"
 	LogTWarn = "WARN"
 	LogTErr  = "ERR"
+
+	DefaultMaxLogMB      = 5
+	DefaultMaxLogBackups = 5
+
+	MaxLogMBLimit      = 50
+	MaxLogBackupsLimit = 20
+
+	dashboardLogLineLimit = 5000
+)
+
+var (
+	logFileSize         int64
+	atomicLogMaxBytes   atomic.Int64
+	atomicLogMaxBackups atomic.Int64
 )
 
 // ============================================================================
@@ -331,6 +343,40 @@ func handleLogWriterEntry(entry LogEntry, batchCount, maxBatchSize int) int {
 
 		return batchCount
 	}
+	data = append(data, '\n')
+
+	if logFileSize > 0 && logFileSize+int64(len(data)) > logMaxBytes() {
+		rotErr := rotateLogBySizeUnsafe()
+		batchCount = 0
+
+		if rotErr != nil {
+			reportLogInfrastructureError("log rotation failed", rotErr)
+		}
+		if err := ensureLogWriterOpen(); err != nil {
+			if err := ensureLogWriterOpen(); err != nil {
+				logMutex.Unlock()
+				reportLogInfrastructureError(
+					fmt.Sprintf(t(phrases().LogCannotOpenFile, "Cannot open log file %s"), logPath),
+					err,
+				)
+
+				return batchCount
+			}
+			if rotErr != nil {
+				logFileSize = 0
+			}
+		}
+
+		if err := writeLogEntry(data); err != nil {
+			logMutex.Unlock()
+			reportLogInfrastructureError(
+				fmt.Sprintf(t(phrases().LogCannotOpenFile, "Cannot open log file %s"), logPath),
+				err,
+			)
+
+			return batchCount
+		}
+	}
 
 	if err := writeLogEntry(data); err != nil {
 		closeLogWriterUnsafe()
@@ -376,14 +422,20 @@ func ensureLogWriterOpen() error {
 		return err
 	}
 
+	logFileSize = 0
+	if st, err := f.Stat(); err == nil {
+		logFileSize = st.Size()
+	}
+
 	logFile = f
 	logWriter = bufio.NewWriterSize(logFile, 256*1024)
 
 	return nil
 }
 
-func writeLogEntry(data []byte) error {
-	_, err := logWriter.Write(append(data, '\n'))
+func writeLogEntry(line []byte) error {
+	n, err := logWriter.Write(line)
+	logFileSize += int64(n)
 
 	return err
 }
@@ -422,155 +474,119 @@ func closeLogWriterUnsafe() {
 	}
 }
 
-func startLogRotationWorker() {
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				log(LogContext{
-					Level:    LogError,
-					Category: "MAINTENANCE",
-					Action:   ActionError,
-					Message:  t(phrases().RotationWorkerPanic, "Log rotation worker panic"),
-					Error:    fmt.Errorf("%v", r),
-				})
-			}
-		}()
+// ============================================================================
+// LOG ROTATION & LIMITS
+// ============================================================================
 
-		for {
-			select {
-			case job, ok := <-rotationQueue:
-				if !ok {
-					return
-				}
-				doLogRotation(job.path, job.maxLines)
-
-			case <-shutdownCtx.Done():
-				return
-			}
-		}
-	}()
+type logGenerationInfo struct {
+	Gen     int       `json:"gen"`
+	ModTime time.Time `json:"mod_time"`
+	Size    int64     `json:"size"`
 }
 
-func doLogRotation(path string, maxLines int) {
+func logGenerationPath(gen int) string {
+	if gen <= 0 {
+		return logPath
+	}
+
+	return fmt.Sprintf("%s.%d", logPath, gen)
+}
+
+func listLogGenerations() []logGenerationInfo {
+	var out []logGenerationInfo
+	for gen := 0; gen <= logMaxBackups(); gen++ {
+		if st, err := os.Stat(logGenerationPath(gen)); err == nil {
+			out = append(out, logGenerationInfo{Gen: gen, ModTime: st.ModTime(), Size: st.Size()})
+		}
+	}
+
+	return out
+}
+
+func rotateFileGenerations(path string, backups int) error {
+	for i := backups; i <= MaxLogBackupsLimit; i++ {
+		_ = os.Remove(fmt.Sprintf("%s.%d", path, i))
+	}
+
+	for i := backups - 1; i >= 1; i-- {
+		src := fmt.Sprintf("%s.%d", path, i)
+		if _, err := os.Stat(src); err != nil {
+			continue
+		}
+		if err := os.Rename(src, fmt.Sprintf("%s.%d", path, i+1)); err != nil {
+			return err
+		}
+	}
+
+	return os.Rename(path, path+".1")
+}
+
+func rotateLogBySizeUnsafe() error {
+	closeLogWriterUnsafe()
+
+	err := rotateFileGenerations(logPath, logMaxBackups())
+
+	logMemCacheMu.Lock()
+	logMemCache = nil
+	logMemCacheTime = time.Time{}
+	logMemCacheMu.Unlock()
+
+	return err
+}
+
+func openLogGenerationsOldestFirst() []*os.File {
 	logMutex.Lock()
 	defer logMutex.Unlock()
 
-	if filepath.Clean(path) == filepath.Clean(logPath) {
-		if logWriter != nil {
-			_ = logWriter.Flush()
-			logWriter = nil
+	if logWriter != nil {
+		_ = logWriter.Flush()
+	}
+
+	files := make([]*os.File, 0, logMaxBackups()+1)
+	for gen := logMaxBackups(); gen >= 0; gen-- {
+		f, err := os.Open(logGenerationPath(gen))
+		if err != nil {
+			continue
 		}
-		if logFile != nil {
-			_ = logFile.Close()
-			logFile = nil
-		}
+		files = append(files, f)
 	}
 
-	newLines, totalCount, err := tailLines(path, maxLines)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "log rotation error: %v\n", err)
-
-		return
-	}
-
-	if totalCount <= maxLines {
-		return
-	}
-
-	output := strings.Join(newLines, "\n") + "\n"
-	tmpPath := path + ".tmp." + strconv.FormatInt(time.Now().UnixNano(), 10)
-
-	if err := os.WriteFile(tmpPath, []byte(output), 0o600); err != nil {
-		fmt.Fprintf(os.Stderr, "log rotation write error: %v\n", err)
-
-		return
-	}
-
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-		fmt.Fprintf(os.Stderr, "log rotation remove failed: %v\n", err)
-		_ = os.Remove(tmpPath)
-
-		return
-	}
-
-	if err := os.Rename(tmpPath, path); err != nil {
-		fmt.Fprintf(os.Stderr, "log rotation rename failed: %v\n", err)
-		_ = os.Remove(tmpPath)
-
-		return
-	}
-
-	if filepath.Clean(path) == filepath.Clean(logPath) {
-		logMemCacheMu.Lock()
-		logMemCache = nil
-		logMemCacheTime = time.Time{}
-		logMemCacheMu.Unlock()
-	}
-
-	debugLog("MAINTENANCE", "", fmt.Sprintf("✅ %s: %d → %d", phrases().LogRotated, totalCount, len(newLines)))
+	return files
 }
 
-func tailLines(path string, maxLines int) ([]string, int, error) {
-	if maxLines <= 0 {
-		return nil, 0, errors.New("maxLines must be > 0")
+func clampOrDefault(v, def, upper int) int {
+	if v <= 0 {
+		return def
 	}
 
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	defer func() {
-		if err := file.Close(); err != nil {
-			log(LogContext{
-				Level:    LogError,
-				Category: "FILE",
-				Action:   ActionError,
-				Message:  fmt.Sprintf("%s: %v", t(phrases().FileCloseError, "Failed to close file"), err),
-			})
-		}
-	}()
-
-	lines := make([]string, maxLines)
-	count := 0
-
-	scanner := bufio.NewScanner(file)
-	buf := make([]byte, 64*1024)
-	scanner.Buffer(buf, 8*1024*1024)
-
-	for scanner.Scan() {
-		lines[count%maxLines] = scanner.Text()
-		count++
-	}
-
-	if err := scanner.Err(); err != nil {
-		log(LogContext{
-			Level:    LogError,
-			Category: "FILE",
-			Action:   ActionError,
-			Message:  fmt.Sprintf("%s: %v", t(phrases().ScannerError, "Scanner error"), err),
-		})
-
-		return nil, 0, err
-	}
-
-	if count <= maxLines {
-		return lines[:count], count, nil
-	}
-
-	start := count % maxLines
-	out := make([]string, 0, maxLines)
-	out = append(out, lines[start:]...)
-	out = append(out, lines[:start]...)
-
-	return out, count, nil
+	return min(v, upper)
 }
 
-func rotateLogFile(path string, maxLines int) {
-	select {
-	case rotationQueue <- rotationJob{path: path, maxLines: maxLines}:
-		debugLog("MAINTENANCE", "", t(phrases().RotationQueued, "Log rotation queued"))
-	default:
-		debugLog("MAINTENANCE", "", t(phrases().RotationQueueFull, "Rotation queue full, skipping"))
+func normalizeLogMB(mb int) int {
+	return clampOrDefault(mb, DefaultMaxLogMB, MaxLogMBLimit)
+}
+
+func normalizeLogBackups(n int) int {
+	return clampOrDefault(n, DefaultMaxLogBackups, MaxLogBackupsLimit)
+}
+
+func setAtomicLogLimits(mb, backups int) {
+	atomicLogMaxBytes.Store(int64(normalizeLogMB(mb)) << 20)
+	atomicLogMaxBackups.Store(int64(normalizeLogBackups(backups)))
+}
+
+func logMaxBackups() int {
+	if v := atomicLogMaxBackups.Load(); v > 0 {
+		return int(v)
 	}
+
+	return DefaultMaxLogBackups
+}
+
+func logMaxBytes() int64 {
+	if v := atomicLogMaxBytes.Load(); v > 0 {
+		return v
+	}
+
+	return int64(DefaultMaxLogMB) << 20
 }

@@ -256,7 +256,7 @@ func logHTTPClientStats() {
 	dryRun := cfg.DryRun
 	logDir := cfg.LogDir
 	lang := cfg.Lang
-	maxloglines := cfg.MaxLogLines
+	maxlogmb := cfg.MaxLogMB
 	maxapiretries := cfg.MaxAPIRetries
 	maxconcurrent := cfg.MaxConcurrent
 	cfgMu.RUnlock()
@@ -272,7 +272,7 @@ func logHTTPClientStats() {
 	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", phrases().ConfigLogDir, logDir))
 	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", phrases().ConfigLanguage, lang))
 	debugLog("CONFIG", "", fmt.Sprintf(t(phrases().LoadedDomains, "Loaded domains: %d"), len(domainConfigs)))
-	debugLog("CONFIG", "", fmt.Sprintf(t(phrases().MaxLogLinesInfo, "Max log lines: %d"), maxloglines))
+	debugLog("CONFIG", "", fmt.Sprintf(t(phrases().MaxLogMBInfo, "Max log MB: %d"), maxlogmb))
 	debugLog("CONFIG", "", fmt.Sprintf(t(phrases().MaxAPIRetriesInfo, "Max API retries: %d"), maxapiretries))
 	debugLog("CONFIG", "", fmt.Sprintf(t(phrases().MaxConcurrentInfo, "Max concurrent: %d"), maxconcurrent))
 

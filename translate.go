@@ -12,7 +12,7 @@ type Phrases struct {
 	ServiceStarted, DashboardStarted, ServerError, SystemEvents                           string
 	PanicLoadingLanguage, TryingLoadLanguage, JSONParseError, LanguageLoaded              string
 	MissingTranslationKey, HourlyLimitEst, RequestsLabel, UsageLast60Min, AutoSaved       string
-	MaxLogLines, MaxAPIRetries, MaxConcurrent, Interval, EmptyTranslationValue            string
+	MaxAPIRetries, MaxConcurrent, Interval, EmptyTranslationValue                         string
 	Password, LoginButton, MetricNoProviderActivity                                       string
 	DebugLogTitle, DebugLogLive, DebugFilterPlaceholder, LoginHint, LoginTitle            string
 	DebugClearBtn, DebugAutoscroll, DebugWaitingMsg, SetupHeading, SetupSubtitle          string
@@ -61,7 +61,7 @@ type Phrases struct {
 	SettingsEmailSMTPHost, SettingsEmailPort, SettingsEmailUser                           string
 	SettingsEmailPassword, SettingsEmailSender, SettingsEmailRecipient                    string
 	SettingsEmailSubject, SettingsEmailTLSMode, SettingsEmailTLSStartTLS                  string
-	SettingsEmailTLSDirectTLS, SettingsEmailTLSPlain                                      string
+	SettingsEmailTLSDirectTLS, SettingsEmailTLSPlain, LogGenCurrent, LogGenArchive        string
 	DebugDisabledNote, LogoutLabel, PageLoading, UnsupportedPage                          string
 
 	// Diagnose / Backup
@@ -153,8 +153,7 @@ type Phrases struct {
 	APIErrorServerErrorGeneric, APIErrorClientErrorGeneric                                     string
 
 	// Logging
-	LogRotated, LogQueueFull, LogCannotOpenFile, LogWriteFailed string
-	RotationWorkerPanic, RotationQueued, RotationQueueFull      string
+	LogQueueFull, LogCannotOpenFile, LogWriteFailed string
 
 	// DNS & Netzwerk
 	RecordFound, RecordCurrent, NoRecordFound, RecordUpdateNeeded, WouldSet              string
@@ -205,7 +204,7 @@ type Phrases struct {
 	LanguageFileLoadFailed, MetricsLoadFailed, InvalidInterval           string
 
 	// System
-	MaintenanceStarting, HTTPConnectionsClosed                            string
+	HTTPConnectionsClosed                                                 string
 	ServerShuttingDown, ServerShutdownComplete, ShutdownError             string
 	Mode, HTTPClientInitialized                                           string
 	WSUpgradeFailed, CouldNotLoadLanguages                                string
@@ -420,7 +419,7 @@ type Phrases struct {
 	SettingsTokenPlaceholder, SettingsTokenSave                                string
 	SettingsSystem, SettingsIPMode, SettingsInterval                           string
 	SettingsHTTPPort, SettingsHTTPSPort, SettingsIface, SettingsIfaceHint      string
-	SettingsDNS, SettingsMaxLog, SettingsMaxRetries                            string
+	SettingsDNS, SettingsMaxLog, SettingsMaxRetries, SettingsMaxLogBackups     string
 	SettingsMaxConcurrent, SettingsHourlyLimit                                 string
 	SettingsLanguage, SettingsDryRun, SettingsDryRunHint                       string
 	SettingsCheckboxActive, SettingsCheckboxDeactive, SettingsAddDomain        string
@@ -467,12 +466,12 @@ type Phrases struct {
 	HetznerCloudZonesLoadedFromDisk                                                               string
 
 	// Main
-	MaxAPIRetriesInvalid, LogMaxLinesInvalid, ConfigJSONReadFailed, ProviderConfigFailed                   string
-	DebugModeActive, LoadedDomains, MaxLogLinesInfo, MaxAPIRetriesInfo, MaxConcurrentInfo                  string
+	MaxAPIRetriesInvalid, LogMaxMBInvalid, ConfigJSONReadFailed, ProviderConfigFailed                      string
+	DebugModeActive, LoadedDomains, MaxLogMBInfo, MaxAPIRetriesInfo, MaxConcurrentInfo                     string
 	LogDirCreateFailed, DomainCacheUpdateFailed, MetricCacheUpdateFailed, SchedulerIntervalChanged         string
 	WebSocketHubStarted, SchedulerShutdownActive, SchedulerIntervalReached, SchedulerPreviousUpdateRunning string
 	ShutdownSignalReceived, WaitingForRunningUpdates, AllUpdatesFinished, WaitForUpdatesTimeout            string
-	WaitingForLogQueue, Providers                                                                          string
+	WaitingForLogQueue, Providers, LogExportAllTitle, AuditExportAllTitle                                  string
 
 	// TOTP
 	TotpSettingsPageTitle, TotpVerificationPageTitle, TotpTitle, TotpAccountMeta                      string

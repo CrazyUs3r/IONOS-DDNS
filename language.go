@@ -346,7 +346,7 @@ var knownAcronyms = []string{
 	"DNScale", "HTTPS", "CNAME",
 	"IPv4", "IPv6", "HTML", "HTTP", "JSON", "FQDN", "TTFB", "MQTT", "PIDs", "SMTP",
 	"API", "CDN", "CPU", "DNS", "SSL", "TTL", "TLS", "URL", "URI", "QoS",
-	"CF", "CA", "OK", "TG", "WS", "ID", "IP", "IO", "JS", "QR",
+	"CF", "CA", "OK", "TG", "WS", "ID", "IP", "IO", "JS", "QR", "MB",
 }
 
 var (

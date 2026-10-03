@@ -42,7 +42,15 @@ const (
 	dummyPbkd2Hash          = "pbkdf2-sha256$600000$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA$iJ2gtxNOzRbKDl2b9Rs/8uLh+TzpRSvl/xFJIkTRrA4"
 	setupTokenLength        = 32
 	maxAuthRequestBody      = 64 << 10
-	auditLogMaxBackups      = 5
+	auditFlushDelay         = 2 * time.Second
+	auditBufferSize         = 32 * 1024
+)
+
+var (
+	auditFile       *os.File
+	auditWriter     *bufio.Writer
+	auditFileSize   int64
+	auditFlushTimer *time.Timer
 )
 
 type UserRole string
@@ -717,6 +725,65 @@ func parseLimitedAuthForm(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
+func ensureAuditWriterUnsafe(path string) error {
+	if auditWriter != nil && auditFile != nil {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	auditFileSize = 0
+	if st, err := f.Stat(); err == nil {
+		auditFileSize = st.Size()
+	}
+	auditFile = f
+	auditWriter = bufio.NewWriterSize(f, auditBufferSize)
+
+	return nil
+}
+
+func closeAuditWriterUnsafe() {
+	if auditFlushTimer != nil {
+		auditFlushTimer.Stop()
+		auditFlushTimer = nil
+	}
+	if auditWriter != nil {
+		_ = auditWriter.Flush()
+		auditWriter = nil
+	}
+	if auditFile != nil {
+		if err := auditFile.Close(); err != nil {
+			debugLog("DASHBOARD", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
+		}
+		auditFile = nil
+	}
+}
+
+func scheduleAuditFlushUnsafe() {
+	if auditFlushTimer != nil {
+		return
+	}
+	var timer *time.Timer
+	timer = time.AfterFunc(auditFlushDelay, func() {
+		auditLogMu.Lock()
+		defer auditLogMu.Unlock()
+		if auditFlushTimer == timer {
+			closeAuditWriterUnsafe()
+		}
+	})
+	auditFlushTimer = timer
+}
+
+func flushAuditLog() {
+	auditLogMu.Lock()
+	defer auditLogMu.Unlock()
+	closeAuditWriterUnsafe()
+}
+
 // ============================================================================
 // MIDDLEWARE
 // ============================================================================
@@ -948,6 +1015,7 @@ var sharedReadRoutes = map[string]struct{}{
 	"/api/trigger/status": {},
 	"/api/export":         {},
 	"/api/logs":           {},
+	"/api/logs/export":    {},
 	"/api/diagnose":       {},
 	"/api/2fa/status":     {},
 	"/settings/2fa":       {},
@@ -1708,8 +1776,7 @@ func checkPassword(password, stored string) bool {
 // ============================================================================
 
 const (
-	auditLogMaxBytes = 5 << 20
-	auditReadLimit   = 200
+	auditReadLimit = 200
 )
 
 var (
@@ -1806,62 +1873,61 @@ func appendAuditEntry(entry auditEntry) error {
 		return errors.New("audit path unavailable")
 	}
 
-	auditLogMu.Lock()
-	defer auditLogMu.Unlock()
-
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	if st, err := os.Stat(path); err == nil && st.Size() >= auditLogMaxBytes {
-		if err := rotateAuditFile(path); err != nil {
-			return err
-		}
-	}
-
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			debugLog("DASHBOARD", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
-		}
-	}()
-
 	data, err := json.Marshal(entry)
 	if err != nil {
 		return err
 	}
 	data = append(data, '\n')
-	_, err = file.Write(data)
 
-	return err
-}
+	auditLogMu.Lock()
+	defer auditLogMu.Unlock()
 
-func rotateAuditFile(path string) error {
-	oldest := fmt.Sprintf("%s.%d", path, auditLogMaxBackups)
-	_ = os.Remove(oldest)
+	if err := ensureAuditWriterUnsafe(path); err != nil {
+		return err
+	}
 
-	for i := auditLogMaxBackups - 1; i >= 1; i-- {
-		src := fmt.Sprintf("%s.%d", path, i)
-		dst := fmt.Sprintf("%s.%d", path, i+1)
-		if _, err := os.Stat(src); err == nil {
-			if err := os.Rename(src, dst); err != nil {
-				return err
-			}
+	if auditFileSize > 0 && auditFileSize+int64(len(data)) > logMaxBytes() {
+		closeAuditWriterUnsafe()
+		rotErr := rotateFileGenerations(path, logMaxBackups())
+		if rotErr != nil {
+			log(LogContext{
+				Level:    LogWarn,
+				Category: "SYSTEM",
+				Action:   ActionError,
+				Message:  "audit rotation failed",
+				Error:    rotErr,
+			})
+		}
+		if err := ensureAuditWriterUnsafe(path); err != nil {
+			return err
+		}
+		if rotErr != nil {
+			auditFileSize = 0
 		}
 	}
 
-	return os.Rename(path, path+".1")
+	n, err := auditWriter.Write(data)
+	auditFileSize += int64(n)
+	if err != nil {
+		closeAuditWriterUnsafe()
+
+		return err
+	}
+	scheduleAuditFlushUnsafe()
+
+	return nil
 }
 
 func readAuditEntries(path string, limit int) ([]auditEntry, int, string, string, error) {
 	if limit <= 0 || limit > auditReadLimit {
 		limit = auditReadLimit
 	}
-
 	auditLogMu.Lock()
 	defer auditLogMu.Unlock()
+
+	if auditWriter != nil {
+		_ = auditWriter.Flush()
+	}
 
 	file, err := os.Open(path)
 	if err != nil {
@@ -1938,7 +2004,7 @@ func listAuditGenerations() []auditGenerationInfo {
 	if st, err := os.Stat(base); err == nil {
 		out = append(out, auditGenerationInfo{Gen: 0, ModTime: st.ModTime(), Size: st.Size()})
 	}
-	for i := 1; i <= auditLogMaxBackups; i++ {
+	for i := 1; i <= logMaxBackups(); i++ {
 		p := fmt.Sprintf("%s.%d", base, i)
 		if st, err := os.Stat(p); err == nil {
 			out = append(out, auditGenerationInfo{Gen: i, ModTime: st.ModTime(), Size: st.Size()})
@@ -1988,6 +2054,156 @@ func handleAPIAudit(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func openAuditGenerationsOldestFirst() []*os.File {
+	auditLogMu.Lock()
+	defer auditLogMu.Unlock()
+
+	if auditWriter != nil {
+		_ = auditWriter.Flush()
+	}
+	files := make([]*os.File, 0, logMaxBackups()+1)
+	for gen := logMaxBackups(); gen >= 0; gen-- {
+		p, err := auditGenerationPath(gen)
+		if err != nil {
+			continue
+		}
+		f, err := os.Open(p)
+		if err != nil {
+			continue
+		}
+		files = append(files, f)
+	}
+
+	return files
+}
+
+func handleAPIAuditExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
+		return
+	}
+	if !requireAdminAPI(w, r) {
+		return
+	}
+
+	select {
+	case logExportSem <- struct{}{}: // teilt sich das Limit mit dem Log-Export
+		defer func() { <-logExportSem }()
+	default:
+		http.Error(w, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
+
+		return
+	}
+
+	format := "txt"
+	contentType := "text/plain; charset=utf-8"
+	if r.URL.Query().Get("format") == "json" {
+		format = "json"
+		contentType = "application/json"
+	}
+
+	files := openAuditGenerationsOldestFirst()
+	defer func() {
+		for _, f := range files {
+			_ = f.Close()
+		}
+	}()
+
+	name := "dyndns-audit-" + time.Now().Format("2006-01-02") + "-all"
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Disposition", `attachment; filename="`+name+"."+format+`"`)
+	w.Header().Set("Cache-Control", "no-store")
+
+	rc := http.NewResponseController(w)
+	extend := func() { _ = rc.SetWriteDeadline(time.Now().Add(2 * time.Minute)) }
+
+	bw := bufio.NewWriterSize(w, 64*1024)
+	if err := streamAuditExport(bw, files, format == "json", extend); err != nil {
+		debugLog("EXPORT", "", fmt.Sprintf("Audit export failed: %v", err))
+	}
+}
+
+func auditExportLine(e auditEntry) string {
+	ts := e.Timestamp
+	if parsed, err := time.Parse(time.RFC3339Nano, e.Timestamp); err == nil {
+		ts = parsed.Local().Format(statusTimestampLayout)
+	}
+
+	actor := e.Actor
+	if actor == "" {
+		actor = "-"
+	}
+	if e.Role != "" {
+		actor += " (" + e.Role + ")"
+	}
+
+	ip := e.IP
+	if ip == "" {
+		ip = "-"
+	}
+
+	status := "-"
+	if e.Status != 0 {
+		status = strconv.Itoa(e.Status)
+	}
+
+	return strings.Join([]string{ts, actor, strings.TrimSpace(e.Method + " " + e.Path), status, ip}, " | ")
+}
+
+func streamAuditExport(w *bufio.Writer, files []*os.File, asJSON bool, extend func()) error {
+	if asJSON {
+		if _, err := w.WriteString("[\n"); err != nil {
+			return err
+		}
+	}
+
+	first := true
+	for _, f := range files {
+		extend()
+
+		scanner := bufio.NewScanner(f)
+		scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+
+		for scanner.Scan() {
+			var e auditEntry
+			if json.Unmarshal(scanner.Bytes(), &e) != nil {
+				continue
+			}
+
+			if asJSON {
+				data, err := json.Marshal(e)
+				if err != nil {
+					continue
+				}
+				if !first {
+					if _, err := w.WriteString(",\n"); err != nil {
+						return err
+					}
+				}
+				if _, err := w.Write(data); err != nil {
+					return err
+				}
+			} else if _, err := w.WriteString(auditExportLine(e) + "\n"); err != nil {
+				return err
+			}
+			first = false
+		}
+
+		if err := scanner.Err(); err != nil {
+			return err
+		}
+	}
+
+	if asJSON {
+		if _, err := w.WriteString("\n]\n"); err != nil {
+			return err
+		}
+	}
+
+	return w.Flush()
+}
+
 func deleteAuditEntry(id string) error {
 	path := auditLogFilePath()
 	if path == "" {
@@ -1996,6 +2212,8 @@ func deleteAuditEntry(id string) error {
 
 	auditLogMu.Lock()
 	defer auditLogMu.Unlock()
+
+	closeAuditWriterUnsafe()
 
 	data, err := os.ReadFile(path)
 	if err != nil {

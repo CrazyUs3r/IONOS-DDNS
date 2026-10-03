@@ -548,7 +548,9 @@ func buildSettingsSystemSection(c Config) string {
 			esc(strings.Join(c.DNSServers, ", ")),
 		) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMaxLog+`</span><input type="number" id="cfg-max-log" class="s-input s-input-sm-right" min="100" max="50000" value="%d"></div>`, c.MaxLogLines) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMaxLog+`</span><input type="number" id="cfg-max-log" class="s-input s-input-sm-right" min="1" max="50" value="%d"></div>`, c.MaxLogMB) +
+
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMaxLogBackups+`</span><input type="number" id="cfg-max-log-backups" class="s-input s-input-sm-right" min="1" max="20" value="%d"></div>`, c.MaxLogBackups) +
 
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMaxRetries+`</span><input type="number" id="cfg-max-retries" class="s-input s-input-sm-right" min="0" max="20" value="%d"></div>`, c.MaxAPIRetries) +
 
@@ -848,7 +850,8 @@ type safeSystemConfig struct {
 	IPv4Endpoints   []string       `json:"ipv4_endpoints"`
 	IPv6Endpoints   []string       `json:"ipv6_endpoints"`
 	MaxAPIRetries   int            `json:"max_api_retries"`
-	MaxLogLines     int            `json:"max_log_lines"`
+	MaxLogMB        int            `json:"max_log_mb"`
+	MaxLogBackups   int            `json:"max_log_backups"`
 	MaxConcurrent   int            `json:"max_concurrent"`
 	HourlyRateLimit int            `json:"hourly_rate_limit"`
 	Interval        int            `json:"interval"`
@@ -913,7 +916,8 @@ func currentSystemConfig() safeSystemConfig {
 		DebugHTTPRaw:    config.DebugHTTPRaw,
 		HourlyRateLimit: config.HourlyRateLimit,
 		MaxConcurrent:   config.MaxConcurrent,
-		MaxLogLines:     config.MaxLogLines,
+		MaxLogMB:        config.MaxLogMB,
+		MaxLogBackups:   config.MaxLogBackups,
 		MaxAPIRetries:   config.MaxAPIRetries,
 		Lang:            config.Lang,
 		NotifyEnabled:   config.Notifications.Enabled,
@@ -1000,10 +1004,12 @@ func registerAPIroutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/users", handleAPIUsers)
 	mux.HandleFunc("/api/users/", handleAPIUsersID)
 	mux.HandleFunc("/api/logs", handleAPILogs)
+	mux.HandleFunc("/api/logs/export", handleAPILogExport)
 	mux.HandleFunc("/api/logs/delete", handleAPILogDelete)
 
 	mux.HandleFunc("/api/diagnose", handleAPIDiagnose)
 	mux.HandleFunc("/api/audit", handleAPIAudit)
+	mux.HandleFunc("/api/audit/export", handleAPIAuditExport)
 	mux.HandleFunc("/api/audit/delete", handleAPIAuditDelete)
 	mux.HandleFunc("/api/dns/propagation", handleAPIDNSPropagation)
 	mux.HandleFunc("/api/backup/download", handleAPIBackupDownload)
@@ -1374,8 +1380,10 @@ func handleAPIPageSection(w http.ResponseWriter, r *http.Request) {
 			writeAuditDNSSection(&fragment, isAdmin)
 		},
 		"logs": func() {
-			logs, logTimeRange := loadDashboardLogs()
-			writeLogsCard(&fragment, logs, logTimeRange)
+			q := r.URL.Query()
+			gen := parseLogGen(q.Get("gen"))
+			logs, logTimeRange := loadLogsForView(gen, parseLogFilter(q.Get("filter")))
+			writeLogsCard(&fragment, logs, logTimeRange, gen, listLogGenerations())
 		},
 		"backup": func() {
 			writeBackupSection(&fragment, isAdmin)
@@ -1649,6 +1657,7 @@ func handleAPISaveSystemSettings(w http.ResponseWriter, r *http.Request) {
 		setWorkerConcurrencyLimit(newMaxConcurrent)
 	}
 	setAtomicDebugFlags(newDebugEnabled, newDebugHTTPRaw)
+	setAtomicLogLimits(snapshotConfig().MaxLogMB, snapshotConfig().MaxLogBackups)
 	restartDashboardServersIfPortsChanged(activeDashboardServers, oldCfg.HTTPPort, oldCfg.HTTPSPort, newHTTPPort, newHTTPSPort)
 
 	ResetHTTPClient()
@@ -1785,8 +1794,11 @@ func applySystemCoreConfig(sys safeSystemConfig) {
 	if sys.DNSServers != nil {
 		cfg.DNSServers = cleanDNSServers(sys.DNSServers)
 	}
-	if sys.MaxLogLines > 0 {
-		cfg.MaxLogLines = sys.MaxLogLines
+	if sys.MaxLogMB > 0 {
+		cfg.MaxLogMB = normalizeLogMB(sys.MaxLogMB)
+	}
+	if sys.MaxLogBackups > 0 {
+		cfg.MaxLogBackups = normalizeLogBackups(sys.MaxLogBackups)
 	}
 	if sys.MaxAPIRetries >= 0 {
 		cfg.MaxAPIRetries = sys.MaxAPIRetries
@@ -3049,16 +3061,159 @@ func handleAPILogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logs, logTimeRange := loadDashboardLogsFresh()
+	q := r.URL.Query()
+	gen := parseLogGen(q.Get("gen"))
+	filter := parseLogFilter(q.Get("filter"))
+
+	var (
+		logs         []LogEntry
+		logTimeRange string
+	)
+	if gen == 0 && filter == "ALL" {
+		logs, logTimeRange = loadDashboardLogsFresh()
+	} else {
+		logs, logTimeRange = loadLogsForView(gen, filter)
+	}
 
 	var b strings.Builder
-	writeLogsCard(&b, logs, logTimeRange)
+	writeLogsCard(&b, logs, logTimeRange, gen, listLogGenerations())
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"html":       b.String(),
 		"count":      len(logs),
 		"time_range": logTimeRange,
 	})
+}
+
+var logExportSem = make(chan struct{}, 1) // max. ein Voll-Export gleichzeitig
+
+type logExportEntry struct {
+	Time    string `json:"time"`
+	Action  string `json:"action"`
+	Level   string `json:"level"`
+	Domain  string `json:"domain"`
+	Message string `json:"message"`
+}
+
+func handleAPILogExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
+		return
+	}
+
+	select {
+	case logExportSem <- struct{}{}:
+		defer func() { <-logExportSem }()
+	default:
+		http.Error(w, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
+
+		return
+	}
+
+	q := r.URL.Query()
+	format := "txt"
+	contentType := "text/plain; charset=utf-8"
+	if q.Get("format") == "json" {
+		format = "json"
+		contentType = "application/json"
+	}
+	filter := parseLogFilter(q.Get("filter"))
+
+	files := openLogGenerationsOldestFirst()
+	defer func() {
+		for _, f := range files {
+			_ = f.Close()
+		}
+	}()
+
+	name := "dyndns-logs-" + time.Now().Format("2006-01-02") + "-all"
+	if filter != "ALL" {
+		name += "-" + strings.ToLower(filter)
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Disposition", `attachment; filename="`+name+"."+format+`"`)
+	w.Header().Set("Cache-Control", "no-store")
+
+	rc := http.NewResponseController(w)
+	extend := func() { _ = rc.SetWriteDeadline(time.Now().Add(2 * time.Minute)) }
+
+	bw := bufio.NewWriterSize(w, 64*1024)
+	if err := streamLogExport(bw, files, format == "json", filter, extend); err != nil {
+		debugLog("EXPORT", "", fmt.Sprintf("Log export failed: %v", err))
+	}
+}
+
+func streamLogExport(w *bufio.Writer, files []*os.File, asJSON bool, filter string, extend func()) error {
+	if asJSON {
+		if _, err := w.WriteString("[\n"); err != nil {
+			return err
+		}
+	}
+
+	first := true
+	for _, f := range files {
+		extend()
+
+		scanner := bufio.NewScanner(f)
+		scanner.Buffer(make([]byte, 64*1024), 8*1024*1024)
+
+		for scanner.Scan() {
+			line := bytes.TrimSpace(scanner.Bytes())
+			if len(line) == 0 {
+				continue
+			}
+
+			var e LogEntry
+			if json.Unmarshal(line, &e) != nil || !logEntryMatchesFilter(e, filter) {
+				continue
+			}
+
+			ts := formatDashboardLogTimestamp(e.Timestamp)
+			action := strings.ToUpper(e.Action)
+
+			if asJSON {
+				data, err := json.Marshal(logExportEntry{
+					Time: ts, Action: action, Level: e.Level, Domain: e.Domain, Message: e.Message,
+				})
+				if err != nil {
+					continue
+				}
+				if !first {
+					if _, err := w.WriteString(",\n"); err != nil {
+						return err
+					}
+				}
+				if _, err := w.Write(data); err != nil {
+					return err
+				}
+			} else {
+				parts := make([]string, 0, 4)
+				for _, p := range []string{ts, action, e.Domain, e.Message} {
+					if p != "" {
+						parts = append(parts, p)
+					}
+				}
+				if _, err := w.WriteString(strings.Join(parts, " | ") + "\n"); err != nil {
+					return err
+				}
+			}
+			first = false
+		}
+
+		if err := scanner.Err(); err != nil {
+			return err
+		}
+	}
+
+	if asJSON {
+		if _, err := w.WriteString("\n]\n"); err != nil {
+			return err
+		}
+	}
+
+	return w.Flush()
 }
 
 func handleAPILogDelete(w http.ResponseWriter, r *http.Request) {
@@ -3072,7 +3227,8 @@ func handleAPILogDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		ID string `json:"id"`
+		ID  string `json:"id"`
+		Gen int    `json:"gen"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&body); err != nil || body.ID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing id"})
@@ -3080,19 +3236,26 @@ func handleAPILogDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	gen := body.Gen
+	if gen < 0 || gen > logMaxBackups() {
+		gen = 0
+	}
+
 	logMutex.Lock()
 	defer logMutex.Unlock()
 
-	if logWriter != nil {
-		_ = logWriter.Flush()
-		logWriter = nil
-	}
-	if logFile != nil {
-		_ = logFile.Close()
-		logFile = nil
+	if gen == 0 {
+		if logWriter != nil {
+			_ = logWriter.Flush()
+			logWriter = nil
+		}
+		if logFile != nil {
+			_ = logFile.Close()
+			logFile = nil
+		}
 	}
 
-	deleted, err := deleteLogEntryStreaming(logPath, body.ID)
+	deleted, err := deleteLogEntryStreaming(logGenerationPath(gen), body.ID)
 	if err != nil {
 		writeJSON(
 			w,
@@ -3107,6 +3270,7 @@ func handleAPILogDelete(w http.ResponseWriter, r *http.Request) {
 	logMemCache = nil
 	logMemCacheTime = time.Time{}
 	logMemCacheMu.Unlock()
+	invalidateLogViewCache()
 
 	status := "not_found"
 	if deleted {
@@ -3119,9 +3283,65 @@ func handleAPILogDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func loadLogsFromMainFile() ([]LogEntry, string) {
-	f, err := os.Open(logPath)
+	return loadLogView(0, "ALL")
+}
+
+func parseLogGen(v string) int {
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 || n > logMaxBackups() {
+		return 0
+	}
+
+	return n
+}
+
+const logScanChunkSize = 64 * 1024
+
+var logFilterValues = map[string]struct{}{
+	"ERR": {}, "WARN": {}, "LOGIN": {}, "LOGOUT": {}, "LOGINFAILED": {},
+	"UPDATE": {}, "START": {}, "STOP": {}, "CREATE": {}, "CLEANUP": {},
+	"SKIP": {}, "CONFIG": {}, "INFO": {},
+}
+
+func parseLogFilter(v string) string {
+	v = strings.ToUpper(strings.TrimSpace(v))
+	if _, ok := logFilterValues[v]; ok {
+		return v
+	}
+
+	return "ALL"
+}
+
+func logEntryMatchesFilter(e LogEntry, filter string) bool {
+	return filter == "ALL" || strings.EqualFold(e.Level, filter) || strings.EqualFold(e.Action, filter)
+}
+
+func appendLogMatchesReverse(out []LogEntry, buf []byte, gen, want int, filter string) []LogEntry {
+	lines := bytes.Split(buf, []byte{'\n'})
+	for i := len(lines) - 1; i >= 0 && len(out) < want; i-- {
+		line := bytes.TrimSpace(lines[i])
+		if len(line) == 0 {
+			continue
+		}
+		var e LogEntry
+		if json.Unmarshal(line, &e) != nil || !logEntryMatchesFilter(e, filter) {
+			continue
+		}
+		e.Timestamp = formatDashboardLogTimestamp(e.Timestamp)
+		e.Gen = gen
+		out = append(out, e)
+	}
+
+	return out
+}
+
+func collectLogEntriesNewestFirst(path string, gen, want int, filter string) []LogEntry {
+	if want <= 0 {
+		return nil
+	}
+	f, err := os.Open(path)
 	if err != nil {
-		return nil, ""
+		return nil
 	}
 	defer func() {
 		if err := f.Close(); err != nil {
@@ -3134,55 +3354,117 @@ func loadLogsFromMainFile() ([]LogEntry, string) {
 		}
 	}()
 
-	config := snapshotConfig()
-	limit := config.MaxLogLines
-	if limit <= 0 {
-		limit = DefaultMaxLogLines
+	st, err := f.Stat()
+	if err != nil {
+		return nil
 	}
-	ring := make([]string, limit)
-	head, count := 0, 0
 
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 64*1024), 64*1024)
+	var (
+		out   []LogEntry
+		carry []byte
+		pos   = st.Size()
+	)
 
-	for scanner.Scan() {
-		if line := strings.TrimSpace(scanner.Text()); line != "" {
-			ring[head%limit] = line
-			head++
-			count++
+	for pos > 0 && len(out) < want {
+		step := min(int64(logScanChunkSize), pos)
+		pos -= step
+
+		buf := make([]byte, step, int(step)+len(carry))
+		if _, err := f.ReadAt(buf, pos); err != nil && !errors.Is(err, io.EOF) {
+			log(LogContext{
+				Level:    LogError,
+				Category: "FILE",
+				Action:   ActionError,
+				Message:  fmt.Sprintf("%s: %v", t(phrases().ScannerError, "Scanner error"), err),
+			})
+
+			break
 		}
-	}
-	if err := scanner.Err(); err != nil {
-		log(LogContext{
-			Level:    LogError,
-			Category: "FILE",
-			Action:   ActionError,
-			Message:  fmt.Sprintf("%s: %v", t(phrases().ScannerError, "Scanner error"), err),
-		})
+		buf = append(buf, carry...)
+		carry = nil
+
+		if pos > 0 {
+			idx := bytes.IndexByte(buf, '\n')
+			if idx < 0 {
+				carry = buf
+
+				continue
+			}
+			carry = buf[:idx]
+			buf = buf[idx+1:]
+		}
+
+		out = appendLogMatchesReverse(out, buf, gen, want, filter)
 	}
 
-	if count > limit {
-		count = limit
+	return out
+}
+
+func logTimeRangeOf(logs []LogEntry) string {
+	if len(logs) == 0 {
+		return ""
+	}
+
+	return fmt.Sprintf("%s — %s", logs[len(logs)-1].Timestamp, logs[0].Timestamp)
+}
+
+func loadLogView(startGen int, filter string) ([]LogEntry, string) {
+	lastGen := startGen
+	if filter != "ALL" {
+		lastGen = logMaxBackups()
 	}
 
 	var logs []LogEntry
-	for i := 1; i <= count; i++ {
-		line := ring[(head-i+limit)%limit]
-		var e LogEntry
-		if json.Unmarshal([]byte(line), &e) == nil {
-			e.Timestamp = formatDashboardLogTimestamp(e.Timestamp)
-			logs = append(logs, e)
+	for gen := startGen; gen <= lastGen && len(logs) < dashboardLogLineLimit; gen++ {
+		logs = append(logs, collectLogEntriesNewestFirst(
+			logGenerationPath(gen), gen, dashboardLogLineLimit-len(logs), filter,
+		)...)
+	}
+
+	return logs, logTimeRangeOf(logs)
+}
+
+var (
+	logViewCacheMu    sync.Mutex
+	logViewCacheKey   string
+	logViewCacheLogs  []LogEntry
+	logViewCacheRange string
+	logViewCacheTime  time.Time
+)
+
+func invalidateLogViewCache() {
+	logViewCacheMu.Lock()
+	logViewCacheTime = time.Time{}
+	logViewCacheMu.Unlock()
+}
+
+func loadLogsForView(gen int, filter string) ([]LogEntry, string) {
+	if filter == "ALL" {
+		if gen == 0 {
+			return loadDashboardLogs()
 		}
+
+		return loadLogView(gen, filter)
 	}
 
-	logTimeRange := ""
-	if len(logs) > 0 {
-		latest := logs[0].Timestamp
-		oldest := logs[len(logs)-1].Timestamp
-		logTimeRange = fmt.Sprintf("%s — %s", oldest, latest)
-	}
+	key := strconv.Itoa(gen) + "|" + filter
 
-	return logs, logTimeRange
+	logViewCacheMu.Lock()
+	if logViewCacheKey == key && time.Since(logViewCacheTime) < logMemCacheTTL {
+		logs, r := logViewCacheLogs, logViewCacheRange
+		logViewCacheMu.Unlock()
+
+		return logs, r
+	}
+	logViewCacheMu.Unlock()
+
+	logs, r := loadLogView(gen, filter)
+
+	logViewCacheMu.Lock()
+	logViewCacheKey, logViewCacheLogs, logViewCacheRange, logViewCacheTime = key, logs, r, time.Now()
+	logViewCacheMu.Unlock()
+
+	return logs, r
 }
 
 func formatDashboardLogTimestamp(ts string) string {
@@ -3824,8 +4106,27 @@ func logEntryID(e LogEntry) string {
 	return hex.EncodeToString(h[:8])
 }
 
-func writeLogsCard(w io.Writer, logs []LogEntry, logTimeRange string) {
+func writeLogsCard(w io.Writer, logs []LogEntry, logTimeRange string, gen int, gens []logGenerationInfo) {
 	entryCount := len(logs)
+
+	genSelectHTML := ""
+	if len(gens) > 1 {
+		var sb strings.Builder
+		sb.WriteString(`<select id="logGenSelect" class="log-filter-select" data-change="onLogGenChange(this.value)">`)
+		for _, g := range gens {
+			label := phrases().LogGenCurrent
+			if g.Gen > 0 {
+				label = fmt.Sprintf("%s .%d (%s)", phrases().LogGenArchive, g.Gen, g.ModTime.Local().Format(statusTimestampLayout))
+			}
+			selected := ""
+			if g.Gen == gen {
+				selected = " selected"
+			}
+			fmt.Fprintf(&sb, `<option value="%d"%s>%s</option>`, g.Gen, selected, esc(label))
+		}
+		sb.WriteString(`</select>`)
+		genSelectHTML = sb.String()
+	}
 	timeRangeHTML := ""
 	if logTimeRange != "" {
 		timeRangeHTML = `<span class="logs-summary-sep">🕒 ` + logTimeRange + `</span>`
@@ -3843,6 +4144,7 @@ func writeLogsCard(w io.Writer, logs []LogEntry, logTimeRange string) {
 			</div>
 			<div class="card-content">
        			<div class="log-filters">
+					%s
 					<select id="logFilterSelect" class="log-filter-select" data-change="filterLogs(this.value)">
 						<option value="all">`+phrases().FilterAll+`</option>
 						<option value="ERR">`+phrases().FilterErrors+`</option>
@@ -3861,9 +4163,11 @@ func writeLogsCard(w io.Writer, logs []LogEntry, logTimeRange string) {
 					</select>
 					<button class="filter-btn filter-btn--export" data-click="exportLogs('txt')">📄 TXT</button>
 					<button class="filter-btn" data-click="exportLogs('json')">📋 JSON</button>
+					<button class="filter-btn filter-btn--export" data-click="exportLogsAll('txt')" title="`+esc(phrases().LogExportAllTitle)+`">📦 TXT</button>
+					<button class="filter-btn" data-click="exportLogsAll('json')" title="`+esc(phrases().LogExportAllTitle)+`">📦 JSON</button>
 				</div>
 				<div id="logContainer" class="log-container">
-	`, esc(phrases().SystemEvents), entryCount, timeRangeHTML)
+	`, esc(phrases().SystemEvents), entryCount, timeRangeHTML, genSelectHTML)
 
 	for _, e := range logs {
 		displayTime := e.Timestamp
@@ -3887,14 +4191,14 @@ func writeLogsCard(w io.Writer, logs []LogEntry, logTimeRange string) {
 
 		_, _ = fmt.Fprintf(
 			w, `
-				<div class="log-entry log-entry-row" data-action="%s" data-level="%s" data-copy="%s" data-log-id="%s">
+				<div class="log-entry log-entry-row" data-action="%s" data-level="%s" data-copy="%s" data-log-id="%s" data-gen="%d">
 					<span class="log-entry-icon">%s</span>
 					<span class="log-entry-time">%s</span>
 					<div class="log-entry-body">%s<span class="log-entry-message">%s</span></div>
 					<button class="copy-btn log-copy-btn" data-click="copyLogEntry(this)" title="`+esc(phrases().CopyTitle)+`">📋</button>
 					<button class="copy-btn log-delete-btn" data-click="deleteLogEntry(this)" title="`+esc(phrases().DeleteEntryTitle)+`">🗑️</button>
 				</div>`,
-			actionUpper, e.Level, esc(copyText), logEntryID(e),
+			actionUpper, e.Level, esc(copyText), logEntryID(e), e.Gen,
 			icon, displayTime, domainHTML, esc(e.Message),
 		)
 	}
@@ -4965,6 +5269,7 @@ func restoreConfigInMemory(oldCfg Config) {
 func afterConfigRestore() {
 	config := snapshotConfig()
 	setAtomicDebugFlags(config.DebugEnabled, config.DebugHTTPRaw)
+	setAtomicLogLimits(config.MaxLogMB, config.MaxLogBackups)
 	if config.MaxConcurrent > 0 {
 		setWorkerConcurrencyLimit(config.MaxConcurrent)
 	}
@@ -5312,14 +5617,15 @@ func diagnoseNotifiers(cfg Config) map[string]bool {
 
 func diagnoseConfigInfo(cfg Config) map[string]any {
 	return map[string]any{
-		"ip_mode":        cfg.IPMode,
-		"interval":       cfg.Interval,
-		"dry_run":        cfg.DryRun,
-		"debug":          cfg.DebugEnabled,
-		"debug_http_raw": cfg.DebugHTTPRaw,
-		"max_log_lines":  cfg.MaxLogLines,
-		"ipv4_endpoints": len(cfg.IPv4Endpoints),
-		"ipv6_endpoints": len(cfg.IPv6Endpoints),
+		"ip_mode":         cfg.IPMode,
+		"interval":        cfg.Interval,
+		"dry_run":         cfg.DryRun,
+		"debug":           cfg.DebugEnabled,
+		"debug_http_raw":  cfg.DebugHTTPRaw,
+		"max_log_mb":      cfg.MaxLogMB,
+		"max_log_backups": cfg.MaxLogBackups,
+		"ipv4_endpoints":  len(cfg.IPv4Endpoints),
+		"ipv6_endpoints":  len(cfg.IPv6Endpoints),
 	}
 }
 
@@ -5632,6 +5938,8 @@ func writeAuditDNSSection(w io.Writer, isAdmin bool) {
 				<span>`+phrases().AuditLogTitle+` <span class="logs-summary-meta" id="audit-summary-meta"></span></span>
 				<span class="audit-header-actions">
 					<select id="audit-gen-select" class="log-filter-select" data-change="onAuditGenChange(this.value)" hidden></select>
+					<button class="action-btn topbar-action-btn" data-click="exportAuditAll('txt')" title="`+esc(phrases().AuditExportAllTitle)+`">📦 TXT</button>
+					<button class="action-btn topbar-action-btn" data-click="exportAuditAll('json')" title="`+esc(phrases().AuditExportAllTitle)+`">📦 JSON</button>
 					<button class="action-btn topbar-action-btn" data-click="refreshAuditLog()">`+phrases().AuditRefreshBtn+`</button>
 				</span>
 				</div>

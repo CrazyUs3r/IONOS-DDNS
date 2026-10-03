@@ -73,7 +73,7 @@ func run() (exitCode int) {
 		envCfg.interval,
 		envCfg.dnsList,
 		envCfg.maxAPIRetries,
-		envCfg.maxLogLines,
+		envCfg.maxLogMB,
 		envCfg.hourlyLimit,
 		envCfg.maxConcurrent,
 	)
@@ -168,7 +168,7 @@ type envConfig struct {
 	dnsList       []string
 	interval      int
 	maxAPIRetries int
-	maxLogLines   int
+	maxLogMB      int
 	hourlyLimit   int
 	maxConcurrent int
 }
@@ -264,7 +264,7 @@ func readEnvConfig() envConfig {
 		interval:      readIntervalFromEnv(),
 		dnsList:       readDNSServersFromEnv(),
 		maxAPIRetries: readMaxAPIRetriesFromEnv(),
-		maxLogLines:   readMaxLogLinesFromEnv(),
+		maxLogMB:      readMaxLogMBFromEnv(),
 		hourlyLimit:   readHourlyRateLimitFromEnv(),
 		maxConcurrent: readMaxConcurrentFromEnv(),
 	}
@@ -325,17 +325,17 @@ func readMaxAPIRetriesFromEnv() int {
 	return value
 }
 
-func readMaxLogLinesFromEnv() int {
-	value := DefaultMaxLogLines
+func readMaxLogMBFromEnv() int {
+	value := DefaultMaxLogMB
 
-	if s := strings.TrimSpace(os.Getenv("LOG_MAX_LINES")); s != "" {
+	if s := strings.TrimSpace(os.Getenv("LOG_MAX_MB")); s != "" {
 		if v, err := strconv.Atoi(s); err == nil && v > 0 {
-			value = v
+			value = normalizeLogMB(v)
 		} else {
 			log(LogContext{
 				Level:   LogWarn,
 				Action:  ActionConfig,
-				Message: fmt.Sprintf(t(phrases().LogMaxLinesInvalid, "Invalid LOG_MAX_LINES value '%s', using default %d"), s, DefaultMaxLogLines),
+				Message: fmt.Sprintf(t(phrases().LogMaxMBInvalid, "Invalid LOG_MAX_MB value '%s', using default %d"), s, DefaultMaxLogMB),
 			})
 		}
 	}
@@ -377,7 +377,8 @@ func initDefaultConfig(logsDir string) {
 		LogDir:          logsDir,
 		HourlyRateLimit: DefaultHourlyRateLimit,
 		MaxConcurrent:   DefaultMaxConcurrent,
-		MaxLogLines:     DefaultMaxLogLines,
+		MaxLogMB:        DefaultMaxLogMB,
+		MaxLogBackups:   normalizeLogBackups(5),
 		MaxAPIRetries:   DefaultMaxAPIRetries,
 	}
 	cfgMu.Unlock()
@@ -526,9 +527,9 @@ func applyConfigDefaults(loaded *Config) {
 	if loaded.MaxConcurrent <= 0 || loaded.MaxConcurrent > 20 {
 		loaded.MaxConcurrent = DefaultMaxConcurrent
 	}
-	if loaded.MaxLogLines <= 0 {
-		loaded.MaxLogLines = DefaultMaxLogLines
-	}
+	loaded.MaxLogMB = normalizeLogMB(loaded.MaxLogMB)
+	loaded.MaxLogBackups = normalizeLogBackups(loaded.MaxLogBackups)
+
 	if loaded.MaxAPIRetries < 0 || loaded.MaxAPIRetries > 20 {
 		loaded.MaxAPIRetries = DefaultMaxAPIRetries
 	}
@@ -590,6 +591,7 @@ func applyDebugOverrides() {
 		cfg.DebugHTTPRaw = v == constTrue
 	}
 	setAtomicDebugFlags(cfg.DebugEnabled, cfg.DebugHTTPRaw)
+	setAtomicLogLimits(cfg.MaxLogMB, cfg.MaxLogBackups)
 }
 
 func configureLanguage(langDir string) error {
@@ -761,7 +763,6 @@ func refreshCaches() {
 
 func startMaintenanceWorkers() {
 	startCacheRefresher()
-	startLogRotationWorker()
 }
 
 type dashboardServers struct {
@@ -941,6 +942,7 @@ func handleContextShutdown(
 
 	debugLog("SYSTEM", "", t(phrases().WaitingForLogQueue, "📝 Waiting for log queue..."))
 
+	flushAuditLog()
 	stopLogWriterAndWait()
 
 	return 0
@@ -949,7 +951,6 @@ func handleContextShutdown(
 func handleSchedulerTick(ticker *time.Ticker, currentInterval *int) *time.Ticker {
 	cfgMu.RLock()
 	interval := cfg.Interval
-	maxLogLines := cfg.MaxLogLines
 	cfgMu.RUnlock()
 
 	if interval != *currentInterval {
@@ -970,24 +971,10 @@ func handleSchedulerTick(ticker *time.Ticker, currentInterval *int) *time.Ticker
 	if !tryClaimUpdate() {
 		debugLog("SCHEDULER", "", t(phrases().SchedulerPreviousUpdateRunning, "⚠️ Previous update is still running. Skipping this cycle..."))
 
-		limit := maxLogLines
-		if interval > 500 && limit == DefaultMaxLogLines {
-			limit = 1000
-		}
-		rotateLogFile(logPath, limit)
-
 		return ticker
 	}
 
 	go runClaimedUpdate(false)
-
-	limit := maxLogLines
-	if interval > 500 && limit == DefaultMaxLogLines {
-		limit = 1000
-	}
-
-	debugLog("MAINTENANCE", "", phrases().MaintenanceStarting)
-	rotateLogFile(logPath, limit)
 
 	return ticker
 }
@@ -1030,6 +1017,7 @@ func handleShutdownSignal(sig os.Signal, ticker *time.Ticker, servers *dashboard
 
 	debugLog("SYSTEM", "", t(phrases().WaitingForLogQueue, "📝 Waiting for log queue..."))
 
+	flushAuditLog()
 	stopLogWriterAndWait()
 
 	return 0
@@ -1114,13 +1102,13 @@ func applyEnvOverrides(
 	logsDir string,
 	tempInterval int,
 	dnsList []string,
-	maxAPIRetries, maxLogLines, hourlyLimit, maxConcurrent int,
+	maxAPIRetries, maxLogMB, hourlyLimit, maxConcurrent int,
 ) {
 	cfgMu.Lock()
 	defer cfgMu.Unlock()
 
 	applyCoreEnvOverrides(logsDir, tempInterval, dnsList)
-	applyLimitEnvOverrides(maxAPIRetries, maxLogLines, hourlyLimit, maxConcurrent)
+	applyLimitEnvOverrides(maxAPIRetries, maxLogMB, hourlyLimit, maxConcurrent)
 }
 
 func applyCoreEnvOverrides(logsDir string, tempInterval int, dnsList []string) {
@@ -1182,12 +1170,12 @@ func applyPortEnvOverrides() {
 	})
 }
 
-func applyLimitEnvOverrides(maxAPIRetries, maxLogLines, hourlyLimit, maxConcurrent int) {
+func applyLimitEnvOverrides(maxAPIRetries, maxLogMB, hourlyLimit, maxConcurrent int) {
 	if os.Getenv("MAX_API_RETRIES") != "" {
 		cfg.MaxAPIRetries = maxAPIRetries
 	}
-	if os.Getenv("LOG_MAX_LINES") != "" {
-		cfg.MaxLogLines = maxLogLines
+	if os.Getenv("LOG_MAX_MB") != "" {
+		cfg.MaxLogMB = maxLogMB
 	}
 	if os.Getenv("HOURLY_RATE_LIMIT") != "" {
 		cfg.HourlyRateLimit = hourlyLimit
