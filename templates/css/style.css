@@ -3895,6 +3895,7 @@ body.auth-page .dashboard-footer {
 }
 
 .audit-header-actions {
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   gap: 8px;
