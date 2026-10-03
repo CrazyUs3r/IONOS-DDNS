@@ -94,6 +94,7 @@ const DECLARATIVE_ACTIONS = Object.freeze({
 	downloadFullBackup: () => downloadFullBackup(),
 	exportData: () => exportData(),
 	exportLogs: ({ args }) => exportLogs(args[0]),
+	exportLogsAll: ({ args }) => exportLogsAll(args[0]),
 	filterDebugLog: ({ element }) => filterDebugLog(element.value),
 	filterDomains: ({ element }) => filterDomains(element.value),
 	filterLogs: ({ element }) => filterLogs(element.value),
@@ -105,6 +106,8 @@ const DECLARATIVE_ACTIONS = Object.freeze({
 	refreshDiagnosis: () => refreshDiagnosis(),
 	refreshAuditLog: () => refreshAuditLog(),
 	onAuditGenChange: ({ element }) => onAuditGenChange(element.value),
+	exportAuditAll: ({ args }) => exportAuditAll(args[0]),
+	onLogGenChange: ({ element }) => onLogGenChange(element.value),
 	runDNSPropagation: () => runDNSPropagation(),
 	resetMetrics: () => resetMetrics(),
 	restoreFullBackup: () => restoreFullBackup(),
@@ -338,6 +341,8 @@ const DEFAULT_PAGE = 'dashboard';
 const PAGES = Object.freeze(Object.keys(PAGE_CONFIG));
 
 let currentPage = DEFAULT_PAGE;
+let logGen = 0;
+let logFilter = 'all';
 const pageRefreshControllers = new Map();
 const pageLoadPromises = new Map();
 const pageLoadedAt = new Map([[DEFAULT_PAGE, Date.now()]]);
@@ -372,11 +377,7 @@ function capturePageState(page, section) {
 	if (!section) return null;
 	if (page === 'dashboard') return captureDashboardState(section);
 	if (page === 'domains') return { search: section.querySelector('#domainSearch')?.value || '' };
-	if (page === 'logs') {
-		return {
-			filter: section.querySelector('.filter-btn.active[data-filter]')?.dataset.filter || 'all',
-		};
-	}
+
 	return null;
 }
 
@@ -409,7 +410,8 @@ function initializeLoadedPage(page, section, state) {
 	}
 
 	if (page === 'logs') {
-		filterLogs(state?.filter || 'all');
+		const select = section.querySelector('#logFilterSelect');
+		if (select) select.value = logFilter;
 		return;
 	}
 
@@ -450,9 +452,13 @@ async function refreshPageSection(page) {
 	oldSection.setAttribute('aria-busy', 'true');
 
 	const state = capturePageState(page, oldSection);
-
 	try {
-		const response = await fetch('/api/page?name=' + encodeURIComponent(page), {
+		let genParam = '';
+		if (page === 'logs') {
+			if (logGen > 0) genParam += '&gen=' + logGen;
+			if (logFilter !== 'all') genParam += '&filter=' + encodeURIComponent(logFilter);
+		}
+		const response = await fetch('/api/page?name=' + encodeURIComponent(page) + genParam, {
 			method: 'GET',
 			cache: 'no-store',
 			headers: { Accept: 'application/json' },
@@ -1349,7 +1355,7 @@ function applyMetricsFields(m) {
 	if (card && m.generated_at) card.dataset.generatedAt = String(m.generated_at);
 }
 
-let latestMetricsSnapshot = null; // { generatedAt, data }
+let latestMetricsSnapshot = null;
 
 function applyMetricsIfNewer(m) {
 	const generatedAt = Number(m.generated_at) || 0;
@@ -1746,16 +1752,10 @@ function copyIP(text) {
 }
 
 function filterLogs(filter) {
-	const select = document.getElementById('logFilterSelect');
-	if (select && select.value !== filter) select.value = filter;
-	const entries = document.querySelectorAll('.log-entry');
-	const f = filter.toUpperCase();
-
-	entries.forEach(entry => {
-		const level = (entry.dataset.level || '').toUpperCase();
-		const action = (entry.dataset.action || '').toUpperCase();
-		entry.style.display = (f === 'ALL' || level === f || action === f) ? '' : 'none';
-	});
+	const next = filter || 'all';
+	if (next === logFilter) return;
+	logFilter = next;
+	refreshPageSection('logs');
 }
 
 function setUpdateButtonBusy(isBusy) {
@@ -2121,9 +2121,6 @@ function wireAutosave(sectionAttr, handler) {
 	if (!container || container.dataset.autosaveWired === '1') return;
 	container.dataset.autosaveWired = '1';
 
-	// Port-Felder lösen bei Änderung einen Server-Restart aus (der laufende
-	// Listener wird neu gebunden). Deshalb hier nicht auf jeden Tastendruck
-	// reagieren, sondern erst wenn das Feld verlassen/bestätigt wird.
 	const restartSensitiveIds = new Set(['cfg-http-port', 'cfg-https-port']);
 
 	const trigger = e => {
@@ -2153,7 +2150,8 @@ function _initSettingsFields() {
 		'cfg-https-port': sys.https_port || '8443',
 		'cfg-iface': sys.iface_name || '',
 		'cfg-dns': (sys.dns_servers || []).join(', '),
-		'cfg-max-log': sys.max_log_lines || 500,
+		'cfg-max-log': sys.max_log_mb || 5,
+		'cfg-max-log-backups': sys.max_log_backups || 5,
 		'cfg-max-retries': sys.max_api_retries || 3,
 		'cfg-max-concurrent': sys.max_concurrent || 5,
 		'cfg-hourly-limit': sys.hourly_rate_limit || 1200,
@@ -2648,7 +2646,8 @@ function collectSystemFieldsPayload() {
 		https_port: _getVal('cfg-https-port') || '8443',
 		iface_name: _getVal('cfg-iface'),
 		dns_servers: _parseList(_getVal('cfg-dns')),
-		max_log_lines: parseInt(_getVal('cfg-max-log'), 10) || 500,
+		max_log_mb: parseInt(_getVal('cfg-max-log'), 10) || 5,
+		max_log_backups: parseInt(_getVal('cfg-max-log-backups'), 10) || 5,
 		max_api_retries: parseInt(_getVal('cfg-max-retries'), 10) || 4,
 		max_concurrent: parseInt(_getVal('cfg-max-concurrent'), 10) || 5,
 		hourly_rate_limit: parseInt(_getVal('cfg-hourly-limit'), 10) || 1200,
@@ -2797,7 +2796,7 @@ function deleteLogEntry(btn) {
 	fetch('/api/logs/delete', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ id }),
+		body: JSON.stringify({ id, gen: parseInt(row.dataset.gen, 10) || 0 }),
 	})
 		.then(async r => {
 			if (!r.ok) throw new Error(await r.text());
@@ -2836,7 +2835,8 @@ function exportLogs(format) {
 		return;
 	}
 
-	const filename = 'dyndns-logs-' + new Date().toISOString().split('T')[0];
+	const suffix = (logGen > 0 ? '-archiv' + logGen : '') + (logFilter !== 'all' ? '-' + logFilter.toLowerCase() : '');
+	const filename = 'dyndns-logs-' + new Date().toISOString().split('T')[0] + suffix;
 
 	if (format === 'txt') {
 		const lines = rows.map(r => {
@@ -2846,7 +2846,7 @@ function exportLogs(format) {
 			const action = r.dataset.action || '';
 			return [time, action, domain, msg].filter(Boolean).join(' | ');
 		});
-		const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+		const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/plain' });
 		_downloadBlob(blob, filename + '.txt');
 	} else {
 		const entries = rows.map(r => ({
@@ -2859,6 +2859,19 @@ function exportLogs(format) {
 		const blob = new Blob([JSON.stringify(entries, null, 2)], { type: 'application/json' });
 		_downloadBlob(blob, filename + '.json');
 	}
+	showToast(tr('export_started', '✓ Export gestartet'), 'success');
+}
+
+function exportLogsAll(format) {
+	const params = new URLSearchParams({ format: format === 'json' ? 'json' : 'txt' });
+	if (logFilter !== 'all') params.set('filter', logFilter);
+
+	const a = document.createElement('a');
+	a.href = '/api/logs/export?' + params.toString();
+	a.download = '';
+	document.body.appendChild(a);
+	a.click();
+	document.body.removeChild(a);
 	showToast(tr('export_started', '✓ Export gestartet'), 'success');
 }
 
@@ -2911,6 +2924,7 @@ function deleteDomain(domain, btn) {
 // ============================================================================
 // IPv64 DOMAIN MANAGEMENT
 // ============================================================================
+
 function _ipv64DomainAction(action) {
 	const input = document.getElementById('ipv64-domain-input');
 	const suffixSelect = document.getElementById('ipv64-domain-suffix');
@@ -4044,6 +4058,21 @@ function updateAuditGenSelect(generations, selectedGen) {
 
 function onAuditGenChange(value) {
 	refreshAuditLog(parseInt(value, 10) || 0);
+}
+
+function exportAuditAll(format) {
+	const a = document.createElement('a');
+	a.href = '/api/audit/export?format=' + (format === 'json' ? 'json' : 'txt');
+	a.download = '';
+	document.body.appendChild(a);
+	a.click();
+	document.body.removeChild(a);
+	showToast(tr('export_started', '✓ Export gestartet'), 'success');
+}
+
+function onLogGenChange(value) {
+	logGen = parseInt(value, 10) || 0;
+	refreshPageSection('logs');
 }
 
 function updateAuditSummaryMeta(count, oldestTimestamp = '', latestTimestamp = '') {
