@@ -31,6 +31,12 @@ Ein hochperformanter, in Go geschriebener **Multi-Provider Dynamic DNS Client** 
 - **Cleanup:** Automatisches Entfernen verwaister DNS-Records, die nicht mehr in der Konfiguration stehen
 - **Benachrichtigungen:** Telegram (inkl. Bot-Commands), Gotify, Ntfy, Webhook, MQTT (inkl. Home Assistant Discovery) und E-Mail (SMTP)
 - **Backup & Restore:** Export/Import von Config, Status und Benutzern direkt aus dem Dashboard
+- **Live-Speichern:** Einstellungen werden beim Ändern automatisch gespeichert, es gibt keinen Speichern-Button mehr
+- **HTTP + HTTPS parallel:** Dashboard auch per HTTPS erreichbar, automatisch erzeugtes Self-Signed-Zertifikat oder eigenes Zertifikat per ENV
+- **Port-Wechsel ohne Neustart:** Ändert man HTTP- oder HTTPS-Port im Dashboard, wird nur der betroffene Listener neu gebunden
+- **Log-Rotation nach Größe:** Größe und Anzahl der Archive (`.1` – `.n`) sind im Dashboard frei einstellbar, gepufferte Schreibzugriffe schonen die Platte
+- **Audit-Log:** Protokoll der Dashboard-Aktionen (Benutzer, Rolle, IP, Methode, Pfad, Ergebnis), nur für Admins einsehbar
+- **Log-Export:** TXT/JSON der aktuellen Ansicht oder Voll-Export aller Logdateien inklusive Archive
 - **Diagnose / Health Center:** Übersicht über System-, Provider- und Notifier-Status mit konfigurierbaren Warnungen
 - **Prometheus-Metriken:** Endpunkt `/metrics/prometheus` für Grafana & Co.
 - **Parallele Verarbeitung:** Einstellbares Worker-Limit für schnelle Updates bei vielen Domains
@@ -41,7 +47,7 @@ Ein hochperformanter, in Go geschriebener **Multi-Provider Dynamic DNS Client** 
 
 ## 🚀 Quick Start (Docker Compose)
 
-Das einfachste Setup — Dashboard unter `http://server-ip:8080`, Konfiguration über die UI:
+Das einfachste Setup — Dashboard unter `http://server-ip:8080` bzw. `https://server-ip:8443`, Konfiguration über die UI:
 
 ```yaml
 services:
@@ -49,7 +55,8 @@ services:
     image: crazyus3r/ionos-ddns:latest
     container_name: go-dyndns
     ports:
-      - "8080:8080"
+      - "8080:8080"   # HTTP
+      - "8443:8443"   # HTTPS (Self-Signed, siehe Abschnitt "HTTPS & Zertifikate")
     volumes:
       - ./config:/config
     restart: unless-stopped
@@ -65,12 +72,19 @@ Beim ersten Start öffnet sich die Setup-Seite zum Erstellen des Admin-Accounts.
 
 Alle Einstellungen lassen sich nach dem ersten Login unter **Einstellungen** im Dashboard verwalten:
 
-- System (Intervall, IP-Modus, DNS-Server, Debug, Dry-Run, Sprache …)
+- System (Intervall, IP-Modus, DNS-Server, Log-Größe & Archive, Debug, Dry-Run, Sprache …)
 - Domains mit Provider-Zugangsdaten
 - Benachrichtigungen (Telegram, Gotify, Webhook, MQTT, E-Mail)
 - Benutzerverwaltung
 
-Änderungen werden sofort in `/config/config.json` übernommen.
+Änderungen werden **automatisch und sofort** in `/config/config.json` gespeichert, einen Speichern-Button gibt es nicht mehr. Kurz nach dem letzten Tastendruck erscheint die Bestätigung „💾 Automatisch gespeichert".
+
+- **System & Benachrichtigungen:** Speichern ca. 0,7 s nach der letzten Eingabe
+- **Domains:** Speichern direkt beim Hinzufügen, Bearbeiten oder Löschen eines Eintrags
+- **Ports:** Speichern erst beim Verlassen des Feldes (Blur/Enter), da ein Wechsel den Listener neu bindet
+- **Sprache:** Ein Sprachwechsel lädt die Seite einmal neu
+
+> ⚠️ **Port-Änderungen im Dashboard:** Der Listener im Container wird sofort neu gebunden, der geöffnete Tab verliert dabei die Verbindung. Das **Docker-Port-Mapping** (`ports:`) wird dadurch **nicht** angepasst. Passe es bei einem Portwechsel selbst an und rufe das Dashboard unter dem neuen Port auf.
 
 ### Option B — Umgebungsvariablen (Legacy / CI)
 
@@ -85,10 +99,10 @@ Für den ersten Start oder automatisierte Deployments können Domains auch per E
 | `INTERVAL` | Sekunden zwischen Prüfungen | `300` |
 | `INTERFACE` | Netzwerk-Interface für IPv6 (z. B. `eth0`) | — |
 | `DNS_SERVERS` | Kommagetrennte DNS-Server | `1.1.1.1:53,8.8.8.8:53` |
-| `HEALTH_PORT` | Port für Dashboard und Healthcheck | `8080` |
-| `DASHBOARD_HTTPS_PORT` | Port für https Dashboard | `8443` |
+| `HTTP_PORT` | Port für Dashboard (HTTP) und Healthcheck | `8080` |
+| `HTTPS_PORT` | Port für das Dashboard per HTTPS | `8443` |
 | `LANG` | Sprache der UI (`de` oder `en`) | `de` |
-| `LOG_MAX_LINES` | Maximale Log-Zeilen | `500` |
+| `LOG_MAX_MB` | Maximale Größe je Logdatei in MB (1–50), gilt für System- und Audit-Log | `5` |
 | `MAX_CONCURRENT` | Parallele API-Updates | `5` |
 | `MAX_API_RETRIES` | Wiederholungsversuche bei API-Fehlern | `3` |
 | `HOURLY_RATE_LIMIT` | Max. API-Anfragen pro Stunde | `1200` |
@@ -97,6 +111,22 @@ Für den ersten Start oder automatisierte Deployments können Domains auch per E
 | `DEBUG_HTTP_RAW` | HTTP-Traffic loggen (Achtung: Secrets!) | `false` |
 | `DASHBOARD_AUTH` | `false` → Dashboard ohne Login | `true` |
 | `TRIGGER_TOKEN` | Token für den `/api/trigger`-Endpunkt | — |
+
+> ℹ️ **Ports haben Vorrang:** `HTTP_PORT` und `HTTPS_PORT` werden bei **jedem Start** angewendet und überschreiben einen bereits gespeicherten Wert aus der `config.json` (und wirken auch dann, wenn dort schon etwas steht). Alle anderen Variablen setzen nur Startwerte, danach gilt die `config.json`. Wer einen Port dauerhaft im Dashboard ändern will, muss die ENV-Variable entfernen.
+
+> ⚠️ **Migration:** `LOG_MAX_LINES` wird nicht mehr gelesen (ersetzt durch `LOG_MAX_MB`). Ein bestehender `max_log_lines`-Eintrag in der `config.json` wird ignoriert, es gilt dann der Standard von 5 MB. Die Anzahl der Archivdateien lässt sich nur im Dashboard einstellen.
+
+#### HTTPS & Sicherheit
+
+| Variable | Beschreibung | Standard |
+| :--- | :--- | :--- |
+| `DASHBOARD_TLS_CERT` | Pfad zu eigenem Zertifikat (PEM). Nur zusammen mit `DASHBOARD_TLS_KEY` | — |
+| `DASHBOARD_TLS_KEY` | Pfad zum privaten Schlüssel (PEM) | — |
+| `DASHBOARD_TLS_HOSTS` | Kommagetrennte Zusatz-Hostnamen/IPs für das Self-Signed-Zertifikat | — |
+| `DASHBOARD_HSTS` | `true` → sendet `Strict-Transport-Security` (nur mit gültigem Zertifikat sinnvoll) | `false` |
+| `DASHBOARD_COOKIE_SECURE` | `false` → Secure-Flag der HTTPS-Session abschalten | `true` |
+| `DASHBOARD_TRUSTED_PROXIES` | Kommagetrennte IPs/CIDRs vertrauenswürdiger Reverse-Proxys | — |
+| `DASHBOARD_HEALTH_TOKEN` | Token für `/health?detailed=true` (Header `X-Health-Token` oder `Authorization: Bearer`) | — |
 
 #### Single-Provider (Legacy)
 
@@ -205,13 +235,14 @@ Unterstützte Felder je Eintrag: `fqdn`, `provider`, `api_prefix`, `api_secret`,
 
 ## 📊 Dashboard
 
-Das Dashboard ist unter `http://server-ip:8080` erreichbar und bietet:
+Das Dashboard ist unter `http://server-ip:8080` und `https://server-ip:8443` erreichbar und bietet:
 
 - **Übersicht:** Letzter Check, Uptime, IP-Endpunkt-Status
 - **Domains:** IP-Historie pro Domain mit Zeitstrahl, Provider-Status, Orphan-Erkennung
 - **Metriken:** Total Requests, Success Rate, Latenz-Perzentile (P50/P85/P99), HTTP-Methoden-Verteilung, stündliche Charts
 - **Diagnose / Health Center:** System-, Config-, Provider- und Notifier-Status auf einen Blick
-- **Logs:** Filterbar nach Level und Aktion, Export als TXT oder JSON
+- **Logs:** Filterbar nach Level und Aktion (bei aktivem Filter werden automatisch ältere Archive mit durchsucht, bis zu 5000 Treffer), Auswahl der Archivdatei, Export der Ansicht oder Voll-Export (📦) als TXT oder JSON
+- **Audit-Log:** Protokoll der Dashboard-Aktionen mit Archiv-Auswahl und Voll-Export (nur Admin)
 - **Debug-Log:** Live-Stream interner Ereignisse (nur bei aktiviertem Debug-Modus)
 - **Backup & Restore:** Config, Domain-Status und Benutzer exportieren und wiederherstellen
 - **Einstellungen:** Vollständige Konfiguration über die UI — kein manuelles Editieren von JSON nötig
@@ -226,6 +257,8 @@ Das Dashboard ist unter `http://server-ip:8080` erreichbar und bietet:
 | `viewer` | Nur lesen (GET-Requests, WebSocket) |
 
 ---
+
+Das Audit-Log (Ansicht und Export) ist ausschließlich für `admin` zugänglich. Das Ereignis-Log inklusive Export dürfen alle Rollen einsehen.
 
 ## 🔔 Benachrichtigungen
 
@@ -243,6 +276,21 @@ Für jeden Notifier lassen sich die gewünschten Events einzeln auswählen (Upda
 
 ---
 
+## 🔒 HTTPS & Zertifikate
+
+Das Dashboard läuft parallel auf **HTTP (Standard 8080)** und **HTTPS (Standard 8443)**. HTTP und HTTPS müssen unterschiedliche Ports nutzen. Das wird beim Start und beim Speichern der Einstellungen geprüft.
+
+**Zertifikat:**
+
+1. **Eigenes Zertifikat:** `DASHBOARD_TLS_CERT` und `DASHBOARD_TLS_KEY` setzen, beide Dateien müssen gültig sein.
+2. **Self-Signed (Standard):** Ohne diese Variablen erzeugt der Container unter `/config/tls/` selbst ein Zertifikat (`dashboard.crt` / `dashboard.key`, RSA 2048, 1 Jahr gültig). Es enthält `localhost`, den Hostnamen, die lokale IP sowie alles aus `DASHBOARD_TLS_HOSTS`. Bei Ablauf (< 30 Tage) oder geänderten Hostnamen wird es automatisch neu erzeugt.
+
+Browser warnen bei einem Self-Signed-Zertifikat einmalig. Für eine vertrauenswürdige Verbindung nutze ein eigenes Zertifikat oder einen Reverse-Proxy.
+
+**Sessions:** HTTP und HTTPS verwenden getrennte Session-Cookies, das Secure-Flag wird nur beim HTTPS-Cookie gesetzt. Ein Login über HTTP gilt daher nicht automatisch für HTTPS und umgekehrt.
+
+**Port-Wechsel zur Laufzeit:** Siehe Hinweis unter „Konfiguration". Ein Wechsel im Dashboard bindet nur den geänderten Listener neu, der andere läuft unverändert weiter.
+
 ## 🩺 Health Check
 
 ```
@@ -255,6 +303,37 @@ Die `/health`-Route liefert `200 OK`, `degraded` oder `503 Unhealthy`. Docker-HE
 
 ---
 
+---
+
+## 📜 Logging & Log-Rotation
+
+Das Ereignis-Log (`dyndns.json`) und das Audit-Log (`audit.json`) werden **nach Größe** rotiert: Erreicht die Datei das Limit, wird sie zu `.1` archiviert, ältere Archive rücken weiter (`.1` → `.2` …), das älteste fällt weg.
+
+| Einstellung | Standard | Bereich | Beschreibung |
+| :--- | :--- | :--- | :--- |
+| Max. Log-Größe (MB) | `5` | 1–50 | Größe je Datei, bevor rotiert wird (auch per `LOG_MAX_MB`) |
+| Archivdateien | `5` | 1–20 | Anzahl der Archive `.1` – `.n` je Log (nur im Dashboard) |
+
+Beide Werte gelten für System- und Audit-Log gemeinsam und wirken sofort, ein Neustart ist nicht nötig.
+
+**Performance:** Beide Logs werden gepuffert geschrieben. Das Ereignis-Log wird alle 2 Sekunden und bei Warnungen/Fehlern sofort auf die Platte geschrieben, das Audit-Log 2 Sekunden nach dem ersten Eintrag (die Datei ist nur so lange offen). Beim sauberen Beenden wird alles geschrieben. Das Dashboard liest nur das Dateiende, statt die ganze Datei zu scannen.
+
+**Speicherbedarf:** Je Log maximal `(1 + Archive) × Max. Log-Größe`. Mit den Standardwerten sind das für beide Logs zusammen höchstens 60 MB.
+
+> ⚠️ Wird die Zahl der Archive verkleinert, löscht die nächste Rotation die überzähligen Archive unwiderruflich.
+
+### Anzeige & Export
+
+- Die Ansicht zeigt maximal 5000 Einträge der gewählten Datei. Sobald Archive existieren, erscheint ein Dropdown zur Auswahl der Datei.
+- Bei aktivem Filter werden ab der gewählten Datei automatisch ältere Archive mit durchsucht, bis 5000 Treffer erreicht sind.
+- **TXT / JSON** exportiert genau die angezeigten Einträge.
+- **📦 TXT / 📦 JSON** exportiert alle Logdateien inklusive Archive in chronologischer Reihenfolge (älteste zuerst). Der Export wird direkt gestreamt, bei Ereignis-Log berücksichtigt er den aktiven Filter. Es läuft höchstens ein Voll-Export gleichzeitig.
+
+| Endpunkt | Beschreibung | Zugriff |
+| :--- | :--- | :--- |
+| `GET /api/logs/export?format=txt\|json&filter=ERR` | Voll-Export Ereignis-Log (`filter` optional) | alle Rollen |
+| `GET /api/audit/export?format=txt\|json` | Voll-Export Audit-Log | nur `admin` |
+
 ## 📁 Datenverzeichnis (`/config`)
 
 ```
@@ -264,8 +343,11 @@ Die `/health`-Route liefert `200 OK`, `degraded` oder `503 Unhealthy`. Docker-HE
 ├── lang/
 │   ├── de.json
 │   └── en.json
-└── logs/
+├── logs/
 │   ├── dyndns.json         # Ereignis-Log (JSON Lines)
+│   ├── dyndns.json.1 … .n  # Archive des Ereignis-Logs
+│   ├── audit.json          # Audit-Log (JSON Lines)
+│   ├── audit.json.1 … .n   # Archive des Audit-Logs
 │   ├── update.json         # IP-Historie pro Domain
 │   ├── metrics.json        # Persistierte Metriken
 │   ├── ionos_cache.json    # Zonen-/Record-Cache IONOS
