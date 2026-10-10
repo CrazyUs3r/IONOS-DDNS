@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release-Version (z.B. 2.5.7)"
+        description: "Release-Version (z.B. 2.5.12)"
         required: true
-        default: "2.5.7"
+        default: "2.5.12"
 
       prerelease:
         description: "Als Prerelease veröffentlichen?"
@@ -48,7 +48,7 @@ jobs:
           VERSION="${{ inputs.version }}"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "TAG_NAME=v$VERSION" >> "$GITHUB_ENV"
-          echo "BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
+          echo "BUILD_DATE=$(date -u +'\%Y-\%m-\%dT\%H:\%M:\%SZ')" >> "$GITHUB_ENV"
           echo "VCS_REF=${{ github.sha }}" >> "$GITHUB_ENV"
           echo "✅ Version gesetzt auf $VERSION"
 
@@ -78,7 +78,7 @@ jobs:
             HASH=$(echo "$line" | cut -d'|' -f2)
             AUTHOR=$(echo "$line" | cut -d'|' -f3)
 
-            ENTRY="- ${MSG} ([${HASH}](${REPO_URL}/commit/${HASH})) - ${AUTHOR}"
+            ENTRY="- ${MSG} ([${HASH}](${REPO_URL}/commit/${HASH})) -${AUTHOR}"
 
             case "$MSG" in
               feat*|feature*|add*|Add*|Feat*)
@@ -166,16 +166,26 @@ jobs:
             fi
           }
 
+          # Linux
           build linux amd64 "" "linux-amd64"
           build linux arm64 "" "linux-arm64"
           build linux arm 7 "linux-armv7"
           build linux arm 6 "linux-armv6"
+          build linux 386 "" "linux-386"
+          build linux riscv64 "" "linux-riscv64"
 
+          # Windows
           build windows amd64 "" "windows-amd64"
           build windows arm64 "" "windows-arm64"
+          build windows 386 "" "windows-386"
 
+          # macOS (Darwin)
           build darwin amd64 "" "darwin-amd64"
           build darwin arm64 "" "darwin-arm64"
+
+          # FreeBSD
+          build freebsd amd64 "" "freebsd-amd64"
+          build freebsd arm64 "" "freebsd-arm64"
 
       - name: Generate checksums
         run: |
@@ -217,6 +227,8 @@ jobs:
             | `linux/arm64` | ARM64 / Raspberry Pi 4/5 64-bit |
             | `linux/arm/v7` | ARMv7 / Raspberry Pi 2/3 32-bit |
             | `linux/arm/v6` | ARMv6 / Raspberry Pi Zero / ältere Pi-Modelle |
+            | `linux/386` | Linux 32-bit (x86) |
+            | `linux/riscv64` | Linux RISC-V 64-bit |
 
             ---
 
@@ -228,10 +240,15 @@ jobs:
             | `ionos-ddns-linux-arm64` | Linux ARM64 |
             | `ionos-ddns-linux-armv7` | Linux ARMv7 32-bit |
             | `ionos-ddns-linux-armv6` | Linux ARMv6 32-bit |
+            | `ionos-ddns-linux-386` | Linux 32-bit (x86) |
+            | `ionos-ddns-linux-riscv64` | Linux RISC-V 64-bit |
             | `ionos-ddns-windows-amd64.exe` | Windows x86_64 |
             | `ionos-ddns-windows-arm64.exe` | Windows ARM64 |
+            | `ionos-ddns-windows-386.exe` | Windows 32-bit (x86) |
             | `ionos-ddns-darwin-arm64` | macOS Apple Silicon |
             | `ionos-ddns-darwin-amd64` | macOS Intel |
+            | `ionos-ddns-freebsd-amd64` | FreeBSD x86_64 |
+            | `ionos-ddns-freebsd-arm64` | FreeBSD ARM64 |
             
             > SHA256-Checksums in `checksums.txt`
           files: |
@@ -262,9 +279,10 @@ jobs:
             linux/arm64
             linux/arm/v7
             linux/arm/v6
+            linux/386
+            linux/riscv64
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/ionos-ddns:${{ env.VERSION }}
-            ${{ inputs.docker_latest == 'true' && format('{0}/ionos-ddns:latest', secrets.DOCKERHUB_USERNAME) || '' }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/ionos-ddns:${{ env.VERSION }}${{ inputs.docker_latest == 'true' && format('{0}/ionos-ddns:latest', secrets.DOCKERHUB_USERNAME) || '' }}
           build-args: |
             VERSION=${{ env.VERSION }}
             BUILD_DATE=${{ env.BUILD_DATE }}
