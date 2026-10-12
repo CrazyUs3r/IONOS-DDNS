@@ -606,6 +606,8 @@
   "ipv64_provider_domain_deleted": "IPv64: %s borttagen hos leverantör",
   "ipv64_rate_limit_backoff": "⌛ Begäransgräns: väntar %s (exponential backoff)",
   "ipv64_rate_limit_header": "⌛ Begäransgräns: väntar %ds (via Retry-After rubrik)",
+  "ipv64_record_needs_domain_js": "För ett postprefix måste även domännamnet anges",
+  "ipv64_record_prefix_placeholder": "Postprefix (valfritt, t.ex. test)",
   "ipv64_record_updated": "🔄 A: %s → %s",
   "ipv64_record_updated_v6": "🔄 AAAA: %s → %s",
   "ipv64_requires_token": "IPv64 kräver IPV64_TOKEN",

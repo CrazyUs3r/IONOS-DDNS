@@ -606,6 +606,8 @@
   "ipv64_provider_domain_deleted": "IPv64: %s eliminato presso il provider",
   "ipv64_rate_limit_backoff": "⌛ Limite velocità: attesa %s (backoff esponenziale)",
   "ipv64_rate_limit_header": "⌛ Limite velocità: attesa %ds (via header Retry-After)",
+  "ipv64_record_needs_domain_js": "Per il prefisso del record è necessario specificare anche il nome di dominio",
+  "ipv64_record_prefix_placeholder": "Prefisso record (opzionale, es. test)",
   "ipv64_record_updated": "🔄 A: %s → %s",
   "ipv64_record_updated_v6": "🔄 AAAA: %s → %s",
   "ipv64_requires_token": "IPv64 richiede IPV64_TOKEN",

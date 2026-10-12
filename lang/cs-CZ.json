@@ -606,6 +606,8 @@
   "ipv64_provider_domain_deleted": "IPv64: %s smazáno u poskytovatele",
   "ipv64_rate_limit_backoff": "⌛ Rate Limit: Čekám %s (exponentiální omezení)",
   "ipv64_rate_limit_header": "⌛ Rate Limit: Čekám %ds (podle hlavičky Retry-After)",
+  "ipv64_record_needs_domain_js": "Pro předponu záznamu musí být zapsán i název domény",
+  "ipv64_record_prefix_placeholder": "Předpona záznamu (volitelně, např. test)",
   "ipv64_record_updated": "🔄 A: %s → %s",
   "ipv64_record_updated_v6": "🔄 AAAA: %s → %s",
   "ipv64_requires_token": "IPv64 vyžaduje IPV64_TOKEN",

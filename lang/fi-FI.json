@@ -606,6 +606,8 @@
   "ipv64_provider_domain_deleted": "IPv64: %s poistettu palveluntarjoajalta",
   "ipv64_rate_limit_backoff": "⌛ Nopeusrajoitus: Odotetaan %s (Exponential Backoff)",
   "ipv64_rate_limit_header": "⌛ Nopeusrajoitus: Odotetaan %ds (Retry-After-otsikon mukaan)",
+  "ipv64_record_needs_domain_js": "Tietueen etuliitettä varten on määritettävä myös verkkotunnus",
+  "ipv64_record_prefix_placeholder": "Tietueen etuliite (valinnainen, esim. test)",
   "ipv64_record_updated": "🔄 A: %s → %s",
   "ipv64_record_updated_v6": "🔄 AAAA: %s → %s",
   "ipv64_requires_token": "IPv64 vaatii IPV64_TOKEN",

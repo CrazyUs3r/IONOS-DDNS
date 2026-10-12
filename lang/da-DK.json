@@ -606,6 +606,8 @@
   "ipv64_provider_domain_deleted": "IPv64: %s slettet hos udbyder",
   "ipv64_rate_limit_backoff": "⌛ Rate Limit: Venter %s (eksponentiel ventetid)",
   "ipv64_rate_limit_header": "⌛ Rate Limit: Venter %ds (ifølge Retry-After header)",
+  "ipv64_record_needs_domain_js": "For et postpræfiks skal domænenavnet også angives",
+  "ipv64_record_prefix_placeholder": "Postpræfiks (valgfrit, f.eks. test)",
   "ipv64_record_updated": "🔄 A: %s → %s",
   "ipv64_record_updated_v6": "🔄 AAAA: %s → %s",
   "ipv64_requires_token": "IPv64 kræver IPV64_TOKEN",

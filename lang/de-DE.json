@@ -606,6 +606,8 @@
   "ipv64_provider_domain_deleted": "IPv64: %s beim Provider gelöscht",
   "ipv64_rate_limit_backoff": "⌛ Rate-Limit: Warte %s (Exponential Backoff)",
   "ipv64_rate_limit_header": "⌛ Rate-Limit: Warte %ds (laut Retry-After Header)",
+  "ipv64_record_needs_domain_js": "Für einen Record-Präfix muss auch der Domain-Name angegeben werden",
+  "ipv64_record_prefix_placeholder": "Record-Präfix (optional, z. B. test)",
   "ipv64_record_updated": "🔄 A: %s → %s",
   "ipv64_record_updated_v6": "🔄 AAAA: %s → %s",
   "ipv64_requires_token": "IPv64 benötigt IPV64_TOKEN",

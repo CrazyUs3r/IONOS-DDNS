@@ -606,6 +606,8 @@
   "ipv64_provider_domain_deleted": "IPv64: %s usunięto u dostawcy",
   "ipv64_rate_limit_backoff": "⌛ Limit zapytań: oczekiwanie %s (exponential backoff)",
   "ipv64_rate_limit_header": "⌛ Limit zapytań: oczekiwanie %ds (przez nagłówek Retry-After)",
+  "ipv64_record_needs_domain_js": "W przypadku prefiksu rekordu należy również podać nazwę domeny",
+  "ipv64_record_prefix_placeholder": "Prefiks rekordu (opcjonalnie, np. test)",
   "ipv64_record_updated": "🔄 A: %s → %s",
   "ipv64_record_updated_v6": "🔄 AAAA: %s → %s",
   "ipv64_requires_token": "IPv64 wymaga IPV64_TOKEN",

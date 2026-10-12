@@ -606,6 +606,8 @@
   "ipv64_provider_domain_deleted": "IPv64: %s verwijderd bij provider",
   "ipv64_rate_limit_backoff": "⌛ Rate-limit: %s wachten (exponential backoff)",
   "ipv64_rate_limit_header": "⌛ Rate-limit: %ds wachten (via Retry-After header)",
+  "ipv64_record_needs_domain_js": "Voor een recordvoorvoegsel moet ook de domeinnaam worden opgegeven",
+  "ipv64_record_prefix_placeholder": "Recordvoorvoegsel (optioneel, bijv. test)",
   "ipv64_record_updated": "🔄 A: %s → %s",
   "ipv64_record_updated_v6": "🔄 AAAA: %s → %s",
   "ipv64_requires_token": "IPv64 vereist IPV64_TOKEN",
