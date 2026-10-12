@@ -813,14 +813,46 @@ func updateIPv64DNS(ctx context.Context, dc *DomainConfig, fqdn, ipv4, ipv6 stri
 		return true, nil
 	}
 
-	if err := performIPv64NICUpdate(ctx, fqdn, domain.DomainUpdateHash, ipv4, ipv6, needV4, needV6); err != nil {
-		return false, err
+	createV4 := needV4 && ipv64PrefixRecordMissing(domain, praefix, RecordTypeA)
+	createV6 := needV6 && ipv64PrefixRecordMissing(domain, praefix, RecordTypeAAAA)
+
+	if createV4 || createV6 {
+		if err := loadAllIPv64Domains(ctx, dc); err == nil {
+			if fresh, getErr := getIPv64DomainFromCache(baseDomain); getErr == nil {
+				createV4 = needV4 && ipv64PrefixRecordMissing(fresh, praefix, RecordTypeA)
+				createV6 = needV6 && ipv64PrefixRecordMissing(fresh, praefix, RecordTypeAAAA)
+			}
+		}
 	}
 
-	if updateIPv64Cache(baseDomain, praefix, ipv4, ipv6, needV4, needV6) {
+	if createV4 {
+		if err := addIPv64Record(ctx, dc, baseDomain, praefix, RecordTypeA, ipv4); err != nil {
+			return false, err
+		}
+	}
+	if createV6 {
+		if err := addIPv64Record(ctx, dc, baseDomain, praefix, RecordTypeAAAA, ipv6); err != nil {
+			return false, err
+		}
+	}
+
+	nicV4, nicV6 := needV4 && !createV4, needV6 && !createV6
+	if nicV4 || nicV6 {
+		if err := performIPv64NICUpdate(ctx, fqdn, domain.DomainUpdateHash, ipv4, ipv6, nicV4, nicV6); err != nil {
+			return false, err
+		}
+	}
+
+	if createV4 || createV6 {
+		lastIPv64DomainsLoadNano.Store(0)
+	}
+
+	if updateIPv64Cache(baseDomain, praefix, ipv4, ipv6, nicV4, nicV6) {
 		if err := saveIPv64Cache(); err != nil {
 			debugLog("CACHE", "", fmt.Sprintf(phrases().IPv64CacheSaveError, err))
 		}
+	} else {
+		lastIPv64DomainsLoadNano.Store(0)
 	}
 	logIPv64UpdateResults(fqdn, ipv4, ipv6, needV4, needV6)
 
@@ -1321,8 +1353,9 @@ func addIPv64Domain(ctx context.Context, dc *DomainConfig, fqdn string) error {
 		return err
 	}
 
+	baseDomain, _ := splitIPv64FQDN(fqdn)
 	params := map[string]string{
-		"add_domain": fqdn,
+		"add_domain": baseDomain,
 	}
 
 	data, err := ipv64API(ctx, dc, params)
@@ -1351,6 +1384,10 @@ func deleteIPv64Domain(ctx context.Context, dc *DomainConfig, fqdn string) error
 	fqdn = normalizeProviderFQDN(fqdn)
 	if err := validateIPv64FQDN(fqdn); err != nil {
 		return err
+	}
+
+	if _, praefix := splitIPv64FQDN(fqdn); praefix != "" {
+		return fmt.Errorf("del_domain %s: not a base domain", fqdn)
 	}
 
 	params := map[string]string{
@@ -1627,6 +1664,8 @@ func ipv64TokenOwnsDomain(ctx context.Context, dc *DomainConfig, fqdn string) (b
 func syncIPv64ProviderDomains(ctx context.Context, oldConfigs, newConfigs []DomainConfig) {
 	oldIPv64 := indexIPv64DomainConfigs(oldConfigs)
 	newIPv64 := indexIPv64DomainConfigs(newConfigs)
+	handledBases := make(map[string]struct{})
+	needUpdate := false
 
 	for fqdn, dc := range newIPv64 {
 		if _, existed := oldIPv64[fqdn]; existed {
@@ -1637,9 +1676,19 @@ func syncIPv64ProviderDomains(ctx context.Context, oldConfigs, newConfigs []Doma
 			continue
 		}
 
+		if _, praefix := splitIPv64FQDN(fqdn); praefix != "" {
+			needUpdate = true // Prefix-Record entsteht erst im Update-Lauf
+		}
+
 		dcCopy := dc
 
-		exists, checkErr := ipv64TokenOwnsDomain(ctx, &dcCopy, fqdn)
+		baseDomain, _ := splitIPv64FQDN(fqdn)
+		if _, done := handledBases[baseDomain]; done {
+			continue
+		}
+		handledBases[baseDomain] = struct{}{}
+
+		exists, checkErr := ipv64TokenOwnsDomain(ctx, &dcCopy, baseDomain)
 		if checkErr != nil {
 			debugLog(string(ProviderIPv64), fqdn, tf(phrases().IPv64ExistenceCheckFailed, "existence check failed, trying create anyway: %v", checkErr))
 		}
@@ -1648,7 +1697,7 @@ func syncIPv64ProviderDomains(ctx context.Context, oldConfigs, newConfigs []Doma
 			continue
 		}
 
-		if err := addIPv64Domain(ctx, &dcCopy, fqdn); err != nil {
+		if err := addIPv64Domain(ctx, &dcCopy, baseDomain); err != nil {
 			debugLog(string(ProviderIPv64), fqdn, tf(phrases().IPv64AutoCreateFailed, "auto-create at provider failed: %v", err))
 			broadcastNotification(tf(phrases().IPv64CreateFailedNotify, "IPv64: %s konnte beim Provider nicht angelegt werden: %v", fqdn, err), "error")
 
@@ -1667,7 +1716,7 @@ func syncIPv64ProviderDomains(ctx context.Context, oldConfigs, newConfigs []Doma
 		}
 
 		dcCopy := dc
-		if err := deleteIPv64Domain(ctx, &dcCopy, fqdn); err != nil {
+		if err := removeIPv64ConfigAtProvider(ctx, &dcCopy, fqdn, newIPv64); err != nil {
 			debugLog(string(ProviderIPv64), fqdn, tf(phrases().IPv64AutoDeleteFailed, "auto-delete at provider failed: %v", err))
 			broadcastNotification(tf(phrases().IPv64DeleteFailedNotify, "IPv64: %s konnte beim Provider nicht gelöscht werden: %v", fqdn, err), "error")
 
@@ -1675,6 +1724,90 @@ func syncIPv64ProviderDomains(ctx context.Context, oldConfigs, newConfigs []Doma
 		}
 		broadcastNotification(tf(phrases().IPv64ProviderDomainDeleted, "IPv64: %s beim Provider gelöscht", fqdn), "info")
 	}
+
+	if needUpdate {
+		lastIPv64DomainsLoadNano.Store(0) // frisch angelegte Basisdomain sicher im Cache
+		forceNextUpdate.Store(true)       // Flag kann vom Scheduler schon verbraucht sein
+		runUpdate(false)
+	}
+}
+
+func removeIPv64ConfigAtProvider(ctx context.Context, dc *DomainConfig, fqdn string, remaining map[string]DomainConfig) error {
+	baseDomain, praefix := splitIPv64FQDN(fqdn)
+
+	if praefix == "" && !ipv64BaseDomainInUse(remaining, baseDomain) {
+		return deleteIPv64Domain(ctx, dc, baseDomain)
+	}
+
+	return deleteIPv64PrefixRecords(ctx, dc, baseDomain, praefix)
+}
+
+func ipv64BaseDomainInUse(configs map[string]DomainConfig, baseDomain string) bool {
+	for fqdn := range configs {
+		if b, _ := splitIPv64FQDN(fqdn); b == baseDomain {
+			return true
+		}
+	}
+
+	return false
+}
+
+func deleteIPv64PrefixRecords(ctx context.Context, dc *DomainConfig, baseDomain, praefix string) error {
+	domain, err := getIPv64DomainFromCache(baseDomain)
+	if err != nil {
+		return err
+	}
+
+	for _, rec := range domain.Records {
+		if rec.Praefix != praefix || !isAddressRecord(rec.Type) {
+			continue
+		}
+		if rec.TTL <= 10 || rec.FailoverPolicy != "0" || rec.Deactivated != 0 {
+			continue
+		}
+		if err := deleteIPv64Record(ctx, dc, baseDomain, rec); err != nil {
+			return err
+		}
+	}
+
+	if err := markOrphanRecordDeleted(buildIPv64RecordFQDN(baseDomain, praefix)); err != nil {
+		debugLog("MAINTENANCE", baseDomain, fmt.Sprintf("failed to mark orphan-deleted timestamp: %v", err))
+	}
+	lastIPv64DomainsLoadNano.Store(0)
+
+	return nil
+}
+
+func addIPv64Record(ctx context.Context, dc *DomainConfig, baseDomain, praefix, recordType, content string) error {
+	fqdn := buildIPv64RecordFQDN(baseDomain, praefix)
+
+	data, err := ipv64API(ctx, dc, map[string]string{
+		"add_record": baseDomain,
+		"praefix":    praefix,
+		"type":       recordType,
+		"content":    content,
+	})
+	if err != nil {
+		return fmt.Errorf("add_record %s (%s): %w", fqdn, recordType, err)
+	}
+
+	debugLog(string(ProviderIPv64), fqdn, fmt.Sprintf("add_record %s response: %s", recordType, string(data)))
+
+	return nil
+}
+
+func ipv64PrefixRecordMissing(domain IPv64Domain, praefix, recordType string) bool {
+	if praefix == "" {
+		return false
+	}
+
+	for _, rec := range domain.Records {
+		if rec.Praefix == praefix && rec.Type == recordType {
+			return false
+		}
+	}
+
+	return true
 }
 
 func indexIPv64DomainConfigs(configs []DomainConfig) map[string]DomainConfig {

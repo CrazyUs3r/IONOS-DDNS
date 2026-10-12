@@ -407,6 +407,7 @@ type Phrases struct {
 	IPv64CreateFailedNotify, IPv64AutoCreateFailed, IPv64AlreadyPresentSkip       string
 	IPv64ExistenceCheckFailed, IPv64SkipCreateNoToken, IPv64ProviderDomainDeleted string
 	IPv64DeleteAlreadyGone, IPv64ProviderDomainCreated                            string
+	IPv64RecordPrefixPlaceholder, IPv64RecordNeedsDomainJS                        string
 
 	// HETZNER
 	HetznerAPIFailed, HetznerTokenMissing string

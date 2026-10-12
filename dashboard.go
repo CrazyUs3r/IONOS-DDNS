@@ -618,7 +618,10 @@ func buildSettingsDomainsSection() string {
 
 	fqdnField := `<div id="fqdn-plain"><input type="text" id="new-domain-fqdn" class="s-input mb-8" placeholder="` +
 		esc(p.SettingsDomainPlaceholder) + `"></div>` +
-		`<div id="fqdn-ipv64" class="is-hidden"><div class="ipv64-mgmt-domain-group mb-8">` +
+		`<div id="fqdn-ipv64" class="is-hidden">` +
+		`<input type="text" id="new-domain-fqdn-record" class="s-input mb-8" autocomplete="off" placeholder="` +
+		esc(p.IPv64RecordPrefixPlaceholder) + `">` +
+		`<div class="ipv64-mgmt-domain-group mb-8">` +
 		`<input type="text" id="new-domain-fqdn-prefix" class="s-input ipv64-mgmt-domain-prefix" autocomplete="off" placeholder="` +
 		esc(p.IPv64DomainPlaceholder) + `">` +
 		`<select id="new-domain-fqdn-suffix" class="s-input ipv64-mgmt-select">` +
@@ -3085,7 +3088,7 @@ func handleAPILogs(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-var logExportSem = make(chan struct{}, 1) // max. ein Voll-Export gleichzeitig
+var logExportSem = make(chan struct{}, 1)
 
 type logExportEntry struct {
 	Time    string `json:"time"`

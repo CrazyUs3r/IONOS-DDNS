@@ -243,8 +243,6 @@ func logMissingProviderZones(zonesByProvider map[string][]Zone, domainConfigs []
 
 	for _, provider := range providers {
 		if providerZoneFailureActive(ProviderType(provider)) {
-			// The provider-level outage tracker already owns persistent logging
-			// for this condition. Avoid a duplicate warning every scheduler run.
 			continue
 		}
 
@@ -605,9 +603,6 @@ func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zo
 	if len(snapshot.Failures) > 0 {
 		zonesByProvider = mergeFailedProviderZoneFallbacks(zonesByProvider, cached, snapshot.Failures)
 
-		// Partial provider failures are intentionally kept stale. This makes the
-		// next normal scheduler run retry provider APIs instead of waiting for the
-		// healthy 60-minute ZoneCacheTTL.
 		setCachedZonesAt(zonesByProvider, time.Time{})
 
 		debugLog(
@@ -633,11 +628,6 @@ func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zo
 func loadRecordsWithCache(ctx context.Context, zonesByProvider map[string][]Zone, forceRefresh bool) (*ZoneRecordCache, error) {
 	cached, cacheAge, hasCachedRecords := getCachedRecordsState()
 
-	// When at least one provider's zone API is degraded, keep the last known
-	// record cache instead of repeatedly refreshing healthy providers every
-	// scheduler interval. As soon as a provider recovers, noteProviderZoneSuccess
-	// marks lastRecordLoad stale so this function performs an immediate full
-	// refresh in that same run.
 	if hasActiveProviderZoneFailures() {
 		if hasCachedRecords {
 			debugLog("CACHE", "", "Provider zone API degraded; retaining last known record cache")

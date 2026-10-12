@@ -5,7 +5,7 @@ FROM --platform=${BUILDPLATFORM} golang:1.27.2-alpine AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
-ARG VERSION=2.5.13
+ARG VERSION=2.5.14rc1
 ARG BUILD_DATE
 ARG VCS_REF
 
@@ -16,7 +16,8 @@ RUN apk add --no-cache git ca-certificates
 COPY go.mod go.sum ./
 
 RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
-    go mod download
+    go mod download && \
+    go mod verify
 
 COPY *.go ./
 COPY templates/ ./templates/
@@ -24,19 +25,18 @@ COPY lang/*.json ./lang/
 
 RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
-    mkdir -p /out && \
+    mkdir -p /out; \
     CGO_ENABLED=0 \
-    GOOS=${TARGETOS} \
-    GOARCH=${TARGETARCH} \
+    GOOS="${TARGETOS}" \
+    GOARCH="${TARGETARCH}" \
     go build \
-    -tags timetzdata \
+    -tags=timetzdata \
     -trimpath \
     -ldflags="-s -w \
     -X main.Version=${VERSION} \
     -X main.BuildDate=${BUILD_DATE} \
     -X main.VCSRef=${VCS_REF}" \
     -o /out/dyndns .
-
 
 # =============================================================================
 # Runtime tools for target platform
@@ -63,12 +63,12 @@ RUN apk add --no-cache \
 # =============================================================================
 FROM busybox:stable-musl
 
-ARG VERSION=2.5.13
+ARG VERSION=2.5.14rc1
 ARG BUILD_DATE
 ARG VCS_REF
 
 LABEL org.opencontainers.image.title="Go-DynDNS" \
-    org.opencontainers.image.description="Multi-Provider DynDNS-Client (IONOS, Cloudflare, IPv64)" \
+    org.opencontainers.image.description="Multi-Provider DynDNS-Client" \
     org.opencontainers.image.version="${VERSION}" \
     org.opencontainers.image.source="https://github.com/crazyus3r/ionos-ddns" \
     org.opencontainers.image.revision="${VCS_REF}" \

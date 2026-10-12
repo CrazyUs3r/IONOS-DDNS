@@ -1189,6 +1189,7 @@ func dashboardI18NJSON() string {
 		"ipv64_domain_delete_confirm":           t(phrases().IPv64DomainDeleteConfirmJS, `IPv64 Domain "{fqdn}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`),
 		"ipv64_domain_delete_running":           t(phrases().IPv64DomainDeleteRunningJS, "⏳ IPv64 Domain wird gelöscht..."),
 		"ipv64_domain_delete_success":           t(phrases().IPv64DomainDeleteSuccessJS, "🗑️ IPv64 Domain gelöscht: {fqdn}"),
+		"ipv64_record_needs_domain":             t(phrases().IPv64RecordNeedsDomainJS, "Für einen Record-Präfix muss auch der Domain-Name angegeben werden"),
 		"keyboard_shortcuts_help":               t(phrases().KeyboardShortcutsHelpJS, "⌨️ R=Update  S=Settings  D=Dashboard  M=Metrics  L=Logs  I=Diagnose"),
 		"loading_saving":                        t(phrases().LoadingSavingJS, "⏳ Saving configuration..."),
 		"loading_slow":                          t(phrases().LoadingSlowJS, "⚠️ Taking longer than expected..."),
@@ -1756,8 +1757,6 @@ func noteProviderZoneSuccess(provider string) {
 		return
 	}
 
-	// A recovered provider should refresh its record cache immediately in the
-	// same scheduler run instead of waiting for RecordCacheTTL.
 	zoneCacheMutex.Lock()
 	lastRecordLoad = time.Time{}
 	zoneCacheMutex.Unlock()

@@ -850,7 +850,6 @@ func startMetricsAutosave(interval time.Duration) {
 				saveMetricsIfDirty()
 
 			case <-shutdownCtx.Done():
-				// Beim Shutdown die letzte Änderung sichern.
 				saveMetricsIfDirty()
 
 				return
