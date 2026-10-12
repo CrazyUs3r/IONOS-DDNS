@@ -2363,24 +2363,34 @@ function _splitIPv64FQDN(fqdn) {
 	const lower = String(fqdn || '').trim().toLowerCase();
 	const suffixes = _ipv64SuffixOptions().sort((a, b) => b.length - a.length);
 	for (const s of suffixes) {
-		if (lower === s) return { prefix: '', suffix: s };
-		if (lower.endsWith('.' + s)) return { prefix: lower.slice(0, -(s.length + 1)), suffix: s };
+		if (lower === s) return { record: '', prefix: '', suffix: s };
+		if (lower.endsWith('.' + s)) {
+			const labels = lower.slice(0, -(s.length + 1)).split('.');
+			return {
+				record: labels.slice(0, -1).join('.'),
+				prefix: labels[labels.length - 1],
+				suffix: s,
+			};
+		}
 	}
-	return { prefix: lower, suffix: '' };
+	return { record: '', prefix: lower, suffix: '' };
 }
 
 function _readNewDomainFQDN(provider) {
 	if (provider !== 'IPv64') return _getVal('new-domain-fqdn').trim().toLowerCase();
 
-	const prefix = _getVal('new-domain-fqdn-prefix').trim().toLowerCase().replace(/^\.+|\.+$/g, '');
+	const clean = id => _getVal(id).trim().toLowerCase().replace(/^\.+|\.+$/g, '');
+	const record = clean('new-domain-fqdn-record');
+	const prefix = clean('new-domain-fqdn-prefix');
 	const suffix = _getVal('new-domain-fqdn-suffix').trim().toLowerCase();
 	if (!suffix) return '';
 
-	return prefix ? prefix + '.' + suffix : suffix;
+	return [record, prefix, suffix].filter(Boolean).join('.');
 }
 
 function resetDomainForm() {
 	_setVal('new-domain-fqdn', '');
+	_setVal('new-domain-fqdn-record', '');
 	_setVal('new-domain-fqdn-prefix', '');
 	const suffixSel = document.getElementById('new-domain-fqdn-suffix');
 	if (suffixSel && suffixSel.options.length > 0) suffixSel.selectedIndex = 0;
@@ -2419,6 +2429,7 @@ function editDomain(index) {
 
 	if (d.provider === 'IPv64') {
 		const parts = _splitIPv64FQDN(d.fqdn || '');
+		_setVal('new-domain-fqdn-record', parts.record);
 		_setVal('new-domain-fqdn-prefix', parts.prefix);
 		if (parts.suffix) _setVal('new-domain-fqdn-suffix', parts.suffix);
 	} else {
@@ -2509,8 +2520,13 @@ function addDomainToList() {
 
 	const provider = providerSelect.value;
 	const fqdn = _readNewDomainFQDN(provider);
+	if (provider === 'IPv64'
+		&& _getVal('new-domain-fqdn-record').trim()
+		&& !_getVal('new-domain-fqdn-prefix').trim()) {
+		return showToast(tr('ipv64_record_needs_domain', 'Für einen Record-Präfix muss auch der Domain-Name angegeben werden'), 'error');
+	}
 	const supportedProviders = (window.PROVIDERS || []).map(p => p.id);
-	if (!supportedProviders.has(provider)) {
+	if (!supportedProviders.includes(provider)) {
 		return showToast(tr('provider_invalid', 'Ungültiger Provider'), 'error');
 	}
 	const ttlRaw = _getVal('new-domain-ttl').trim();
