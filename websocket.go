@@ -26,7 +26,7 @@ func (h *WSHub) run() {
 			go c.writePump()
 			go c.readPump(h)
 
-			debugLog("WS", "", fmt.Sprintf("Client connected (total: %d)", n))
+			debugLog(logCategoryWebsocket, "", fmt.Sprintf("Client connected (total: %d)", n))
 
 		case c := <-h.unregister:
 			removed := false
@@ -42,7 +42,7 @@ func (h *WSHub) run() {
 
 			if removed {
 				c.closeSend()
-				debugLog("WS", "", fmt.Sprintf(
+				debugLog(logCategoryWebsocket, "", fmt.Sprintf(
 					"Client disconnected (total: %d)",
 					n,
 				))
@@ -74,7 +74,7 @@ func (h *WSHub) broadcastToClients(clients []*WSClient, msg WSMessage) {
 			continue
 		}
 
-		debugLog("WS", "", "client send queue full or closed - disconnecting")
+		debugLog(logCategoryWebsocket, "", "client send queue full or closed - disconnecting")
 		select {
 		case h.unregister <- client:
 		default:
@@ -165,7 +165,7 @@ func broadcastUpdate(updateType string, data any) {
 	select {
 	case wsHub.broadcast <- msg:
 	default:
-		debugLog("WS", "", "broadcast queue full - dropping message")
+		debugLog(logCategoryWebsocket, "", "broadcast queue full - dropping message")
 	}
 }
 

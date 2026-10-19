@@ -126,7 +126,7 @@ func newMQTTNotifier(
 
 	if caFile != "" {
 		certPool := x509.NewCertPool()
-		ca, err := os.ReadFile(caFile)
+		ca, err := readFileWithinDir(caFile)
 		switch {
 		case err != nil:
 			log(LogContext{
@@ -250,10 +250,10 @@ func (m *mqttNotifier) afterConnect(client mqtt.Client) {
 		return
 	}
 	if err := m.publishSnapshot(client); err != nil {
-		debugLog("MQTT", "", fmt.Sprintf(phrases().MqttStatePublishFailed, err))
+		debugLog(logCategoryMQTT, "", fmt.Sprintf(phrases().MqttStatePublishFailed, err))
 	}
 	if err := m.publishDomainStates(client); err != nil {
-		debugLog("MQTT", "", fmt.Sprintf(phrases().MqttDomainStatePublishFailed, err))
+		debugLog(logCategoryMQTT, "", fmt.Sprintf(phrases().MqttDomainStatePublishFailed, err))
 	}
 }
 
@@ -348,7 +348,7 @@ func (m *mqttNotifier) publishSnapshot(client mqtt.Client) error {
 
 	serviceStatus := "online"
 	if !schedulerRanOnce.Load() {
-		serviceStatus = starting
+		serviceStatus = "starting"
 	} else if !lastOk.Load() {
 		serviceStatus = "error"
 	}
@@ -376,14 +376,11 @@ func (m *mqttNotifier) publishSnapshot(client mqtt.Client) error {
 }
 
 func (m *mqttNotifier) publishDomainStates(client mqtt.Client) error {
-	statusData := make(map[string]DomainHistory)
-	statusMutex.Lock()
-	if updatePath != "" {
-		if b, err := os.ReadFile(updatePath); err == nil {
-			_ = json.Unmarshal(b, &statusData)
-		}
+	statusData, err := snapshotStatusDomains()
+	if err != nil {
+		debugLog(logCategoryMQTT, "", fmt.Sprintf("Failed to load domain status: %v", err))
+		statusData = make(map[string]DomainHistory)
 	}
-	statusMutex.Unlock()
 
 	cfgMu.RLock()
 	configured := make(map[string]string, len(cfg.DomainConfigs))
@@ -489,10 +486,9 @@ func (m *mqttNotifier) handleCommand(client mqtt.Client, topic string, payload [
 		_ = m.publishSnapshot(client)
 
 		go func() {
-			defer updateInProgress.Store(false)
-			debugLog("NOTIFY", "", phrases().MqttManualUpdateTriggered)
+			debugLog(logCategoryNotify, "", phrases().MqttManualUpdateTriggered)
 			forceNextUpdate.Store(true)
-			runClaimedUpdate(false)
+			runClaimedUpdate(shutdownCtx, false)
 
 			status := "completed"
 			message := phrases().MqttCmdManualUpdateCompleted

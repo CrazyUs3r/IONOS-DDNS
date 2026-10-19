@@ -127,7 +127,7 @@ func printZoneInfrastructure(ctx context.Context, provider ProviderType, z Zone,
 
 	records, err := loadInfrastructureRecords(ctx, provider, z, dc, cache)
 	if err != nil {
-		debugLog("DEBUG", z.Name, err.Error())
+		debugLog(logCategoryDEBUG, z.Name, err.Error())
 		fmt.Printf("   └─ ⚠️ %s\n", err)
 
 		return
@@ -261,20 +261,20 @@ func logHTTPClientStats() {
 	maxconcurrent := cfg.MaxConcurrent
 	cfgMu.RUnlock()
 
-	debugLog("CONFIG", "", "========== "+phrases().ConfigHeading+" ==========")
+	debugLog(logCategoryConfig, "", "========== "+phrases().ConfigHeading+" ==========")
 
-	debugLog("CONFIG", "", fmt.Sprintf(t(phrases().DebugModeActive, "Debug mode active. Interval: %ds, mode: %s"), interval, ipMode))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %ds", phrases().ConfigInterval, interval))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", phrases().ConfigIPMode, ipMode))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", phrases().ConfigInterface, ifaceName))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", phrases().ConfigHTTPPort, httpPort))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %v", phrases().ConfigDryRun, dryRun))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", phrases().ConfigLogDir, logDir))
-	debugLog("CONFIG", "", fmt.Sprintf("%s: %s", phrases().ConfigLanguage, lang))
-	debugLog("CONFIG", "", fmt.Sprintf(t(phrases().LoadedDomains, "Loaded domains: %d"), len(domainConfigs)))
-	debugLog("CONFIG", "", fmt.Sprintf(t(phrases().MaxLogMBInfo, "Max log MB: %d"), maxlogmb))
-	debugLog("CONFIG", "", fmt.Sprintf(t(phrases().MaxAPIRetriesInfo, "Max API retries: %d"), maxapiretries))
-	debugLog("CONFIG", "", fmt.Sprintf(t(phrases().MaxConcurrentInfo, "Max concurrent: %d"), maxconcurrent))
+	debugLog(logCategoryConfig, "", fmt.Sprintf(t(phrases().DebugModeActive, "Debug mode active. Interval: %ds, mode: %s"), interval, ipMode))
+	debugLog(logCategoryConfig, "", fmt.Sprintf("%s: %ds", phrases().ConfigInterval, interval))
+	debugLog(logCategoryConfig, "", fmt.Sprintf("%s: %s", phrases().ConfigIPMode, ipMode))
+	debugLog(logCategoryConfig, "", fmt.Sprintf("%s: %s", phrases().ConfigInterface, ifaceName))
+	debugLog(logCategoryConfig, "", fmt.Sprintf("%s: %s", phrases().ConfigHTTPPort, httpPort))
+	debugLog(logCategoryConfig, "", fmt.Sprintf("%s: %v", phrases().ConfigDryRun, dryRun))
+	debugLog(logCategoryConfig, "", fmt.Sprintf("%s: %s", phrases().ConfigLogDir, logDir))
+	debugLog(logCategoryConfig, "", fmt.Sprintf("%s: %s", phrases().ConfigLanguage, lang))
+	debugLog(logCategoryConfig, "", fmt.Sprintf(t(phrases().LoadedDomains, "Loaded domains: %d"), len(domainConfigs)))
+	debugLog(logCategoryConfig, "", fmt.Sprintf(t(phrases().MaxLogMBInfo, "Max log MB: %d"), maxlogmb))
+	debugLog(logCategoryConfig, "", fmt.Sprintf(t(phrases().MaxAPIRetriesInfo, "Max API retries: %d"), maxapiretries))
+	debugLog(logCategoryConfig, "", fmt.Sprintf(t(phrases().MaxConcurrentInfo, "Max concurrent: %d"), maxconcurrent))
 
 	providerCounts := make(map[ProviderType]int)
 	for _, dc := range domainConfigs {
@@ -283,14 +283,14 @@ func logHTTPClientStats() {
 
 	for provider, count := range providerCounts {
 		domainLabel := localizedCountLabel(count, phrases().DomainSingular, phrases().DomainPlural)
-		debugLog("CONFIG", "", fmt.Sprintf(
+		debugLog(logCategoryConfig, "", fmt.Sprintf(
 			phrases().ConfigProviderCount,
 			phrases().ProviderLabel, provider, count, domainLabel,
 		))
 	}
 
 	for _, dc := range cfg.DomainConfigs {
-		debugLog("CONFIG", "", fmt.Sprintf("  - %s (%s)", dc.FQDN, dc.Provider))
+		debugLog(logCategoryConfig, "", fmt.Sprintf("  - %s (%s)", dc.FQDN, dc.Provider))
 	}
-	debugLog("CONFIG", "", "===================================")
+	debugLog(logCategoryConfig, "", "===================================")
 }

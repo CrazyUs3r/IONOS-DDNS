@@ -26,7 +26,7 @@ func saveDNSProviderCacheToFile(providerName, cachePath string, zones []Zone, re
 		return fmt.Errorf("%s", phrases().ErrRecordCacheNil)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(cachePath), 0o700); err != nil {
 		return fmt.Errorf("%s: %w", phrases().ErrCacheDirCreate, err)
 	}
 
@@ -56,26 +56,26 @@ func saveDNSProviderCacheToFile(providerName, cachePath string, zones []Zone, re
 		return fmt.Errorf("%s: %w", phrases().ErrCacheWrite, err)
 	}
 
-	debugLog("CACHE", "", fmt.Sprintf(phrases().CacheSavedZones, providerName, len(zones), totalRecords))
+	debugLog(logCategoryCache, "", fmt.Sprintf(phrases().CacheSavedZones, providerName, len(zones), totalRecords))
 
 	return nil
 }
 
 func loadDNSProviderCacheFromFile(providerName, cachePath string) ([]Zone, *ZoneRecordCache, error) {
-	data, err := os.ReadFile(cachePath)
+	data, err := readFileWithinDir(cachePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			debugLog("CACHE", "", fmt.Sprintf(phrases().CacheFileNotFound, providerName))
+			debugLog(logCategoryCache, "", fmt.Sprintf(phrases().CacheFileNotFound, providerName))
 
 			return nil, nil, nil
 		}
 
-		return nil, nil, fmt.Errorf("%s: %w", phrases().ErrBodyRead, err)
+		return nil, nil, fmt.Errorf("%s: %w", phrases().ErrCacheRead, err)
 	}
 
 	var cache dnsProviderFileCache
 	if err := json.Unmarshal(data, &cache); err != nil {
-		return nil, nil, fmt.Errorf("%s: %w", phrases().ErrCacheMarshal, err)
+		return nil, nil, fmt.Errorf("%s: %w", phrases().ErrCacheUnmarshal, err)
 	}
 
 	if cache.Version == 0 {
@@ -96,7 +96,7 @@ func loadDNSProviderCacheFromFile(providerName, cachePath string) ([]Zone, *Zone
 	}
 
 	age := time.Since(cache.LastUpdate)
-	debugLog("CACHE", "", fmt.Sprintf(phrases().CacheLoadedZones, providerName, len(cache.Zones), age.Round(time.Second)))
+	debugLog(logCategoryCache, "", fmt.Sprintf(phrases().CacheLoadedZones, providerName, len(cache.Zones), age.Round(time.Second)))
 
 	return cache.Zones, recordCache, nil
 }

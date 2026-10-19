@@ -394,7 +394,7 @@ func buildSettingsIPModeOptions(current string) string {
 	for _, m := range []string{IPModeBoth, IPModeV4, IPModeV6} {
 		sel := ""
 		if m == current {
-			sel = ` selected`
+			sel = HTMLSelected
 		}
 		fmt.Fprintf(&out, `<option value="%s"%s>%s</option>`, m, sel, m)
 	}
@@ -472,7 +472,7 @@ func selected(v bool) string {
 }
 
 func buildSettingsSecuritySection() string {
-	return `<div class="s-row s-row-stack s-gap-8"><span class="s-label">` + esc(phrases().SettingsTriggerToken) + `</span><div class="input-with-action"><input type="password" id="s-token" class="s-input" placeholder="` + esc(phrases().SettingsTokenPlaceholder) + `" autocomplete="off"><button type="button" class="input-action-btn" data-click="togglePassword('s-token', this)">👁️</button></div><button class="s-btn" data-click="saveToken()">` + esc(phrases().SettingsTokenSave) + `</button></div>`
+	return `<div class="s-row s-row-stack s-gap-8"><span class="s-label">` + esc(phrases().SettingsTriggerToken) + `</span><div class="input-with-action"><input type="password" id="s-token" class="s-input" placeholder="` + esc(phrases().SettingsTokenPlaceholder) + `" autocomplete="off">` + passwordToggleButton("s-token") + `</div><button class="s-btn" data-click="saveToken()">` + esc(phrases().SettingsTokenSave) + `</button></div>`
 }
 
 func buildNetworkInterfaceOptions(selectedName string) string {
@@ -635,30 +635,30 @@ func buildSettingsDomainsSection() string {
 
 	providerFields := `<div id="fields-ionos"><input type="text" id="new-ionos-prefix" class="s-input mb-8" placeholder="` +
 		esc(p.SettingsAPIPrefix) + `"><div class="input-with-action mt-8"><input type="password" id="new-ionos-secret" class="s-input" placeholder="` +
-		esc(p.SettingsAPISecret) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-ionos-secret', this)">👁️</button></div></div>` +
+		esc(p.SettingsAPISecret) + `">` + passwordToggleButton("new-ionos-secret") + `</div></div>` +
 
 		`<div id="fields-cloudflare" class="is-hidden"><input type="text" id="new-cf-token" class="s-input mb-8" placeholder="` +
 		esc(p.SettingsCFTokenHint) + `"><div class="center-note">` + esc(p.SettingsCFOr) +
 		`</div><input type="text" id="new-cf-email" class="s-input mb-8" placeholder="` + esc(p.SettingsCFEmail) +
 		`"><div class="input-with-action mt-8"><input type="password" id="new-cf-secret" class="s-input" placeholder="` +
-		esc(p.SettingsCFGlobalKey) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-cf-secret', this)">👁️</button></div>` +
+		esc(p.SettingsCFGlobalKey) + `">` + passwordToggleButton("new-cf-secret") + `</div>` +
 		`<label class="inline-check"><input type="checkbox" id="new-cf-proxied"> ` + esc(p.SettingsCFProxyLabel) + `</label></div>` +
 
 		`<div id="fields-ipv64" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-ipv64-token" class="s-input" placeholder="` +
-		esc(p.SettingsIPv64Token) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-ipv64-token', this)">👁️</button></div></div>` +
+		esc(p.SettingsIPv64Token) + `">` + passwordToggleButton("new-ipv64-token") + `</div></div>` +
 
 		`<div id="fields-hetzner" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-hetzner-token" class="s-input" placeholder="` +
-		esc(p.SettingsHetznerDNSToken) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-hetzner-token', this)">👁️</button></div></div>` +
+		esc(p.SettingsHetznerDNSToken) + `">` + passwordToggleButton("new-hetzner-token") + `</div></div>` +
 
 		`<div id="fields-hetznercloud" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-hcloud-token" class="s-input" placeholder="` +
-		esc(p.SettingsHetznerCloudToken) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-hcloud-token', this)">👁️</button></div></div>` +
+		esc(p.SettingsHetznerCloudToken) + `">` + passwordToggleButton("new-hcloud-token") + `</div></div>` +
 
 		`<div id="fields-febas" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-febas-update-url" class="s-input" placeholder="` +
-		esc(p.SettingsFebasUpdateURL) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-febas-update-url', this)">👁️</button></div>` +
+		esc(p.SettingsFebasUpdateURL) + `">` + passwordToggleButton("new-febas-update-url") + `</div>` +
 		`<small class="s-label-hint-block">` + esc(p.SettingsFebasUpdateURLHint) + `</small></div>` +
 
 		`<div id="fields-dnscale" class="is-hidden"><div class="input-with-action mt-8"><input type="password" id="new-dnscale-api-key" class="s-input" placeholder="` +
-		esc(p.SettingsDNScaleAPIKey) + `"><button type="button" class="input-action-btn" data-click="togglePassword('new-dnscale-api-key', this)">👁️</button></div>` +
+		esc(p.SettingsDNScaleAPIKey) + `">` + passwordToggleButton("new-dnscale-api-key") + `</div>` +
 		`<small class="s-label-hint-block">` + esc(p.SettingsDNScaleAPIKeyHint) + `</small></div>`
 
 	buttons := `<div class="s-btn-row"><button class="s-btn s-btn-success-full" data-click="addDomainToList()">` +
@@ -686,14 +686,14 @@ func buildSettingsNotifySection(c Config) string {
 	telegramSection := `<div class="notify-box notify-telegram">` +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsTGChatID+`<small class="s-label-hint-block">(`+phrases().SettingsDNSHint+`)</small></span><input type="text" id="cfg-tg-chat-id" class="s-input s-input-lg" placeholder="123456789, -100xxxxxxxxx" value="%s"></div>`,
 			esc(c.Notifications.Telegram.ChatID)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsTGToken+`</span><div class="input-with-action"><input type="password" id="cfg-tg-token" class="s-input s-input-lg" placeholder="`+phrases().SettingsTokenUnchanged+`" value="%s"><button type="button" class="input-action-btn" data-click="togglePassword('cfg-tg-token', this)">👁️</button></div></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsTGToken+`</span><div class="input-with-action"><input type="password" id="cfg-tg-token" class="s-input s-input-lg" placeholder="`+phrases().SettingsTokenUnchanged+`" value="%s">`+passwordToggleButton("cfg-tg-token")+`</div></div>`,
 			esc(c.Notifications.Telegram.Token)) +
 		`</div>`
 
 	gotifySection := `<div class="notify-box notify-gotify">` +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsGotifyURL+`</span><input type="text" id="cfg-gotify-url" class="s-input s-input-lg" placeholder="https://gotify.example.com" value="%s"></div>`,
 			esc(c.Notifications.Gotify.URL)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsGotifyToken+`</span><div class="input-with-action"><input type="password" id="cfg-gotify-token" class="s-input s-input-lg" placeholder="`+phrases().SettingsTokenUnchanged+`" value="%s"><button type="button" class="input-action-btn" data-click="togglePassword('cfg-gotify-token', this)">👁️</button></div></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsGotifyToken+`</span><div class="input-with-action"><input type="password" id="cfg-gotify-token" class="s-input s-input-lg" placeholder="`+phrases().SettingsTokenUnchanged+`" value="%s">`+passwordToggleButton("cfg-gotify-token")+`</div></div>`,
 			esc(c.Notifications.Gotify.Token)) +
 		`</div>`
 
@@ -702,14 +702,14 @@ func buildSettingsNotifySection(c Config) string {
 			esc(c.Notifications.Ntfy.URL)) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsNtfyTopic+`</span><input type="text" id="cfg-ntfy-topic" class="s-input s-input-lg" placeholder="ddns" value="%s"></div>`,
 			esc(c.Notifications.Ntfy.Topic)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsNtfyToken+`</span><div class="input-with-action"><input type="password" id="cfg-ntfy-token" class="s-input s-input-lg" placeholder="`+phrases().SettingsTokenUnchanged+`" value="%s"><button type="button" class="input-action-btn" data-click="togglePassword('cfg-ntfy-token', this)">👁️</button></div></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsNtfyToken+`</span><div class="input-with-action"><input type="password" id="cfg-ntfy-token" class="s-input s-input-lg" placeholder="`+phrases().SettingsTokenUnchanged+`" value="%s">`+passwordToggleButton("cfg-ntfy-token")+`</div></div>`,
 			esc(c.Notifications.Ntfy.Token)) +
 		`</div>`
 
 	webhookSection := `<div class="notify-box notify-webhook">` +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsWebhookURL+`</span><input type="text" id="cfg-webhook-url" class="s-input s-input-lg" placeholder="https://your-endpoint.com/api" value="%s"></div>`,
 			esc(c.Notifications.Webhook.URL)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsWebhookSecret+` <small class="s-label-hint-inline">`+phrases().SettingsOptional+`</small></span><div class="input-with-action"><input type="password" id="cfg-webhook-secret" class="s-input s-input-lg" placeholder="`+phrases().SettingsTokenUnchanged+`" value="%s"><button type="button" class="input-action-btn" data-click="togglePassword('cfg-webhook-secret', this)">👁️</button></div></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsWebhookSecret+` <small class="s-label-hint-inline">`+phrases().SettingsOptional+`</small></span><div class="input-with-action"><input type="password" id="cfg-webhook-secret" class="s-input s-input-lg" placeholder="`+phrases().SettingsTokenUnchanged+`" value="%s">`+passwordToggleButton("cfg-webhook-secret")+`</div></div>`,
 			esc(c.Notifications.Webhook.Secret)) +
 		`</div>`
 
@@ -720,7 +720,7 @@ func buildSettingsNotifySection(c Config) string {
 			esc(c.Notifications.MQTTConfig.ClientID)) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMQTTUsername+`</span><input type="text" id="cfg-mqtt-username" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" placeholder="`+phrases().SettingsOptionalPlaceholder+`" value="%s"></div>`,
 			esc(c.Notifications.MQTTConfig.Username)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMQTTSecret+` <small class="s-label-hint-inline">`+phrases().SettingsMQTTPassword+`</small></span><div class="input-with-action"><input type="password" id="cfg-mqtt-password" class="s-input s-input-lg" autocomplete="new-password" readonly data-unlock-input="1" placeholder="`+phrases().SettingsTokenUnchanged+`" value="%s"><button type="button" class="input-action-btn" data-click="togglePassword('cfg-mqtt-password', this)">👁️</button></div></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMQTTSecret+` <small class="s-label-hint-inline">`+phrases().SettingsMQTTPassword+`</small></span><div class="input-with-action"><input type="password" id="cfg-mqtt-password" class="s-input s-input-lg" autocomplete="new-password" readonly data-unlock-input="1" placeholder="`+phrases().SettingsTokenUnchanged+`" value="%s">`+passwordToggleButton("cfg-mqtt-password")+`</div></div>`,
 			esc(c.Notifications.MQTTConfig.Password)) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMQTTTopic+`</span><input type="text" id="cfg-mqtt-topic" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" placeholder="dyndns/ip" value="%s"></div>`,
 			esc(c.Notifications.MQTTConfig.Topic)) +
@@ -751,7 +751,7 @@ func buildSettingsNotifySection(c Config) string {
 			c.Notifications.Email.Port) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsEmailUser+`</span><input type="text" id="cfg-email-user" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" value="%s"></div>`,
 			esc(c.Notifications.Email.Username)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsEmailPassword+`</span><div class="input-with-action"><input type="password" id="cfg-email-pass" class="s-input s-input-lg" autocomplete="new-password" readonly data-unlock-input="1" placeholder="***" value="%s"><button type="button" class="input-action-btn" data-click="togglePassword('cfg-email-pass', this)">👁️</button></div></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsEmailPassword+`</span><div class="input-with-action"><input type="password" id="cfg-email-pass" class="s-input s-input-lg" autocomplete="new-password" readonly data-unlock-input="1" placeholder="***" value="%s">`+passwordToggleButton("cfg-email-pass")+`</div></div>`,
 			esc(c.Notifications.Email.Password)) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsEmailSender+`</span><input type="text" id="cfg-email-from" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" value="%s"></div>`,
 			esc(c.Notifications.Email.From)) +
@@ -1293,7 +1293,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		debugLog("WS", "", fmt.Sprintf(phrases().WSUpgradeFailed, err))
+		debugLog(logCategoryWebsocket, "", fmt.Sprintf(phrases().WSUpgradeFailed, err))
 
 		return
 	}
@@ -1614,7 +1614,7 @@ func handleAPISaveSystemSettings(w http.ResponseWriter, r *http.Request) {
 
 	var sys safeSystemConfig
 	if err := decodeJSONBody(w, r, &sys); err != nil {
-		debugLog("API", getClientIP(r), fmt.Sprintf("system settings decode failed: %v", err))
+		debugLog(logCategoryAPI, getClientIP(r), fmt.Sprintf("system settings decode failed: %v", err))
 		http.Error(w, esc(fmt.Sprintf(phrases().JSONParseError, err)), http.StatusBadRequest)
 
 		return
@@ -1661,13 +1661,13 @@ func handleAPISaveSystemSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	setAtomicDebugFlags(newDebugEnabled, newDebugHTTPRaw)
 	setAtomicLogLimits(snapshotConfig().MaxLogMB, snapshotConfig().MaxLogBackups)
-	restartDashboardServersIfPortsChanged(activeDashboardServers, oldCfg.HTTPPort, oldCfg.HTTPSPort, newHTTPPort, newHTTPSPort)
+	restartDashboardServersIfPortsChanged(context.WithoutCancel(r.Context()), activeDashboardServers, oldCfg.HTTPPort, oldCfg.HTTPSPort, newHTTPPort, newHTTPSPort)
 
 	ResetHTTPClient()
 	forceNextUpdate.Store(true)
 
-	debugLog("API", getClientIP(r), esc(phrases().SettingsSystem))
-	writeJSON(w, http.StatusOK, map[string]string{status: "saved"})
+	debugLog(logCategoryAPI, getClientIP(r), esc(phrases().SettingsSystem))
+	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
 }
 
 func handleAPISaveNotifySettings(w http.ResponseWriter, r *http.Request) {
@@ -1684,7 +1684,7 @@ func handleAPISaveNotifySettings(w http.ResponseWriter, r *http.Request) {
 
 	var sys safeSystemConfig
 	if err := decodeJSONBody(w, r, &sys); err != nil {
-		debugLog("API", getClientIP(r), fmt.Sprintf("notify settings decode failed: %v", err))
+		debugLog(logCategoryAPI, getClientIP(r), fmt.Sprintf("notify settings decode failed: %v", err))
 		http.Error(w, esc(fmt.Sprintf(phrases().JSONParseError, err)), http.StatusBadRequest)
 
 		return
@@ -1710,10 +1710,11 @@ func handleAPISaveNotifySettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	invalidateSecretReplacer()
-	go initNotifiers()
 
-	debugLog("API", getClientIP(r), esc(phrases().SettingsNotify))
-	writeJSON(w, http.StatusOK, map[string]string{status: "saved"})
+	go initNotifiers(context.WithoutCancel(r.Context()))
+
+	debugLog(logCategoryAPI, getClientIP(r), esc(phrases().SettingsNotify))
+	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
 }
 
 func handleAPISaveDomainSettings(w http.ResponseWriter, r *http.Request) {
@@ -1732,7 +1733,7 @@ func handleAPISaveDomainSettings(w http.ResponseWriter, r *http.Request) {
 		DomainConfigs []safeDomainConfig `json:"domain_configs"`
 	}
 	if err := decodeJSONBody(w, r, &payload); err != nil {
-		debugLog("API", getClientIP(r), fmt.Sprintf("domain settings decode failed: %v", err))
+		debugLog(logCategoryAPI, getClientIP(r), fmt.Sprintf("domain settings decode failed: %v", err))
 		http.Error(w, esc(fmt.Sprintf(phrases().JSONParseError, err)), http.StatusBadRequest)
 
 		return
@@ -1752,6 +1753,8 @@ func handleAPISaveDomainSettings(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+
+	newConfigs := append([]DomainConfig(nil), cfg.DomainConfigs...)
 	cfgMu.Unlock()
 
 	if err := saveConfigToFile(); err != nil {
@@ -1769,14 +1772,24 @@ func handleAPISaveDomainSettings(w http.ResponseWriter, r *http.Request) {
 	forceNextUpdate.Store(true)
 	lastCleanupNano.Store(0)
 
-	go func(oldConfigs, newConfigs []DomainConfig) {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		defer cancel()
-		syncIPv64ProviderDomains(ctx, oldConfigs, newConfigs)
-	}(oldCfg.DomainConfigs, cfg.DomainConfigs)
+	oldConfigs := append([]DomainConfig(nil), oldCfg.DomainConfigs...)
 
-	debugLog("API", getClientIP(r), esc(phrases().SettingsDomains))
-	writeJSON(w, http.StatusOK, map[string]string{status: "saved"})
+	if !enqueueBackgroundJob(backgroundJob{
+		run: func(parent context.Context) {
+			ctx, cancel := context.WithTimeout(parent, 2*time.Minute)
+			defer cancel()
+
+			syncIPv64ProviderDomains(ctx, oldConfigs, newConfigs)
+		},
+		onDiscard: func() {
+			debugLog(logCategoryAPI, "", "IPv64 sync discarded during shutdown")
+		},
+	}) {
+		debugLog(logCategoryAPI, getClientIP(r), "IPv64 sync could not be queued")
+	}
+
+	debugLog(logCategoryAPI, getClientIP(r), esc(phrases().SettingsDomains))
+	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
 }
 
 func applySystemCoreConfig(sys safeSystemConfig) {
@@ -1960,6 +1973,8 @@ func mergeExistingDomainConfig(found DomainConfig, incoming safeDomainConfig) Do
 	} else {
 		found.CNAMEPending = false
 	}
+
+	normalizeDomainConfig(&found)
 
 	return found
 }
@@ -2166,10 +2181,10 @@ func handleAPISetLanguage(w http.ResponseWriter, r *http.Request) {
 	p = phrases()
 
 	if err := saveConfigToFile(); err != nil {
-		debugLog("API", getClientIP(r), fmt.Sprintf(p.ConfigSaveWarnAfterLanguageChange, err))
+		debugLog(logCategoryAPI, getClientIP(r), fmt.Sprintf(p.ConfigSaveWarnAfterLanguageChange, err))
 	}
 
-	debugLog("API", getClientIP(r), fmt.Sprintf(p.LanguageChangedLog, lang))
+	debugLog(logCategoryAPI, getClientIP(r), fmt.Sprintf(p.LanguageChangedLog, lang))
 
 	broadcastNotification(fmt.Sprintf(p.LanguageChangedNotification, lang), "info")
 
@@ -2180,6 +2195,7 @@ func handleAPISetLanguage(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAPIIPv64Domain(w http.ResponseWriter, r *http.Request) {
+	configWarn := false
 	if r.Method != MethodPOST {
 		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
 
@@ -2217,7 +2233,8 @@ func handleAPIIPv64Domain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := r.Context()
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 60*time.Second)
+	defer cancel()
 
 	dc, statusCode, err := selectIPv64DomainConfigForAction(ctx, req.Action, req.FQDN, req.APIToken)
 	if err != nil {
@@ -2231,20 +2248,22 @@ func handleAPIIPv64Domain(w http.ResponseWriter, r *http.Request) {
 		err = addIPv64Domain(ctx, dc, req.FQDN)
 		if err == nil {
 			if regErr := registerIPv64DomainConfig(dc, req.FQDN); regErr != nil {
-				debugLog("API", getClientIP(r), fmt.Sprintf("IPv64 domain %s added at provider but config save failed: %v", req.FQDN, regErr))
+				configWarn = true
+				debugLog(logCategoryAPI, getClientIP(r), fmt.Sprintf("IPv64 domain %s added at provider but config save failed: %v", req.FQDN, regErr))
 			}
 		}
 	case MethodDELETE:
 		err = deleteIPv64Domain(ctx, dc, req.FQDN)
 		if err == nil {
 			if unregErr := unregisterIPv64DomainConfig(req.FQDN); unregErr != nil {
-				debugLog("API", getClientIP(r), fmt.Sprintf("IPv64 domain %s deleted at provider but config removal failed: %v", req.FQDN, unregErr))
+				configWarn = true
+				debugLog(logCategoryAPI, getClientIP(r), fmt.Sprintf("IPv64 domain %s deleted at provider but config removal failed: %v", req.FQDN, unregErr))
 			}
 		}
 	}
 
 	if err != nil {
-		debugLog("API", getClientIP(r), fmt.Sprintf("IPv64 %s domain %s: %v", req.Action, req.FQDN, err))
+		debugLog(logCategoryAPI, getClientIP(r), fmt.Sprintf("IPv64 %s domain %s: %v", req.Action, req.FQDN, err))
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 
 		return
@@ -2255,11 +2274,12 @@ func handleAPIIPv64Domain(w http.ResponseWriter, r *http.Request) {
 		action = "deleted"
 	}
 
-	debugLog("API", getClientIP(r), fmt.Sprintf("IPv64 domain %s: %s", action, req.FQDN))
-	writeJSON(w, http.StatusOK, map[string]string{
-		"status": action,
-		"fqdn":   req.FQDN,
-	})
+	debugLog(logCategoryAPI, getClientIP(r), fmt.Sprintf("IPv64 domain %s: %s", action, req.FQDN))
+	resp := map[string]string{"status": action, "fqdn": req.FQDN}
+	if configWarn {
+		resp["warning"] = "config_not_saved"
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func handleAPIDomainDelete(w http.ResponseWriter, r *http.Request) {
@@ -2302,7 +2322,7 @@ func handleAPIDomainDelete(w http.ResponseWriter, r *http.Request) {
 			delete(domains, statusKey)
 			if writeErr := writeStatusDomainsLocked(domains); writeErr != nil {
 				statusMutex.Unlock()
-				debugLog("API", getClientIP(r), fmt.Sprintf("Failed to persist update.json after removing %s: %v", statusKey, writeErr))
+				debugLog(logCategoryAPI, getClientIP(r), fmt.Sprintf("Failed to persist update.json after removing %s: %v", statusKey, writeErr))
 				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": esc(phrases().SaveFailed)})
 
 				return
@@ -2318,14 +2338,14 @@ func handleAPIDomainDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := updateDomainsCache(); err != nil {
-		debugLog("CACHE", "", fmt.Sprintf("updateDomainsCache failed after domain delete: %v", err))
+		debugLog(logCategoryCache, "", fmt.Sprintf("updateDomainsCache failed after domain delete: %v", err))
 	}
 
 	forceNextUpdate.Store(true)
 	lastCleanupNano.Store(0)
 
-	debugLog("API", getClientIP(r), fmt.Sprintf("Removed %s from update.json; provider cleanup queued", statusKey))
-	broadcastNotification("Provider cleanup queued for "+statusKey, "info")
+	debugLog(logCategoryAPI, getClientIP(r), fmt.Sprintf("Removed %s from update.json; provider cleanup queued", statusKey))
+	broadcastNotification(tf(phrases().ProviderCleanupQueued, "Provider cleanup queued for %s", statusKey), "info")
 
 	writeJSON(w, http.StatusAccepted, map[string]string{
 		"status": "cleanup_queued",
@@ -2379,7 +2399,7 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
 			"error": esc(phrases().InvalidOrMissingTriggerToken),
 		})
-		debugLog("API", clientIP, esc(phrases().TriggerBlockedInvalidToken))
+		debugLog(logCategoryAPI, clientIP, esc(phrases().TriggerBlockedInvalidToken))
 
 		return
 	}
@@ -2388,7 +2408,7 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, map[string]string{
 			"error": esc(phrases().TriggerNoDomainsError),
 		})
-		debugLog("API", clientIP, esc(phrases().TriggerBlockedNoDomainsLog))
+		debugLog(logCategoryAPI, clientIP, esc(phrases().TriggerBlockedNoDomainsLog))
 
 		return
 	}
@@ -2398,21 +2418,8 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 			"error":  esc(phrases().UpdateAlreadyInProgressAPI),
 			"status": esc(phrases().TriggerStatusBusy),
 		})
-		debugLog("API", clientIP, esc(phrases().TriggerBlockedUpdateRunning))
+		debugLog(logCategoryAPI, clientIP, esc(phrases().TriggerBlockedUpdateRunning))
 		broadcastNotification(phrases().UpdateAlreadyRunningNotification, "info")
-
-		return
-	}
-
-	if !globalTriggerLimiter.Allow() {
-		const retryAfter = 10
-		w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
-		writeJSON(w, http.StatusTooManyRequests, map[string]any{
-			"error":               esc(phrases().GlobalRateLimitExceeded),
-			"retry_after_seconds": retryAfter,
-		})
-		debugLog("API", clientIP, esc(phrases().TriggerBlockedGlobalRateLimit))
-		broadcastNotification(phrases().RateLimitGlobal, "warning")
 
 		return
 	}
@@ -2428,8 +2435,21 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 			"retry_after_seconds": retryAfter,
 			"remaining":           remaining,
 		})
-		debugLog("API", clientIP, esc(phrases().TriggerBlockedIPRateLimit))
+		debugLog(logCategoryAPI, clientIP, esc(phrases().TriggerBlockedIPRateLimit))
 		broadcastNotification(phrases().TooManyUpdateRequestsWait, "warning")
+
+		return
+	}
+
+	if !globalTriggerLimiter.Allow() {
+		const retryAfter = 10
+		w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+		writeJSON(w, http.StatusTooManyRequests, map[string]any{
+			"error":               esc(phrases().GlobalRateLimitExceeded),
+			"retry_after_seconds": retryAfter,
+		})
+		debugLog(logCategoryAPI, clientIP, esc(phrases().TriggerBlockedGlobalRateLimit))
+		broadcastNotification(phrases().RateLimitGlobal, "warning")
 
 		return
 	}
@@ -2439,34 +2459,47 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 			"error":  esc(phrases().UpdateAlreadyInProgressAPI),
 			"status": esc(phrases().TriggerStatusBusy),
 		})
-		debugLog("API", clientIP, esc(phrases().TriggerBlockedUpdateRunning))
+		debugLog(logCategoryAPI, clientIP, esc(phrases().TriggerBlockedUpdateRunning))
 		broadcastNotification(phrases().UpdateAlreadyRunningNotification, "info")
 
 		return
 	}
 
+	if !enqueueBackgroundJob(backgroundJob{
+		run: func(ctx context.Context) {
+			if !hasDomainConfig() {
+				updateInProgress.Store(false)
+				debugLog(logCategoryAPI, clientIP, esc(phrases().UpdateAbortedNoDomainsLog))
+				return
+			}
+
+			debugLog(logCategoryAPI, clientIP, esc(phrases().ManualUpdateTriggeredLog))
+			broadcastNotification(phrases().ManualUpdateStartedNotification, "info")
+
+			forceNextUpdate.Store(true)
+			runClaimedUpdate(ctx, false)
+		},
+		onDiscard: func() {
+			updateInProgress.Store(false)
+			debugLog(logCategoryAPI, clientIP, "Manual update discarded during shutdown")
+		},
+	}) {
+		updateInProgress.Store(false)
+
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "Background job queue is full",
+		})
+		return
+	}
+
 	remaining := ipLimiter.Remaining()
 	w.Header().Set("X-Ratelimit-Remaining", strconv.Itoa(remaining))
+
 	writeJSON(w, http.StatusAccepted, map[string]any{
 		"status":               "triggered",
 		"message":              esc(phrases().UpdateStartedMessage),
 		"rate_limit_remaining": remaining,
 	})
-
-	go func(triggerIP string) {
-		if !hasDomainConfig() {
-			updateInProgress.Store(false)
-			debugLog("API", triggerIP, esc(phrases().UpdateAbortedNoDomainsLog))
-
-			return
-		}
-
-		debugLog("API", triggerIP, esc(phrases().ManualUpdateTriggeredLog))
-		broadcastNotification(phrases().ManualUpdateStartedNotification, "info")
-
-		forceNextUpdate.Store(true)
-		runClaimedUpdate(false)
-	}(clientIP)
 }
 
 func handleAPINotifyTest(w http.ResponseWriter, r *http.Request) {
@@ -2523,7 +2556,7 @@ func handleAPINotifyTest(w http.ResponseWriter, r *http.Request) {
 
 		r := result{Name: n.Name(), OK: err == nil}
 		if err != nil {
-			r.Error = err.Error()
+			r.Error = getSecretReplacer().Replace(err.Error())
 		}
 		results = append(results, r)
 	}
@@ -2595,7 +2628,7 @@ func handleAPIExport(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err := streamDashboardExport(w); err != nil {
-		debugLog("EXPORT", "", fmt.Sprintf("Export failed: %v", err))
+		debugLog(logCategoryExport, "", fmt.Sprintf("Export failed: %v", err))
 	}
 }
 
@@ -2657,7 +2690,7 @@ func streamDomainsJSON(w io.Writer) error {
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			debugLog("DASHBOARD", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
+			debugLog(logCategoryDashboard, "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
 		}
 	}()
 
@@ -2677,7 +2710,7 @@ func streamLogEntriesJSON(w io.Writer) error {
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			debugLog("DASHBOARD", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
+			debugLog(logCategoryDashboard, "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
 		}
 	}()
 
@@ -2746,12 +2779,12 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	stats := apiMetrics.GetStats()
 	total := getTotalRequests(stats)
 
-	status := healthy
+	status := "healthy"
 	reason := ""
 	statusCode := http.StatusOK
 
 	if !hasRun {
-		status = starting
+		status = "starting"
 		reason = esc(phrases().WaitingForFirstSchedulerRun)
 	} else if total > 10 {
 		if successRateStr, ok := stats["success_rate"].(string); ok {
@@ -2760,7 +2793,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 				switch {
 				case rate < 20.0:
 					isHealthy = false
-					status = unhealthy
+					status = "unhealthy"
 					reason = esc(phrases().HealthCriticalSuccessRate)
 					statusCode = http.StatusServiceUnavailable
 				case rate < 50.0:
@@ -2771,8 +2804,8 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if hasRun && !isHealthy && status != unhealthy {
-		status = unhealthy
+	if hasRun && !isHealthy && status != "unhealthy" {
+		status = "unhealthy"
 		statusCode = http.StatusServiceUnavailable
 		if reason == "" {
 			reason = esc(phrases().HealthLastSchedulerFailed)
@@ -2790,7 +2823,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if status == healthy {
+	if status == "healthy" {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("OK"))
 
@@ -2798,7 +2831,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, statusCode, map[string]any{
-		"status": status,
+		status:   status,
 		"reason": reason,
 	})
 }
@@ -3144,7 +3177,7 @@ func handleAPILogExport(w http.ResponseWriter, r *http.Request) {
 
 	bw := bufio.NewWriterSize(w, 64*1024)
 	if err := streamLogExport(bw, files, format == "json", filter, extend); err != nil {
-		debugLog("EXPORT", "", fmt.Sprintf("Log export failed: %v", err))
+		debugLog(logCategoryExport, "", fmt.Sprintf("Log export failed: %v", err))
 	}
 }
 
@@ -3193,9 +3226,10 @@ func streamLogExport(w *bufio.Writer, files []*os.File, asJSON bool, filter stri
 				}
 			} else {
 				parts := make([]string, 0, 4)
+				oneLine := strings.NewReplacer("\r", " ", "\n", " ")
 				for _, p := range []string{ts, action, e.Domain, e.Message} {
 					if p != "" {
-						parts = append(parts, p)
+						parts = append(parts, oneLine.Replace(p))
 					}
 				}
 				if _, err := w.WriteString(strings.Join(parts, " | ") + "\n"); err != nil {
@@ -3241,7 +3275,9 @@ func handleAPILogDelete(w http.ResponseWriter, r *http.Request) {
 
 	gen := body.Gen
 	if gen < 0 || gen > logMaxBackups() {
-		gen = 0
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid generation"})
+
+		return
 	}
 
 	logMutex.Lock()
@@ -3301,9 +3337,9 @@ func parseLogGen(v string) int {
 const logScanChunkSize = 64 * 1024
 
 var logFilterValues = map[string]struct{}{
-	"ERR": {}, "WARN": {}, "LOGIN": {}, "LOGOUT": {}, "LOGINFAILED": {},
+	LogTErr: {}, LogTWarn: {}, "LOGIN": {}, "LOGOUT": {}, "LOGINFAILED": {},
 	"UPDATE": {}, "START": {}, "STOP": {}, "CREATE": {}, "CLEANUP": {},
-	"SKIP": {}, "CONFIG": {}, "INFO": {},
+	"SKIP": {}, ActionConfig: {}, "INFO": {},
 }
 
 func parseLogFilter(v string) string {
@@ -3342,7 +3378,7 @@ func collectLogEntriesNewestFirst(path string, gen, want int, filter string) []L
 	if want <= 0 {
 		return nil
 	}
-	f, err := os.Open(path)
+	f, err := openFileWithinDir(path)
 	if err != nil {
 		return nil
 	}
@@ -3350,7 +3386,7 @@ func collectLogEntriesNewestFirst(path string, gen, want int, filter string) []L
 		if err := f.Close(); err != nil {
 			log(LogContext{
 				Level:    LogError,
-				Category: "FILE",
+				Category: logCategoryFile,
 				Action:   ActionError,
 				Message:  fmt.Sprintf("%s: %v", t(phrases().FileCloseError, "Failed to close file"), err),
 			})
@@ -3376,7 +3412,7 @@ func collectLogEntriesNewestFirst(path string, gen, want int, filter string) []L
 		if _, err := f.ReadAt(buf, pos); err != nil && !errors.Is(err, io.EOF) {
 			log(LogContext{
 				Level:    LogError,
-				Category: "FILE",
+				Category: logCategoryFile,
 				Action:   ActionError,
 				Message:  fmt.Sprintf("%s: %v", t(phrases().ScannerError, "Scanner error"), err),
 			})
@@ -3542,55 +3578,55 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 				<span>🌐</span>
 				<div>
 					<div>DynDNS</div>
-					<small>`+t(phrases().MultiProvider, "Multi-Provider")+`</small>
+					<small>`+esc(t(phrases().MultiProvider, "Multi-Provider"))+`</small>
 				</div>
 			</div>
 
-			<div class="nav-section-label">`+t(phrases().NavOverview, "Overview")+`</div>
+			<div class="nav-section-label">`+esc(t(phrases().NavOverview, "Overview"))+`</div>
 			<button type="button" class="nav-item" data-page="dashboard" data-click="navTo('dashboard')">
-				<span class="nav-item-icon">📊</span> `+phrases().NavDashboard+`
+				<span class="nav-item-icon">📊</span> `+esc(phrases().NavDashboard)+`
 			</button>
 			<button type="button" class="nav-item" data-page="domains" data-click="navTo('domains')">
-				<span class="nav-item-icon">🌐</span> `+phrases().NavDomains+`
+				<span class="nav-item-icon">🌐</span> `+esc(phrases().NavDomains)+`
 			</button>
 
-			<div class="nav-section-label">`+t(phrases().NavMonitoring, "Monitoring")+`</div>
+			<div class="nav-section-label">`+esc(t(phrases().NavMonitoring, "Monitoring"))+`</div>
 			<button type="button" class="nav-item" data-page="metrics" data-click="navTo('metrics')">
-				<span class="nav-item-icon">📈</span> `+phrases().APIPerformance+`
+				<span class="nav-item-icon">📈</span> `+esc(phrases().APIPerformance)+`
 			</button>
 			<button type="button" class="nav-item" data-page="diagnose" data-click="navTo('diagnose')">
-				<span class="nav-item-icon">🩺</span> `+t(phrases().DiagnoseTitle, "Diagnose / Health Center")+`
+				<span class="nav-item-icon">🩺</span> `+esc(t(phrases().DiagnoseTitle, "Diagnose / Health Center"))+`
 			</button>
 			<button type="button" class="nav-item" data-page="logs" data-click="navTo('logs')">
-				<span class="nav-item-icon">🧾</span> `+phrases().SystemEvents+`
+				<span class="nav-item-icon">🧾</span> `+esc(phrases().SystemEvents)+`
 			</button>
 			<button type="button" class="nav-item" data-page="debug" data-click="navTo('debug')">
-				<span class="nav-item-icon">🐞</span> `+phrases().DebugLogTitle+`
+				<span class="nav-item-icon">🐞</span> `+esc(phrases().DebugLogTitle)+`
 			</button>
 
-			<div class="nav-section-label">`+t(phrases().NavTools, "Tools")+`</div>
+			<div class="nav-section-label">`+esc(t(phrases().NavTools, "Tools"))+`</div>
 			<button type="button" class="nav-item" data-page="backup" data-click="navTo('backup')">
-				<span class="nav-item-icon">💾</span> `+t(phrases().BackupTitle, "Backup & Restore")+`
+				<span class="nav-item-icon">💾</span> `+esc(t(phrases().BackupTitle, "Backup & Restore"))+`
 			</button>
 			`+auditPage+`
 
-			<div class="nav-section-label">`+t(phrases().NavConfig, "Config")+`</div>
+			<div class="nav-section-label">`+esc(t(phrases().NavConfig, "Config"))+`</div>
 			<button type="button" class="nav-item nav-item--group" id="settings-group-toggle" data-click="toggleSettingsSubmenu()" aria-expanded="false" aria-controls="settings-submenu">
-				<span class="nav-item-icon">⚙️</span> `+phrases().SettingsTitle+`
+				<span class="nav-item-icon">⚙️</span> `+esc(phrases().SettingsTitle)+`
 				<span class="nav-item-chevron">▾</span>
 			</button>
 			<div class="nav-submenu" id="settings-submenu">
 				<button type="button" class="nav-item nav-item--sub" data-page="settings-security" data-click="navTo('settings-security')">
-					 `+phrases().SettingsSecurity+`
+					`+esc(phrases().SettingsSecurity)+`
 				</button>
 				<button type="button" class="nav-item nav-item--sub" data-page="settings-system" data-click="navTo('settings-system')">
-					`+phrases().SettingsSystem+`
+					`+esc(phrases().SettingsSystem)+`
 				</button>
 				<button type="button" class="nav-item nav-item--sub" data-page="settings-domains" data-click="navTo('settings-domains')">
-					 `+phrases().SettingsDomains+`
+					`+esc(phrases().SettingsDomains)+`
 				</button>
 				<button type="button" class="nav-item nav-item--sub" data-page="settings-notify" data-click="navTo('settings-notify')">
-					 `+phrases().SettingsNotify+`
+					`+esc(phrases().SettingsNotify)+`
 				</button>
 			</div>
 			%s
@@ -3610,20 +3646,20 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 			<!-- Topbar -->
 			<header class="topbar">
 				<button type="button" class="hamburger-btn" data-click="toggleSidebar()" aria-label="Menu" aria-controls="sidebar" aria-expanded="false">☰</button>
-				<span id="page-title" class="topbar-title">`+t(phrases().NavDashboardJS, "📊 Dashboard")+`</span>
+				<span id="page-title" class="topbar-title">`+esc(t(phrases().NavDashboardJS, "📊 Dashboard"))+`</span>
 				<div class="topbar-right">
 					<button class="action-btn topbar-action-btn"
 						id="update-button"
 						data-tooltip="`+esc(phrases().SettingsUpdateHint)+`"
 						data-mouseenter="showNotifierTooltip()"
 						data-focus="showNotifierTooltip()"
-						data-click="triggerUpdate()">🔄 `+phrases().Update+`</button>
+						data-click="triggerUpdate()">🔄 `+esc(phrases().Update)+`</button>
 
 					<button class="action-btn topbar-action-btn"
 						data-tooltip="`+esc(phrases().SettingsExportHint)+`"
 						data-mouseenter="showNotifierTooltip()"
 						data-focus="showNotifierTooltip()"
-						data-click="exportData()">📥 `+phrases().ExportBtn+`</button>
+						data-click="exportData()">📥 `+esc(phrases().ExportBtn)+`</button>
 
 					<div class="notif-wrap">
 						<button type="button" class="theme-toggle notif-toggle"
@@ -3638,7 +3674,7 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 
 						<div id="notif-panel" class="notif-panel">
 							<div class="notif-panel-header">
-								🔔 `+phrases().SettingsNotifyHint+`
+								🔔 `+esc(phrases().SettingsNotifyHint)+`
 							</div>
 							<div id="notif-list"></div>
 						</div>
@@ -3652,7 +3688,7 @@ func writeDashboardHeader(w http.ResponseWriter, sess *Session) {
 				</div>
 			</header>
 
-			<div id="toast" class="toast"></div>
+			<div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 			<!-- ═══ MAIN CONTENT ═══ -->
 			<div class="main-content">
@@ -3808,7 +3844,7 @@ func buildUsersSection() string {
 		<input type="text" id="new-user-name" class="s-input mb-8" placeholder="` + esc(phrases().UserPlaceholderName) + `">
 		<div class="input-with-action mb-8">
 			<input type="password" id="new-user-pass" class="s-input" placeholder="` + esc(phrases().UserPlaceholderPass) + `">
-			<button type="button" class="input-action-btn" data-click="togglePassword('new-user-pass', this)">👁️</button>
+			` + passwordToggleButton("new-user-pass") + `
 		</div>
 		<select id="new-user-role" class="s-input mb-8">
 			<option value="viewer">` + esc(phrases().UserRoleViewer) + `</option>
@@ -4885,7 +4921,7 @@ func handleAPIBackupRestore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	restored, status, err := restoreSelectedBackup(req)
+	restored, status, err := restoreSelectedBackup(r.Context(), req)
 	if err != nil {
 		writeJSON(w, status, map[string]string{"error": err.Error()})
 
@@ -4912,10 +4948,25 @@ type backupRestoreRequest struct {
 }
 
 func parseBackupRestoreRequest(w http.ResponseWriter, r *http.Request) (backupRestoreRequest, int, error) {
-	const maxBackupSize = 16 << 20
+	const (
+		maxBackupSize = 16 << 20
+		maxFormMemory = 1 << 20
+	)
 	r.Body = http.MaxBytesReader(w, r.Body, maxBackupSize)
-	if err := r.ParseMultipartForm(maxBackupSize); err != nil {
+	// #nosec G120 -- Request size is limited to 16 MiB
+	// with MaxBytesReader. Multipart memory threshold is 1 MiB.
+	if err := r.ParseMultipartForm(maxFormMemory); err != nil {
 		return backupRestoreRequest{}, http.StatusBadRequest, err
+	}
+
+	if r.MultipartForm != nil {
+		defer func() {
+			if err := r.MultipartForm.RemoveAll(); err != nil {
+				debugLog(logCategoryBackup, "", fmt.Sprintf(
+					"failed to clean up multipart temporary files: %v", err,
+				))
+			}
+		}()
 	}
 
 	selection := backupRestoreSelectionFromForm(r)
@@ -4929,7 +4980,7 @@ func parseBackupRestoreRequest(w http.ResponseWriter, r *http.Request) (backupRe
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			debugLog("DASHBOARD", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
+			debugLog(logCategoryDashboard, "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
 		}
 	}()
 
@@ -5148,7 +5199,7 @@ func captureBackupRestoreSnapshot(selection backupRestoreSelection) backupRestor
 	return backupRestoreSnapshot{Backup: snapshot}
 }
 
-func rollbackBackupRestore(snapshot backupRestoreSnapshot, restored []string) error {
+func rollbackBackupRestore(ctx context.Context, snapshot backupRestoreSnapshot, restored []string) error {
 	var rollbackErrors []string
 	for _, r := range slices.Backward(restored) {
 		var err error
@@ -5156,10 +5207,10 @@ func rollbackBackupRestore(snapshot backupRestoreSnapshot, restored []string) er
 		case "users":
 			err = saveUsers(snapshot.Backup.Users)
 			sessionStore.DeleteAll()
-		case status:
+		case "status":
 			_, err = restoreBackupStatus(snapshot.Backup)
 		case "config":
-			_, err = restoreBackupConfig(snapshot.Backup)
+			_, err = restoreBackupConfig(ctx, snapshot.Backup)
 		}
 		if err != nil {
 			rollbackErrors = append(rollbackErrors, r+": "+err.Error())
@@ -5172,7 +5223,7 @@ func rollbackBackupRestore(snapshot backupRestoreSnapshot, restored []string) er
 	return nil
 }
 
-func restoreSelectedBackup(req backupRestoreRequest) ([]string, int, error) {
+func restoreSelectedBackup(ctx context.Context, req backupRestoreRequest) ([]string, int, error) {
 	backupRestoreMu.Lock()
 	defer backupRestoreMu.Unlock()
 
@@ -5190,7 +5241,7 @@ func restoreSelectedBackup(req backupRestoreRequest) ([]string, int, error) {
 
 			return status, nil
 		}
-		if rollbackErr := rollbackBackupRestore(snapshot, restored); rollbackErr != nil {
+		if rollbackErr := rollbackBackupRestore(ctx, snapshot, restored); rollbackErr != nil {
 			return http.StatusInternalServerError, fmt.Errorf("%w; rollback failed: %w", err, rollbackErr)
 		}
 
@@ -5198,7 +5249,7 @@ func restoreSelectedBackup(req backupRestoreRequest) ([]string, int, error) {
 	}
 
 	if req.Selection.Config {
-		if status, err := apply("config", func() (int, error) { return restoreBackupConfig(req.Backup) }); err != nil {
+		if status, err := apply("config", func() (int, error) { return restoreBackupConfig(ctx, req.Backup) }); err != nil {
 			return nil, status, err
 		}
 	}
@@ -5216,7 +5267,7 @@ func restoreSelectedBackup(req backupRestoreRequest) ([]string, int, error) {
 	return restored, http.StatusOK, nil
 }
 
-func restoreBackupConfig(backup dashboardBackup) (int, error) {
+func restoreBackupConfig(ctx context.Context, backup dashboardBackup) (int, error) {
 	configUpdateMu.Lock()
 	defer configUpdateMu.Unlock()
 
@@ -5240,7 +5291,7 @@ func restoreBackupConfig(backup dashboardBackup) (int, error) {
 		)
 	}
 
-	afterConfigRestore()
+	afterConfigRestore(ctx)
 
 	return http.StatusOK, nil
 }
@@ -5269,7 +5320,7 @@ func restoreConfigInMemory(oldCfg Config) {
 	cfgMu.Unlock()
 }
 
-func afterConfigRestore() {
+func afterConfigRestore(ctx context.Context) {
 	config := snapshotConfig()
 	setAtomicDebugFlags(config.DebugEnabled, config.DebugHTTPRaw)
 	setAtomicLogLimits(config.MaxLogMB, config.MaxLogBackups)
@@ -5280,7 +5331,7 @@ func afterConfigRestore() {
 	ResetHTTPClient()
 	invalidateSecretReplacer()
 
-	go initNotifiers()
+	go initNotifiers(context.WithoutCancel(ctx))
 
 	forceNextUpdate.Store(true)
 	lastCleanupNano.Store(0)
@@ -5308,27 +5359,11 @@ func restoreBackupStatus(backup dashboardBackup) (int, error) {
 	statusMutex.Unlock()
 
 	if err != nil {
-		return http.StatusInternalServerError, fmt.Errorf(
-			t(
-				phrases().BackupStatusRestoreFailedFormat,
-				"status restore failed: %w",
-			),
-			err,
-		)
+		return http.StatusInternalServerError, fmt.Errorf(t(phrases().BackupStatusRestoreFailedFormat, "status restore failed: %w"), err)
 	}
 
 	if err := updateDomainsCache(); err != nil {
-		debugLog(
-			"CACHE",
-			"",
-			fmt.Sprintf(
-				t(
-					phrases().ErrUpdateDomainsCache,
-					"updateDomainsCache failed: %v",
-				),
-				err,
-			),
-		)
+		debugLog(logCategoryCache, "", fmt.Sprintf(t(phrases().ErrUpdateDomainsCache, "updateDomainsCache failed: %v"), err))
 	}
 
 	return http.StatusOK, nil
@@ -5634,18 +5669,18 @@ func diagnoseConfigInfo(cfg Config) map[string]any {
 
 func diagnosisMainStatus(warnings []string, logWarnings int) (string, string) {
 	if !schedulerRanOnce.Load() {
-		return starting, t(phrases().DiagnoseReasonSchedulerNotRun, "Scheduler has not run yet.")
+		return "starting", t(phrases().DiagnoseReasonSchedulerNotRun, "Scheduler has not run yet.")
 	}
 
 	if !lastOk.Load() {
-		return unhealthy, t(phrases().DiagnoseReasonLastSchedulerFailed, "The last scheduler run failed.")
+		return "unhealthy", t(phrases().DiagnoseReasonLastSchedulerFailed, "The last scheduler run failed.")
 	}
 
 	if len(warnings) > 0 || logWarnings > 0 {
 		return "degraded", t(phrases().DiagnoseReasonWarningsButRunning, "There are warnings, but the service is running.")
 	}
 
-	return healthy, t(phrases().DiagnoseReasonAllGood, "Everything looks good.")
+	return "healthy", t(phrases().DiagnoseReasonAllGood, "Everything looks good.")
 }
 
 func formatDiagnosisTime(t time.Time) string {

@@ -6,6 +6,7 @@ import (
 	"encoding/base32"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -34,6 +35,26 @@ const (
 	flashTypeError   = "error"
 	flashTypeInfo    = "info"
 )
+
+var (
+	totpUsedMu sync.Mutex
+	totpUsed   = map[string]time.Time{}
+)
+
+func consumeTOTPCode(userID, code string) bool {
+	key := userID + ":" + code
+	now := time.Now()
+
+	totpUsedMu.Lock()
+	defer totpUsedMu.Unlock()
+
+	if exp, ok := totpUsed[key]; ok && now.Before(exp) {
+		return false
+	}
+	totpUsed[key] = now.Add((2*totpWindow + 1) * totpPeriod * time.Second)
+
+	return true
+}
 
 func generateTOTPSecret() (string, error) {
 	b := make([]byte, totpSecretLen)
@@ -289,7 +310,11 @@ func handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = fmt.Fprint(w, buildTOTPLoginPage(errMsg))
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+
+	// #nosec G705 -- buildTOTPLoginPage escapes dynamic
+	// error messages before rendering the HTML document.
+	_, _ = io.WriteString(w, buildTOTPLoginPage(errMsg))
 }
 
 func pendingTOTPTokenFromRequest(r *http.Request) string {
@@ -304,6 +329,9 @@ func pendingTOTPTokenFromRequest(r *http.Request) string {
 }
 
 func handleLoginTOTPPost(w http.ResponseWriter, r *http.Request, pendingToken string, pending pendingTOTPSession) (string, bool) {
+	if !loginLimiter.GetLimiter("totp:" + pending.UserID).Allow() {
+		return t(phrases().TotpLoginInvalidCode, "Too many attempts"), false
+	}
 	code := strings.TrimSpace(r.FormValue("totp_code"))
 	if foundUser, ok := validPendingTOTPUser(pending, code); ok {
 		completeTOTPLogin(w, r, pendingToken, pending, foundUser)
@@ -316,7 +344,9 @@ func handleLoginTOTPPost(w http.ResponseWriter, r *http.Request, pendingToken st
 
 func validPendingTOTPUser(pending pendingTOTPSession, code string) (*DashboardUser, bool) {
 	foundUser, found := findDashboardUser(loadUsers(), pending.UserID)
-	valid := found && totpEnabledForUser(foundUser) && validateTOTPCode(foundUser.TOTPSecret, code)
+	valid := found && totpEnabledForUser(foundUser) &&
+		validateTOTPCode(foundUser.TOTPSecret, code) &&
+		consumeTOTPCode(foundUser.ID, code)
 
 	return foundUser, valid
 }
@@ -366,6 +396,8 @@ func handleInvalidTOTPLogin(w http.ResponseWriter, r *http.Request, pendingToken
 }
 
 func expirePendingTOTPCookie(w http.ResponseWriter, name string, secure bool) {
+	// #nosec G124 -- HTTP and HTTPS are intentionally supported.
+	// Secure is enabled for HTTPS requests; HttpOnly and SameSite are enforced.
 	http.SetCookie(w, &http.Cookie{
 		Name:     name,
 		Value:    "",
@@ -474,7 +506,7 @@ func findDashboardUser(users []DashboardUser, userID string) (*DashboardUser, bo
 func handleSettings2FAPost(r *http.Request, currentUser *DashboardUser) totpFlash {
 	switch r.FormValue("action") {
 	case "generate":
-		return handle2FAGenerate(currentUser)
+		return handle2FAGenerate(r, currentUser)
 	case "confirm":
 		return handle2FAConfirm(r, currentUser)
 	case "disable":
@@ -484,7 +516,15 @@ func handleSettings2FAPost(r *http.Request, currentUser *DashboardUser) totpFlas
 	}
 }
 
-func handle2FAGenerate(currentUser *DashboardUser) totpFlash {
+func handle2FAGenerate(r *http.Request, currentUser *DashboardUser) totpFlash {
+	if totpEnabledForUser(currentUser) &&
+		!validateTOTPCode(currentUser.TOTPSecret, r.FormValue("totp_code")) {
+		return totpFlash{Message: t(
+			phrases().TotpFlashDisableInvalid,
+			"Invalid code — cannot replace secret",
+		), Type: flashTypeError}
+	}
+
 	secret, err := generateTOTPSecret()
 	if err != nil {
 		return totpFlash{Message: fmt.Sprintf(
@@ -695,6 +735,8 @@ func handleLoginPost2FA(w http.ResponseWriter, r *http.Request, user *DashboardU
 
 			return
 		}
+		// #nosec G124 -- HTTP and HTTPS are intentionally supported;
+		// HTTPS requests receive Secure cookies, and HttpOnly/SameSite are set.
 		http.SetCookie(w, &http.Cookie{
 			Name:     pendingTOTPCookieName(r),
 			Value:    token,
@@ -726,6 +768,7 @@ func handleLoginPost2FA(w http.ResponseWriter, r *http.Request, user *DashboardU
 		Message: fmt.Sprintf(phrases().LoginSuccessLog, user.Username, user.Role, getClientIP(r)),
 	})
 
+	// #nosec G710 -- Redirect target is validated as a local URL.
 	http.Redirect(w, r, safeLocalRedirect(redirect), http.StatusSeeOther)
 }
 

@@ -107,7 +107,7 @@ func (ipl *IPRateLimiter) cleanupRoutine() {
 			ipl.mu.Unlock()
 
 		case <-ipl.ctx.Done():
-			debugLog("SYSTEM", "", "IP Rate Limiter cleanup routine stopping...")
+			debugLog(logCategorySystem, "", "IP Rate Limiter cleanup routine stopping...")
 
 			return
 		}

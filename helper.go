@@ -351,6 +351,8 @@ func detectContainerEnvironment(cgroupText string) string {
 		return "macOS Host"
 	case PlatformLinux:
 		return "Linux Host"
+	case PlatformFreeBSD:
+		return "FreeBSD Host"
 	default:
 		return runtime.GOOS + " Host"
 	}
@@ -433,7 +435,7 @@ func cgroupV2Base(cgroupText string) string {
 
 func readCgroupV2CPULimit(base string) float64 {
 	capacity := 0.0
-	if data, err := os.ReadFile(filepath.Join(base, "cpu.max")); err == nil {
+	if data, err := readFileWithinDir(filepath.Join(base, "cpu.max")); err == nil {
 		fields := strings.Fields(string(data))
 		if len(fields) >= 2 && fields[0] != "max" {
 			quota, qErr := strconv.ParseFloat(fields[0], 64)
@@ -581,7 +583,7 @@ func collectNetworkNamespaceStats(raw *dashboardSystemRawStats) {
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			debugLog("HELPER", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
+			debugLog(logCategoryHelper, "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
 		}
 	}()
 
@@ -669,13 +671,13 @@ func readPressureAvg10(path string) float64 {
 }
 
 func readLines(path string) []string {
-	file, err := os.Open(path)
+	file, err := openFileWithinDir(path)
 	if err != nil {
 		return nil
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			debugLog("HELPER", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
+			debugLog(logCategoryHelper, "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
 		}
 	}()
 
@@ -691,7 +693,7 @@ func readLines(path string) []string {
 }
 
 func readTextFile(path string) string {
-	data, err := os.ReadFile(path)
+	data, err := readFileWithinDir(path)
 	if err != nil {
 		return ""
 	}
@@ -1176,7 +1178,7 @@ func dashboardI18NJSON() string {
 		"dnscale_api_key_missing":               t(phrases().DNScaleAPIKeyMissingJS, "DNScale API Key fehlt"),
 		"domain_removed":                        t(phrases().DomainRemovedJS, "🗑️ {domain} removed"),
 		"domain_updated":                        t(phrases().DomainUpdatedJS, "✓ {domain} updated"),
-		"edit_domain_cancelled":                 t(phrases().EditDomainCancelledJS, "Edit cancelled"),
+		"edit_domain_canceled":                  t(phrases().EditDomainCancelledJS, "Edit canceled"),
 		"edit_domain_saved":                     t(phrases().EditDomainSavedJS, "Changes saved"),
 		"error_prefix":                          t(phrases().ErrorPrefixJS, "❌ Error: "),
 		"export_failed":                         t(phrases().ExportFailedJS, "Export failed"),
@@ -1226,6 +1228,8 @@ func dashboardI18NJSON() string {
 		"notify_test_unauthorized":              t(phrases().NotifyTestUnauthorized, "❌ Unauthorized (check token)"),
 		"page_reload_failed":                    t(phrases().PageReloadFailedJS, "Seite konnte nicht aktualisiert werden"),
 		"password_reset":                        t(phrases().PasswordResetJS, "Password changed"),
+		"password_hide":                         t(phrases().PasswordHideJS, "Passwort ausblenden"),
+		"password_show":                         t(phrases().PasswordShowJS, "Passwort anzeigen"),
 		"provider_invalid":                      t(phrases().ProviderInvalidJS, "Ungültiger Provider"),
 		"entries_label":                         t(phrases().EntriesLabel, "Records"),
 		"remove_btn":                            t(phrases().RemoveBtn, "🗑️ Remove"),
@@ -1397,7 +1401,7 @@ func buildDynamicLangOptions(current string) string {
 		selected := ""
 
 		if code == current {
-			selected = ` selected`
+			selected = HTMLSelected
 		}
 
 		out.WriteString(`<option value="`)
@@ -1438,6 +1442,15 @@ func esc(s string) string {
 	return html.EscapeString(s)
 }
 
+func passwordToggleButton(inputID string) string {
+	label := esc(t(phrases().PasswordShowJS, "Passwort anzeigen"))
+
+	return `<button type="button" class="input-action-btn" data-toggle-password="` + esc(inputID) +
+		`" aria-label="` + label +
+		`" title="` + label +
+		`" aria-pressed="false">👁️</button>`
+}
+
 func ipEntriesJSONAttr(entries []IPEntry) string {
 	b, err := json.Marshal(entries)
 	if err != nil {
@@ -1473,7 +1486,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.WriteHeader(status)
 
 	if _, err := w.Write(buf.Bytes()); err != nil {
-		debugLog("HTTP", "", fmt.Sprintf("write JSON response: %v", err))
+		debugLog(logCategoryHTTP, "", fmt.Sprintf("write JSON response: %v", err))
 	}
 }
 
@@ -1523,7 +1536,7 @@ func writeFileAtomic(path string, data []byte) (err error) {
 }
 
 func deleteLogEntryStreaming(path, wantedID string) (bool, error) {
-	source, err := os.Open(path)
+	source, err := openFileWithinDir(path)
 	if err != nil {
 		return false, err
 	}
@@ -1627,6 +1640,121 @@ func deleteLogEntryStreaming(path, wantedID string) (bool, error) {
 	return deleted, nil
 }
 
+type backgroundJob struct {
+	run       func(context.Context)
+	onDiscard func()
+}
+
+var (
+	backgroundJobs       = make(chan backgroundJob, 64)
+	backgroundJobsMu     sync.Mutex
+	backgroundJobsClosed bool
+)
+
+func startBackgroundJobDispatcher(ctx context.Context) {
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				stopBackgroundJobDispatcher()
+				return
+
+			case job := <-backgroundJobs:
+				if ctx.Err() != nil {
+					if job.onDiscard != nil {
+						job.onDiscard()
+					}
+					stopBackgroundJobDispatcher()
+					return
+				}
+
+				go func() {
+					defer func() {
+						if recovered := recover(); recovered != nil {
+							debugLog("JOB", "", fmt.Sprintf(
+								t(phrases().ErrPanicRecovered, "🚨 Panic recovered: %v"),
+								recovered,
+							))
+						}
+					}()
+					job.run(ctx)
+				}()
+			}
+		}
+	}()
+}
+
+func stopBackgroundJobDispatcher() {
+	backgroundJobsMu.Lock()
+	backgroundJobsClosed = true
+
+	var discarded []backgroundJob
+
+	for {
+		select {
+		case job := <-backgroundJobs:
+			discarded = append(discarded, job)
+
+		default:
+			backgroundJobsMu.Unlock()
+
+			for _, job := range discarded {
+				if job.onDiscard != nil {
+					job.onDiscard()
+				}
+			}
+			return
+		}
+	}
+}
+
+func enqueueBackgroundJob(job backgroundJob) bool {
+	backgroundJobsMu.Lock()
+	defer backgroundJobsMu.Unlock()
+
+	if backgroundJobsClosed || shutdownCtx.Err() != nil {
+		return false
+	}
+
+	select {
+	case backgroundJobs <- job:
+		return true
+
+	default:
+		return false
+	}
+}
+
+func readFileWithinDir(path string) ([]byte, error) {
+	root, err := os.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = root.Close() }()
+
+	return root.ReadFile(filepath.Base(path))
+}
+
+func openFileWithinDir(path string) (*os.File, error) {
+	root, err := os.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = root.Close() }()
+
+	return root.Open(filepath.Base(path))
+}
+
+func openFileWithinDirWithFlags(path string, flags int, perm os.FileMode) (*os.File, error) {
+	root, err := os.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = root.Close() }()
+
+	return root.OpenFile(filepath.Base(path), flags, perm)
+}
+
 // ============================================================================
 // HELPER - DNS
 // ============================================================================
@@ -1721,11 +1849,7 @@ func noteProviderZoneFailure(provider string, err error) {
 	providerZoneFailureTracker.Unlock()
 
 	if !shouldPersist {
-		debugLog(
-			"ZONE",
-			"",
-			fmt.Sprintf("Provider %s zones still unavailable (attempt %d): %s", provider, attempts, errText),
-		)
+		debugLog(logCategoryZone, "", fmt.Sprintf("Provider %s zones still unavailable (attempt %d): %s", provider, attempts, errText))
 		return
 	}
 
@@ -1852,11 +1976,7 @@ func noteIPCheckFailure(want IPVersion, err error) {
 	ipCheckFailureTracker.Unlock()
 
 	if !shouldPersist {
-		debugLog(
-			"IP-CHECK",
-			"",
-			fmt.Sprintf("%s check still failing (attempt %d): %s", label, attempts, errText),
-		)
+		debugLog(logCategoryIPCheck, "", fmt.Sprintf("%s check still failing (attempt %d): %s", label, attempts, errText))
 		return
 	}
 
@@ -1959,7 +2079,7 @@ func loadAllProviderZones(ctx context.Context) (providerZoneLoadSnapshot, error)
 
 		snapshot.Zones[result.provider] = result.zones
 		noteProviderZoneSuccess(result.provider)
-		debugLog("ZONE", "", fmt.Sprintf("✅ Loaded %d zones for %s", len(result.zones), result.provider))
+		debugLog(logCategoryZone, "", fmt.Sprintf("✅ Loaded %d zones for %s", len(result.zones), result.provider))
 	}
 
 	if len(snapshot.Zones) == 0 && len(loadErrors) > 0 {
@@ -1994,7 +2114,13 @@ func doSingleflight[T any](
 			return zero, res.Err
 		}
 
-		return res.Val.(T), nil
+		value, ok := res.Val.(T)
+		if !ok {
+			var zero T
+			return zero, fmt.Errorf("unexpected result type: %T", res.Val)
+		}
+
+		return value, nil
 	}
 }
 

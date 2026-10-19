@@ -46,7 +46,7 @@ func cloudflareAPIAttempt(
 	body any,
 	attempt, maxRetries int,
 ) ([]byte, bool, error) {
-	debugLog("HTTP", "", fmt.Sprintf(phrases().CFAttempt,
+	debugLog(logCategoryHTTP, "", fmt.Sprintf(phrases().CFAttempt,
 		phrases().Attempt, attempt+1, maxRetries, method, fullURL))
 
 	req, err := buildCloudflareRequest(ctx, dc, method, fullURL, body)
@@ -66,7 +66,7 @@ func cloudflareAPIAttempt(
 
 	defer func() {
 		if err := res.Body.Close(); err != nil {
-			debugLog("HTTP", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
+			debugLog(logCategoryHTTP, "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
 		}
 	}()
 
@@ -183,7 +183,7 @@ func handleCloudflareResponse(ctx context.Context, res *http.Response, method, f
 		msg = cfErrorMessage(&cfResp, msg)
 	}
 	if len(respBody) > 0 && respBody[0] == '<' {
-		debugLog("HTTP", "", fmt.Sprintf(phrases().CFHTMLResponse, res.StatusCode, sanitizeHTTPDebugBody(msg)))
+		debugLog(logCategoryHTTP, "", fmt.Sprintf(phrases().CFHTMLResponse, res.StatusCode, sanitizeHTTPDebugBody(msg)))
 	}
 
 	apiErr := classifyAPIErrorWithHeaders(effectiveStatus, method, fullURL, msg, res.Header)
@@ -205,7 +205,7 @@ func loadCloudflareZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) 
 		endpoint := fmt.Sprintf("/zones?page=%d&per_page=%d", page, perPage)
 		data, err := cloudflareAPI(ctx, dc, MethodGET, endpoint, nil)
 		if err != nil {
-			debugLog("CACHE", "", fmt.Sprintf(phrases().CFZoneLoadError+": %v", err))
+			debugLog(logCategoryCache, "", fmt.Sprintf(phrases().CFZoneLoadError+": %v", err))
 
 			return nil, fmt.Errorf("%s: %w", phrases().CFZoneLoadError, err)
 		}
@@ -219,7 +219,7 @@ func loadCloudflareZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) 
 			} `json:"result_info"`
 		}
 		if err := json.Unmarshal(data, &resp); err != nil {
-			debugLog("CACHE", "", fmt.Sprintf(phrases().CFZoneParseError+": %v", err))
+			debugLog(logCategoryCache, "", fmt.Sprintf(phrases().CFZoneParseError+": %v", err))
 
 			return nil, fmt.Errorf("%s: %w", phrases().CFZoneParseError, err)
 		}
@@ -359,7 +359,7 @@ func shouldSkipCloudflareUpdate(fqdn, recordType, newIP string, existing *Record
 	}
 
 	if dnsRecordContentEqual(recordType, existing.Content, newIP) {
-		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("✅ %s: %s = %s", phrases().RecordCurrent, recordType, newIP))
+		debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf("✅ %s: %s = %s", phrases().RecordCurrent, recordType, newIP))
 		log(LogContext{
 			Level:   LogInfo,
 			Action:  ActionCurrent,
@@ -373,7 +373,7 @@ func shouldSkipCloudflareUpdate(fqdn, recordType, newIP string, existing *Record
 	if strings.TrimSpace(existing.Comment) != ManagedComment {
 		msg := fmt.Sprintf(phrases().CFUnmanagedRecord, recordType, strings.TrimSpace(existing.Comment))
 
-		debugLog("DNS-LOGIC", fqdn, msg)
+		debugLog(logCategoryDNSLogic, fqdn, msg)
 		log(LogContext{
 			Level:   LogWarn,
 			Action:  ActionSkip,
@@ -503,7 +503,7 @@ func cloudflareDCForZone(zoneName string) *DomainConfig {
 }
 
 func cleanupCloudflareRecords(ctx context.Context, zones []Zone, recordCache *ZoneRecordCache) {
-	debugLog("MAINTENANCE", "", phrases().CleanupStartCF)
+	debugLog(logCategoryMaintenace, "", phrases().CleanupStartCF)
 
 	configRecords := buildCloudflareConfigRecords()
 	managedDomains := buildProviderManagedDomains(ProviderCloudflare)
@@ -555,7 +555,7 @@ func cleanupSingleCloudflareRecord(
 		return
 	}
 
-	debugLog("MAINTENANCE", fqdn, fmt.Sprintf(phrases().CleanupOrphanedCF, rec.Type, rec.ID, zone.Name))
+	debugLog(logCategoryMaintenace, fqdn, fmt.Sprintf(phrases().CleanupOrphanedCF, rec.Type, rec.ID, zone.Name))
 
 	if dryRunEnabled() {
 		log(LogContext{
@@ -613,7 +613,7 @@ func deleteCloudflareRecord(
 	endpoint := fmt.Sprintf("/zones/%s/dns_records/%s", zoneID, rec.ID)
 
 	if _, err := cloudflareAPI(ctx, cfDC, MethodDELETE, endpoint, nil); err != nil {
-		debugLog("MAINTENANCE", fqdn, fmt.Sprintf(phrases().CleanupDeleteError, err))
+		debugLog(logCategoryMaintenace, fqdn, fmt.Sprintf(phrases().CleanupDeleteError, err))
 
 		return
 	}
@@ -625,7 +625,7 @@ func deleteCloudflareRecord(
 		Message: fmt.Sprintf(phrases().CleanupRecordRemoved, rec.Type),
 	})
 	if err := markOrphanRecordDeleted(fqdn); err != nil {
-		debugLog("MAINTENANCE", fqdn, fmt.Sprintf("failed to mark orphan-deleted timestamp: %v", err))
+		debugLog(logCategoryMaintenace, fqdn, fmt.Sprintf("failed to mark orphan-deleted timestamp: %v", err))
 	}
 }
 

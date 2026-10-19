@@ -3,9 +3,8 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"time"
@@ -21,16 +20,29 @@ func tryClaimUpdate() bool {
 
 func runUpdate(firstRun bool) {
 	if !tryClaimUpdate() {
-		debugLog("SCHEDULER", "", phrases().UpdateAlreadyRunning)
+		debugLog(logCategorySchudler, "", phrases().UpdateAlreadyRunning)
 
 		return
 	}
 
-	runClaimedUpdate(firstRun)
+	runClaimedUpdate(shutdownCtx, firstRun)
 }
 
-func runClaimedUpdate(firstRun bool) {
+func runClaimedUpdate(ctx context.Context, firstRun bool) {
 	defer updateInProgress.Store(false)
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			lastOk.Store(false)
+			log(LogContext{
+				Level:  LogError,
+				Action: ActionError,
+				Message: fmt.Sprintf(
+					t(phrases().ErrPanicRecovered, "🚨 Panic recovered: %v"),
+					recovered,
+				) + "\n" + string(debug.Stack()),
+			})
+		}
+	}()
 
 	activeUpdates.Add(1)
 	defer activeUpdates.Add(-1)
@@ -38,11 +50,18 @@ func runClaimedUpdate(firstRun bool) {
 	forceRequested := forceNextUpdate.Swap(false)
 	forced := firstRun || forceRequested
 
-	debugLog("SCHEDULER", "", fmt.Sprintf(phrases().SchedulerStarted, firstRun))
+	refreshed := false
+	defer func() {
+		if forceRequested && !refreshed {
+			forceNextUpdate.Store(true)
+		}
+	}()
+
+	debugLog(logCategorySchudler, "", fmt.Sprintf(phrases().SchedulerStarted, firstRun))
 
 	domainConfigs := snapshotDomainConfigs()
 
-	ctx, ipCtx, cancel, ipCancel := createRunUpdateContexts(len(domainConfigs))
+	runCtx, ipCtx, cancel, ipCancel := createRunUpdateContexts(ctx, len(domainConfigs))
 	defer cancel()
 	defer ipCancel()
 
@@ -51,7 +70,7 @@ func runClaimedUpdate(firstRun bool) {
 		return
 	}
 
-	zonesByProvider, ok := loadRunUpdateZones(ctx, forced)
+	zonesByProvider, ok := loadRunUpdateZones(runCtx, forced)
 	if !ok {
 		return
 	}
@@ -61,20 +80,15 @@ func runClaimedUpdate(firstRun bool) {
 		domainConfigs,
 	)
 
-	cache, ok := loadRunUpdateRecords(
-		ctx,
-		zonesByProvider,
-		forced,
-	)
+	cache, ok := loadRunUpdateRecords(runCtx, zonesByProvider, forced)
+
+	refreshed = true
+
 	if !ok {
 		return
 	}
 
-	refreshIPv64DomainsIfNeeded(
-		ctx,
-		forced,
-		domainConfigs,
-	)
+	refreshIPv64DomainsIfNeeded(runCtx, forced, domainConfigs)
 
 	saveCachesToDisk(zonesByProvider, cache)
 
@@ -88,33 +102,33 @@ func runClaimedUpdate(firstRun bool) {
 	}
 
 	successCount := processDomains(
-		ctx,
+		runCtx,
 		zonesByProvider,
 		cache,
 		currentIPv4,
 		currentIPv6,
 	)
 
-	debugLog("SCHEDULER", "", fmt.Sprintf(phrases().SchedulerCompleted, successCount))
+	debugLog(logCategorySchudler, "", fmt.Sprintf(phrases().SchedulerCompleted, successCount))
 
 	runCleanupIfNeeded(
-		ctx,
+		runCtx,
 		zonesByProvider,
 		cache,
 		domainConfigs,
 	)
 }
 
-func createRunUpdateContexts(domainCount int) (context.Context, context.Context, context.CancelFunc, context.CancelFunc) {
+func createRunUpdateContexts(parent context.Context, domainCount int) (context.Context, context.Context, context.CancelFunc, context.CancelFunc) {
 	baseTimeout := BaseUpdateTimeout
 	perDomainTimeout := time.Duration(domainCount) * PerDomainTimeout
 	buffer := UpdateBufferTimeout
 	totalTimeout := min(max(baseTimeout+perDomainTimeout+buffer, MinUpdateTimeout), MaxUpdateTimeout)
 
-	debugLog("SCHEDULER", "", fmt.Sprintf(phrases().ContextTimeoutForDomains, totalTimeout, domainCount))
+	debugLog(logCategorySchudler, "", fmt.Sprintf(phrases().ContextTimeoutForDomains, totalTimeout, domainCount))
 
-	ctx, cancel := context.WithTimeout(shutdownCtx, totalTimeout)
-	ipCtx, ipCancel := context.WithTimeout(shutdownCtx, 60*time.Second)
+	ctx, cancel := context.WithTimeout(parent, totalTimeout)
+	ipCtx, ipCancel := context.WithTimeout(parent, 60*time.Second)
 
 	return ctx, ipCtx, cancel, ipCancel
 }
@@ -266,7 +280,7 @@ func loadRunUpdateRecords(
 	cache, err := loadRecordsWithCache(ctx, zonesByProvider, forced)
 	if err != nil {
 		lastOk.Store(false)
-		debugLog("CACHE", "", fmt.Sprintf(phrases().CacheLoadFailed, err))
+		debugLog(logCategoryCache, "", fmt.Sprintf(phrases().CacheLoadFailed, err))
 
 		return nil, false
 	}
@@ -281,7 +295,7 @@ func refreshIPv64DomainsIfNeeded(ctx context.Context, forced bool, domainConfigs
 	}
 
 	if err := ensureIPv64DomainsFresh(ctx, ipv64Config, forced); err != nil {
-		debugLog("CACHE", "", fmt.Sprintf(phrases().IPv64CacheError, err))
+		debugLog(logCategoryCache, "", fmt.Sprintf(phrases().IPv64CacheError, err))
 	}
 }
 
@@ -305,34 +319,20 @@ func loadLastKnownIPs() (ipv4, ipv6 string) {
 	return state.ipv4, state.ipv6
 }
 
-func readDomainHistories() (
-	map[string]DomainHistory,
-	error,
-) {
+func readDomainHistories() (map[string]DomainHistory, error) {
 	statusMutex.Lock()
 	defer statusMutex.Unlock()
 
-	data, err := os.ReadFile(updatePath)
+	domains, err := currentStatusDomainsLocked()
 	if err != nil {
 		return nil, err
 	}
 
-	var domains map[string]DomainHistory
-	if err := json.Unmarshal(data, &domains); err != nil {
-		return nil, err
-	}
-
-	return domains, nil
+	return cloneStatusDomains(domains), nil
 }
 
-func findLastKnownIPs(
-	domains map[string]DomainHistory,
-) lastKnownIPState {
-	state := lastKnownIPState{
-		ipv4Seq: -1,
-		ipv6Seq: -1,
-	}
-
+func findLastKnownIPs(domains map[string]DomainHistory) lastKnownIPState {
+	state := lastKnownIPState{ipv4Seq: -1, ipv6Seq: -1}
 	domainNames := sortedHistoryDomainNames(domains)
 	sequence := 0
 
@@ -511,6 +511,7 @@ func cloneZonesByProvider(src map[string][]Zone) map[string][]Zone {
 }
 
 func mergeFailedProviderZoneFallbacks(
+	ctx context.Context,
 	fresh map[string][]Zone,
 	cached map[string][]Zone,
 	failures map[string]error,
@@ -520,17 +521,17 @@ func mergeFailedProviderZoneFallbacks(
 	for provider := range failures {
 		if zones := cached[provider]; len(zones) > 0 {
 			merged[provider] = append([]Zone(nil), zones...)
-			debugLog("CACHE", "", fmt.Sprintf("Using stale in-memory zones for provider %s after API failure", provider))
+			debugLog(logCategoryCache, "", fmt.Sprintf("Using stale in-memory zones for provider %s after API failure", provider))
 			continue
 		}
 
-		zones, ok := loadProviderZonesFromDisk(ProviderType(provider))
+		zones, ok := loadProviderZonesFromDisk(ctx, ProviderType(provider))
 		if !ok || len(zones) == 0 {
 			continue
 		}
 
 		merged[provider] = append([]Zone(nil), zones...)
-		debugLog("CACHE", "", fmt.Sprintf("Using stale disk zones for provider %s after API failure", provider))
+		debugLog(logCategoryCache, "", fmt.Sprintf("Using stale disk zones for provider %s after API failure", provider))
 	}
 
 	return merged
@@ -549,22 +550,22 @@ func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zo
 	cached, cacheAge, hasCachedZones := getCachedZonesState()
 
 	if !forceRefresh && hasCachedZones && cacheAge < ZoneCacheTTL {
-		debugLog("SCHEDULER", "", fmt.Sprintf(phrases().UsingZoneCacheAge, cacheAge.Round(time.Second)))
+		debugLog(logCategorySchudler, "", fmt.Sprintf(phrases().UsingZoneCacheAge, cacheAge.Round(time.Second)))
 		return cached, nil
 	}
 
 	switch {
 	case forceRefresh:
-		debugLog("SCHEDULER", "", phrases().ForcedRefreshLoadZones)
+		debugLog(logCategorySchudler, "", phrases().ForcedRefreshLoadZones)
 	case !hasCachedZones:
-		debugLog("SCHEDULER", "", phrases().NoZoneCacheInitialLoad)
+		debugLog(logCategorySchudler, "", phrases().NoZoneCacheInitialLoad)
 	default:
-		debugLog("SCHEDULER", "", fmt.Sprintf(phrases().ZoneCacheTooOldReload, cacheAge.Round(time.Second)))
+		debugLog(logCategorySchudler, "", fmt.Sprintf(phrases().ZoneCacheTooOldReload, cacheAge.Round(time.Second)))
 	}
 
 	if !forceRefresh && !hasCachedZones {
-		if zonesFromDisk, err := loadZonesFromDiskCache(); err == nil && len(zonesFromDisk) > 0 {
-			debugLog("SCHEDULER", "", phrases().ZonesLoadedFromDiskNoAPICall)
+		if zonesFromDisk, err := loadZonesFromDiskCache(ctx); err == nil && len(zonesFromDisk) > 0 {
+			debugLog(logCategorySchudler, "", phrases().ZonesLoadedFromDiskNoAPICall)
 			setCachedZonesAt(zonesFromDisk, time.Time{})
 			return zonesFromDisk, nil
 		}
@@ -579,34 +580,34 @@ func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zo
 		},
 	)
 	if err != nil {
-		debugLog("SCHEDULER", "", fmt.Sprintf(phrases().ZoneAPILoadFailed, err))
+		debugLog(logCategorySchudler, "", fmt.Sprintf(phrases().ZoneAPILoadFailed, err))
 
 		if hasCachedZones {
 			zonesByProvider := cloneZonesByProvider(cached)
 			setCachedZonesAt(zonesByProvider, time.Time{})
-			debugLog("SCHEDULER", "", "Using stale in-memory zone cache; retry on next scheduler run")
+			debugLog(logCategorySchudler, "", "Using stale in-memory zone cache; retry on next scheduler run")
 			return zonesByProvider, nil
 		}
 
-		debugLog("SCHEDULER", "", phrases().TryingDiskCacheFallback)
-		zonesByProvider, diskErr := loadZonesFromDiskCache()
+		debugLog(logCategorySchudler, "", phrases().TryingDiskCacheFallback)
+		zonesByProvider, diskErr := loadZonesFromDiskCache(ctx)
 		if diskErr != nil {
 			return nil, fmt.Errorf("%s: %w", phrases().APIAndDiskCacheFailed, diskErr)
 		}
 
 		setCachedZonesAt(zonesByProvider, time.Time{})
-		debugLog("SCHEDULER", "", phrases().ZonesLoadedFromDisk)
+		debugLog(logCategorySchudler, "", phrases().ZonesLoadedFromDisk)
 		return zonesByProvider, nil
 	}
 
 	zonesByProvider := snapshot.Zones
 	if len(snapshot.Failures) > 0 {
-		zonesByProvider = mergeFailedProviderZoneFallbacks(zonesByProvider, cached, snapshot.Failures)
+		zonesByProvider = mergeFailedProviderZoneFallbacks(ctx, zonesByProvider, cached, snapshot.Failures)
 
 		setCachedZonesAt(zonesByProvider, time.Time{})
 
 		debugLog(
-			"SCHEDULER",
+			logCategorySchudler,
 			"",
 			fmt.Sprintf(
 				"Zone cache degraded; failed providers=%s; retry on next scheduler run",
@@ -617,7 +618,7 @@ func loadZonesWithCache(ctx context.Context, forceRefresh bool) (map[string][]Zo
 	}
 
 	setCachedZones(zonesByProvider)
-	debugLog("SCHEDULER", "", phrases().ZonesLoadedFromAPI)
+	debugLog(logCategorySchudler, "", phrases().ZonesLoadedFromAPI)
 	return zonesByProvider, nil
 }
 
@@ -630,34 +631,34 @@ func loadRecordsWithCache(ctx context.Context, zonesByProvider map[string][]Zone
 
 	if hasActiveProviderZoneFailures() {
 		if hasCachedRecords {
-			debugLog("CACHE", "", "Provider zone API degraded; retaining last known record cache")
+			debugLog(logCategoryCache, "", "Provider zone API degraded; retaining last known record cache")
 			return cached, nil
 		}
 
 		if cacheFromDisk, err := loadRecordCacheFromDisk(zonesByProvider); err == nil && cacheFromDisk != nil {
-			debugLog("CACHE", "", "Provider zone API degraded; using record cache from disk")
+			debugLog(logCategoryCache, "", "Provider zone API degraded; using record cache from disk")
 			setCachedRecords(cacheFromDisk)
 			return cacheFromDisk, nil
 		}
 	}
 
 	if !forceRefresh && hasCachedRecords && cacheAge < RecordCacheTTL {
-		debugLog("SCHEDULER", "", fmt.Sprintf(phrases().UsingRecordCacheAge, cacheAge.Round(time.Second)))
+		debugLog(logCategorySchudler, "", fmt.Sprintf(phrases().UsingRecordCacheAge, cacheAge.Round(time.Second)))
 		return cached, nil
 	}
 
 	switch {
 	case forceRefresh:
-		debugLog("SCHEDULER", "", phrases().ForcedRefreshLoadRecords)
+		debugLog(logCategorySchudler, "", phrases().ForcedRefreshLoadRecords)
 	case !hasCachedRecords:
-		debugLog("SCHEDULER", "", phrases().NoRecordCacheInitialLoad)
+		debugLog(logCategorySchudler, "", phrases().NoRecordCacheInitialLoad)
 	default:
-		debugLog("SCHEDULER", "", fmt.Sprintf(phrases().RecordCacheTooOldReload, cacheAge.Round(time.Second)))
+		debugLog(logCategorySchudler, "", fmt.Sprintf(phrases().RecordCacheTooOldReload, cacheAge.Round(time.Second)))
 	}
 
 	if !forceRefresh && !hasCachedRecords {
 		if cacheFromDisk, err := loadRecordCacheFromDisk(zonesByProvider); err == nil && cacheFromDisk != nil {
-			debugLog("SCHEDULER", "", phrases().RecordCacheLoadedFromDiskNoAPICall)
+			debugLog(logCategorySchudler, "", phrases().RecordCacheLoadedFromDiskNoAPICall)
 			setCachedRecords(cacheFromDisk)
 			return cacheFromDisk, nil
 		}
@@ -667,21 +668,21 @@ func loadRecordsWithCache(ctx context.Context, zonesByProvider map[string][]Zone
 		return loadZoneCache(ctx, zonesByProvider)
 	})
 	if err != nil {
-		debugLog("CACHE", "", fmt.Sprintf(phrases().RecordCacheError, err))
+		debugLog(logCategoryCache, "", fmt.Sprintf(phrases().RecordCacheError, err))
 
 		if hasCachedRecords {
-			debugLog("CACHE", "", "Record API refresh failed; retaining stale in-memory record cache")
+			debugLog(logCategoryCache, "", "Record API refresh failed; retaining stale in-memory record cache")
 			return cached, nil
 		}
 
-		debugLog("CACHE", "", phrases().TryingLoadRecordCacheFromDisk)
+		debugLog(logCategoryCache, "", phrases().TryingLoadRecordCacheFromDisk)
 		cache, err = loadRecordCacheFromDisk(zonesByProvider)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", phrases().RecordCacheCouldNotBeLoaded, err)
 		}
-		debugLog("CACHE", "", phrases().RecordCacheLoadedFromDisk)
+		debugLog(logCategoryCache, "", phrases().RecordCacheLoadedFromDisk)
 	} else {
-		debugLog("CACHE", "", phrases().RecordsLoadedSuccessfully)
+		debugLog(logCategoryCache, "", phrases().RecordsLoadedSuccessfully)
 	}
 
 	setCachedRecords(cache)
@@ -714,7 +715,7 @@ func saveProviderCacheJob(job cacheSaveJob, cache *ZoneRecordCache) bool {
 	switch job.provider {
 	case ProviderIONOS:
 		if err := saveIONOSCacheToFile(job.zones, cache); err != nil {
-			debugLog("CACHE", "", fmt.Sprintf(phrases().IonosCacheSaveFailed, err))
+			debugLog(logCategoryCache, "", fmt.Sprintf(phrases().IonosCacheSaveFailed, err))
 
 			return false
 		}
@@ -723,7 +724,7 @@ func saveProviderCacheJob(job cacheSaveJob, cache *ZoneRecordCache) bool {
 
 	case ProviderCloudflare:
 		if err := saveCloudflareCacheToFile(job.zones, cache); err != nil {
-			debugLog("CACHE", "", fmt.Sprintf(phrases().CloudflareCacheSaveFailed, err))
+			debugLog(logCategoryCache, "", fmt.Sprintf(phrases().CloudflareCacheSaveFailed, err))
 
 			return false
 		}
@@ -732,7 +733,7 @@ func saveProviderCacheJob(job cacheSaveJob, cache *ZoneRecordCache) bool {
 
 	case ProviderIPv64:
 		if err := saveIPv64Cache(); err != nil {
-			debugLog("CACHE", "", fmt.Sprintf(phrases().IPv64CacheSaveFailed, err))
+			debugLog(logCategoryCache, "", fmt.Sprintf(phrases().IPv64CacheSaveFailed, err))
 
 			return false
 		}
@@ -741,7 +742,7 @@ func saveProviderCacheJob(job cacheSaveJob, cache *ZoneRecordCache) bool {
 
 	case ProviderHetzner:
 		if err := saveHetznerDNSCacheToFile(job.zones, cache); err != nil {
-			debugLog("CACHE", "", fmt.Sprintf(phrases().HetznerDNSCacheSaveFailed, err))
+			debugLog(logCategoryCache, "", fmt.Sprintf(phrases().HetznerDNSCacheSaveFailed, err))
 
 			return false
 		}
@@ -750,7 +751,7 @@ func saveProviderCacheJob(job cacheSaveJob, cache *ZoneRecordCache) bool {
 
 	case ProviderHetznerCloud:
 		if err := saveHetznerCloudCacheToFile(job.zones, cache); err != nil {
-			debugLog("CACHE", "", fmt.Sprintf(phrases().HetznerCloudCacheSaveFailed, err))
+			debugLog(logCategoryCache, "", fmt.Sprintf(phrases().HetznerCloudCacheSaveFailed, err))
 
 			return false
 		}
@@ -763,7 +764,7 @@ func saveProviderCacheJob(job cacheSaveJob, cache *ZoneRecordCache) bool {
 
 	case ProviderDNScale:
 		if err := saveDNScaleCacheToFile(job.zones, cache); err != nil {
-			debugLog("CACHE", "", fmt.Sprintf(phrases().DNScaleCacheSaveFailed, err))
+			debugLog(logCategoryCache, "", fmt.Sprintf(phrases().DNScaleCacheSaveFailed, err))
 
 			return false
 		}
@@ -790,7 +791,7 @@ func saveCachesToDisk(
 	diskPersistMutex.Unlock()
 
 	if !needsPersist {
-		debugLog("CACHE", "", phrases().DiskCachePersistSkipped)
+		debugLog(logCategoryCache, "", phrases().DiskCachePersistSkipped)
 
 		return
 	}
@@ -849,12 +850,18 @@ func runCleanupIfNeeded(
 	}
 
 	if timeSinceLastCleanup < CleanupInterval {
-		debugLog("MAINTENANCE", "", fmt.Sprintf(phrases().CleanupSkippedLastRun, timeSinceLastCleanup.Round(time.Minute)))
+		debugLog(logCategoryMaintenace, "", fmt.Sprintf(phrases().CleanupSkippedLastRun, timeSinceLastCleanup.Round(time.Minute)))
 
 		return
 	}
 
-	debugLog("MAINTENANCE", "", fmt.Sprintf(phrases().CleanupStartingLastRun, timeSinceLastCleanup.Round(time.Minute)))
+	if hasActiveProviderZoneFailures() {
+		debugLog(logCategoryMaintenace, "", "Cleanup skipped: provider zone API degraded")
+
+		return
+	}
+
+	debugLog(logCategoryMaintenace, "", fmt.Sprintf(phrases().CleanupStartingLastRun, timeSinceLastCleanup.Round(time.Minute)))
 	lastCleanupNano.Store(time.Now().UnixNano())
 
 	hasIPv64Config := findProviderDomainConfig(domainConfigs, ProviderIPv64) != nil
@@ -877,7 +884,7 @@ func runCleanupIfNeeded(
 
 		case ProviderIPv64:
 			if hasIPv64Config {
-				debugLog("MAINTENANCE", "", phrases().CheckingIPv64OrphanedRecords)
+				debugLog(logCategoryMaintenace, "", phrases().CheckingIPv64OrphanedRecords)
 				cleanupIPv64Records(ctx)
 			}
 		case ProviderDNScale:
@@ -890,7 +897,7 @@ func runCleanupIfNeeded(
 // DISK CACHE FALLBACK
 // ============================================================================
 
-func loadZonesFromDiskCache() (map[string][]Zone, error) {
+func loadZonesFromDiskCache(ctx context.Context) (map[string][]Zone, error) {
 	zonesByProvider := make(map[string][]Zone)
 	seen := make(map[ProviderType]bool)
 
@@ -903,7 +910,7 @@ func loadZonesFromDiskCache() (map[string][]Zone, error) {
 		}
 		seen[provider] = true
 
-		zones, ok := loadProviderZonesFromDisk(provider)
+		zones, ok := loadProviderZonesFromDisk(ctx, provider)
 		if !ok {
 			continue
 		}
@@ -1039,12 +1046,12 @@ type providerZoneDiskSource struct {
 	loadedMessage string
 }
 
-func loadProviderZonesFromDisk(provider ProviderType) ([]Zone, bool) {
+func loadProviderZonesFromDisk(ctx context.Context, provider ProviderType) ([]Zone, bool) {
 	switch provider {
 	case ProviderIPv64:
 		return loadIPv64ProviderZonesFromDisk()
 	case ProviderFebas:
-		return loadFebasProviderZonesFromDisk()
+		return loadFebasProviderZonesFromDisk(ctx)
 	default:
 		source, ok := providerZoneDiskSourceFor(provider)
 		if !ok {
@@ -1078,7 +1085,7 @@ func loadFileBackedProviderZonesFromDisk(source providerZoneDiskSource) ([]Zone,
 		return nil, false
 	}
 
-	debugLog("CACHE", "", fmt.Sprintf(source.loadedMessage, len(zones)))
+	debugLog(logCategoryCache, "", fmt.Sprintf(source.loadedMessage, len(zones)))
 
 	return zones, true
 }
@@ -1089,18 +1096,22 @@ func loadIPv64ProviderZonesFromDisk() ([]Zone, bool) {
 		return nil, false
 	}
 
-	debugLog("CACHE", "", fmt.Sprintf(phrases().IPv64ZonesLoadedFromDisk, len(zones)))
+	debugLog(logCategoryCache, "", fmt.Sprintf(phrases().IPv64ZonesLoadedFromDisk, len(zones)))
 
 	return zones, true
 }
 
-func loadFebasProviderZonesFromDisk() ([]Zone, bool) {
+func loadFebasProviderZonesFromDisk(ctx context.Context) ([]Zone, bool) {
+	if err := ctx.Err(); err != nil {
+		return nil, false
+	}
+
 	domainConfigs := snapshotDomainConfigs()
 	if findProviderDomainConfig(domainConfigs, ProviderFebas) == nil {
 		return nil, false
 	}
 
-	zones, err := loadFebasZones(context.Background())
+	zones, err := loadFebasZones(ctx)
 
 	return zones, err == nil && len(zones) > 0
 }

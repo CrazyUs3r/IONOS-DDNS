@@ -100,7 +100,7 @@ func initAuth(logsDir string) error {
 	if v := strings.ToLower(strings.TrimSpace(os.Getenv("DASHBOARD_AUTH"))); v == "false" {
 		authEnabled = false
 		log(LogContext{
-			Level:   LogInfo,
+			Level:   LogWarn,
 			Action:  ActionConfig,
 			Message: phrases().AuthDisabled,
 		})
@@ -172,6 +172,10 @@ func maxLen(values ...string) int {
 	}
 
 	return maxVal
+}
+
+func (w *auditResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
 }
 
 // ============================================================================
@@ -310,7 +314,11 @@ var (
 )
 
 func readUsersFile() ([]DashboardUser, error) {
-	data, err := os.ReadFile(usersFilePath)
+	if filepath.Base(usersFilePath) != "users.json" {
+		return nil, errors.New("invalid users file path")
+	}
+
+	data, err := readFileWithinDir(usersFilePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return []DashboardUser{}, nil
@@ -482,16 +490,28 @@ func safeAuthLogValue(value string) string {
 
 func safeLocalRedirect(raw string) string {
 	raw = strings.TrimSpace(raw)
-	if raw == "" || strings.HasPrefix(raw, "//") || strings.Contains(raw, "\\") {
+
+	if raw == "" ||
+		!strings.HasPrefix(raw, "/") ||
+		strings.HasPrefix(raw, "//") ||
+		strings.Contains(raw, "\\") {
 		return "/"
 	}
 
 	u, err := url.Parse(raw)
-	if err != nil || u.IsAbs() || u.Host != "" || u.User != nil || !strings.HasPrefix(u.Path, "/") {
+	if err != nil ||
+		u.IsAbs() ||
+		u.Host != "" ||
+		u.User != nil ||
+		u.Opaque != "" {
 		return "/"
 	}
+
 	decodedPath, err := url.PathUnescape(u.EscapedPath())
-	if err != nil || strings.HasPrefix(decodedPath, "//") || strings.Contains(decodedPath, "\\") {
+	if err != nil ||
+		!strings.HasPrefix(decodedPath, "/") ||
+		strings.HasPrefix(decodedPath, "//") ||
+		strings.Contains(decodedPath, "\\") {
 		return "/"
 	}
 
@@ -630,6 +650,8 @@ func secureCookieEnabled(r *http.Request) bool {
 }
 
 func setSessionCookie(w http.ResponseWriter, r *http.Request, sess *Session) {
+	// #nosec G124 -- HTTP and HTTPS are intentionally supported.
+	// Secure is enabled for HTTPS requests; HttpOnly and SameSite are enforced.
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName(r),
 		Value:    sess.Token,
@@ -643,6 +665,8 @@ func setSessionCookie(w http.ResponseWriter, r *http.Request, sess *Session) {
 }
 
 func expireSessionCookie(w http.ResponseWriter, name string, secure bool) {
+	// #nosec G124 -- HTTP and HTTPS are intentionally supported.
+	// Secure is enabled for HTTPS requests; HttpOnly and SameSite are enforced.
 	http.SetCookie(w, &http.Cookie{
 		Name:     name,
 		Value:    "",
@@ -699,7 +723,7 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
 		return err
 	}
 	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
 		if err == nil {
 			return errors.New("multiple JSON values")
 		}
@@ -732,7 +756,7 @@ func ensureAuditWriterUnsafe(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	f, err := openFileWithinDirWithFlags(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
@@ -757,7 +781,7 @@ func closeAuditWriterUnsafe() {
 	}
 	if auditFile != nil {
 		if err := auditFile.Close(); err != nil {
-			debugLog("DASHBOARD", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
+			debugLog(logCategoryDashboard, "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
 		}
 		auditFile = nil
 	}
@@ -902,6 +926,11 @@ func (w *auditResponseWriter) Write(data []byte) (int, error) {
 }
 
 func shouldAuditRequest(method, path string) bool {
+	switch path {
+	case "/api/backup/download", "/api/audit/export",
+		"/api/logs/export", "/api/export":
+		return true
+	}
 	if !isUnsafeMethod(method) {
 		return false
 	}
@@ -1097,6 +1126,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	redirect := safeLocalRedirect(r.URL.Query().Get("redirect"))
 
 	if _, ok := sessionFromRequest(r); ok {
+		// #nosec G710 -- Redirect target is validated as a local URL.
 		http.Redirect(w, r, redirect, http.StatusFound)
 
 		return
@@ -1116,8 +1146,12 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 				Message: "🚫 Login rate limit exceeded for IP: " + clientIP,
 			})
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("X-Content-Type-Options", "nosniff")
 			w.WriteHeader(http.StatusTooManyRequests)
-			_, _ = fmt.Fprintf(w, "%s", buildLoginPage(errMsg, redirect))
+
+			// #nosec G705 -- The HTML template is generated internally;
+			// dynamic error messages and redirect attributes are escaped.
+			_, _ = io.WriteString(w, buildLoginPage(errMsg, redirect))
 
 			return
 		}
@@ -1146,7 +1180,11 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = fmt.Fprintf(w, "%s", buildLoginPage(errMsg, redirect))
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+
+	// #nosec G705 -- User-controlled HTML fields are escaped
+	// by buildLoginPage before the response is written.
+	_, _ = io.WriteString(w, buildLoginPage(errMsg, redirect))
 }
 
 // ============================================================================
@@ -1212,7 +1250,11 @@ func handleSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = fmt.Fprintf(w, "%s", buildSetupPage(errMsg))
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+
+	// #nosec G705 -- buildSetupPage escapes the error message
+	// before embedding it in the HTML response.
+	_, _ = io.WriteString(w, buildSetupPage(errMsg))
 }
 
 func handleSetupPost(w http.ResponseWriter, r *http.Request) (string, bool) {
@@ -1252,7 +1294,7 @@ func validateSetupForm(r *http.Request) (setupForm, string) {
 	passwordConfirmation := r.FormValue("password2")
 
 	switch {
-	case subtle.ConstantTimeCompare([]byte(token), []byte(setupToken)) != 1:
+	case setupToken == "" || subtle.ConstantTimeCompare([]byte(token), []byte(setupToken)) != 1:
 		return setupForm{}, phrases().ErrInvalidSetupToken
 	case !validDashboardUsername(form.username):
 		return setupForm{}, phrases().ErrUsernameTooShort
@@ -1782,7 +1824,6 @@ const (
 var (
 	auditLogMu      sync.Mutex
 	backupRestoreMu sync.Mutex
-	auditFilePath   string
 )
 
 type auditEntry struct {
@@ -1806,9 +1847,7 @@ func auditLogFilePath() string {
 		return ""
 	}
 
-	auditFilePath = filepath.Join(filepath.Dir(basePath), "audit.json")
-
-	return auditFilePath
+	return filepath.Join(filepath.Dir(basePath), "audit.json")
 }
 
 func safeAuditField(value string, maxRunes int) string {
@@ -1863,7 +1902,7 @@ func auditHTTPRequest(r *http.Request, sess *Session, status int) {
 		Result:    result,
 	}
 	if err := appendAuditEntry(entry); err != nil {
-		debugLog("AUDIT", "", fmt.Sprintf("audit write failed: %v", err))
+		debugLog(logCategoryAudit, "", fmt.Sprintf("audit write failed: %v", err))
 	}
 }
 
@@ -1892,7 +1931,7 @@ func appendAuditEntry(entry auditEntry) error {
 		if rotErr != nil {
 			log(LogContext{
 				Level:    LogWarn,
-				Category: "SYSTEM",
+				Category: logCategorySystem,
 				Action:   ActionError,
 				Message:  "audit rotation failed",
 				Error:    rotErr,
@@ -1929,7 +1968,7 @@ func readAuditEntries(path string, limit int) ([]auditEntry, int, string, string
 		_ = auditWriter.Flush()
 	}
 
-	file, err := os.Open(path)
+	file, err := openFileWithinDir(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return []auditEntry{}, 0, "", "", nil
@@ -1939,7 +1978,7 @@ func readAuditEntries(path string, limit int) ([]auditEntry, int, string, string
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			debugLog("DASHBOARD", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
+			debugLog(logCategoryDashboard, "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
 		}
 	}()
 
@@ -2039,7 +2078,8 @@ func handleAPIAudit(w http.ResponseWriter, r *http.Request) {
 
 	entries, total, oldestTimestamp, latestTimestamp, err := readAuditEntries(path, auditReadLimit)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		debugLog(logCategoryAudit, "", fmt.Sprintf("audit read failed: %v", err))
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": phrases().ErrSave})
 
 		return
 	}
@@ -2067,7 +2107,7 @@ func openAuditGenerationsOldestFirst() []*os.File {
 		if err != nil {
 			continue
 		}
-		f, err := os.Open(p)
+		f, err := openFileWithinDir(p)
 		if err != nil {
 			continue
 		}
@@ -2120,7 +2160,7 @@ func handleAPIAuditExport(w http.ResponseWriter, r *http.Request) {
 
 	bw := bufio.NewWriterSize(w, 64*1024)
 	if err := streamAuditExport(bw, files, format == "json", extend); err != nil {
-		debugLog("EXPORT", "", fmt.Sprintf("Audit export failed: %v", err))
+		debugLog(logCategoryExport, "", fmt.Sprintf("Audit export failed: %v", err))
 	}
 }
 
@@ -2215,7 +2255,7 @@ func deleteAuditEntry(id string) error {
 
 	closeAuditWriterUnsafe()
 
-	data, err := os.ReadFile(path)
+	data, err := readFileWithinDir(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -2246,7 +2286,7 @@ func deleteAuditEntry(id string) error {
 		output = strings.Join(kept, "\n") + "\n"
 	}
 
-	return os.WriteFile(path, []byte(output), 0o600)
+	return writeFileAtomic(path, []byte(output))
 }
 
 func handleAPIAuditDelete(w http.ResponseWriter, r *http.Request) {
@@ -2314,6 +2354,7 @@ func authPageShell(title, body string) string {
 				</div>
 			</div>
 			` + appFooterHTML() + `
+			<script src="/assets/i18n.js" defer></script>
 			<script src="` + assetURL("/assets/auth.js", authJSETag) + `" defer></script>
 		</body>
 	</html>`
@@ -2340,7 +2381,7 @@ func buildLoginPage(errMsg, redirect string) string {
 			<label class="auth-label">` + phrases().Password + `</label>
 			<div class="input-with-action">
 				<input id="login-password" class="auth-input" type="password" name="password" autocomplete="current-password" required>
-				<button type="button" class="input-action-btn" data-toggle-password="login-password" aria-label="Passwort anzeigen" aria-pressed="false">👁️</button>
+				` + passwordToggleButton("login-password") + `
 			</div>
 		</div>
 		<button class="auth-btn" type="submit">🔐 ` + phrases().LoginButton + `</button>
@@ -2375,14 +2416,14 @@ func buildSetupPage(errMsg string) string {
 			<label class="auth-label">` + phrases().Password + ` <small style="opacity:0.5">(` + phrases().PasswordMinHint + `)</small></label>
 			<div class="input-with-action">
 				<input id="setup-password" class="auth-input" type="password" name="password" autocomplete="new-password" required>
-				<button type="button" class="input-action-btn" data-toggle-password="setup-password" aria-label="Passwort anzeigen" aria-pressed="false">👁️</button>
+				` + passwordToggleButton("setup-password") + `
 			</div>
 		</div>
 		<div class="auth-field">
 			<label class="auth-label">` + phrases().PasswordConfirm + `</label>
 			<div class="input-with-action">
 				<input id="setup-password2" class="auth-input" type="password" name="password2" autocomplete="new-password" required>
-				<button type="button" class="input-action-btn" data-toggle-password="setup-password2" aria-label="Passwort anzeigen" aria-pressed="false">👁️</button>
+				` + passwordToggleButton("setup-password2") + `
 			</div>
 		</div>
 		<button class="auth-btn" type="submit">✅ ` + phrases().SetupButton + `</button>

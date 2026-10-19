@@ -290,7 +290,7 @@ func febasAPIAttempt(
 	attempt, maxRetries int,
 ) ([]byte, bool, error) {
 	redactedURL := redactFebasURL(requestURL)
-	debugLog("HTTP", "", fmt.Sprintf(phrases().FebasAttempt, attempt+1, maxRetries, redactedURL))
+	debugLog(logCategoryHTTP, "", fmt.Sprintf(phrases().FebasAttempt, attempt+1, maxRetries, redactedURL))
 
 	req, err := http.NewRequestWithContext(ctx, MethodGET, requestURL, http.NoBody)
 	if err != nil {
@@ -312,7 +312,7 @@ func febasAPIAttempt(
 	}
 	defer func() {
 		if closeErr := res.Body.Close(); closeErr != nil {
-			debugLog("HTTP", "", fmt.Sprintf(phrases().FebasResponseClose, closeErr))
+			debugLog(logCategoryHTTP, "", fmt.Sprintf(phrases().FebasResponseClose, closeErr))
 		}
 	}()
 
@@ -353,7 +353,7 @@ func febasAPIAttempt(
 
 		if retryable && attempt < maxRetries-1 {
 			wait := calculateRetryDelay(attempt, true)
-			debugLog("HTTP", "", fmt.Sprintf(phrases().FebasTemporaryRetry, wait))
+			debugLog(logCategoryHTTP, "", fmt.Sprintf(phrases().FebasTemporaryRetry, wait))
 			if !sleepOrCancel(ctx, wait) {
 				return nil, false, fmt.Errorf("%s: %w", phrases().ErrContextCancelled, ctx.Err())
 			}
@@ -366,7 +366,7 @@ func febasAPIAttempt(
 
 	apiMetrics.RecordSuccess(string(ProviderFebas), MethodNIC, duration)
 	lastErrorMsg.Set("")
-	debugLog("HTTP", "", "✅ Febas success: "+sanitizeFebasText(strings.TrimSpace(string(respBody))))
+	debugLog(logCategoryHTTP, "", "✅ Febas success: "+sanitizeFebasText(strings.TrimSpace(string(respBody))))
 
 	return respBody, false, nil
 }

@@ -125,7 +125,7 @@ func (e *emailNotifier) Send(msg NotifyMessage) error {
 	default:
 		select {
 		case dropped := <-e.sendQueue:
-			debugLog("NOTIFY", "", fmt.Sprintf(
+			debugLog(logCategoryNotify, "", fmt.Sprintf(
 				"⚠️ Email queue full – oldest message dropped (age: %v)",
 				time.Since(dropped.enqueued).Round(time.Second),
 			))
@@ -163,7 +163,7 @@ func (e *emailNotifier) drainQueue() {
 			select {
 			case msg := <-e.sendQueue:
 				if time.Since(msg.enqueued) > emailQueueMaxAge {
-					debugLog("NOTIFY", "", fmt.Sprintf(
+					debugLog(logCategoryNotify, "", fmt.Sprintf(
 						"⚠️ Email message discarded (too old: %v)",
 						time.Since(msg.enqueued).Round(time.Second),
 					))
@@ -171,10 +171,10 @@ func (e *emailNotifier) drainQueue() {
 					continue
 				}
 				if err := e.doSend(msg); err != nil {
-					debugLog("NOTIFY", "", fmt.Sprintf("⚠️ Email send failed: %v", err))
+					debugLog(logCategoryNotify, "", fmt.Sprintf("⚠️ Email send failed: %v", err))
 					log(LogContext{
 						Level:    LogError,
-						Category: "NOTIFY",
+						Category: logCategoryNotify,
 						Action:   ActionError,
 						Message:  "Email (SMTP) error",
 						Error:    err,
@@ -210,7 +210,10 @@ func (e *emailNotifier) doSend(msg emailMsg) error {
 }
 
 func (e *emailNotifier) sendStartTLS(addr string, msg []byte) error {
-	conn, err := net.DialTimeout(ProtocolTCP, addr, emailDialTimeout)
+	dialer := &net.Dialer{
+		Timeout: emailDialTimeout,
+	}
+	conn, err := dialer.DialContext(e.ctx, ProtocolTCP, addr)
 	if err != nil {
 		return fmt.Errorf("email dial: %w", err)
 	}
@@ -244,11 +247,19 @@ func (e *emailNotifier) sendStartTLS(addr string, msg []byte) error {
 }
 
 func (e *emailNotifier) sendTLS(addr string, msg []byte) error {
-	tlsCfg := &tls.Config{ServerName: e.host, MinVersion: tls.VersionTLS12}
-	conn, err := tls.DialWithDialer(
-		&net.Dialer{Timeout: emailDialTimeout},
-		ProtocolTCP, addr, tlsCfg,
-	)
+	tlsCfg := &tls.Config{
+		ServerName: e.host,
+		MinVersion: tls.VersionTLS12,
+	}
+
+	dialer := &tls.Dialer{
+		NetDialer: &net.Dialer{
+			Timeout: emailDialTimeout,
+		},
+		Config: tlsCfg,
+	}
+
+	conn, err := dialer.DialContext(e.ctx, ProtocolTCP, addr)
 	if err != nil {
 		return fmt.Errorf("email tls dial: %w", err)
 	}
@@ -277,7 +288,10 @@ func (e *emailNotifier) sendTLS(addr string, msg []byte) error {
 }
 
 func (e *emailNotifier) sendPlain(addr string, msg []byte) error {
-	conn, err := net.DialTimeout(ProtocolTCP, addr, emailDialTimeout)
+	dialer := &net.Dialer{
+		Timeout: emailDialTimeout,
+	}
+	conn, err := dialer.DialContext(e.ctx, ProtocolTCP, addr)
 	if err != nil {
 		return fmt.Errorf("email plain dial: %w", err)
 	}

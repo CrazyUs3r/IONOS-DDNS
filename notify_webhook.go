@@ -35,7 +35,13 @@ func (w *webhookNotifier) Name() string { return "Webhook" }
 func (w *webhookNotifier) Close() { w.cancel() }
 
 func (w *webhookNotifier) Send(msg NotifyMessage) error {
-	return w.doSend(msg)
+	go func() {
+		if err := w.doSend(msg); err != nil {
+			debugLog(logCategoryNotify, "", fmt.Sprintf("Webhook send failed: %v", err))
+		}
+	}()
+
+	return nil
 }
 
 func (w *webhookNotifier) SendSync(msg NotifyMessage) error {
@@ -76,7 +82,7 @@ func (w *webhookNotifier) doSend(msg NotifyMessage) error {
 			return err
 		}
 
-		debugLog("NOTIFY", "", fmt.Sprintf("⌛ Webhook retry %d/%d: %v", attempt+1, maxAttempts, err))
+		debugLog(logCategoryNotify, "", fmt.Sprintf("⌛ Webhook retry %d/%d: %v", attempt+1, maxAttempts, err))
 		timer := time.NewTimer(wait)
 		select {
 		case <-w.ctx.Done():

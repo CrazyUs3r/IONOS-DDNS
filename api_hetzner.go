@@ -71,7 +71,7 @@ func hetznerAPIAttempt(
 	body any,
 	attempt, maxRetries int,
 ) ([]byte, bool, error) {
-	debugLog("HTTP", "", fmt.Sprintf(phrases().HetznerAttempt, phrases().Attempt, attempt+1, maxRetries, method, endpoint))
+	debugLog(logCategoryHTTP, "", fmt.Sprintf(phrases().HetznerAttempt, phrases().Attempt, attempt+1, maxRetries, method, endpoint))
 
 	bodyBytes, err := marshalHetznerBody(body)
 	if err != nil {
@@ -97,7 +97,7 @@ func hetznerAPIAttempt(
 
 	defer func() {
 		if err := res.Body.Close(); err != nil {
-			debugLog("HTTP", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
+			debugLog(logCategoryHTTP, "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
 		}
 	}()
 
@@ -112,7 +112,7 @@ func marshalHetznerBody(body any) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", phrases().ErrJSONMarshal, err)
 	}
-	debugLog("HTTP", "", fmt.Sprintf("📤 %s: %s", phrases().PayloadSent, string(bodyBytes)))
+	debugLog(logCategoryHTTP, "", fmt.Sprintf("📤 %s: %s", phrases().PayloadSent, string(bodyBytes)))
 
 	return bodyBytes, nil
 }
@@ -469,7 +469,7 @@ func findHetznerExistingRecord(records []Record, fqdn, zoneName, recordName, rec
 		name := normalizeHetznerRelativeName(records[i].Name)
 		if name == recordName || hetznerRecordFQDN(zoneName, name) == fqdn {
 			existing := &records[i]
-			debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("📌 Record found: %s (ID: %s)", existing.Content, existing.ID))
+			debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf("📌 Record found: %s (ID: %s)", existing.Content, existing.ID))
 
 			return existing
 		}
@@ -480,15 +480,15 @@ func findHetznerExistingRecord(records []Record, fqdn, zoneName, recordName, rec
 
 func shouldSkipHetznerUpdate(providerName, fqdn, recordType, newIP string, existing *Record) bool {
 	if existing != nil && dnsRecordContentEqual(recordType, existing.Content, newIP) {
-		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("✅ %s current: %s = %s", providerName, recordType, newIP))
+		debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf("✅ %s current: %s = %s", providerName, recordType, newIP))
 		log(LogContext{Level: LogInfo, Action: ActionCurrent, Domain: fqdn, Message: fmt.Sprintf("%-4s %s %s", recordType, newIP, phrases().Current)})
 
 		return true
 	}
 	if existing == nil {
-		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("🆕 %s: no %s record found", providerName, recordType))
+		debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf("🆕 %s: no %s record found", providerName, recordType))
 	} else {
-		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("🔄 %s update needed: %s -> %s", providerName, existing.Content, newIP))
+		debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf("🔄 %s update needed: %s -> %s", providerName, existing.Content, newIP))
 	}
 
 	return false
@@ -566,7 +566,7 @@ func cleanupHetznerRecords(
 }
 
 func cleanupSingleHetznerRecord(ctx context.Context, dc *DomainConfig, provider ProviderType, zone Zone, rec Record, fqdn string) {
-	debugLog("MAINTENANCE", fqdn, fmt.Sprintf("cleanup orphaned %s record", rec.Type))
+	debugLog(logCategoryMaintenace, fqdn, fmt.Sprintf("cleanup orphaned %s record", rec.Type))
 	if dryRunEnabled() {
 		log(LogContext{Level: LogInfo, Action: ActionCleanup, Domain: fqdn, Message: phrases().CleanupDryRun})
 
@@ -588,7 +588,7 @@ func cleanupSingleHetznerRecord(ctx context.Context, dc *DomainConfig, provider 
 		_, err = hetznerCloudAPI(ctx, dc, MethodDELETE, endpoint, nil)
 	}
 	if err != nil {
-		debugLog("MAINTENANCE", fqdn, fmt.Sprintf("cleanup delete error: %v", err))
+		debugLog(logCategoryMaintenace, fqdn, fmt.Sprintf("cleanup delete error: %v", err))
 
 		return
 	}

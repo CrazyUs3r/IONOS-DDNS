@@ -17,7 +17,7 @@ import (
 
 func saveConfigToFile() error {
 	dir := filepath.Dir(configPath)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionError,
@@ -79,7 +79,7 @@ func initProviderConfig() error {
 
 	configJSON := os.Getenv("DOMAINS_CONFIG")
 	if configJSON != "" {
-		debugLog("CONFIG", "", phrases().ConfigJSONMissingMigratingFromDomainsConfig)
+		debugLog(logCategoryConfig, "", phrases().ConfigJSONMissingMigratingFromDomainsConfig)
 
 		var raw []rawEntry
 		if err := json.Unmarshal([]byte(configJSON), &raw); err != nil {
@@ -93,16 +93,16 @@ func initProviderConfig() error {
 		}
 
 		if err := saveConfigToFile(); err != nil {
-			debugLog("CONFIG", "", fmt.Sprintf(phrases().CouldNotCreateConfigJSONFormat, err))
+			debugLog(logCategoryConfig, "", fmt.Sprintf(phrases().CouldNotCreateConfigJSONFormat, err))
 		} else {
-			debugLog("CONFIG", "", phrases().ConfigJSONSuccessfullyCreatedFromEnv)
+			debugLog(logCategoryConfig, "", phrases().ConfigJSONSuccessfullyCreatedFromEnv)
 		}
 
 		return nil
 	}
 
 	if strings.TrimSpace(os.Getenv("DOMAINS")) != "" {
-		debugLog("CONFIG", "", phrases().NoConfigJSONAndNoDomainsConfigFoundUsingLegacyMode)
+		debugLog(logCategoryConfig, "", phrases().NoConfigJSONAndNoDomainsConfigFoundUsingLegacyMode)
 		err := initLegacyConfig()
 		if err == nil {
 			_ = saveConfigToFile()
@@ -111,7 +111,7 @@ func initProviderConfig() error {
 		return err
 	}
 
-	debugLog("CONFIG", "", "No domain/provider configuration found yet; dashboard setup mode active.")
+	debugLog(logCategoryConfig, "", "No domain/provider configuration found yet; dashboard setup mode active.")
 
 	return nil
 }

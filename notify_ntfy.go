@@ -46,8 +46,8 @@ type ntfyQueuedMsg struct {
 // NTFY NOTIFIER
 // ============================================================================
 
-func newNtfyNotifier(url, topic, token string) *ntfyNotifier {
-	ctx, cancel := context.WithCancel(notificationParentContext())
+func newNtfyNotifier(parent context.Context, url, topic, token string) *ntfyNotifier {
+	ctx, cancel := context.WithCancel(parent)
 	n := &ntfyNotifier{
 		url:       strings.TrimRight(strings.TrimSpace(url), "/"),
 		topic:     strings.Trim(strings.TrimSpace(topic), "/"),
@@ -58,7 +58,7 @@ func newNtfyNotifier(url, topic, token string) *ntfyNotifier {
 	}
 
 	n.wg.Go(func() {
-		n.drainQueue()
+		n.drainQueue(ctx)
 	})
 
 	return n
@@ -91,7 +91,7 @@ func (n *ntfyNotifier) Send(msg NotifyMessage) error {
 		default:
 		}
 
-		debugLog("NOTIFY", "", fmt.Sprintf(
+		debugLog(logCategoryNotify, "", fmt.Sprintf(
 			t(
 				phrases().NtfyQueueFull,
 				"⚠️ ntfy-Warteschlange voll – älteste Nachricht verworfen (Alter: %v)",
@@ -108,20 +108,20 @@ func (n *ntfyNotifier) Send(msg NotifyMessage) error {
 	return nil
 }
 
-func (n *ntfyNotifier) drainQueue() {
+func (n *ntfyNotifier) drainQueue(ctx context.Context) {
 	ticker := time.NewTicker(ntfySendDelay)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-n.ctx.Done():
+		case <-ctx.Done():
 			return
 		case <-ticker.C:
 			select {
 			case msg := <-n.sendQueue:
 				age := time.Since(msg.enqueued)
 				if age > ntfyQueueMaxAge {
-					debugLog("NOTIFY", "", fmt.Sprintf(
+					debugLog(logCategoryNotify, "", fmt.Sprintf(
 						t(
 							phrases().NtfyMsgDiscarded,
 							"⚠️ ntfy-Nachricht verworfen (zu alt: %v)",
@@ -131,8 +131,8 @@ func (n *ntfyNotifier) drainQueue() {
 
 					continue
 				}
-				if err := n.sendWithRetry(msg); err != nil {
-					debugLog("NOTIFY", "", fmt.Sprintf(
+				if err := n.sendWithRetry(ctx, msg); err != nil {
+					debugLog(logCategoryNotify, "", fmt.Sprintf(
 						t(
 							phrases().NtfySendFailed,
 							"⚠️ ntfy-Versand fehlgeschlagen: %v",
@@ -146,14 +146,14 @@ func (n *ntfyNotifier) drainQueue() {
 	}
 }
 
-func (n *ntfyNotifier) sendWithRetry(msg ntfyQueuedMsg) error {
+func (n *ntfyNotifier) sendWithRetry(ctx context.Context, msg ntfyQueuedMsg) error {
 	const maxAttempts = 3
 	wait := 5 * time.Second
 
 	var lastErr error
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		lastErr = n.doSend(msg)
+		lastErr = n.doSend(ctx, msg)
 		if lastErr == nil {
 			return nil
 		}
@@ -162,17 +162,17 @@ func (n *ntfyNotifier) sendWithRetry(msg ntfyQueuedMsg) error {
 			break
 		}
 
-		debugLog("NOTIFY", "", fmt.Sprintf(
+		debugLog(logCategoryNotify, "", fmt.Sprintf(
 			t(phrases().NtfyRetry, "⌛ ntfy: Wiederholung %d/%d nach Fehler: %v (warte %v)"),
 			attempt, maxAttempts-1, lastErr, wait,
 		))
 
 		timer := time.NewTimer(wait)
 		select {
-		case <-n.ctx.Done():
+		case <-ctx.Done():
 			stopNotifyTimer(timer)
 
-			return lastErr
+			return ctx.Err()
 		case <-timer.C:
 		}
 
@@ -182,10 +182,10 @@ func (n *ntfyNotifier) sendWithRetry(msg ntfyQueuedMsg) error {
 	return fmt.Errorf(t(phrases().NtfyMaxAttemptsReached, "ntfy: Maximale Anzahl an Versuchen erreicht: %w"), lastErr)
 }
 
-func (n *ntfyNotifier) doSend(msg ntfyQueuedMsg) error {
+func (n *ntfyNotifier) doSend(parent context.Context, msg ntfyQueuedMsg) error {
 	endpoint := fmt.Sprintf("%s/%s", n.url, n.topic)
 
-	ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(

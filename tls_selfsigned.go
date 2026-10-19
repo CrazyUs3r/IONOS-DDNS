@@ -42,7 +42,7 @@ func resolveDashboardTLSFiles() (certFile, keyFile string, selfSigned bool, err 
 		return certFile, keyFile, false, nil
 	}
 
-	tlsDir := filepath.Join(configDir, emailTLSModeTLS)
+	tlsDir := filepath.Join(configDir, "tls")
 	certFile = filepath.Join(tlsDir, "dashboard.crt")
 	keyFile = filepath.Join(tlsDir, "dashboard.key")
 

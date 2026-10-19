@@ -13,7 +13,6 @@ import (
 	"math/big"
 	"net"
 	"net/http"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -90,18 +89,20 @@ type tgQueuedMsg struct {
 // TELEGRAM NOTIFIER
 // ============================================================================
 
-func newTelegramNotifier(token, chatIDs string) *telegramNotifier {
-	ctx, cancel := context.WithCancel(shutdownCtx)
+func newTelegramNotifier(ctx context.Context, token, chatIDs string) *telegramNotifier {
+	pollCtx, cancel := context.WithCancel(ctx)
+
 	t := &telegramNotifier{
 		token:       token,
 		chatIDs:     parseTelegramChatIDs(chatIDs),
 		instanceTag: generateInstanceTag(),
 		sendQueue:   make(chan tgQueuedMsg, tgQueueSize),
-		pollCtx:     ctx,
+		pollCtx:     pollCtx,
 		pollCancel:  cancel,
 	}
+
 	t.wg.Go(func() {
-		t.drainQueue()
+		t.drainQueue(pollCtx)
 	})
 
 	return t
@@ -161,7 +162,7 @@ func (t *telegramNotifier) SendSync(msg NotifyMessage) error {
 	text := formatTelegramMessage(msg, t.instanceTag)
 	var errs []error
 	for _, chatID := range t.chatIDs {
-		if err := t.sendTextWithRetry(chatID, text, nil); err != nil {
+		if err := t.sendTextWithRetry(t.pollCtx, chatID, text, nil); err != nil {
 			errs = append(errs, fmt.Errorf("chat %s: %w", chatID, err))
 		}
 	}
@@ -187,7 +188,7 @@ func (t *telegramNotifier) enqueue(chatID, text string, kb *tgInlineKeyboard) {
 	default:
 		select {
 		case dropped := <-t.sendQueue:
-			debugLog("NOTIFY", "", fmt.Sprintf(
+			debugLog(logCategoryNotify, "", fmt.Sprintf(
 				phrases().TgQueueFull,
 				time.Since(dropped.enqueued).Round(time.Second),
 			))
@@ -196,33 +197,33 @@ func (t *telegramNotifier) enqueue(chatID, text string, kb *tgInlineKeyboard) {
 		select {
 		case t.sendQueue <- msg:
 		default:
-			debugLog("NOTIFY", "", phrases().TgQueuePushFailed)
+			debugLog(logCategoryNotify, "", phrases().TgQueuePushFailed)
 		}
 	}
 }
 
-func (t *telegramNotifier) drainQueue() {
+func (t *telegramNotifier) drainQueue(ctx context.Context) {
 	ticker := time.NewTicker(tgSendInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-t.pollCtx.Done():
+		case <-ctx.Done():
 			return
 
 		case <-ticker.C:
 			select {
 			case msg := <-t.sendQueue:
 				if time.Since(msg.enqueued) > tgQueueMaxAge {
-					debugLog("NOTIFY", "", fmt.Sprintf(
+					debugLog(logCategoryNotify, "", fmt.Sprintf(
 						phrases().TgMsgDiscarded,
 						time.Since(msg.enqueued).Round(time.Second),
 					))
 
 					continue
 				}
-				if err := t.sendTextWithRetry(msg.chatID, msg.text, msg.kb); err != nil {
-					debugLog("NOTIFY", "", fmt.Sprintf(phrases().TgSendFailed, err))
+				if err := t.sendTextWithRetry(ctx, msg.chatID, msg.text, msg.kb); err != nil {
+					debugLog(logCategoryNotify, "", fmt.Sprintf(phrases().TgSendFailed, err))
 				}
 			default:
 			}
@@ -230,13 +231,13 @@ func (t *telegramNotifier) drainQueue() {
 	}
 }
 
-func (t *telegramNotifier) sendTextWithRetry(chatID, text string, kb *tgInlineKeyboard) error {
+func (t *telegramNotifier) sendTextWithRetry(ctx context.Context, chatID, text string, kb *tgInlineKeyboard) error {
 	const maxAttempts = 3
 	wait := 5 * time.Second
 
 	var lastErr error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		lastErr = t.sendText(chatID, text, kb)
+		lastErr = t.sendText(ctx, chatID, text, kb)
 		if lastErr == nil {
 			return nil
 		}
@@ -244,13 +245,13 @@ func (t *telegramNotifier) sendTextWithRetry(chatID, text string, kb *tgInlineKe
 			break
 		}
 
-		debugLog("NOTIFY", "", fmt.Sprintf(
+		debugLog(logCategoryNotify, "", fmt.Sprintf(
 			phrases().TgRateLimit,
 			wait, attempt, maxAttempts-1,
 		))
 		timer := time.NewTimer(wait)
 		select {
-		case <-t.pollCtx.Done():
+		case <-ctx.Done():
 			stopNotifyTimer(timer)
 
 			return lastErr
@@ -266,7 +267,7 @@ func (t *telegramNotifier) sendTextWithRetry(chatID, text string, kb *tgInlineKe
 	return errors.New(phrases().TgMaxRetries)
 }
 
-func (t *telegramNotifier) sendText(chatID, text string, kb *tgInlineKeyboard) error {
+func (t *telegramNotifier) sendText(parent context.Context, chatID, text string, kb *tgInlineKeyboard) error {
 	payload := map[string]any{
 		"chat_id":    chatID,
 		"text":       text,
@@ -282,7 +283,7 @@ func (t *telegramNotifier) sendText(chatID, text string, kb *tgInlineKeyboard) e
 	}
 
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", t.token)
-	ctx, cancel := context.WithTimeout(t.pollCtx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, MethodPOST, url, bytes.NewReader(body))
@@ -318,7 +319,7 @@ func (t *telegramNotifier) sendText(chatID, text string, kb *tgInlineKeyboard) e
 	return nil
 }
 
-func (t *telegramNotifier) deleteMessage(chatID int64, messageID int) {
+func (t *telegramNotifier) deleteMessage(parent context.Context, chatID int64, messageID int) {
 	payload := map[string]any{
 		"chat_id":    chatID,
 		"message_id": messageID,
@@ -326,7 +327,7 @@ func (t *telegramNotifier) deleteMessage(chatID int64, messageID int) {
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		debugLog("NOTIFY", "", fmt.Sprintf("marshal deleteMessage payload: %v", err))
+		debugLog(logCategoryNotify, "", fmt.Sprintf("marshal deleteMessage payload: %v", err))
 
 		return
 	}
@@ -336,7 +337,7 @@ func (t *telegramNotifier) deleteMessage(chatID int64, messageID int) {
 		t.token,
 	)
 
-	ctx, cancel := context.WithTimeout(t.pollCtx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(
@@ -360,7 +361,7 @@ func (t *telegramNotifier) deleteMessage(chatID int64, messageID int) {
 	_ = resp.Body.Close()
 }
 
-func (t *telegramNotifier) answerCallback(callbackID string) {
+func (t *telegramNotifier) answerCallback(parent context.Context, callbackID string) {
 	payload := struct {
 		CallbackQueryID string `json:"callback_query_id"`
 	}{
@@ -369,7 +370,7 @@ func (t *telegramNotifier) answerCallback(callbackID string) {
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		debugLog("NOTIFY", "", fmt.Sprintf("marshal callback response: %v", err))
+		debugLog(logCategoryNotify, "", fmt.Sprintf("marshal callback response: %v", err))
 
 		return
 	}
@@ -379,7 +380,7 @@ func (t *telegramNotifier) answerCallback(callbackID string) {
 		t.token,
 	)
 
-	ctx, cancel := context.WithTimeout(t.pollCtx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(
@@ -409,7 +410,7 @@ func (t *telegramNotifier) answerCallback(callbackID string) {
 func (t *telegramNotifier) StartPolling() {
 	t.pollOnce.Do(func() {
 		t.wg.Go(func() {
-			t.pollingLoop()
+			t.pollingLoop(t.pollCtx)
 		})
 	})
 }
@@ -424,23 +425,31 @@ func (t *telegramNotifier) StopPolling() {
 
 func (t *telegramNotifier) Close() { t.StopPolling() }
 
-func (t *telegramNotifier) pollingLoop() {
-	debugLog("NOTIFY", "", phrases().TgPollingStarted)
-	go t.deleteWebhook()
-	go t.registerCommands()
+func (t *telegramNotifier) pollingLoop(ctx context.Context) {
+	debugLog(logCategoryNotify, "", phrases().TgPollingStarted)
+	go t.deleteWebhook(ctx)
+	go t.registerCommands(ctx)
+
+	if backlog, err := t.getUpdates(ctx, -1); err == nil {
+		for _, u := range backlog {
+			if u.UpdateID > t.lastOffset.Load() {
+				t.lastOffset.Store(u.UpdateID)
+			}
+		}
+	}
 
 	for {
 		select {
 		case <-t.pollCtx.Done():
-			debugLog("NOTIFY", "", phrases().TgPollingStopped)
+			debugLog(logCategoryNotify, "", phrases().TgPollingStopped)
 
 			return
 		default:
 		}
 
-		updates, err := t.getUpdates(int(t.lastOffset.Load()) + 1)
+		updates, err := t.getUpdates(ctx, int(t.lastOffset.Load())+1)
 		if err != nil {
-			debugLog("NOTIFY", "", fmt.Sprintf(phrases().TgGetUpdatesFailed, err))
+			debugLog(logCategoryNotify, "", fmt.Sprintf(phrases().TgGetUpdatesFailed, err))
 			select {
 			case <-t.pollCtx.Done():
 				return
@@ -456,13 +465,13 @@ func (t *telegramNotifier) pollingLoop() {
 			}
 
 			if u.CallbackQuery != nil {
-				go t.handleCallback(u.CallbackQuery)
+				go t.handleCallback(ctx, u.CallbackQuery)
 
 				continue
 			}
 
 			if u.Message != nil {
-				go t.handleCommand(u.Message)
+				go t.handleCommand(ctx, u.Message)
 			}
 		}
 
@@ -474,12 +483,12 @@ func (t *telegramNotifier) pollingLoop() {
 	}
 }
 
-func (t *telegramNotifier) getUpdates(offset int) ([]tgUpdateFull, error) {
+func (t *telegramNotifier) getUpdates(parent context.Context, offset int) ([]tgUpdateFull, error) {
 	url := fmt.Sprintf(
 		"https://api.telegram.org/bot%s/getUpdates?offset=%d&timeout=30",
 		t.token, offset,
 	)
-	ctx, cancel := context.WithTimeout(t.pollCtx, 40*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 40*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, MethodGET, url, http.NoBody)
@@ -517,7 +526,7 @@ func (t *telegramNotifier) getUpdates(offset int) ([]tgUpdateFull, error) {
 	return result.Result, nil
 }
 
-func (t *telegramNotifier) registerCommands() {
+func (t *telegramNotifier) registerCommands(parent context.Context) {
 	type telegramCommand struct {
 		Command     string `json:"command"`
 		Description string `json:"description"`
@@ -539,7 +548,7 @@ func (t *telegramNotifier) registerCommands() {
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		debugLog("NOTIFY", "", fmt.Sprintf("marshal bot commands: %v", err))
+		debugLog(logCategoryNotify, "", fmt.Sprintf("marshal bot commands: %v", err))
 
 		return
 	}
@@ -549,7 +558,7 @@ func (t *telegramNotifier) registerCommands() {
 		t.token,
 	)
 
-	ctx, cancel := context.WithTimeout(t.pollCtx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(
@@ -577,28 +586,28 @@ func (t *telegramNotifier) registerCommands() {
 	}
 
 	_ = resp.Body.Close()
-	debugLog("NOTIFY", "", phrases().TgBotCmdsReg)
+	debugLog(logCategoryNotify, "", phrases().TgBotCmdsReg)
 }
 
-func (t *telegramNotifier) deleteWebhook() {
+func (t *telegramNotifier) deleteWebhook(parent context.Context) {
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/deleteWebhook?drop_pending_updates=false", t.token)
-	ctx, cancel := context.WithTimeout(t.pollCtx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, MethodGET, url, http.NoBody)
 	if err != nil {
-		debugLog("NOTIFY", "", fmt.Sprintf(phrases().TgWebhookDeleteRequestError, err))
+		debugLog(logCategoryNotify, "", fmt.Sprintf(phrases().TgWebhookDeleteRequestError, err))
 
 		return
 	}
 	req.Header.Set("User-Agent", ManagedComment)
 	resp, err := t.getPollClient().Do(req)
 	if err != nil {
-		debugLog("NOTIFY", "", fmt.Sprintf(phrases().TgWebhookDeleteFailed, err))
+		debugLog(logCategoryNotify, "", fmt.Sprintf(phrases().TgWebhookDeleteFailed, err))
 
 		return
 	}
 	_ = resp.Body.Close()
-	debugLog("NOTIFY", "", phrases().TgWebhookUnregistered)
+	debugLog(logCategoryNotify, "", phrases().TgWebhookUnregistered)
 }
 
 // ============================================================================
@@ -638,10 +647,10 @@ func chatIDStr(id int64) string {
 // COMMAND HANDLER
 // ============================================================================
 
-func (t *telegramNotifier) handleCommand(msg *tgMessage) {
+func (t *telegramNotifier) handleCommand(ctx context.Context, msg *tgMessage) {
 	chatID := chatIDStr(msg.Chat.ID)
 	if !t.isAuthorized(chatID) {
-		debugLog("NOTIFY", "", fmt.Sprintf(phrases().TgUnauthAccess, chatID))
+		debugLog(logCategoryNotify, "", fmt.Sprintf(phrases().TgUnauthAccess, chatID))
 
 		return
 	}
@@ -662,7 +671,7 @@ func (t *telegramNotifier) handleCommand(msg *tgMessage) {
 	case "/domains":
 		t.sendDomains(chatID)
 	case "/update":
-		t.triggerUpdate(chatID)
+		t.triggerUpdate(ctx, chatID)
 	case "/health":
 		t.sendHealth(chatID)
 	default:
@@ -676,9 +685,9 @@ func (t *telegramNotifier) handleCommand(msg *tgMessage) {
 // CALLBACK HANDLER
 // ============================================================================
 
-func (t *telegramNotifier) handleCallback(cb *tgCallbackQuery) {
+func (t *telegramNotifier) handleCallback(ctx context.Context, cb *tgCallbackQuery) {
 	chatID := chatIDStr(cb.Message.Chat.ID)
-	t.answerCallback(cb.ID)
+	t.answerCallback(ctx, cb.ID)
 	if !t.isAuthorized(chatID) {
 		return
 	}
@@ -693,11 +702,11 @@ func (t *telegramNotifier) handleCallback(cb *tgCallbackQuery) {
 	case "domains":
 		t.sendDomains(chatID)
 	case "update":
-		t.triggerUpdate(chatID)
+		t.triggerUpdate(ctx, chatID)
 	case "health":
 		t.sendHealth(chatID)
 	case "close":
-		t.deleteMessage(cb.Message.Chat.ID, cb.Message.MessageID)
+		t.deleteMessage(ctx, cb.Message.Chat.ID, cb.Message.MessageID)
 	}
 }
 
@@ -814,7 +823,8 @@ func (t *telegramNotifier) sendMetrics(chatID string) {
 	fmt.Fprintf(&sb, "  %s <code>%v%%</code>\n", phrases().TgMetricsLoad, stats["usage_percent"])
 
 	fmt.Fprintf(&sb, "\n<b>%s</b>\n", phrases().TgMetricsTodayHTTP)
-	fmt.Fprintf(&sb,
+	fmt.Fprintf(
+		&sb,
 		"  GET: <code>%v</code>  POST: <code>%v</code>  PUT: <code>%v</code>  DEL: <code>%v</code>",
 		stats["daily_get"],
 		stats["daily_post"],
@@ -832,7 +842,8 @@ func (t *telegramNotifier) sendMetrics(chatID string) {
 		fmt.Fprintf(&sb, "\n<b>Provider</b>\n")
 
 		for provider, data := range providers {
-			fmt.Fprintf(&sb,
+			fmt.Fprintf(
+				&sb,
 				"  <b>%s</b>: GET <code>%d</code>  POST <code>%d</code>  PUT <code>%d</code>  DEL <code>%d</code>",
 				provider,
 				data.GET,
@@ -870,14 +881,11 @@ func (t *telegramNotifier) sendDomains(chatID string) {
 		}
 	}
 
-	statusMutex.Lock()
-	statusData := make(map[string]DomainHistory)
-	if updatePath != "" {
-		if b, err := os.ReadFile(updatePath); err == nil {
-			_ = json.Unmarshal(b, &statusData)
-		}
+	statusData, err := snapshotStatusDomains()
+	if err != nil {
+		debugLog(logCategoryTelegram, "", fmt.Sprintf("Failed to load domain status: %v", err))
+		statusData = make(map[string]DomainHistory)
 	}
-	statusMutex.Unlock()
 
 	if len(statusData) > 0 {
 		fmt.Fprintf(&sb, "\n<b>%s</b>\n", phrases().TgDomainsCurrentIPs)
@@ -927,7 +935,7 @@ func (t *telegramNotifier) sendHealth(chatID string) {
 	t.enqueue(chatID, sb.String(), backKeyboard())
 }
 
-func (t *telegramNotifier) triggerUpdate(chatID string) {
+func (t *telegramNotifier) triggerUpdate(ctx context.Context, chatID string) {
 	if !updateInProgress.CompareAndSwap(false, true) {
 		t.enqueue(chatID, phrases().TgUpdateAlreadyRunning, backKeyboard())
 
@@ -935,10 +943,9 @@ func (t *telegramNotifier) triggerUpdate(chatID string) {
 	}
 	t.enqueue(chatID, phrases().TgUpdateStarting, backKeyboard())
 	go func() {
-		defer updateInProgress.Store(false)
-		debugLog("NOTIFY", "", phrases().NotifyTelegramManualUpdate)
+		debugLog(logCategoryNotify, "", phrases().NotifyTelegramManualUpdate)
 		forceNextUpdate.Store(true)
-		runClaimedUpdate(false)
+		runClaimedUpdate(ctx, false)
 		t.enqueue(chatID,
 			fmt.Sprintf(phrases().TgUpdateDone+"\n🕒 <i>%s</i>",
 				time.Now().Format(statusTimestampLayout)),

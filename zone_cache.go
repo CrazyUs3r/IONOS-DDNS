@@ -187,7 +187,7 @@ func loadIPv64ZoneCache(cache *ZoneRecordCache, zones []Zone) {
 	for _, z := range zones {
 		domain, ok := providerCache.ipv64Records[z.Name]
 		if !ok {
-			debugLog("CACHE", z.Name, phrases().IPv64CacheNoData)
+			debugLog(logCategoryCache, z.Name, phrases().IPv64CacheNoData)
 
 			continue
 		}
@@ -195,7 +195,7 @@ func loadIPv64ZoneCache(cache *ZoneRecordCache, zones []Zone) {
 		records := convertIPv64DomainRecords(domain)
 		cache.Set(z.ID, records)
 
-		debugLog("CACHE", z.Name, fmt.Sprintf(phrases().IPv64CacheRecordsLoaded, len(records)))
+		debugLog(logCategoryCache, z.Name, fmt.Sprintf(phrases().IPv64CacheRecordsLoaded, len(records)))
 	}
 }
 
@@ -208,9 +208,9 @@ func ensureIPv64CacheLoaded() {
 		return
 	}
 
-	debugLog("CACHE", "", phrases().IPv64CacheLoadDisk)
+	debugLog(logCategoryCache, "", phrases().IPv64CacheLoadDisk)
 	if err := loadIPv64CacheFromDisk(); err != nil {
-		debugLog("CACHE", "", fmt.Sprintf(phrases().IPv64CacheLoadDiskFailed, err))
+		debugLog(logCategoryCache, "", fmt.Sprintf(phrases().IPv64CacheLoadDiskFailed, err))
 	}
 }
 
@@ -292,14 +292,7 @@ func shouldSkipZoneCacheLoad(cache *ZoneRecordCache, z Zone) bool {
 		return false
 	}
 
-	debugLog(
-		"CACHE",
-		z.Name,
-		fmt.Sprintf(
-			t(phrases().ZoneCacheHitSkipAPI, "✅ Zone bereits im Cache (%d Records) – überspringe API-Call"),
-			len(existingRecords),
-		),
-	)
+	debugLog(logCategoryCache, z.Name, fmt.Sprintf(t(phrases().ZoneCacheHitSkipAPI, "✅ Zone bereits im Cache (%d Records) – überspringe API-Call"), len(existingRecords)))
 
 	return true
 }
@@ -367,13 +360,13 @@ func startZoneCacheLoad(
 		)
 		if err != nil {
 			recordZoneCacheError(cacheErrors, cacheErrorsMu, zone, err)
-			debugLog("CACHE", zone.Name, fmt.Sprintf(phrases().CacheLoadError, err))
+			debugLog(logCategoryCache, zone.Name, fmt.Sprintf(phrases().CacheLoadError, err))
 
 			return
 		}
 
 		cache.Set(zone.ID, records)
-		debugLog("CACHE", zone.Name, fmt.Sprintf(phrases().CacheRecordsLoaded, len(records)))
+		debugLog(logCategoryCache, zone.Name, fmt.Sprintf(phrases().CacheRecordsLoaded, len(records)))
 	}(z, dc, provider)
 }
 

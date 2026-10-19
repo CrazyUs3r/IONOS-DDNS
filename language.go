@@ -40,7 +40,7 @@ func loadLanguage(lang string) (err error) {
 
 			log(LogContext{
 				Level:    LogError,
-				Category: "CONFIG",
+				Category: logCategoryConfig,
 				Action:   ActionConfig,
 				Message: fmt.Sprintf(
 					"%s: %v",
@@ -109,10 +109,10 @@ func loadLanguage(lang string) (err error) {
 		)
 	}
 
+	validateTranslationKeys(translations)
 	applyTranslations(translations)
 
 	logLanguageLoaded(resolved, len(translations))
-	validateTranslationKeys(translations)
 
 	return nil
 }
@@ -169,13 +169,19 @@ func loadLanguageData(lang string) ([]byte, error) {
 	}
 
 	filename := lang + ".json"
+
+	if !filepath.IsLocal(filename) ||
+		filepath.Base(filename) != filename {
+		return nil, errors.New("invalid language filename")
+	}
+
 	diskPath := filepath.Join(langDir, filename)
 
 	p := phrases()
 
 	log(LogContext{
 		Level:    LogInfo,
-		Category: "CONFIG",
+		Category: logCategoryConfig,
 		Action:   ActionConfig,
 		Message: fmt.Sprintf(
 			t(
@@ -186,7 +192,7 @@ func loadLanguageData(lang string) ([]byte, error) {
 		),
 	})
 
-	if data, err := os.ReadFile(diskPath); err == nil {
+	if data, err := readFileWithinDir(diskPath); err == nil {
 		return data, nil
 	}
 
@@ -194,7 +200,7 @@ func loadLanguageData(lang string) ([]byte, error) {
 
 	log(LogContext{
 		Level:    LogInfo,
-		Category: "CONFIG",
+		Category: logCategoryConfig,
 		Action:   ActionConfig,
 		Message: fmt.Sprintf(
 			t(
@@ -228,7 +234,7 @@ func parseTranslationData(
 
 		log(LogContext{
 			Level:    LogError,
-			Category: "CONFIG",
+			Category: logCategoryConfig,
 			Action:   ActionConfig,
 			Message: fmt.Sprintf(
 				"%s (%s): %v",
@@ -297,7 +303,7 @@ func applyTranslations(translations map[string]string) {
 func logLanguageLoaded(lang string, count int) {
 	log(LogContext{
 		Level:    LogInfo,
-		Category: "CONFIG",
+		Category: logCategoryConfig,
 		Action:   ActionConfig,
 		Message:  fmt.Sprintf(phrases().LanguageLoaded, lang, count),
 	})
@@ -312,7 +318,7 @@ func validateTranslationKeys(translations map[string]string) {
 		if !ok {
 			log(LogContext{
 				Level:    LogWarn,
-				Category: "CONFIG",
+				Category: logCategoryConfig,
 				Action:   ActionConfig,
 				Message:  fmt.Sprintf("%s: %s", phrases().MissingTranslationKey, key),
 			})
@@ -322,7 +328,7 @@ func validateTranslationKeys(translations map[string]string) {
 		if strings.TrimSpace(val) == "" {
 			log(LogContext{
 				Level:    LogWarn,
-				Category: "CONFIG",
+				Category: logCategoryConfig,
 				Action:   ActionConfig,
 				Message:  fmt.Sprintf(t(phrases().EmptyTranslationValue, "Empty translation value: %s"), key),
 			})
@@ -333,7 +339,7 @@ func validateTranslationKeys(translations map[string]string) {
 		if _, ok := expectedSet[key]; !ok {
 			log(LogContext{
 				Level:    LogWarn,
-				Category: "CONFIG",
+				Category: logCategoryConfig,
 				Action:   ActionConfig,
 				Message:  fmt.Sprintf(t(phrases().RemovedUnusedKey, "Removed unused translation key: %s"), key),
 			})
@@ -361,7 +367,9 @@ func toSnakeCase(s string) string {
 		return key
 	}
 	if cached, ok := snakeCaseCache.Load(s); ok {
-		return cached.(string)
+		if cachedString, ok := cached.(string); ok {
+			return cachedString
+		}
 	}
 
 	result := buildSnakeCase(s)
@@ -400,11 +408,16 @@ func buildSnakeCase(s string) string {
 }
 
 func copyEmbeddedLangFiles(dir string) error {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return fmt.Errorf("open language directory: %w", err)
+	}
+	defer func() { _ = root.Close() }()
 	entries, err := embeddedLang.ReadDir("lang")
 	if err != nil {
 		log(LogContext{
 			Level:    LogError,
-			Category: "SYSTEM",
+			Category: logCategorySystem,
 			Action:   ActionConfig,
 			Message:  fmt.Sprintf("%s: %v", t(phrases().CannotReadEmbeddedDir, "cannot read embedded lang dir"), err),
 		})
@@ -420,7 +433,7 @@ func copyEmbeddedLangFiles(dir string) error {
 		if err != nil {
 			log(LogContext{
 				Level:    LogWarn,
-				Category: "SYSTEM",
+				Category: logCategorySystem,
 				Action:   ActionConfig,
 				Message:  fmt.Sprintf("%s: %s: %v", t(phrases().EmbeddedFileUnreadable, "Embedded file unreadable"), name, err),
 			})
@@ -428,29 +441,29 @@ func copyEmbeddedLangFiles(dir string) error {
 			continue
 		}
 
-		if oldData, err := os.ReadFile(dst); err == nil {
+		if oldData, err := root.ReadFile(name); err == nil {
 			if bytes.Equal(oldData, newData) {
 				continue
 			}
 			log(LogContext{
 				Level:    LogInfo,
-				Category: "CONFIG",
+				Category: logCategoryConfig,
 				Action:   ActionConfig,
 				Message:  fmt.Sprintf("%s: %s", t(phrases().UpdateDetected, "Update detected"), name),
 			})
 		} else {
 			log(LogContext{
 				Level:    LogInfo,
-				Category: "CONFIG",
+				Category: logCategoryConfig,
 				Action:   ActionConfig,
 				Message:  fmt.Sprintf("%s: %s", t(phrases().NewFileDetected, "New file"), name),
 			})
 		}
 
-		if err := os.WriteFile(dst, newData, 0o600); err != nil {
+		if err := root.WriteFile(name, newData, 0o600); err != nil {
 			log(LogContext{
 				Level:    LogWarn,
-				Category: "CONFIG",
+				Category: logCategoryConfig,
 				Action:   ActionConfig,
 				Message:  fmt.Sprintf("%s: %s: %v", t(phrases().WriteFailed, "write failed"), dst, err),
 			})
@@ -460,7 +473,7 @@ func copyEmbeddedLangFiles(dir string) error {
 
 		log(LogContext{
 			Level:    LogInfo,
-			Category: "CONFIG",
+			Category: logCategoryConfig,
 			Action:   ActionConfig,
 			Message:  fmt.Sprintf("%s: %s", t(phrases().FileSaved, "saved"), dst),
 		})

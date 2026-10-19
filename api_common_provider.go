@@ -116,7 +116,7 @@ func buildProviderManagedDomains(provider ProviderType) map[string]struct{} {
 
 	domains, err := snapshotStatusDomains()
 	if err != nil {
-		debugLog("MAINTENANCE", "", fmt.Sprintf("%s managed-domain snapshot failed: %v", provider, err))
+		debugLog(logCategoryMaintenace, "", fmt.Sprintf("%s managed-domain snapshot failed: %v", provider, err))
 
 		return managed
 	}
@@ -176,7 +176,7 @@ func handleProviderNetworkError(
 	serverBusy bool,
 ) (bool, error) {
 	err = redactNetworkError(err)
-	debugLog("HTTP", "", fmt.Sprintf("❌ %s network error: %v | latency: %v", providerName, err, duration))
+	debugLog(logCategoryHTTP, "", fmt.Sprintf("❌ %s network error: %v | latency: %v", providerName, err, duration))
 	apiMetrics.RecordError(providerName, method, 0, err, duration)
 
 	handledErr := fmt.Errorf("%s: %w", phrases().ErrNetworkError, err)
@@ -185,7 +185,7 @@ func handleProviderNetworkError(
 	}
 
 	wait := calculateRetryDelay(attempt, serverBusy)
-	debugLog("HTTP", "", fmt.Sprintf("⏱️  %s %v", phrases().RetryIn, wait))
+	debugLog(logCategoryHTTP, "", fmt.Sprintf("⏱️  %s %v", phrases().RetryIn, wait))
 
 	if !sleepOrCancel(ctx, wait) {
 		return false, fmt.Errorf("%s: %w", phrases().ErrContextCancelled, ctx.Err())
@@ -203,7 +203,7 @@ func handleProviderReadError(
 	attempt, maxAttempts int,
 	serverBusy bool,
 ) (bool, error) {
-	debugLog("HTTP", "", fmt.Sprintf("❌ %s body read error: %v", providerName, err))
+	debugLog(logCategoryHTTP, "", fmt.Sprintf("❌ %s body read error: %v", providerName, err))
 	apiMetrics.RecordError(providerName, method, statusCode, err, duration)
 
 	handledErr := fmt.Errorf("%s: %w", phrases().ErrBodyRead, err)
@@ -239,7 +239,7 @@ func handleProviderHTTPResponse(
 	if res.StatusCode >= http.StatusOK && res.StatusCode < http.StatusMultipleChoices {
 		apiMetrics.RecordSuccess(providerName, method, duration)
 		lastErrorMsg.Set("")
-		debugLog("HTTP", "", fmt.Sprintf("✅ %s success: %d bytes", providerName, len(respBody)))
+		debugLog(logCategoryHTTP, "", fmt.Sprintf("✅ %s success: %d bytes", providerName, len(respBody)))
 
 		return respBody, false, nil
 	}
@@ -271,7 +271,7 @@ func handleProviderAPIError(
 		})
 	}
 
-	debugLog("HTTP", "", fmt.Sprintf("%s retryable: %v", providerName, apiErr.IsRetryable()))
+	debugLog(logCategoryHTTP, "", fmt.Sprintf("%s retryable: %v", providerName, apiErr.IsRetryable()))
 
 	if !apiErr.IsRetryable() {
 		return false, apiErr
@@ -286,7 +286,7 @@ func handleProviderAPIError(
 	}
 
 	wait := providerRetryWait(apiErr, attempt, statusCode)
-	debugLog("HTTP", "", fmt.Sprintf("🔄 %s retry #%d in %v", providerName, attempt+2, wait))
+	debugLog(logCategoryHTTP, "", fmt.Sprintf("🔄 %s retry #%d in %v", providerName, attempt+2, wait))
 
 	if !sleepOrCancel(ctx, wait) {
 		return false, fmt.Errorf("%s: %w", phrases().ErrContextCancelled, ctx.Err())
@@ -331,7 +331,6 @@ func updateCachedZoneRecord(
 		}
 		return records, false
 	})
-
 }
 
 func syntheticCachedRecordID(records []Record) string {

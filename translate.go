@@ -28,6 +28,7 @@ type Phrases struct {
 	ErrUserNotFound, StatusUpdated, ErrForbidden, ErrOwnAccountDelete, StatusDeleted      string
 	UserLoadFailedJS, NoUsersFoundJS, UserCreatedJS, RoleChangedJS, UserDeletedJS         string
 	ResetPasswordJS, ResetPasswordPromptJS, PasswordResetJS                               string
+	PasswordShowJS, PasswordHideJS                                                        string
 	GenericErrorJS, RoleAdminJS, RoleEditorJS, RoleViewerJS, AuthUserMinJS, AuthPassMinJS string
 	UserLoading, UserNewTitle, UserPlaceholderName, UserPlaceholderPass                   string
 	UserRoleViewer, UserRoleEditor, UserRoleAdmin, UserBtnCreate, NotifyTestDesc          string
@@ -219,7 +220,7 @@ type Phrases struct {
 	BadgeChanged, FilterAll, FilterErrors, FilterWarnings                              string
 	FilterUpdates, FilterStarts, FilterStop, FilterCreated, FilterCleanup              string
 	FilterSkip, FilterConfig, FilterInfo, FilterLogin, FilterLogout                    string
-	FilterLoginFailed, NoDomainsConfigured                                             string
+	FilterLoginFailed, NoDomainsConfigured, ProviderCleanupQueued                      string
 	DomainContext, ThemeLabelJS, NoIPToCopyJS, CopiedJS, CopyFailedJS                  string
 	UpdateStartingJS, UpdateStartedJS, ConnectionErrorJS                               string
 	ExportStartedJS, ExportFailedJS, FQDNMissingJS                                     string
@@ -355,16 +356,16 @@ type Phrases struct {
 	NtfyRetry, NtfyMsgDiscarded, NtfyQueueFull, NtfySendFailed, NtfyMaxAttemptsReached string
 
 	// Cache & persistence
-	ErrRecordCacheNil, ErrCacheDirCreate, ErrCacheMarshal               string
-	ErrCacheWrite, FileCloseError, ScannerError                         string
-	CacheSavedZones, ZoneCacheHitSkipAPI                                string
-	CacheFileNotFound, CacheLoadedZones, CacheLoadedDomains             string
-	IPv64CacheNoData, CacheLoadError, CacheRecordsLoaded                string
-	IPv64CacheRecordsLoaded, IPv64CacheLoadDiskFailed                   string
-	ErrMarshalStatusFile, ErrWriteTempStatusFile                        string
-	ErrReplaceStatusFile, ErrUpdateDomainsCache, ErrMetricsCacheMarshal string
-	ErrResponseWrite, ErrPanicRecovered, CacheRefresherStopped          string
-	ErrPanicRefreshCycle, ErrDomainCacheRefresh, ErrMetricsCacheRefresh string
+	ErrRecordCacheNil, ErrCacheDirCreate, ErrCacheMarshal, ErrCacheUnmarshal string
+	ErrCacheWrite, FileCloseError, ScannerError, ErrCacheRead                string
+	CacheSavedZones, ZoneCacheHitSkipAPI                                     string
+	CacheFileNotFound, CacheLoadedZones, CacheLoadedDomains                  string
+	IPv64CacheNoData, CacheLoadError, CacheRecordsLoaded                     string
+	IPv64CacheRecordsLoaded, IPv64CacheLoadDiskFailed                        string
+	ErrMarshalStatusFile, ErrWriteTempStatusFile                             string
+	ErrReplaceStatusFile, ErrUpdateDomainsCache, ErrMetricsCacheMarshal      string
+	ErrResponseWrite, ErrPanicRecovered, CacheRefresherStopped               string
+	ErrPanicRefreshCycle, ErrDomainCacheRefresh, ErrMetricsCacheRefresh      string
 
 	// Generic API errors
 	ErrContextError, ErrJSONMarshal, ErrRequestCreate, ErrNetworkError string

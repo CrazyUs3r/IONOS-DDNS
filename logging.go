@@ -147,9 +147,9 @@ func broadcastDebugLogIfNeeded(ctx LogContext, msg, icon string) {
 var categoryIcons = map[string]string{
 	"SYSTEM": IconConfig, "CONFIG": IconConfig, "DNS": IconZone, "ZONE": IconZone,
 	"API": IconZone, "NETWORK": IconNetwork, "IP": IconNetwork, "IP-CHECK": IconNetwork,
-	"SCHEDULER": "⏱️", "MAINTENANCE": IconCleanup, "SERVER": "📊",
+	logCategorySchudler: "⏱️", "MAINTENANCE": IconCleanup, "SERVER": "📊",
 	"HTTP": "📊", "HTTP-RAW": "📝", "WS": IconAPI, "WORKER": "👷",
-	"DNS-LOGIC": "🔧", "CACHE": "💾", "DNS-FAILOVER": "🔀",
+	logCategoryDNSLogic: "🔧", "CACHE": "💾", "DNS-FAILOVER": "🔀",
 	"STATUS": "📄", "NOTIFY": "🔔",
 }
 
@@ -225,13 +225,13 @@ func levelToString(level LogLevel) string {
 	case LogDebug:
 		return "DBG"
 	case LogInfo:
-		return "INFO"
+		return ActionInfo
 	case LogWarn:
-		return "WARN"
+		return LogTWarn
 	case LogError:
-		return "ERR"
+		return LogTErr
 	default:
-		return "INFO"
+		return ActionInfo
 	}
 }
 
@@ -247,7 +247,7 @@ func debugLog(category, domain, msg string) {
 func ipLog(msg string) {
 	log(LogContext{
 		Level:    LogInfo,
-		Category: "IP-CHECK",
+		Category: logCategoryIPCheck,
 		Message:  msg,
 	})
 }
@@ -407,7 +407,7 @@ func ensureLogWriterOpen() error {
 	}
 
 	dir := filepath.Dir(logPath)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 

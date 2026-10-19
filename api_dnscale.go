@@ -46,7 +46,7 @@ func dnscaleAPIAttempt(
 	attempt, maxRetries int,
 	allowRetry bool,
 ) ([]byte, bool, error) {
-	debugLog("HTTP", "", fmt.Sprintf(phrases().DNScaleAttempt, phrases().Attempt, attempt+1, maxRetries, method, url))
+	debugLog(logCategoryHTTP, "", fmt.Sprintf(phrases().DNScaleAttempt, phrases().Attempt, attempt+1, maxRetries, method, url))
 
 	bodyBytes, err := marshalDNScaleBody(body)
 	if err != nil {
@@ -65,7 +65,7 @@ func dnscaleAPIAttempt(
 	if err != nil {
 		if !allowRetry {
 			err = redactNetworkError(err)
-			debugLog("HTTP", "", fmt.Sprintf(phrases().DNScaleNetworkErrorNoRetry, err, duration))
+			debugLog(logCategoryHTTP, "", fmt.Sprintf(phrases().DNScaleNetworkErrorNoRetry, err, duration))
 			apiMetrics.RecordError(string(ProviderDNScale), method, 0, err, duration)
 
 			return nil, false, fmt.Errorf("%s: %w", phrases().ErrNetworkError, err)
@@ -78,11 +78,11 @@ func dnscaleAPIAttempt(
 
 	defer func() {
 		if err := res.Body.Close(); err != nil {
-			debugLog("HTTP", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
+			debugLog(logCategoryHTTP, "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
 		}
 	}()
 
-	debugLog("HTTP", "", fmt.Sprintf(phrases().HTTPStatusLatency, res.StatusCode, phrases().AvgLatency, duration))
+	debugLog(logCategoryHTTP, "", fmt.Sprintf(phrases().HTTPStatusLatency, res.StatusCode, phrases().AvgLatency, duration))
 
 	responseAttempt := attempt
 	if !allowRetry {
@@ -102,7 +102,7 @@ func marshalDNScaleBody(body any) ([]byte, error) {
 		return nil, fmt.Errorf("%s: %w", phrases().ErrJSONMarshal, err)
 	}
 
-	debugLog("HTTP", "", fmt.Sprintf("📤 %s: %s", phrases().PayloadSent, string(bodyBytes)))
+	debugLog(logCategoryHTTP, "", fmt.Sprintf("📤 %s: %s", phrases().PayloadSent, string(bodyBytes)))
 
 	return bodyBytes, nil
 }
@@ -235,7 +235,7 @@ func loadDNScaleZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
 	}
 
 	if len(filtered) < len(allZones) {
-		debugLog("ZONE", "", fmt.Sprintf(phrases().DNScaleZonesFiltered, len(filtered), len(allZones)))
+		debugLog(logCategoryZone, "", fmt.Sprintf(phrases().DNScaleZonesFiltered, len(filtered), len(allZones)))
 	}
 
 	return filtered, nil
@@ -333,7 +333,7 @@ func findDNScaleExistingRecord(records []Record, fqdn, recordName, recordType st
 
 		if (actualName == wantedFQDN || actualName == wantedRecordName) && actualType == wantedType {
 			existing := &records[i]
-			debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("📌 %s: %s (ID: %s)", phrases().RecordFound, existing.Content, existing.ID))
+			debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf("📌 %s: %s (ID: %s)", phrases().RecordFound, existing.Content, existing.ID))
 
 			return existing
 		}
@@ -344,7 +344,7 @@ func findDNScaleExistingRecord(records []Record, fqdn, recordName, recordType st
 
 func shouldSkipDNScaleUpdate(fqdn, recordType, newIP string, existing *Record) bool {
 	if existing != nil && dnsRecordContentEqual(recordType, existing.Content, newIP) {
-		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("✅ %s: %s = %s", phrases().RecordCurrent, recordType, newIP))
+		debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf("✅ %s: %s = %s", phrases().RecordCurrent, recordType, newIP))
 		log(LogContext{
 			Level:   LogInfo,
 			Action:  ActionCurrent,
@@ -356,9 +356,9 @@ func shouldSkipDNScaleUpdate(fqdn, recordType, newIP string, existing *Record) b
 	}
 
 	if existing == nil {
-		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("🆕 %s: %s", phrases().NoRecordFound, recordType))
+		debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf("🆕 %s: %s", phrases().NoRecordFound, recordType))
 	} else {
-		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("🔄 %s: %s -> %s", phrases().RecordUpdateNeeded, existing.Content, newIP))
+		debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf("🔄 %s: %s -> %s", phrases().RecordUpdateNeeded, existing.Content, newIP))
 	}
 
 	return false
@@ -399,11 +399,7 @@ func executeDNScaleDNSUpdate(
 			requestURL += "?content=" + neturl.QueryEscape(existing.Content)
 		}
 
-		debugLog(
-			"DNS-LOGIC",
-			fqdn,
-			fmt.Sprintf("📡 %s: %s %s", phrases().APICall, MethodPUT, requestURL),
-		)
+		debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf("📡 %s: %s %s", phrases().APICall, MethodPUT, requestURL))
 
 		payload := map[string]any{
 			"content": newIP,
@@ -421,22 +417,13 @@ func executeDNScaleDNSUpdate(
 		}
 
 		record := parseDNScaleRecordResponse(data, fqdn)
-		debugLog(
-			"DNS-LOGIC",
-			fqdn,
-			fmt.Sprintf(
-				phrases().DNScaleRecordArrow,
-				phrases().Success,
-				recordType,
-				newIP,
-			),
-		)
+		debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf(phrases().DNScaleRecordArrow, phrases().Success, recordType, newIP))
 
 		return ActionUpdate, record, nil
 	}
 
 	url := fmt.Sprintf("%s/%s/records", dnscaleBaseURL, zoneID)
-	debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("📡 %s: %s %s", phrases().APICall, MethodPOST, url))
+	debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf("📡 %s: %s %s", phrases().APICall, MethodPOST, url))
 
 	payload := map[string]any{
 		"name":    dnscaleRecordName(recordName, fqdn),
@@ -451,7 +438,7 @@ func executeDNScaleDNSUpdate(
 	}
 
 	record := parseDNScaleRecordResponse(data, fqdn)
-	debugLog("DNS-LOGIC", fqdn, fmt.Sprintf(phrases().DNScaleRecordArrow, phrases().Success, recordType, newIP))
+	debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf(phrases().DNScaleRecordArrow, phrases().Success, recordType, newIP))
 
 	return ActionCreate, record, nil
 }
@@ -478,7 +465,7 @@ func parseDNScaleRecordResponse(data []byte, fqdn string) *Record {
 
 	var resp dnscaleRecordResponse
 	if err := json.Unmarshal(data, &resp); err != nil {
-		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf(phrases().DNScaleSuccessResponseParseFailed, err))
+		debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf(phrases().DNScaleSuccessResponseParseFailed, err))
 
 		return nil
 	}
@@ -493,7 +480,7 @@ func parseDNScaleRecordResponse(data []byte, fqdn string) *Record {
 func handleDNScaleDNSAPIError(fqdn, recordType, newIP string, err error) error {
 	var apiErr *APIError
 	if !errors.As(err, &apiErr) || apiErr == nil {
-		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf(phrases().UpdateFailedWithError, err))
+		debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf(phrases().UpdateFailedWithError, err))
 
 		return err
 	}
@@ -572,7 +559,7 @@ func dnscaleCacheZoneExists(cache *ZoneRecordCache, zoneID, fqdn string) bool {
 		return true
 	}
 
-	debugLog("CACHE", fqdn, phrases().DNScaleCacheZoneNotFound)
+	debugLog(logCategoryCache, fqdn, phrases().DNScaleCacheZoneNotFound)
 
 	return false
 }
@@ -648,7 +635,7 @@ func logDNScaleCacheUpdate(
 	if created {
 		message = phrases().DNScaleCacheRecordAdded
 	}
-	debugLog("CACHE", fqdn, fmt.Sprintf(message, recordType, newIP))
+	debugLog(logCategoryCache, fqdn, fmt.Sprintf(message, recordType, newIP))
 }
 
 // ============================================================================
@@ -661,7 +648,7 @@ func cleanupDNScaleRecords(ctx context.Context, zones []Zone, recordCache *ZoneR
 		return
 	}
 
-	debugLog("MAINTENANCE", "", phrases().CleanupStartDNScale)
+	debugLog(logCategoryMaintenace, "", phrases().CleanupStartDNScale)
 	configRecords := buildDNScaleConfigRecords()
 	managedDomains := buildDNScaleManagedDomains()
 
@@ -716,7 +703,7 @@ func cleanupSingleDNScaleRecord(
 		return
 	}
 
-	debugLog("MAINTENANCE", fqdn, fmt.Sprintf(phrases().CleanupOrphanedDNScale, rec.Type, rec.ID))
+	debugLog(logCategoryMaintenace, fqdn, fmt.Sprintf(phrases().CleanupOrphanedDNScale, rec.Type, rec.ID))
 
 	if dryRunEnabled() {
 		log(LogContext{
@@ -741,7 +728,7 @@ func cleanupSingleDNScaleRecord(
 	}
 
 	if _, err := dnscaleAPI(ctx, dc, MethodDELETE, url, nil); err != nil {
-		debugLog("MAINTENANCE", fqdn, fmt.Sprintf(phrases().CleanupDeleteError, err))
+		debugLog(logCategoryMaintenace, fqdn, fmt.Sprintf(phrases().CleanupDeleteError, err))
 
 		return
 	}
@@ -753,7 +740,7 @@ func cleanupSingleDNScaleRecord(
 		Message: fmt.Sprintf(phrases().CleanupRecordRemoved, rec.Type),
 	})
 	if err := markOrphanRecordDeleted(fqdn); err != nil {
-		debugLog("MAINTENANCE", fqdn, fmt.Sprintf("failed to mark orphan-deleted timestamp: %v", err))
+		debugLog(logCategoryMaintenace, fqdn, fmt.Sprintf("failed to mark orphan-deleted timestamp: %v", err))
 	}
 }
 

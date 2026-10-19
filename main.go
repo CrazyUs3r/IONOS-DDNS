@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -61,8 +62,6 @@ func run() (exitCode int) {
 
 	fmt.Printf("\n🌐 Go-DynDNS v%s (built: %s, ref: %s)\n\n", Version, BuildDate, VCSRef)
 
-	logRuntimePaths(paths)
-
 	loadPersistedMetrics(paths.metricsPersistPath)
 
 	envCfg := readEnvConfig()
@@ -86,8 +85,12 @@ func run() (exitCode int) {
 		return 1
 	}
 
+	logRuntimePaths(paths)
+
 	initShutdownContext(context.Background())
 	defer shutdownCancel()
+
+	startBackgroundJobDispatcher(shutdownCtx)
 
 	if err := initAuth(paths.logsDir); err != nil {
 		log(LogContext{
@@ -150,11 +153,14 @@ func run() (exitCode int) {
 	startDashboardServers(servers)
 	startWebSocketHub()
 
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+
 	if hasDomainConfig() {
 		runUpdate(true)
 	}
 
-	return runMainLoop(servers)
+	return runMainLoop(servers, stop)
 }
 
 type runtimePaths struct {
@@ -210,10 +216,10 @@ func initRuntimePaths() runtimePaths {
 }
 
 func prepareRuntimeDirectories(paths runtimePaths) error {
-	if err := os.MkdirAll(paths.langDir, 0o755); err != nil {
+	if err := os.MkdirAll(paths.langDir, 0o700); err != nil {
 		log(LogContext{
 			Level:    LogError,
-			Category: "CONFIG",
+			Category: logCategoryConfig,
 			Message:  fmt.Sprintf(t(phrases().LanguageDirCreateFailed, "Failed to create language directory: %v"), err),
 		})
 
@@ -230,19 +236,19 @@ func prepareRuntimeDirectories(paths runtimePaths) error {
 func logRuntimePaths(paths runtimePaths) {
 	log(LogContext{
 		Level:    LogInfo,
-		Category: "CONFIG",
+		Category: logCategoryConfig,
 		Message:  fmt.Sprintf(t(phrases().ConfigDir, "Config directory: %s"), paths.configDir),
 	})
 
 	log(LogContext{
 		Level:    LogInfo,
-		Category: "CONFIG",
+		Category: logCategoryConfig,
 		Message:  fmt.Sprintf(t(phrases().ConfigLanguageDir, "Languages: %s"), paths.langDir),
 	})
 
 	log(LogContext{
 		Level:    LogInfo,
-		Category: "CONFIG",
+		Category: logCategoryConfig,
 		Message:  fmt.Sprintf(t(phrases().ConfigLogsDir, "Logs: %s"), paths.logsDir),
 	})
 }
@@ -251,7 +257,7 @@ func loadPersistedMetrics(path string) {
 	if err := apiMetrics.LoadFromFile(path); err != nil {
 		log(LogContext{
 			Level:    LogWarn,
-			Category: "CONFIG",
+			Category: logCategoryConfig,
 			Action:   ActionConfig,
 			Message:  fmt.Sprintf(t(phrases().MetricsLoadFailed, "Failed to load metrics: %v"), err),
 		})
@@ -279,7 +285,7 @@ func readIntervalFromEnv() int {
 		} else {
 			log(LogContext{
 				Level:    LogWarn,
-				Category: "CONFIG",
+				Category: logCategoryConfig,
 				Action:   ActionConfig,
 				Message:  fmt.Sprintf(t(phrases().InvalidInterval, "Invalid INTERVAL value '%s', using default 300"), s),
 			})
@@ -385,13 +391,17 @@ func initDefaultConfig(logsDir string) {
 }
 
 func loadConfigFromFile() bool {
-	data, err := os.ReadFile(configPath)
+	data, err := readFileWithinDir(configPath)
 	if err != nil {
 		return false
 	}
 
 	loaded, err := parseConfig(data)
 	if err != nil {
+		broken := fmt.Sprintf("%s.broken.%s", configPath, time.Now().Format("20060102_150405"))
+		if renameErr := os.Rename(configPath, broken); renameErr != nil {
+			debugLog(logCategoryConfig, "", fmt.Sprintf("could not back up broken config: %v", renameErr))
+		}
 		log(LogContext{
 			Level:   LogWarn,
 			Action:  ActionConfig,
@@ -608,11 +618,16 @@ func configureLanguage(langDir string) error {
 	if err := loadLanguage(cfg.Lang); err != nil {
 		log(LogContext{
 			Level:    LogError,
-			Category: "CONFIG",
+			Category: ActionConfig,
 			Message:  fmt.Sprintf(t(phrases().LanguageFileLoadFailed, "Failed to load language file: %v"), err),
 		})
 
-		return err
+		if cfg.Lang == "en" {
+			return err
+		}
+		cfg.Lang = "en"
+
+		return loadLanguage("en")
 	}
 
 	return nil
@@ -638,7 +653,7 @@ func initializeProvidersAndNotifiers() error {
 	}
 
 	invalidateSecretReplacer()
-	initNotifiers()
+	initNotifiers(shutdownCtx)
 
 	return nil
 }
@@ -652,7 +667,7 @@ func ensureRuntimeDirs(paths runtimePaths) error {
 		cfg.HTTPSPort = "8443"
 	}
 
-	if err := os.MkdirAll(paths.logsDir, 0o755); err != nil {
+	if err := os.MkdirAll(paths.logsDir, 0o700); err != nil {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionConfig,
@@ -662,7 +677,7 @@ func ensureRuntimeDirs(paths runtimePaths) error {
 		return err
 	}
 
-	if err := os.MkdirAll(paths.langDir, 0o755); err != nil {
+	if err := os.MkdirAll(paths.langDir, 0o700); err != nil {
 		log(LogContext{
 			Level:   LogError,
 			Action:  ActionConfig,
@@ -828,7 +843,16 @@ func newDashboardServers() (*dashboardServers, error) {
 	return servers, nil
 }
 
+func validPort(p string) bool {
+	n, err := strconv.Atoi(p)
+
+	return err == nil && n >= 1 && n <= 65535
+}
+
 func validateDashboardPorts(httpPort, httpsPort string) error {
+	if !validPort(httpPort) || !validPort(httpsPort) {
+		return fmt.Errorf("invalid port (http=%q, https=%q)", httpPort, httpsPort)
+	}
 	if httpPort == httpsPort {
 		return fmt.Errorf("HTTP and HTTPS cannot use the same port %s", httpsPort)
 	}
@@ -847,7 +871,7 @@ func startDashboardServers(servers *dashboardServers) {
 func startHTTPServer(srv *http.Server) {
 	ip := getLocalIP()
 	go func() {
-		debugLog("SYSTEM", "", fmt.Sprintf("%s (http://%s%s)", phrases().DashboardStarted, ip, srv.Addr))
+		debugLog(logCategorySystem, "", fmt.Sprintf("%s (http://%s%s)", phrases().DashboardStarted, ip, srv.Addr))
 		log(LogContext{
 			Level:   LogInfo,
 			Action:  ActionServer,
@@ -871,7 +895,7 @@ func startHTTPSServer(srv *http.Server, certFile, keyFile string, selfSigned boo
 		if selfSigned {
 			message += " [self-signed certificate]"
 		}
-		debugLog("SYSTEM", "", message)
+		debugLog(logCategorySystem, "", message)
 		log(LogContext{
 			Level:   LogInfo,
 			Action:  ActionServer,
@@ -890,10 +914,10 @@ func startHTTPSServer(srv *http.Server, certFile, keyFile string, selfSigned boo
 
 func startWebSocketHub() {
 	go wsHub.run()
-	debugLog("SYSTEM", "", t(phrases().WebSocketHubStarted, "WebSocket hub started"))
+	debugLog(logCategorySystem, "", t(phrases().WebSocketHubStarted, "WebSocket hub started"))
 }
 
-func runMainLoop(servers *dashboardServers) int {
+func runMainLoop(servers *dashboardServers, stop <-chan os.Signal) int {
 	cfgMu.RLock()
 	currentInterval := cfg.Interval
 	cfgMu.RUnlock()
@@ -901,13 +925,10 @@ func runMainLoop(servers *dashboardServers) int {
 	ticker := time.NewTicker(time.Duration(currentInterval) * time.Second)
 	defer ticker.Stop()
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-
 	for {
 		select {
 		case <-shutdownCtx.Done():
-			debugLog("SCHEDULER", "", t(phrases().SchedulerShutdownActive, "Shutdown active, stopping scheduler"))
+			debugLog(logCategorySchudler, "", t(phrases().SchedulerShutdownActive, "Shutdown active, stopping scheduler"))
 
 			return handleContextShutdown(ticker, servers)
 
@@ -930,7 +951,7 @@ func handleContextShutdown(
 	if httpClient != nil {
 		httpClient.CloseIdleConnections()
 
-		debugLog("SYSTEM", "", phrases().HTTPConnectionsClosed)
+		debugLog(logCategorySystem, "", phrases().HTTPConnectionsClosed)
 	}
 
 	shutdownDashboardServers(servers)
@@ -940,7 +961,7 @@ func handleContextShutdown(
 	markMetricsDirty()
 	saveMetricsIfDirty()
 
-	debugLog("SYSTEM", "", t(phrases().WaitingForLogQueue, "📝 Waiting for log queue..."))
+	debugLog(logCategorySystem, "", t(phrases().WaitingForLogQueue, "📝 Waiting for log queue..."))
 
 	flushAuditLog()
 	stopLogWriterAndWait()
@@ -957,30 +978,30 @@ func handleSchedulerTick(ticker *time.Ticker, currentInterval *int) *time.Ticker
 		ticker.Stop()
 		*currentInterval = interval
 		ticker = time.NewTicker(time.Duration(*currentInterval) * time.Second)
-		debugLog("SCHEDULER", "", fmt.Sprintf(t(phrases().SchedulerIntervalChanged, "Interval changed → new ticker: %ds"), *currentInterval))
+		debugLog(logCategorySchudler, "", fmt.Sprintf(t(phrases().SchedulerIntervalChanged, "Interval changed → new ticker: %ds"), *currentInterval))
 	}
 
 	if !hasDomainConfig() {
-		debugLog("SCHEDULER", "", "No domains configured yet; scheduler paused until config.json is saved.")
+		debugLog(logCategorySchudler, "", "No domains configured yet; scheduler paused until config.json is saved.")
 
 		return ticker
 	}
 
-	debugLog("SCHEDULER", "", t(phrases().SchedulerIntervalReached, "Interval reached, starting runUpdate(false)"))
+	debugLog(logCategorySchudler, "", t(phrases().SchedulerIntervalReached, "Interval reached, starting runUpdate(false)"))
 
 	if !tryClaimUpdate() {
-		debugLog("SCHEDULER", "", t(phrases().SchedulerPreviousUpdateRunning, "⚠️ Previous update is still running. Skipping this cycle..."))
+		debugLog(logCategorySchudler, "", t(phrases().SchedulerPreviousUpdateRunning, "⚠️ Previous update is still running. Skipping this cycle..."))
 
 		return ticker
 	}
 
-	go runClaimedUpdate(false)
+	go runClaimedUpdate(shutdownCtx, false)
 
 	return ticker
 }
 
 func handleShutdownSignal(sig os.Signal, ticker *time.Ticker, servers *dashboardServers) int {
-	debugLog("SYSTEM", "", fmt.Sprintf(t(phrases().ShutdownSignalReceived, "Shutdown signal received: %v"), sig))
+	debugLog(logCategorySystem, "", fmt.Sprintf(t(phrases().ShutdownSignalReceived, "Shutdown signal received: %v"), sig))
 
 	stopCtx := LogContext{
 		Level:  LogInfo,
@@ -1005,17 +1026,28 @@ func handleShutdownSignal(sig os.Signal, ticker *time.Ticker, servers *dashboard
 	if httpClient != nil {
 		httpClient.CloseIdleConnections()
 
-		debugLog("SYSTEM", "", phrases().HTTPConnectionsClosed)
+		debugLog(logCategorySystem, "", phrases().HTTPConnectionsClosed)
 	}
 
 	shutdownDashboardServers(servers)
 
 	waitForRunningUpdates()
 
+	notifyCtx := stopCtx
+	done := make(chan struct{})
+	go func() {
+		notifySync(notifyCtx)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+	}
+
 	markMetricsDirty()
 	saveMetricsIfDirty()
 
-	debugLog("SYSTEM", "", t(phrases().WaitingForLogQueue, "📝 Waiting for log queue..."))
+	debugLog(logCategorySystem, "", t(phrases().WaitingForLogQueue, "📝 Waiting for log queue..."))
 
 	flushAuditLog()
 	stopLogWriterAndWait()
@@ -1048,7 +1080,7 @@ func stopLogWriterAndWait() {
 }
 
 func waitForRunningUpdates() {
-	debugLog("SYSTEM", "", t(phrases().WaitingForRunningUpdates, "⏳ Waiting for running updates..."))
+	debugLog(logCategorySystem, "", t(phrases().WaitingForRunningUpdates, "⏳ Waiting for running updates..."))
 
 	waitCtx, waitCancel := context.WithTimeout(
 		context.Background(),
@@ -1061,7 +1093,7 @@ func waitForRunningUpdates() {
 
 	for {
 		if activeUpdates.Load() == 0 && !updateInProgress.Load() {
-			debugLog("SYSTEM", "", t(phrases().AllUpdatesFinished, "✅ All updates finished"))
+			debugLog(logCategorySystem, "", t(phrases().AllUpdatesFinished, "✅ All updates finished"))
 
 			return
 		}
@@ -1070,7 +1102,7 @@ func waitForRunningUpdates() {
 		case <-ticker.C:
 
 		case <-waitCtx.Done():
-			debugLog("SYSTEM", "", t(phrases().WaitForUpdatesTimeout, "⚠️ Timeout while waiting for updates - force shutdown"))
+			debugLog(logCategorySystem, "", t(phrases().WaitForUpdatesTimeout, "⚠️ Timeout while waiting for updates - force shutdown"))
 
 			return
 		}
@@ -1081,7 +1113,7 @@ func shutdownDashboardServers(servers *dashboardServers) {
 	ctx, cancel := context.WithTimeout(context.Background(), ShutdownGraceTimeout)
 	defer cancel()
 
-	debugLog("SYSTEM", "", phrases().ServerShuttingDown)
+	debugLog(logCategorySystem, "", phrases().ServerShuttingDown)
 	httpSrv, httpsSrv := servers.snapshot()
 	for _, srv := range []*http.Server{httpSrv, httpsSrv} {
 		if srv == nil {
@@ -1095,7 +1127,7 @@ func shutdownDashboardServers(servers *dashboardServers) {
 			})
 		}
 	}
-	debugLog("SYSTEM", "", phrases().ServerShutdownComplete)
+	debugLog(logCategorySystem, "", phrases().ServerShutdownComplete)
 }
 
 func applyEnvOverrides(
@@ -1185,7 +1217,7 @@ func applyLimitEnvOverrides(maxAPIRetries, maxLogMB, hourlyLimit, maxConcurrent 
 	}
 }
 
-func restartDashboardServersIfPortsChanged(servers *dashboardServers, oldHTTPPort, oldHTTPSPort, newHTTPPort, newHTTPSPort string) {
+func restartDashboardServersIfPortsChanged(ctx context.Context, servers *dashboardServers, oldHTTPPort, oldHTTPSPort, newHTTPPort, newHTTPSPort string) {
 	if servers == nil {
 		return
 	}
@@ -1204,14 +1236,27 @@ func restartDashboardServersIfPortsChanged(servers *dashboardServers, oldHTTPPor
 	}
 
 	if newHTTPPort != oldHTTPPort {
-		restartHTTPServer(servers, newHTTPPort)
+		restartHTTPServer(ctx, servers, newHTTPPort)
 	}
 	if newHTTPSPort != oldHTTPSPort {
-		restartHTTPSServer(servers, newHTTPSPort)
+		restartHTTPSServer(ctx, servers, newHTTPSPort)
 	}
 }
 
-func restartHTTPServer(servers *dashboardServers, port string) {
+func restartHTTPServer(ctx context.Context, servers *dashboardServers, port string) {
+	lc := net.ListenConfig{}
+
+	ln, err := lc.Listen(ctx, "tcp", ":"+port)
+	if err != nil {
+		log(LogContext{
+			Level: LogError, Action: ActionError,
+			Message: fmt.Sprintf("port %s unavailable, keeping old listener: %v", port, err),
+		})
+
+		return
+	}
+	_ = ln.Close()
+
 	newSrv := newDashboardServer(":"+port, newDashboardHandler())
 
 	servers.mu.Lock()
@@ -1227,10 +1272,23 @@ func restartHTTPServer(servers *dashboardServers, port string) {
 		Message: "HTTP listener restarted on port " + port,
 	})
 
-	go shutdownReplacedServer(old)
+	go shutdownReplacedServer(ctx, old)
 }
 
-func restartHTTPSServer(servers *dashboardServers, port string) {
+func restartHTTPSServer(ctx context.Context, servers *dashboardServers, port string) {
+	lc := net.ListenConfig{}
+
+	ln, err := lc.Listen(ctx, "tcp", ":"+port)
+	if err != nil {
+		log(LogContext{
+			Level: LogError, Action: ActionError,
+			Message: fmt.Sprintf("port %s unavailable, keeping old listener: %v", port, err),
+		})
+
+		return
+	}
+	_ = ln.Close()
+
 	certFile, keyFile, selfSigned, err := resolveDashboardTLSFiles()
 	if err != nil {
 		log(LogContext{
@@ -1260,15 +1318,15 @@ func restartHTTPSServer(servers *dashboardServers, port string) {
 		Message: "HTTPS listener restarted on port" + port,
 	})
 
-	go shutdownReplacedServer(old)
+	go shutdownReplacedServer(ctx, old)
 }
 
-func shutdownReplacedServer(srv *http.Server) {
+func shutdownReplacedServer(parent context.Context, srv *http.Server) {
 	if srv == nil {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), ShutdownGraceTimeout)
+	ctx, cancel := context.WithTimeout(parent, ShutdownGraceTimeout)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {

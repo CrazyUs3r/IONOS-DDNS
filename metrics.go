@@ -352,10 +352,20 @@ func (m *APIMetrics) calcPercentile(p float64) time.Duration {
 	if m.LatencySampleCount == 0 {
 		return 0
 	}
-	count := m.LatencySampleCount
 
-	bufPtr := percentileBufPool.Get().(*[]int64)
-	buf := (*bufPtr)[:0]
+	count := min(m.LatencySampleCount, len(m.LatencySamples))
+	if count == 0 {
+		return 0
+	}
+
+	bufPtr, ok := percentileBufPool.Get().(*[]int64)
+	if !ok {
+		buf := make([]int64, 0, 256)
+		bufPtr = &buf
+	}
+
+	buf := *bufPtr
+
 	if cap(buf) < count {
 		buf = make([]int64, count)
 	} else {
@@ -365,7 +375,8 @@ func (m *APIMetrics) calcPercentile(p float64) time.Duration {
 	if count < len(m.LatencySamples) {
 		copy(buf, m.LatencySamples[:count])
 	} else {
-		start := m.LatencySampleIdx
+		start := m.LatencySampleIdx % len(m.LatencySamples)
+
 		for i := range count {
 			buf[i] = m.LatencySamples[(start+i)%len(m.LatencySamples)]
 		}
@@ -373,16 +384,17 @@ func (m *APIMetrics) calcPercentile(p float64) time.Duration {
 
 	slices.Sort(buf)
 
-	idx := max(int(float64(count-1)*p), 0)
-	if idx >= count {
-		idx = count - 1
-	}
+	idx := clamp(int(float64(count-1)*p), 0, count-1)
 	result := time.Duration(buf[idx]) * time.Millisecond
 
 	*bufPtr = buf[:0]
 	percentileBufPool.Put(bufPtr)
 
 	return result
+}
+
+func clamp(value, low, high int) int {
+	return min(max(value, low), high)
 }
 
 func (m *APIMetrics) cleanupOldTimestamps(now time.Time) {
@@ -551,7 +563,7 @@ func (m *APIMetrics) getStatsUnsafe() map[string]any {
 
 func ensureMetricsFile(path string) error {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 
@@ -625,12 +637,12 @@ func readAPIMetricsSnapshot(path string) (*apiMetricsSnapshot, error) {
 		return nil, err
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := readFileWithinDir(path)
 	if err != nil {
 		return nil, err
 	}
 	if len(data) == 0 {
-		return nil, nil
+		return &apiMetricsSnapshot{}, nil
 	}
 
 	var snap apiMetricsSnapshot
@@ -976,7 +988,7 @@ func handleMetricsReset(w http.ResponseWriter, r *http.Request) {
 
 	if err := apiMetrics.SaveToFile(metricsPersistPath); err != nil {
 		metricsDirty.Store(true)
-		debugLog("API", getClientIP(r), "Failed to save empty metrics: "+err.Error())
+		debugLog(logCategoryAPI, getClientIP(r), "Failed to save empty metrics: "+err.Error())
 	} else {
 		metricsDirty.Store(false)
 	}
@@ -1023,13 +1035,20 @@ func handlePrometheusMetrics(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	cfgMu.RLock()
-	for _, dc := range cfg.DomainConfigs {
-		safe := strings.ReplaceAll(dc.FQDN, ".", "_")
-		safe = strings.ReplaceAll(safe, "-", "_")
+	promLabel := strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`).Replace
 
-		lines = append(lines,
-			fmt.Sprintf(`dyndns_domain_%s_configured{fqdn=%q,provider=%q} 1`, safe, dc.FQDN, dc.Provider))
+	lines = append(
+		lines,
+		"# HELP dyndns_domain_configured Configured domains",
+		"# TYPE dyndns_domain_configured gauge",
+	)
+	for _, dc := range cfg.DomainConfigs {
+		lines = append(lines, fmt.Sprintf(
+			`dyndns_domain_configured{fqdn="%s",provider="%s"} 1`,
+			promLabel(dc.FQDN), promLabel(string(dc.Provider)),
+		))
 	}
+
 	cfgMu.RUnlock()
 
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4")

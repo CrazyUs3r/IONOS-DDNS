@@ -18,7 +18,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -283,7 +282,7 @@ func logHTTPTimings(req *http.Request, timings *httpTimings) {
 	msg := sanitizeHTTPDebugBody(timings.String())
 	target := sanitizeURLForLogging(req.URL)
 
-	debugLog("HTTP-TIMING", "", fmt.Sprintf(phrases().HTTPTimingFormat, req.Method, target, msg))
+	debugLog(logCategoryHTTPTiming, "", fmt.Sprintf(phrases().HTTPTimingFormat, req.Method, target, msg))
 }
 
 func cloneRequestForLogging(req *http.Request) (*http.Request, func()) {
@@ -294,7 +293,7 @@ func cloneRequestForLogging(req *http.Request) (*http.Request, func()) {
 			return
 		}
 		if closeErr := logReq.Body.Close(); closeErr != nil {
-			debugLog("HTTP-RAW", "", fmt.Sprintf(phrases().HTTPDebugCloseRequestBodyFailed, closeErr))
+			debugLog(logCategoryHTTPRaw, "", fmt.Sprintf(phrases().HTTPDebugCloseRequestBodyFailed, closeErr))
 		}
 	}
 
@@ -309,7 +308,7 @@ func cloneRequestForLogging(req *http.Request) (*http.Request, func()) {
 	if err != nil {
 		logReq.Body = nil
 		logReq.ContentLength = 0
-		debugLog("HTTP-RAW", "", fmt.Sprintf(phrases().HTTPDebugCloneRequestBodyFailed, err))
+		debugLog(logCategoryHTTPRaw, "", fmt.Sprintf(phrases().HTTPDebugCloneRequestBodyFailed, err))
 
 		return logReq, cleanup
 	}
@@ -446,10 +445,10 @@ func prepareRequestBodyForLogging(req *http.Request, maxBytes int) (truncated bo
 	original := req.Body
 	body, err := io.ReadAll(io.LimitReader(original, int64(maxBytes+1)))
 	if closeErr := original.Close(); closeErr != nil {
-		debugLog("HTTP-RAW", "", fmt.Sprintf(phrases().HTTPDebugCloseClonedRequestBodyFailed, closeErr))
+		debugLog(logCategoryHTTPRaw, "", fmt.Sprintf(phrases().HTTPDebugCloseClonedRequestBodyFailed, closeErr))
 	}
 	if err != nil {
-		debugLog("HTTP-RAW", "", fmt.Sprintf(phrases().HTTPDebugReadClonedRequestBodyFailed, err))
+		debugLog(logCategoryHTTPRaw, "", fmt.Sprintf(phrases().HTTPDebugReadClonedRequestBodyFailed, err))
 	}
 
 	truncated = len(body) > maxBytes
@@ -526,7 +525,7 @@ func logHTTPRequest(req *http.Request) {
 
 	requestDump, err := httputil.DumpRequestOut(logReq, true)
 	if err != nil {
-		debugLog("HTTP-RAW", "", fmt.Sprintf(phrases().HTTPDebugDumpRequestFailed, err))
+		debugLog(logCategoryHTTPRaw, "", fmt.Sprintf(phrases().HTTPDebugDumpRequestFailed, err))
 
 		return
 	}
@@ -537,7 +536,7 @@ func logHTTPRequest(req *http.Request) {
 		dump += phrases().HTTPDebugRequestBodyTruncated
 	}
 
-	debugLog("HTTP-RAW", "", fmt.Sprintf(phrases().HTTPDebugRequestDump, dump))
+	debugLog(logCategoryHTTPRaw, "", fmt.Sprintf(phrases().HTTPDebugRequestDump, dump))
 }
 
 func logHTTPResponse(resp *http.Response, duration time.Duration) {
@@ -549,7 +548,7 @@ func logHTTPResponse(resp *http.Response, duration time.Duration) {
 		bodyStr += phrases().HTTPDebugResponseBodyTruncated
 	}
 
-	debugLog("HTTP-RAW", "", fmt.Sprintf(phrases().HTTPDebugResponseDump, duration.Seconds(), resp.Status, bodyStr))
+	debugLog(logCategoryHTTPRaw, "", fmt.Sprintf(phrases().HTTPDebugResponseDump, duration.Seconds(), resp.Status, bodyStr))
 }
 
 func peekAndRestoreResponseBody(resp *http.Response, maxBytes int) ([]byte, bool) {
@@ -571,7 +570,7 @@ func peekAndRestoreResponseBody(resp *http.Response, maxBytes int) ([]byte, bool
 			Reader: io.MultiReader(bytes.NewReader(peeked), original),
 			Closer: original,
 		}
-		debugLog("HTTP-RAW", "", fmt.Sprintf(phrases().HTTPDebugPeekResponseBodyFailed, readErr))
+		debugLog(logCategoryHTTPRaw, "", fmt.Sprintf(phrases().HTTPDebugPeekResponseBodyFailed, readErr))
 
 		return logBytes, truncated
 	}
@@ -586,7 +585,7 @@ func peekAndRestoreResponseBody(resp *http.Response, maxBytes int) ([]byte, bool
 	}
 
 	if err := original.Close(); err != nil {
-		debugLog("HTTP-RAW", "", fmt.Sprintf(phrases().HTTPDebugCloseResponseBodyFailed, err))
+		debugLog(logCategoryHTTPRaw, "", fmt.Sprintf(phrases().HTTPDebugCloseResponseBodyFailed, err))
 	}
 
 	resp.Body = io.NopCloser(bytes.NewReader(peeked))
@@ -604,7 +603,7 @@ func logMQTTPublish(topic string, qos byte, retain bool, payload []byte) {
 	body = prettyPrintHTTPDebugJSON(body)
 	body = truncateHTTPDebugBody(body, 5000)
 
-	debugLog("MQTT-RAW", "", fmt.Sprintf(phrases().MQTTDebugPublishDump, topic, qos, retain, body))
+	debugLog(logCategoryMQTTRAW, "", fmt.Sprintf(phrases().MQTTDebugPublishDump, topic, qos, retain, body))
 }
 
 func sanitizeHTTPDebugBody(body string) string {
@@ -755,7 +754,7 @@ func buildHTTPClientWithSettings(settings httpClientSettings) *http.Client {
 		maxIdleConnsPerHost *= multiplier
 		maxConnsPerHost *= multiplier
 
-		debugLog("HTTP", "", fmt.Sprintf(phrases().HTTPPoolConfigured, domainCount, maxConnsPerHost, maxIdleConnsPerHost))
+		debugLog(logCategoryHTTP, "", fmt.Sprintf(phrases().HTTPPoolConfigured, domainCount, maxConnsPerHost, maxIdleConnsPerHost))
 	}
 
 	dnsTTL := min(max(settings.interval+30*time.Second, 60*time.Second), 10*time.Minute)
@@ -835,7 +834,7 @@ func buildHTTPClientWithSettings(settings httpClientSettings) *http.Client {
 		CheckRedirect: checkAPIRedirect,
 	}
 
-	debugLog("SYSTEM", "", fmt.Sprintf(phrases().HTTPClientInitialized, len(dnsList), strings.Join(dnsList, ", ")))
+	debugLog(logCategorySystem, "", fmt.Sprintf(phrases().HTTPClientInitialized, len(dnsList), strings.Join(dnsList, ", ")))
 
 	return client
 }
@@ -1038,7 +1037,7 @@ func dialResolvedAddrs(ctx context.Context, d *net.Dialer, network, originalAddr
 				return result.conn, nil
 			}
 			lastErr = result.err
-			debugLog("HTTP-DIAL", "", fmt.Sprintf(phrases().HTTPDialAttemptFailed, result.addr, result.err))
+			debugLog(logCategoryHTTPDail, "", fmt.Sprintf(phrases().HTTPDialAttemptFailed, result.addr, result.err))
 		}
 	}
 
@@ -1349,7 +1348,9 @@ var (
 
 func sanitizeIDWithHash(s string) string {
 	if cached, ok := sanitizeIDCache.Load(s); ok {
-		return cached.(string)
+		if cachedString, ok := cached.(string); ok {
+			return cachedString
+		}
 	}
 	base := sanitizeID(s)
 	sum := sha256.Sum256([]byte(s))
@@ -1514,7 +1515,7 @@ func (c *dnsCache) lookupUsingResolvers(
 		}
 
 		lastErr = err
-		debugLog("DNS-FAILOVER", "", fmt.Sprintf(phrases().DNSFailoverLookupFailed, c.dnsServerLabel(index), host, err))
+		debugLog(logCategoryDNSFail, "", fmt.Sprintf(phrases().DNSFailoverLookupFailed, c.dnsServerLabel(index), host, err))
 	}
 
 	return nil, newAllResolversError(host, lastErr)
@@ -1587,17 +1588,13 @@ func getClientIP(r *http.Request) string {
 		remoteIP = ip
 	}
 
-	trustProxy, err := strconv.ParseBool(
-		strings.TrimSpace(os.Getenv("TRUST_PROXY")),
-	)
-	if err != nil || !trustProxy {
+	if !requestFromTrustedProxy(r) {
 		return remoteIP
 	}
 
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		first, _, _ := strings.Cut(xff, ",")
-		first = strings.TrimSpace(first)
-
+		parts := strings.Split(xff, ",")
+		first := strings.TrimSpace(parts[len(parts)-1])
 		if parsed := net.ParseIP(first); parsed != nil {
 			return parsed.String()
 		}

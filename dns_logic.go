@@ -57,14 +57,7 @@ sendLoop:
 		case jobs <- &domains[i]:
 			submitted++
 		case <-ctx.Done():
-			debugLog(
-				"SCHEDULER",
-				"",
-				t(
-					phrases().DomainLoopCancelled,
-					"Domain loop aborted: context cancelled",
-				),
-			)
+			debugLog(logCategorySchudler, "", t(phrases().DomainLoopCancelled, "Domain loop aborted: context canceled"))
 
 			break sendLoop
 		}
@@ -99,7 +92,7 @@ func processDomainUpdate(ctx context.Context, dc *DomainConfig, job domainUpdate
 
 	if isCNAMEDomainConfig(dc) {
 		if !dc.CNAMEPending {
-			debugLog("DNS-LOGIC", job.Domain, "CNAME unchanged; automatic scheduler update skipped")
+			debugLog(logCategoryDNSLogic, job.Domain, "CNAME unchanged; automatic scheduler update skipped")
 
 			return result
 		}
@@ -215,7 +208,7 @@ func processCNAMEDomainUpdate(
 		return result
 	}
 
-	debugLog("DNS-LOGIC", job.Domain, fmt.Sprintf("CNAME mode: %s -> %s", job.Domain, target))
+	debugLog(logCategoryDNSLogic, job.Domain, fmt.Sprintf("CNAME mode: %s -> %s", job.Domain, target))
 
 	changed, err := updateDomainRecord(ctx, dc, job, cache, RecordTypeCNAME, target)
 	if err != nil {
@@ -365,20 +358,13 @@ func processDomainWorkerJob(
 	}()
 
 	if providerZoneFailureActive(domainConfig.Provider) {
-		debugLog(
-			"DNS-LOGIC",
-			domainConfig.FQDN,
-			fmt.Sprintf("Provider %s zone API unavailable; domain update skipped", domainConfig.Provider),
-		)
+		debugLog(logCategoryDNSLogic, domainConfig.FQDN, fmt.Sprintf("Provider %s zone API unavailable; domain update skipped", domainConfig.Provider))
 
 		return result, nil
 	}
 
 	if err := ctx.Err(); err != nil {
-		result.Error = fmt.Errorf(
-			"domain update cancelled before start: %w",
-			err,
-		)
+		result.Error = fmt.Errorf("domain update canceled before start: %w", err)
 
 		return result, nil
 	}
@@ -417,7 +403,7 @@ func buildDomainUpdateJob(
 ) (domainUpdateJob, error) {
 	zones, exists := zonesByProvider[string(dc.Provider)]
 	if !exists || len(zones) == 0 {
-		debugLog("DNS-LOGIC", dc.FQDN, phrases().NoZoneFoundForDomain)
+		debugLog(logCategoryDNSLogic, dc.FQDN, phrases().NoZoneFoundForDomain)
 
 		return domainUpdateJob{}, fmt.Errorf(
 			t(phrases().NoZonesFoundForProvider, "No zones found for provider %s"),
@@ -427,7 +413,7 @@ func buildDomainUpdateJob(
 
 	matchedZone := findMatchedZoneForDomain(dc.FQDN, zones)
 	if matchedZone == nil {
-		debugLog("DNS-LOGIC", dc.FQDN, phrases().NoZoneFoundForDomain)
+		debugLog(logCategoryDNSLogic, dc.FQDN, phrases().NoZoneFoundForDomain)
 
 		return domainUpdateJob{}, fmt.Errorf("%s", t(phrases().NoZoneFound, "No zone found"))
 	}
@@ -438,7 +424,7 @@ func buildDomainUpdateJob(
 
 	records, exists := cache.Get(matchedZone.ID)
 	if !exists && dc.Provider != ProviderIPv64 {
-		debugLog("DNS-LOGIC", dc.FQDN, phrases().NoRecordsInCache)
+		debugLog(logCategoryDNSLogic, dc.FQDN, phrases().NoRecordsInCache)
 
 		return domainUpdateJob{}, fmt.Errorf("%s", t(phrases().NoRecordsInCache, "no records in cache"))
 	}
@@ -490,7 +476,7 @@ func handleDomainResultStatus(
 	providerName := string(dc.Provider)
 
 	if result.Error == nil && result.Changed && !dryRun {
-		debugLog("STATUS", dc.FQDN, phrases().ChangesDetected)
+		debugLog(logCategoryStatus, dc.FQDN, phrases().ChangesDetected)
 
 		v4 := result.IPv4
 		v6 := result.IPv6
@@ -505,7 +491,7 @@ func handleDomainResultStatus(
 	}
 
 	if result.Error == nil {
-		debugLog("STATUS", dc.FQDN, phrases().NoChangesNeeded)
+		debugLog(logCategoryStatus, dc.FQDN, phrases().NoChangesNeeded)
 	}
 
 	return result, nil
@@ -598,7 +584,7 @@ func finalizeDomainResults(results <-chan domainUpdateResult, totalDomains int) 
 	schedulerRanOnce.Store(true)
 
 	if errorCount > 0 {
-		debugLog("SCHEDULER", "", fmt.Sprintf("⚠️ %d/%d domains failed", errorCount, totalDomains))
+		debugLog(logCategorySchudler, "", fmt.Sprintf("⚠️ %d/%d domains failed", errorCount, totalDomains))
 	}
 
 	return successCount
@@ -655,7 +641,7 @@ func processDomainIPv4Update(
 		return false, nil
 	}
 
-	debugLog("DNS-LOGIC", job.Domain, phrases().CheckingIPv4)
+	debugLog(logCategoryDNSLogic, job.Domain, phrases().CheckingIPv4)
 
 	changed, err := updateDomainRecord(ctx, dc, job, cache, RecordTypeA, job.IPv4)
 	if err != nil {
@@ -680,7 +666,7 @@ func processDomainIPv6Update(
 		return false, nil
 	}
 
-	debugLog("DNS-LOGIC", job.Domain, phrases().CheckingIPv6)
+	debugLog(logCategoryDNSLogic, job.Domain, phrases().CheckingIPv6)
 
 	changed, err := updateDomainRecord(ctx, dc, job, cache, RecordTypeAAAA, job.IPv6)
 	if err != nil {

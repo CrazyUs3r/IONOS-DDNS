@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+var ErrIonosEmptyResponse = errors.New("IONOS API returned an empty response")
+
 func saveIONOSCacheToFile(zones []Zone, recordCache *ZoneRecordCache) error {
 	return saveProviderCacheToFile(string(ProviderIONOS), "ionos_cache.json", zones, recordCache)
 }
@@ -41,7 +43,7 @@ func ionosAPIAttempt(
 	attempt, maxRetries int,
 	allowRetry bool,
 ) ([]byte, bool, error) {
-	debugLog("HTTP", "", fmt.Sprintf(phrases().IonosAttempt, phrases().Attempt, attempt+1, maxRetries, method, url))
+	debugLog(logCategoryHTTP, "", fmt.Sprintf(phrases().IonosAttempt, phrases().Attempt, attempt+1, maxRetries, method, url))
 
 	bodyBytes, err := marshalIonosBody(body)
 	if err != nil {
@@ -60,7 +62,7 @@ func ionosAPIAttempt(
 	if err != nil {
 		if !allowRetry {
 			err = redactNetworkError(err)
-			debugLog("HTTP", "", fmt.Sprintf(phrases().IonosNetworkErrorNoRetry, err, duration))
+			debugLog(logCategoryHTTP, "", fmt.Sprintf(phrases().IonosNetworkErrorNoRetry, err, duration))
 			apiMetrics.RecordError(string(ProviderIONOS), method, 0, err, duration)
 
 			return nil, false, fmt.Errorf("%s: %w", phrases().ErrNetworkError, err)
@@ -73,11 +75,11 @@ func ionosAPIAttempt(
 
 	defer func() {
 		if err := res.Body.Close(); err != nil {
-			debugLog("HTTP", "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
+			debugLog(logCategoryHTTP, "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
 		}
 	}()
 
-	debugLog("HTTP", "", fmt.Sprintf(phrases().HTTPStatusLatency, res.StatusCode, phrases().AvgLatency, duration))
+	debugLog(logCategoryHTTP, "", fmt.Sprintf(phrases().HTTPStatusLatency, res.StatusCode, phrases().AvgLatency, duration))
 
 	responseAttempt := attempt
 	if !allowRetry {
@@ -97,7 +99,7 @@ func marshalIonosBody(body any) ([]byte, error) {
 		return nil, fmt.Errorf("%s: %w", phrases().ErrJSONMarshal, err)
 	}
 
-	debugLog("HTTP", "", fmt.Sprintf("📤 %s: %s", phrases().PayloadSent, string(bodyBytes)))
+	debugLog(logCategoryHTTP, "", fmt.Sprintf("📤 %s: %s", phrases().PayloadSent, string(bodyBytes)))
 
 	return bodyBytes, nil
 }
@@ -218,14 +220,7 @@ func updateIonosDNS(
 	)
 
 	if existing != nil && isInvalidIonosRecordID(existing.ID) {
-		debugLog(
-			"CACHE",
-			fqdn,
-			fmt.Sprintf(
-				phrases().IonosInvalidCachedRecordID,
-				existing.ID,
-			),
-		)
+		debugLog(logCategoryCache, fqdn, fmt.Sprintf(phrases().IonosInvalidCachedRecordID, existing.ID))
 
 		liveRecords, err := loadIonosInfrastructureRecords(
 			ctx,
@@ -437,11 +432,11 @@ func isConflictingIonosRecord(
 	actualType := strings.ToUpper(strings.TrimSpace(record.Type))
 
 	switch wantedRecordType {
-	case "CNAME":
-		return actualType == "A" || actualType == "AAAA"
+	case RecordTypeCNAME:
+		return actualType == RecordTypeA || actualType == RecordTypeAAAA
 
-	case "A", "AAAA":
-		return actualType == "CNAME"
+	case RecordTypeA, RecordTypeAAAA:
+		return actualType == RecordTypeCNAME
 
 	default:
 		return false
@@ -465,7 +460,7 @@ func findIonosExistingRecord(records []Record, fqdn, recordName, recordType stri
 
 		if (actualName == wantedFQDN || actualName == wantedRecordName) && actualType == wantedType {
 			existing := &records[i]
-			debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("📌 %s: %s (ID: %s)", phrases().RecordFound, existing.Content, existing.ID))
+			debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf("📌 %s: %s (ID: %s)", phrases().RecordFound, existing.Content, existing.ID))
 
 			return existing
 		}
@@ -485,7 +480,7 @@ func shouldSkipIonosUpdate(dc *DomainConfig, fqdn, recordType, newIP string, exi
 		ttlCurrent := existing.TTL == effectiveIonosTTL(dc)
 
 		if contentCurrent && ttlCurrent {
-			debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("✅ %s: %s = %s, TTL = %d", phrases().RecordCurrent, recordType, newIP, existing.TTL))
+			debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf("✅ %s: %s = %s, TTL = %d", phrases().RecordCurrent, recordType, newIP, existing.TTL))
 			log(LogContext{
 				Level:   LogInfo,
 				Action:  ActionCurrent,
@@ -498,9 +493,9 @@ func shouldSkipIonosUpdate(dc *DomainConfig, fqdn, recordType, newIP string, exi
 	}
 
 	if existing == nil {
-		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("🆕 %s: %s", phrases().NoRecordFound, recordType))
+		debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf("🆕 %s: %s", phrases().NoRecordFound, recordType))
 	} else {
-		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("🔄 %s: %s TTL=%d -> %s TTL=%d", phrases().RecordUpdateNeeded, existing.Content, existing.TTL, newIP, effectiveIonosTTL(dc)))
+		debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf("🔄 %s: %s TTL=%d -> %s TTL=%d", phrases().RecordUpdateNeeded, existing.Content, existing.TTL, newIP, effectiveIonosTTL(dc)))
 	}
 
 	return false
@@ -546,8 +541,8 @@ func buildIonosUpdateRequest(
 }
 
 func debugIonosUpdateRequest(fqdn, method, url, zoneName, recordType string) {
-	debugLog("DNS-LOGIC", fqdn, fmt.Sprintf("📡 %s: %s %s", phrases().APICall, method, url))
-	debugLog("DNS-LOGIC", fqdn, fmt.Sprintf(phrases().IonosPayload, zoneName, fqdn, recordType))
+	debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf("📡 %s: %s %s", phrases().APICall, method, url))
+	debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf(phrases().IonosPayload, zoneName, fqdn, recordType))
 }
 
 func executeIonosDNSUpdate(
@@ -579,8 +574,8 @@ func executeIonosDNSUpdate(
 		recordType,
 		newIP,
 	)
-	if parseErr != nil {
-		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf(phrases().IonosSuccessResponseParseFailed, parseErr))
+	if parseErr != nil && !errors.Is(parseErr, ErrIonosEmptyResponse) {
+		debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf(phrases().IonosSuccessResponseParseFailed, parseErr))
 	}
 
 	updatedRecord, err = ensureIonosCreatedRecord(
@@ -607,7 +602,7 @@ func executeIonosDNSUpdate(
 		newIP,
 	)
 
-	debugLog("DNS-LOGIC", fqdn, fmt.Sprintf(phrases().IonosRecordArrow, phrases().Success, recordType, newIP))
+	debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf(phrases().IonosRecordArrow, phrases().Success, recordType, newIP))
 
 	return updatedRecord, nil
 }
@@ -630,13 +625,13 @@ func handleIonosUpdateError(
 		)
 
 		if reconcileErr == nil && hasUsableIonosRecordID(record) {
-			debugLog("DNS-LOGIC", fqdn, phrases().IonosCreateReconciled)
+			debugLog(logCategoryDNSLogic, fqdn, phrases().IonosCreateReconciled)
 
 			return record, nil
 		}
 
 		if reconcileErr != nil {
-			debugLog("DNS-LOGIC", fqdn, fmt.Sprintf(phrases().IonosCreateReconciliationFailed, reconcileErr))
+			debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf(phrases().IonosCreateReconciliationFailed, reconcileErr))
 		}
 	}
 
@@ -651,7 +646,7 @@ func handleIonosUpdateError(
 		)
 	}
 
-	debugLog("DNS-LOGIC", fqdn, fmt.Sprintf(phrases().UpdateFailedWithError, updateErr))
+	debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf(phrases().UpdateFailedWithError, updateErr))
 
 	return nil, updateErr
 }
@@ -717,7 +712,7 @@ func parseIonosUpdatedRecord(
 	fqdn, recordName, recordType, newIP string,
 ) (*Record, error) {
 	if len(data) == 0 {
-		return nil, nil
+		return nil, ErrIonosEmptyResponse
 	}
 
 	var records []Record
@@ -805,7 +800,7 @@ func handleIonosDNSAPIError(fqdn, recordType, newIP string, apiErr *APIError, er
 	case http.StatusUnprocessableEntity:
 		return fmt.Errorf("%s: %w", phrases().ErrValidationFailed, err)
 	default:
-		debugLog("DNS-LOGIC", fqdn, fmt.Sprintf(phrases().IonosErrDetail, err, err))
+		debugLog(logCategoryDNSLogic, fqdn, fmt.Sprintf(phrases().IonosErrDetail, err, err))
 
 		return err
 	}
@@ -872,7 +867,7 @@ func loadIONOSZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
 	}
 
 	if len(filtered) < len(zones) {
-		debugLog("ZONE", "", fmt.Sprintf(phrases().IonosZonesFiltered, len(filtered), len(zones)))
+		debugLog(logCategoryZone, "", fmt.Sprintf(phrases().IonosZonesFiltered, len(filtered), len(zones)))
 	}
 
 	return filtered, nil
@@ -892,7 +887,7 @@ func updateIONOSCache(
 	}
 
 	if _, exists := cache.Get(zoneID); !exists {
-		debugLog("CACHE", fqdn, phrases().IonosCacheZoneNotFound)
+		debugLog(logCategoryCache, fqdn, phrases().IonosCacheZoneNotFound)
 
 		return
 	}
@@ -900,7 +895,7 @@ func updateIONOSCache(
 	var create cachedRecordCreateFunc
 	if existing == nil {
 		if updatedRecord == nil || strings.TrimSpace(updatedRecord.ID) == "" {
-			debugLog("CACHE", fqdn, phrases().IonosCacheMissingRealRecordID)
+			debugLog(logCategoryCache, fqdn, phrases().IonosCacheMissingRealRecordID)
 
 			return
 		}
@@ -948,12 +943,12 @@ func updateIONOSCache(
 	}
 
 	if existing == nil {
-		debugLog("CACHE", fqdn, fmt.Sprintf(phrases().IonosCacheRecordAdded, recordType, newIP))
+		debugLog(logCategoryCache, fqdn, fmt.Sprintf(phrases().IonosCacheRecordAdded, recordType, newIP))
 
 		return
 	}
 
-	debugLog("CACHE", fqdn, fmt.Sprintf(phrases().IonosCacheUpdated, recordType, newIP))
+	debugLog(logCategoryCache, fqdn, fmt.Sprintf(phrases().IonosCacheUpdated, recordType, newIP))
 }
 
 // ============================================================================
@@ -966,7 +961,7 @@ func cleanupIONOSRecords(ctx context.Context, zones []Zone, recordCache *ZoneRec
 		return
 	}
 
-	debugLog("MAINTENANCE", "", phrases().CleanupStartIonos)
+	debugLog(logCategoryMaintenace, "", phrases().CleanupStartIonos)
 	configRecords := buildIONOSConfigRecords()
 	managedDomains := buildProviderManagedDomains(ProviderIONOS)
 
@@ -1018,12 +1013,12 @@ func cleanupSingleIONOSRecord(
 	}
 
 	if isInvalidIonosRecordID(rec.ID) {
-		debugLog("MAINTENANCE", fqdn, fmt.Sprintf(phrases().IonosCleanupInvalidCachedRecordID, rec.ID))
+		debugLog(logCategoryMaintenace, fqdn, fmt.Sprintf(phrases().IonosCleanupInvalidCachedRecordID, rec.ID))
 
 		return
 	}
 
-	debugLog("MAINTENANCE", fqdn, fmt.Sprintf(phrases().CleanupOrphanedIonos, rec.Type, rec.ID))
+	debugLog(logCategoryMaintenace, fqdn, fmt.Sprintf(phrases().CleanupOrphanedIonos, rec.Type, rec.ID))
 
 	if dryRunEnabled() {
 		log(LogContext{
@@ -1038,7 +1033,7 @@ func cleanupSingleIONOSRecord(
 
 	url := fmt.Sprintf("%s/%s/records/%s", ionosBaseURL, zone.ID, rec.ID)
 	if _, err := ionosAPI(ctx, ionosDC, MethodDELETE, url, nil); err != nil {
-		debugLog("MAINTENANCE", fqdn, fmt.Sprintf(phrases().CleanupDeleteError, err))
+		debugLog(logCategoryMaintenace, fqdn, fmt.Sprintf(phrases().CleanupDeleteError, err))
 
 		return
 	}
@@ -1050,7 +1045,7 @@ func cleanupSingleIONOSRecord(
 		Message: fmt.Sprintf(phrases().CleanupRecordRemoved, rec.Type),
 	})
 	if err := markOrphanRecordDeleted(fqdn); err != nil {
-		debugLog("MAINTENANCE", fqdn, fmt.Sprintf("failed to mark orphan-deleted timestamp: %v", err))
+		debugLog(logCategoryMaintenace, fqdn, fmt.Sprintf("failed to mark orphan-deleted timestamp: %v", err))
 	}
 }
 

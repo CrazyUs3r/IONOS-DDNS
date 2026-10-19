@@ -58,15 +58,15 @@ type notifyConfig struct {
 // INIT
 // ============================================================================
 
-func initNotifiers() {
+func initNotifiers(ctx context.Context) {
 	notifierInitMu.Lock()
 	defer notifierInitMu.Unlock()
 
-	if shutdownCtx != nil && shutdownCtx.Err() != nil {
+	if err := ctx.Err(); err != nil {
 		return
 	}
 
-	newCfg := buildNotifyConfig(snapshotNotifierConfig())
+	newCfg := buildNotifyConfig(ctx, snapshotNotifierConfig())
 	notifyCfgMu.Lock()
 	oldNotifiers := append([]Notifier(nil), notifyCfg.notifiers...)
 	notifyCfg = newCfg
@@ -74,7 +74,7 @@ func initNotifiers() {
 	closeNotifierList(oldNotifiers)
 }
 
-func buildNotifyConfig(config Config) notifyConfig {
+func buildNotifyConfig(ctx context.Context, config Config) notifyConfig {
 	newCfg := notifyConfig{
 		events:    make(map[NotifyEvent]struct{}),
 		notifiers: []Notifier{},
@@ -86,35 +86,35 @@ func buildNotifyConfig(config Config) notifyConfig {
 		return newCfg
 	}
 
-	appendTelegramNotifier(&newCfg, config)
-	appendGotifyNotifier(&newCfg, config)
+	appendTelegramNotifier(ctx, &newCfg, config)
+	appendGotifyNotifier(ctx, &newCfg, config)
 	appendWebhookNotifier(&newCfg, config)
-	appendNtfyNotifier(&newCfg, config)
+	appendNtfyNotifier(ctx, &newCfg, config)
 	appendMQTTNotifier(&newCfg, config)
 	appendEmailNotifier(&newCfg, config)
 
 	return newCfg
 }
 
-func appendTelegramNotifier(target *notifyConfig, config Config) {
+func appendTelegramNotifier(ctx context.Context, target *notifyConfig, config Config) {
 	telegram := config.Notifications.Telegram
 	if telegram.Token == "" || telegram.ChatID == "" {
 		return
 	}
-	tg := newTelegramNotifier(telegram.Token, telegram.ChatID)
+	tg := newTelegramNotifier(ctx, telegram.Token, telegram.ChatID)
 	target.notifiers = append(target.notifiers, tg)
 	tg.StartPolling()
-	debugLog("NOTIFY", "", fmt.Sprintf("%s %s", phrases().NotifyTelegramActive, telegram.ChatID))
+	debugLog(logCategoryNotify, "", fmt.Sprintf("%s %s", phrases().NotifyTelegramActive, telegram.ChatID))
 	log(LogContext{Level: LogInfo, Action: ActionConfig, Message: t(phrases().NotifyTelegramActive, "✅ Telegram active")})
 }
 
-func appendGotifyNotifier(target *notifyConfig, config Config) {
+func appendGotifyNotifier(ctx context.Context, target *notifyConfig, config Config) {
 	gotify := config.Notifications.Gotify
 	if gotify.URL == "" || gotify.Token == "" {
 		return
 	}
-	target.notifiers = append(target.notifiers, newGotifyNotifier(gotify.URL, gotify.Token))
-	debugLog("NOTIFY", "", fmt.Sprintf("%s %s", phrases().NotifyGotifyActive, gotify.URL))
+	target.notifiers = append(target.notifiers, newGotifyNotifier(ctx, gotify.URL, gotify.Token))
+	debugLog(logCategoryNotify, "", fmt.Sprintf("%s %s", phrases().NotifyGotifyActive, gotify.URL))
 	log(LogContext{Level: LogInfo, Action: ActionConfig, Message: t(phrases().NotifyGotifyActive, "✅ Gotify active")})
 }
 
@@ -124,17 +124,17 @@ func appendWebhookNotifier(target *notifyConfig, config Config) {
 		return
 	}
 	target.notifiers = append(target.notifiers, newWebhookNotifier(webhook.URL, webhook.Secret))
-	debugLog("NOTIFY", "", fmt.Sprintf("%s %s", phrases().NotifyWebhookActive, webhook.URL))
+	debugLog(logCategoryNotify, "", fmt.Sprintf("%s %s", phrases().NotifyWebhookActive, webhook.URL))
 	log(LogContext{Level: LogInfo, Action: ActionConfig, Message: t(phrases().NotifyWebhookActive, "✅ Webhook active")})
 }
 
-func appendNtfyNotifier(target *notifyConfig, config Config) {
+func appendNtfyNotifier(ctx context.Context, target *notifyConfig, config Config) {
 	ntfy := config.Notifications.Ntfy
 	if ntfy.URL == "" || ntfy.Topic == "" {
 		return
 	}
-	target.notifiers = append(target.notifiers, newNtfyNotifier(ntfy.URL, ntfy.Topic, ntfy.Token))
-	debugLog("NOTIFY", "", fmt.Sprintf("%s %s", phrases().NotifyNtfyActive, ntfy.URL))
+	target.notifiers = append(target.notifiers, newNtfyNotifier(ctx, ntfy.URL, ntfy.Topic, ntfy.Token))
+	debugLog(logCategoryNotify, "", fmt.Sprintf("%s %s", phrases().NotifyNtfyActive, ntfy.URL))
 	log(LogContext{Level: LogInfo, Action: ActionConfig, Message: t(phrases().NotifyNtfyActive, "✅ Ntfy active")})
 }
 
@@ -155,7 +155,7 @@ func appendMQTTNotifier(target *notifyConfig, config Config) {
 		mqtt.Discovery,
 		mqtt.DiscoveryPrefix,
 	))
-	debugLog("NOTIFY", "", fmt.Sprintf("%s %s", phrases().NotifyMqttActive, mqtt.Broker))
+	debugLog(logCategoryNotify, "", fmt.Sprintf("%s %s", phrases().NotifyMqttActive, mqtt.Broker))
 	log(LogContext{Level: LogInfo, Action: ActionConfig, Message: t(phrases().NotifyMqttActive, "✅ MQTT active")})
 }
 
@@ -174,7 +174,7 @@ func appendEmailNotifier(target *notifyConfig, config Config) {
 		email.SubjectPrefix,
 		email.TLSMode,
 	))
-	debugLog("NOTIFY", "", fmt.Sprintf("%s %s", phrases().NotifyEmailActive, email.To))
+	debugLog(logCategoryNotify, "", fmt.Sprintf("%s %s", phrases().NotifyEmailActive, email.To))
 	log(LogContext{Level: LogInfo, Action: ActionConfig, Message: t(phrases().NotifyEmailActive, "✅ Email (SMTP) active")})
 }
 
@@ -260,7 +260,7 @@ func notify(ctx LogContext) {
 	for _, n := range notifiers {
 		go func() {
 			if err := n.Send(nm); err != nil {
-				debugLog("NOTIFY", "", fmt.Sprintf(phrases().NotifyFailed, n.Name(), err))
+				debugLog(logCategoryNotify, "", fmt.Sprintf(phrases().NotifyFailed, n.Name(), err))
 			}
 		}()
 	}
@@ -298,7 +298,7 @@ func notifySync(ctx LogContext) {
 			}
 
 			if err != nil {
-				debugLog("NOTIFY", "", fmt.Sprintf(phrases().NotifyFailed, n.Name(), err))
+				debugLog(logCategoryNotify, "", fmt.Sprintf(phrases().NotifyFailed, n.Name(), err))
 			}
 		})
 	}

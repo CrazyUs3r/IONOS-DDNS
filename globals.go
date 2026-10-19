@@ -400,21 +400,49 @@ const (
 // ============================================================================
 
 const (
+	// HTML
 	HTMLChecked  = " checked"
 	HTMLSelected = " selected"
 
+	// Email TLS modes
 	emailTLSModeStartTLS = "starttls"
 	emailTLSModeTLS      = "tls"
 	emailTLSModePlain    = "plain"
 
-	unhealthy = "unhealthy"
-	status    = "status"
-	healthy   = "healthy"
-	starting  = "starting"
-
+	// Platforms
 	PlatformLinux   = "linux"
 	PlatformWindows = "windows"
 	PlatformDarwin  = "darwin"
+	PlatformFreeBSD = "freebsd"
+
+	// Logging and categories
+	logCategorySystem     = "SYSTEM"
+	logCategoryConfig     = "CONFIG"
+	logCategoryFile       = "FILE"
+	logCategoryIPCheck    = "IP-CHECK"
+	logCategoryNotify     = "NOTIFY"
+	logCategoryAPI        = "API"
+	logCategoryHTTP       = "HTTP"
+	logCategoryHTTPRaw    = "HTTP-RAW"
+	logCategoryHTTPDail   = "HTTP-DIAL"
+	logCategoryHTTPTiming = "HTTP-TIMING"
+	logCategoryHelper     = "HELPER"
+	logCategoryDNSLogic   = "DNS-LOGIC"
+	logCategoryCache      = "CACHE"
+	logCategoryMaintenace = "MAINTENANCE"
+	logCategorySchudler   = "SCHEDULER"
+	logCategoryWebsocket  = "WS"
+	logCategoryStatus     = "STATUS"
+	logCategoryDEBUG      = "DEBUG"
+	logCategoryDashboard  = "DASHBOARD"
+	logCategoryZone       = "ZONE"
+	logCategoryAudit      = "AUDIT"
+	logCategoryExport     = "EXPORT"
+	logCategoryBackup     = "BACKUP"
+	logCategoryMQTT       = "MQTT"
+	logCategoryMQTTRAW    = "MQTT-RAW"
+	logCategoryDNSFail    = "DNS-FAILOVER"
+	logCategoryTelegram   = "TELEGRAM"
 )
 
 const (

@@ -103,21 +103,11 @@ func updateStatusFileBatch(updates []statusUpdate) error {
 	}
 
 	for _, domain := range pruned {
-		debugLog("STATUS", domain, "Orphaned domain pruned from status")
+		debugLog(logCategoryStatus, domain, "Orphaned domain pruned from status")
 	}
 
 	if err := updateDomainsCache(); err != nil {
-		debugLog(
-			"CACHE",
-			"",
-			fmt.Sprintf(
-				t(
-					phrases().ErrUpdateDomainsCache,
-					"updateDomainsCache failed: %v",
-				),
-				err,
-			),
-		)
+		debugLog(logCategoryCache, "", fmt.Sprintf(t(phrases().ErrUpdateDomainsCache, "updateDomainsCache failed: %v"), err))
 	}
 
 	for _, u := range changedUpdates {
@@ -198,7 +188,7 @@ func loadStatusDomainsFromDiskLocked() (map[string]DomainHistory, error) {
 		return nil, err
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := readFileWithinDir(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return make(map[string]DomainHistory), nil
@@ -386,11 +376,14 @@ func writeStatusDomainsAtomic(path string, domains map[string]DomainHistory) err
 	}
 	removeTemp = false
 
-	if dirHandle, err := os.Open(dir); err == nil {
-		if err := dirHandle.Sync(); err != nil {
-			debugLog("STATUS", "", fmt.Sprintf("Status directory sync failed: %v", err))
+	if root, err := os.OpenRoot(dir); err == nil {
+		if dirHandle, err := root.Open("."); err == nil {
+			if err := dirHandle.Sync(); err != nil {
+				debugLog(logCategoryStatus, "", fmt.Sprintf("Status directory sync failed: %v", err))
+			}
+			_ = dirHandle.Close()
 		}
-		_ = dirHandle.Close()
+		_ = root.Close()
 	}
 
 	return nil
@@ -508,7 +501,7 @@ func updateMetricsCache() error {
 
 	data, err := json.MarshalIndent(stats, "", " ")
 	if err != nil {
-		debugLog("CACHE", "", fmt.Sprintf(t(phrases().ErrMetricsCacheMarshal, "Metrics cache marshal error: %v"), err))
+		debugLog(logCategoryCache, "", fmt.Sprintf(t(phrases().ErrMetricsCacheMarshal, "Metrics cache marshal error: %v"), err))
 
 		return err
 	}
@@ -552,13 +545,13 @@ func serveCachedJSON(w http.ResponseWriter, r *http.Request, cache *CachedRespon
 	w.Header().Set("Last-Modified", lastMod.UTC().Format(http.TimeFormat))
 	w.Header().Set("Cache-Control", "private, max-age=5")
 
-	if r.Header.Get("If-None-Match") == etag {
-		w.WriteHeader(http.StatusNotModified)
+	if inm := r.Header.Get("If-None-Match"); inm != "" {
+		if inm == etag {
+			w.WriteHeader(http.StatusNotModified)
 
-		return
-	}
-
-	if ifModSince := r.Header.Get("If-Modified-Since"); ifModSince != "" {
+			return
+		}
+	} else if ifModSince := r.Header.Get("If-Modified-Since"); ifModSince != "" {
 		if parsed, err := http.ParseTime(ifModSince); err == nil {
 			if !lastMod.After(parsed) {
 				w.WriteHeader(http.StatusNotModified)
@@ -575,7 +568,7 @@ func serveCachedJSON(w http.ResponseWriter, r *http.Request, cache *CachedRespon
 	}
 
 	if _, err := w.Write(data); err != nil {
-		debugLog("HTTP", "", fmt.Sprintf(t(phrases().ErrResponseWrite, "Response write failed: %v"), err))
+		debugLog(logCategoryHTTP, "", fmt.Sprintf(t(phrases().ErrResponseWrite, "Response write failed: %v"), err))
 	}
 }
 
@@ -600,7 +593,7 @@ func startCacheRefresher() {
 	go func() {
 		defer func() {
 			if recovered := recover(); recovered != nil {
-				debugLog("CACHE", "", fmt.Sprintf(t(phrases().ErrPanicRecovered, "🚨 Panic recovered: %v"), recovered))
+				debugLog(logCategoryCache, "", fmt.Sprintf(t(phrases().ErrPanicRecovered, "🚨 Panic recovered: %v"), recovered))
 			}
 			ticker.Stop()
 		}()
@@ -608,24 +601,25 @@ func startCacheRefresher() {
 		for {
 			select {
 			case <-shutdownCtx.Done():
-				debugLog("CACHE", "", t(phrases().CacheRefresherStopped, "Cache refresher stopped (shutdown)"))
+				debugLog(logCategoryCache, "", t(phrases().CacheRefresherStopped, "Cache refresher stopped (shutdown)"))
 
 				return
 
 			case <-ticker.C:
+				ticker.Reset(cacheRefreshInterval())
 				func() {
 					defer func() {
 						if recovered := recover(); recovered != nil {
-							debugLog("CACHE", "", fmt.Sprintf(t(phrases().ErrPanicRefreshCycle, "Panic in refresh cycle: %v"), recovered))
+							debugLog(logCategoryCache, "", fmt.Sprintf(t(phrases().ErrPanicRefreshCycle, "Panic in refresh cycle: %v"), recovered))
 						}
 					}()
 
 					if err := updateDomainsCache(); err != nil {
-						debugLog("CACHE", "", fmt.Sprintf(t(phrases().ErrDomainCacheRefresh, "Domain cache refresh failed: %v"), err))
+						debugLog(logCategoryCache, "", fmt.Sprintf(t(phrases().ErrDomainCacheRefresh, "Domain cache refresh failed: %v"), err))
 					}
 
 					if err := updateMetricsCache(); err != nil {
-						debugLog("CACHE", "", fmt.Sprintf(t(phrases().ErrMetricsCacheRefresh, "Metrics cache refresh failed: %v"), err))
+						debugLog(logCategoryCache, "", fmt.Sprintf(t(phrases().ErrMetricsCacheRefresh, "Metrics cache refresh failed: %v"), err))
 					}
 				}()
 			}
