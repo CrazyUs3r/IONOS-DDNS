@@ -401,21 +401,25 @@ const (
 
 const (
 	// HTML
+
 	HTMLChecked  = " checked"
 	HTMLSelected = " selected"
 
 	// Email TLS modes
+
 	emailTLSModeStartTLS = "starttls"
 	emailTLSModeTLS      = "tls"
 	emailTLSModePlain    = "plain"
 
 	// Platforms
+
 	PlatformLinux   = "linux"
 	PlatformWindows = "windows"
 	PlatformDarwin  = "darwin"
 	PlatformFreeBSD = "freebsd"
 
 	// Logging and categories
+
 	logCategorySystem     = "SYSTEM"
 	logCategoryConfig     = "CONFIG"
 	logCategoryFile       = "FILE"
