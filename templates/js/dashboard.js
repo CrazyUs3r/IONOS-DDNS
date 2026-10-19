@@ -4,6 +4,11 @@
 
 const nativeFetch = window.fetch.bind(window);
 
+const safeStorage = {
+	get(key) { try { return localStorage.getItem(key); } catch { return null; } },
+	set(key, value) { try { localStorage.setItem(key, value); } catch { /* Storage blockiert */ } },
+};
+
 function currentCSRFToken() {
 	const meta = document.querySelector('meta[name="csrf-token"]');
 	return meta ? String(meta.content || '') : '';
@@ -78,7 +83,7 @@ function decodeDeclarativeString(raw) {
 }
 
 const DECLARATIVE_ACTIONS = Object.freeze({
-	addDomainToList: ({ element }) => addDomainToList(element),
+	addDomainToList: () => addDomainToList(),
 	addUser: () => addUser(),
 	cancelEdit: () => cancelEdit(),
 	clearDebugLog: () => clearDebugLog(),
@@ -116,7 +121,6 @@ const DECLARATIVE_ACTIONS = Object.freeze({
 	sendNotifyTest: () => sendNotifyTest(),
 	showNotifierTooltip: ({ args, element }) => showNotifierTooltip(element, element.dataset.tooltip || args[1] || args[0] || ''),
 	toggleNotifCenter: () => toggleNotifCenter(),
-	togglePassword: ({ args, element }) => togglePassword(args[0], element),
 	toggleProviderFields: () => toggleProviderFields(),
 	toggleRecordModeFields: () => toggleRecordModeFields(),
 	toggleSidebar: () => toggleSidebar(),
@@ -605,7 +609,7 @@ function navTo(page) {
 
 	syncDashboardActivity();
 
-	try { localStorage.setItem('nav-page', page); } catch { }
+	safeStorage.set('nav-page', page);
 	try {
 		const newHash = '#' + page;
 		if (window.location.hash !== newHash) history.replaceState(null, '', newHash);
@@ -754,13 +758,13 @@ function focusTOTPCodeInput() {
 }
 
 function applySavedTheme() {
-	if (!localStorage.getItem('theme')) {
-		localStorage.setItem(
+	if (!safeStorage.get('theme')) {
+		safeStorage.set(
 			'theme',
 			window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark',
 		);
 	}
-	const theme = localStorage.getItem('theme') || 'dark';
+	const theme = safeStorage.get('theme') || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
 	document.documentElement.setAttribute('data-theme', theme);
 	return theme;
 }
@@ -768,6 +772,8 @@ function applySavedTheme() {
 document.addEventListener('DOMContentLoaded', () => {
 	const savedTheme = applySavedTheme();
 	if (!shouldRunDashboardBoot()) return;
+
+	setupPasswordToggles();
 
 	const initialMetrics = {
 		avg_latency: (document.getElementById('mLatency')?.textContent || '').trim(),
@@ -787,8 +793,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		}
 
 		syncDashboardActivity();
-		dashboardTick();
-		refreshSystemStats();
+
 		if (pageLoadedAt.get(currentPage) === 0) {
 			ensurePageLoaded(currentPage).catch(error =>
 				console.error('stale page refresh failed:', error)
@@ -804,7 +809,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	const hashPage = migrateLegacySettingsPage((window.location.hash || '').replace(/^#/, ''));
 	const savedPage = PAGES.includes(hashPage)
 		? hashPage
-		: migrateLegacySettingsPage(localStorage.getItem('nav-page') || DEFAULT_PAGE);
+		: migrateLegacySettingsPage(safeStorage.get('nav-page') || DEFAULT_PAGE);
 	navTo(savedPage);
 
 	document.addEventListener('click', event => {
@@ -880,7 +885,7 @@ function toggleTheme() {
 	const current = html.getAttribute('data-theme') || 'dark';
 	const next = current === 'dark' ? 'light' : 'dark';
 	html.setAttribute('data-theme', next);
-	localStorage.setItem('theme', next);
+	safeStorage.set('theme', next);
 	applyFavicon(next, currentLevel, false);
 	setBlinking(next, currentLevel);
 	showToast(tr('theme', 'Theme') + ': ' + next);
@@ -919,7 +924,7 @@ function initDomainDetailsState() {
 		if (!domain) return;
 
 		const key = 'domain-open-' + domain;
-		if (localStorage.getItem(key) === '1') {
+		if (safeStorage.get(key) === '1') {
 			details.open = true;
 		}
 
@@ -930,7 +935,7 @@ function initDomainDetailsState() {
 		if (details.dataset.detailsBound === '1') return;
 
 		details.addEventListener('toggle', () => {
-			localStorage.setItem(key, details.open ? '1' : '0');
+			safeStorage.set(key, details.open ? '1' : '0');
 			if (details.open) {
 				ensureIPTimeline(details);
 			}
@@ -1418,7 +1423,7 @@ function renderProviderDaily(providers) {
 		`;
 	}
 
-	container.innerHTML = html || `<div class="provider-methods-empty">${tr('metric_no_provider_activity', 'Heute noch keine Provider-Aktivität')}</div>`;
+	container.innerHTML = html || `<div class="provider-methods-empty">${escName(tr('metric_no_provider_activity', 'Heute noch keine Provider-Aktivität'))}</div>`;
 }
 
 let _chartTooltip = null;
@@ -1648,7 +1653,7 @@ function connectWS() {
 		if (!shouldSkipDashboardWSUpdate(msg.type)) {
 			if (msg.type === 'initial' || msg.type === 'metrics') {
 				updateMetrics(msg.data);
-				const theme = localStorage.getItem('theme') || 'dark';
+				const theme = safeStorage.get('theme') || 'dark';
 				currentLevel = calcLevelFromMetrics(msg.data);
 				applyFavicon(theme, currentLevel, false);
 				setBlinking(theme, currentLevel);
@@ -1841,8 +1846,8 @@ async function triggerUpdate() {
 			return;
 		}
 
-		if (!response.ok) {
-			throw new Error(data.error || `HTTP ${response.status}`);
+		if (response.status !== 202) {
+			throw new Error(data.error || `Unexpected HTTP ${response.status}`);
 		}
 
 		showToast(tr('update_started', '✅ Update gestartet'), 'success');
@@ -2103,6 +2108,7 @@ function _isChecked(id) { const el = document.getElementById(id); return el ? el
 function _parseList(raw) { return (raw || '').split(',').map(s => s.trim()).filter(Boolean); }
 function _setVal(id, v) { const el = document.getElementById(id); if (!el || el === document.activeElement) return; const next = v != null ? String(v) : ''; if (el.value !== next) el.value = next; }
 function _setChk(id, v) { const el = document.getElementById(id); if (!el || el === document.activeElement) return; const next = !!v; if (el.checked !== next) el.checked = next; updateCheckboxLabel(el); }
+function _getInt(id, fallback) { const n = Number.parseInt(_getVal(id), 10); return Number.isNaN(n) ? fallback : n; }
 
 function debounce(fn, wait) {
 	let t;
@@ -2152,7 +2158,7 @@ function _initSettingsFields() {
 		'cfg-dns': (sys.dns_servers || []).join(', '),
 		'cfg-max-log': sys.max_log_mb || 5,
 		'cfg-max-log-backups': sys.max_log_backups || 5,
-		'cfg-max-retries': sys.max_api_retries || 3,
+		'cfg-max-retries': sys.max_api_retries ?? 3,
 		'cfg-max-concurrent': sys.max_concurrent || 5,
 		'cfg-hourly-limit': sys.hourly_rate_limit || 1200,
 		'cfg-lang': sys.lang || 'de',
@@ -2590,24 +2596,6 @@ function addDomainToList() {
 	resetDomainForm();
 	saveDomainSettings();
 
-	fqdnInput.value = '';
-	[
-		'new-domain-fqdn',
-		'new-domain-fqdn-prefix',
-		'new-domain-ttl',
-		'new-domain-cname-target',
-		'new-ionos-prefix',
-		'new-ionos-secret',
-		'new-cf-token',
-		'new-cf-email',
-		'new-cf-secret',
-		'new-ipv64-token',
-		'new-hetzner-token',
-		'new-hcloud-token',
-		'new-dnscale-api-key',
-	].forEach(id => _setVal(id, ''));
-
-	_setChk('new-cf-proxied', false);
 	const addBtn = document.querySelector('#add-domain-section button[data-click="addDomainToList()"]');
 	if (addBtn) addBtn.textContent = tr('settings_add_btn', 'Hinzufügen');
 }
@@ -2619,7 +2607,7 @@ function cancelEdit() {
 	if (addBtn) addBtn.textContent = tr('settings_add_btn', 'Hinzufügen');
 	const section = document.getElementById('add-domain-section');
 	if (section) section.open = false;
-	showToast(tr('edit_domain_cancelled', 'Edit cancelled'), 'info');
+	showToast(tr('edit_domain_canceled', 'Edit canceled'), 'info');
 }
 
 function removeDomainFromList(index) {
@@ -2664,7 +2652,7 @@ function collectSystemFieldsPayload() {
 		dns_servers: _parseList(_getVal('cfg-dns')),
 		max_log_mb: parseInt(_getVal('cfg-max-log'), 10) || 5,
 		max_log_backups: parseInt(_getVal('cfg-max-log-backups'), 10) || 5,
-		max_api_retries: parseInt(_getVal('cfg-max-retries'), 10) || 4,
+		max_api_retries: _getInt('cfg-max-retries', 4),
 		max_concurrent: parseInt(_getVal('cfg-max-concurrent'), 10) || 5,
 		hourly_rate_limit: parseInt(_getVal('cfg-hourly-limit'), 10) || 1200,
 		lang: _getVal('cfg-lang') || 'de',
@@ -3033,17 +3021,30 @@ function startClock() {
 	ensureDashboardTicker();
 }
 
-function togglePassword(id, btn) {
-	const input = document.getElementById(id);
-	if (!input) return;
+// ---- Passwort-Sichtbarkeit (identisch in auth.js und dashboard.js) ----
+function setPasswordVisibility(btn, input, show) {
+	input.type = show ? 'text' : 'password';
+	btn.textContent = show ? '🙈' : '👁️';
 
-	if (input.type === "password") {
-		input.type = "text";
-		btn.textContent = "🙈";
-	} else {
-		input.type = "password";
-		btn.textContent = "👁️";
-	}
+	const label = show
+		? tr('password_hide', 'Passwort ausblenden')
+		: tr('password_show', 'Passwort anzeigen');
+
+	btn.setAttribute('aria-pressed', String(show));
+	btn.setAttribute('aria-label', label);
+	btn.setAttribute('title', label);
+}
+
+function setupPasswordToggles() {
+	document.addEventListener('click', event => {
+		const btn = event.target.closest?.('[data-toggle-password]');
+		if (!btn) return;
+
+		const input = document.getElementById(btn.dataset.togglePassword);
+		if (!input) return;
+
+		setPasswordVisibility(btn, input, input.type === 'password');
+	});
 }
 
 function updateCheckboxLabel(cb) {
@@ -3404,38 +3405,12 @@ function hideLoadingToast() {
 	const minutes = h * 60 + now.getMinutes();
 	const root = document.documentElement;
 
-	let vars;
-	if (h >= 5 && h < 11) {
-		vars = {
-			'--sky-1': '#9be7ff', '--sky-2': '#5b7cff', '--floor': '#172554',
-			'--sun-core': 'rgba(255,230,120,0.95)', '--sun-glow': 'rgba(255,184,77,0.55)',
-			'--grid-color': 'rgba(34,211,238,0.36)', '--horizon': 'rgba(56,189,248,0.75)',
-			'--mountain': '#172554', '--mountain-dark': '#0f172a'
-		};
-	} else if (h >= 11 && h < 17) {
-		vars = {
-			'--sky-1': '#60a5fa', '--sky-2': '#3730a3', '--floor': '#111827',
-			'--sun-core': 'rgba(34,211,238,0.95)', '--sun-glow': 'rgba(59,130,246,0.65)',
-			'--grid-color': 'rgba(125,211,252,0.36)', '--horizon': 'rgba(59,130,246,0.8)',
-			'--mountain': '#1e1b4b', '--mountain-dark': '#020617'
-		};
-	} else if (h >= 17 && h < 21) {
-		vars = {
-			'--sky-1': '#312e81', '--sky-2': '#db2777', '--floor': '#020617',
-			'--sun-core': 'rgba(251,191,36,0.98)', '--sun-glow': 'rgba(236,72,153,0.7)',
-			'--grid-color': 'rgba(244,114,182,0.42)', '--horizon': 'rgba(236,72,153,0.9)',
-			'--mountain': '#1e1b4b', '--mountain-dark': '#020617'
-		};
-	} else {
-		vars = {
-			'--sky-1': '#020617', '--sky-2': '#1e1b4b', '--floor': '#020617',
-			'--sun-core': 'rgba(34,211,238,0.98)', '--sun-glow': 'rgba(168,85,247,0.75)',
-			'--grid-color': 'rgba(34,211,238,0.46)', '--horizon': 'rgba(34,211,238,0.95)',
-			'--mountain': '#0f172a', '--mountain-dark': '#020617'
-		};
-	}
-
-	for (const k in vars) root.style.setProperty(k, vars[k]);
+	// Farbprofile zentral in style.css; JavaScript bestimmt nur die Tageszeit.
+	const skyTime = h >= 5 && h < 11 ? 'morning'
+		: h >= 11 && h < 17 ? 'day'
+			: h >= 17 && h < 21 ? 'evening'
+				: 'night';
+	root.setAttribute('data-sky-time', skyTime);
 
 	const dayStart = 5 * 60, dayEnd = 21 * 60;
 	let progress;

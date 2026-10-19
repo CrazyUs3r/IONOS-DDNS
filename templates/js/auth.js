@@ -1,23 +1,40 @@
 // Lightweight bootstrap for login, setup and standalone 2FA pages.
 
+function tr(key, fallback = '') {
+	const val = window.I18N?.[key];
+	return (typeof val === 'string' && val.trim() !== '') ? val : fallback;
+}
+
+// ---- Passwort-Sichtbarkeit (identisch in auth.js und dashboard.js) ----
+function setPasswordVisibility(btn, input, show) {
+	input.type = show ? 'text' : 'password';
+	btn.textContent = show ? '🙈' : '👁️';
+
+	const label = show
+		? tr('password_hide', 'Passwort ausblenden')
+		: tr('password_show', 'Passwort anzeigen');
+
+	btn.setAttribute('aria-pressed', String(show));
+	btn.setAttribute('aria-label', label);
+	btn.setAttribute('title', label);
+}
+
 function setupPasswordToggles() {
 	document.addEventListener('click', event => {
-		const btn = event.target.closest('[data-toggle-password]');
+		const btn = event.target.closest?.('[data-toggle-password]');
 		if (!btn) return;
 
 		const input = document.getElementById(btn.dataset.togglePassword);
 		if (!input) return;
 
-		const show = input.type === 'password';
-		input.type = show ? 'text' : 'password';
-		btn.textContent = show ? '🙈' : '👁️';
-		btn.setAttribute('aria-pressed', String(show));
-		btn.setAttribute('aria-label', show ? 'Passwort ausblenden' : 'Passwort anzeigen');
+		setPasswordVisibility(btn, input, input.type === 'password');
 	});
 }
+
 (() => {
 	const root = document.documentElement;
-	const savedTheme = localStorage.getItem('theme');
+	let savedTheme = null;
+	try { savedTheme = localStorage.getItem('theme'); } catch { /* Storage blockiert */ }
 	const theme = savedTheme || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
 	root.setAttribute('data-theme', theme);
 	setupPasswordToggles();
@@ -29,40 +46,11 @@ function setupPasswordToggles() {
 	const hour = now.getHours();
 	const minutes = hour * 60 + now.getMinutes();
 
-	let variables;
-	if (hour >= 5 && hour < 11) {
-		variables = {
-			'--sky-1': '#9be7ff', '--sky-2': '#5b7cff', '--floor': '#172554',
-			'--sun-core': 'rgba(255,230,120,0.95)', '--sun-glow': 'rgba(255,184,77,0.55)',
-			'--grid-color': 'rgba(34,211,238,0.36)', '--horizon': 'rgba(56,189,248,0.75)',
-			'--mountain': '#172554', '--mountain-dark': '#0f172a',
-		};
-	} else if (hour >= 11 && hour < 17) {
-		variables = {
-			'--sky-1': '#60a5fa', '--sky-2': '#3730a3', '--floor': '#111827',
-			'--sun-core': 'rgba(34,211,238,0.95)', '--sun-glow': 'rgba(59,130,246,0.65)',
-			'--grid-color': 'rgba(125,211,252,0.36)', '--horizon': 'rgba(59,130,246,0.8)',
-			'--mountain': '#1e1b4b', '--mountain-dark': '#020617',
-		};
-	} else if (hour >= 17 && hour < 21) {
-		variables = {
-			'--sky-1': '#312e81', '--sky-2': '#db2777', '--floor': '#020617',
-			'--sun-core': 'rgba(251,191,36,0.98)', '--sun-glow': 'rgba(236,72,153,0.7)',
-			'--grid-color': 'rgba(244,114,182,0.42)', '--horizon': 'rgba(236,72,153,0.9)',
-			'--mountain': '#1e1b4b', '--mountain-dark': '#020617',
-		};
-	} else {
-		variables = {
-			'--sky-1': '#020617', '--sky-2': '#1e1b4b', '--floor': '#020617',
-			'--sun-core': 'rgba(34,211,238,0.98)', '--sun-glow': 'rgba(168,85,247,0.75)',
-			'--grid-color': 'rgba(34,211,238,0.46)', '--horizon': 'rgba(34,211,238,0.95)',
-			'--mountain': '#0f172a', '--mountain-dark': '#020617',
-		};
-	}
-
-	for (const [name, value] of Object.entries(variables)) {
-		root.style.setProperty(name, value);
-	}
+	const skyTime = hour >= 5 && hour < 11 ? 'morning'
+		: hour >= 11 && hour < 17 ? 'day'
+			: hour >= 17 && hour < 21 ? 'evening'
+				: 'night';
+	root.setAttribute('data-sky-time', skyTime);
 
 	const dayStart = 5 * 60;
 	const dayEnd = 21 * 60;
