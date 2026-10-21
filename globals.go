@@ -400,22 +400,22 @@ const (
 // ============================================================================
 
 const (
-	// HTML
+	// HTML.
 	HTMLChecked  = " checked"
 	HTMLSelected = " selected"
 
-	// Email TLS modes
+	// Email TLS modes.
 	emailTLSModeStartTLS = "starttls"
 	emailTLSModeTLS      = "tls"
 	emailTLSModePlain    = "plain"
 
-	// Platforms
+	// Platforms.
 	PlatformLinux   = "linux"
 	PlatformWindows = "windows"
 	PlatformDarwin  = "darwin"
 	PlatformFreeBSD = "freebsd"
 
-	// Logging and categories
+	// Logging and categories.
 	logCategorySystem     = "SYSTEM"
 	logCategoryConfig     = "CONFIG"
 	logCategoryFile       = "FILE"
