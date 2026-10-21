@@ -400,26 +400,22 @@ const (
 // ============================================================================
 
 const (
-	// HTML.
-
+	// HTML
 	HTMLChecked  = " checked"
 	HTMLSelected = " selected"
 
-	// Email TLS modes.
-
+	// Email TLS modes
 	emailTLSModeStartTLS = "starttls"
 	emailTLSModeTLS      = "tls"
 	emailTLSModePlain    = "plain"
 
-	// Platforms.
-
+	// Platforms
 	PlatformLinux   = "linux"
 	PlatformWindows = "windows"
 	PlatformDarwin  = "darwin"
 	PlatformFreeBSD = "freebsd"
 
-	// Logging and categories.
-
+	// Logging and categories
 	logCategorySystem     = "SYSTEM"
 	logCategoryConfig     = "CONFIG"
 	logCategoryFile       = "FILE"
@@ -685,26 +681,31 @@ type Config struct {
 	MaxLogBackups   int            `json:"max_log_backups"`
 	MaxAPIRetries   int            `json:"max_api_retries"`
 	Notifications   struct {
-		Enabled  bool     `json:"enabled"`
+		Enabled  bool     `json:"enabled,omitempty"`
 		Events   []string `json:"events"`
 		Telegram struct {
-			Token  string `json:"token"`
-			ChatID string `json:"chat_id"`
+			Enabled *bool  `json:"enabled,omitempty"`
+			Token   string `json:"token"`
+			ChatID  string `json:"chat_id"`
 		} `json:"telegram"`
 		Gotify struct {
-			URL   string `json:"url"`
-			Token string `json:"token"`
+			Enabled *bool  `json:"enabled,omitempty"`
+			URL     string `json:"url"`
+			Token   string `json:"token"`
 		} `json:"gotify"`
 		Ntfy struct {
-			URL   string `json:"url"`
-			Topic string `json:"topic"`
-			Token string `json:"token"`
+			Enabled *bool  `json:"enabled,omitempty"`
+			URL     string `json:"url"`
+			Topic   string `json:"topic"`
+			Token   string `json:"token"`
 		} `json:"ntfy"`
 		Webhook struct {
-			URL    string `json:"url"`
-			Secret string `json:"secret"`
+			Enabled *bool  `json:"enabled,omitempty"`
+			URL     string `json:"url"`
+			Secret  string `json:"secret"`
 		} `json:"webhook"`
 		MQTTConfig struct {
+			Enabled         *bool  `json:"enabled,omitempty"`
 			Broker          string `json:"broker"`
 			ClientID        string `json:"client_id"`
 			Username        string `json:"username"`
@@ -717,6 +718,7 @@ type Config struct {
 			DiscoveryPrefix string `json:"discovery_prefix"`
 		} `json:"mqtt"`
 		Email struct {
+			Enabled       *bool  `json:"enabled,omitempty"`
 			Host          string `json:"host"`
 			Port          int    `json:"port"`
 			Username      string `json:"username"`

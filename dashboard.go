@@ -463,6 +463,17 @@ func checkboxLabel(v bool) string {
 	return esc(phrases().SettingsCheckboxDeactive)
 }
 
+func notifierEnabledRow(id string, on bool) string {
+	return fmt.Sprintf(
+		`<div class="s-row"><span class="s-label">`+phrases().SettingsNotifierEnabled+`</span><label class="s-checkbox-container"><input type="checkbox" id="%s" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
+		id,
+		esc(phrases().SettingsCheckboxActive),
+		esc(phrases().SettingsCheckboxDeactive),
+		checkedAttr(on),
+		checkboxLabel(on),
+	)
+}
+
 func selected(v bool) string {
 	if v {
 		return HTMLSelected
@@ -684,6 +695,7 @@ func buildSettingsNotifySection(c Config) string {
 	notifyEventsSection := buildSettingsNotifyEventCheckboxes(c.Notifications.Events)
 
 	telegramSection := `<div class="notify-box notify-telegram">` +
+		notifierEnabledRow("cfg-tg-enabled", notifierToggle(c.Notifications.Telegram.Enabled)) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsTGChatID+`<small class="s-label-hint-block">(`+phrases().SettingsDNSHint+`)</small></span><input type="text" id="cfg-tg-chat-id" class="s-input s-input-lg" placeholder="123456789, -100xxxxxxxxx" value="%s"></div>`,
 			esc(c.Notifications.Telegram.ChatID)) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsTGToken+`</span><div class="input-with-action"><input type="password" id="cfg-tg-token" class="s-input s-input-lg" placeholder="`+phrases().SettingsTokenUnchanged+`" value="%s">`+passwordToggleButton("cfg-tg-token")+`</div></div>`,
@@ -691,6 +703,7 @@ func buildSettingsNotifySection(c Config) string {
 		`</div>`
 
 	gotifySection := `<div class="notify-box notify-gotify">` +
+		notifierEnabledRow("cfg-gotify-enabled", notifierToggle(c.Notifications.Gotify.Enabled)) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsGotifyURL+`</span><input type="text" id="cfg-gotify-url" class="s-input s-input-lg" placeholder="https://gotify.example.com" value="%s"></div>`,
 			esc(c.Notifications.Gotify.URL)) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsGotifyToken+`</span><div class="input-with-action"><input type="password" id="cfg-gotify-token" class="s-input s-input-lg" placeholder="`+phrases().SettingsTokenUnchanged+`" value="%s">`+passwordToggleButton("cfg-gotify-token")+`</div></div>`,
@@ -698,6 +711,7 @@ func buildSettingsNotifySection(c Config) string {
 		`</div>`
 
 	ntfySection := `<div class="notify-box notify-ntfy">` +
+		notifierEnabledRow("cfg-ntfy-enabled", notifierToggle(c.Notifications.Ntfy.Enabled)) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsNtfyURL+`</span><input type="text" id="cfg-ntfy-url" class="s-input s-input-lg" placeholder="https://ntfy.sh" value="%s"></div>`,
 			esc(c.Notifications.Ntfy.URL)) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsNtfyTopic+`</span><input type="text" id="cfg-ntfy-topic" class="s-input s-input-lg" placeholder="ddns" value="%s"></div>`,
@@ -707,6 +721,7 @@ func buildSettingsNotifySection(c Config) string {
 		`</div>`
 
 	webhookSection := `<div class="notify-box notify-webhook">` +
+		notifierEnabledRow("cfg-webhook-enabled", notifierToggle(c.Notifications.Webhook.Enabled)) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsWebhookURL+`</span><input type="text" id="cfg-webhook-url" class="s-input s-input-lg" placeholder="https://your-endpoint.com/api" value="%s"></div>`,
 			esc(c.Notifications.Webhook.URL)) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsWebhookSecret+` <small class="s-label-hint-inline">`+phrases().SettingsOptional+`</small></span><div class="input-with-action"><input type="password" id="cfg-webhook-secret" class="s-input s-input-lg" placeholder="`+phrases().SettingsTokenUnchanged+`" value="%s">`+passwordToggleButton("cfg-webhook-secret")+`</div></div>`,
@@ -714,6 +729,7 @@ func buildSettingsNotifySection(c Config) string {
 		`</div>`
 
 	mqttSection := `<div class="notify-box notify-mqtt">` +
+		notifierEnabledRow("cfg-mqtt-enabled", notifierToggle(c.Notifications.MQTTConfig.Enabled)) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMQTTBroker+`</span><input type="text" id="cfg-mqtt-broker" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" placeholder="tcp://192.168.1.10:1883" value="%s"></div>`,
 			esc(c.Notifications.MQTTConfig.Broker)) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMQTTClientID+`</span><input type="text" id="cfg-mqtt-clientid" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" placeholder="go-dyndns" value="%s"></div>`,
@@ -728,15 +744,15 @@ func buildSettingsNotifySection(c Config) string {
 			c.Notifications.MQTTConfig.QoS) +
 		fmt.Sprintf(
 			`<div class="s-row"><span class="s-label">`+phrases().SettingsMQTTRetain+`</span><label class="s-checkbox-container"><input type="checkbox" id="cfg-mqtt-retain" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
-			phrases().SettingsCheckboxActive,
-			phrases().SettingsCheckboxDeactive,
+			esc(phrases().SettingsCheckboxActive),
+			esc(phrases().SettingsCheckboxDeactive),
 			checkedAttr(c.Notifications.MQTTConfig.Retain),
 			checkboxLabel(c.Notifications.MQTTConfig.Retain),
 		) +
 		fmt.Sprintf(
 			`<div class="s-row"><span class="s-label">`+phrases().SettingsMQTTDiscovery+` <small class="s-label-hint-inline">`+phrases().SettingsMQTTHomeAssistant+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-mqtt-discovery" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
-			phrases().SettingsCheckboxActive,
-			phrases().SettingsCheckboxDeactive,
+			esc(phrases().SettingsCheckboxActive),
+			esc(phrases().SettingsCheckboxDeactive),
 			checkedAttr(c.Notifications.MQTTConfig.Discovery),
 			checkboxLabel(c.Notifications.MQTTConfig.Discovery),
 		) +
@@ -745,6 +761,7 @@ func buildSettingsNotifySection(c Config) string {
 		`</div>`
 
 	emailSection := `<div class="notify-box notify-email">` +
+		notifierEnabledRow("cfg-email-enabled", notifierToggle(c.Notifications.Email.Enabled)) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsEmailSMTPHost+`</span><input type="text" id="cfg-email-host" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" placeholder="smtp.gmail.com" value="%s"></div>`,
 			esc(c.Notifications.Email.Host)) +
 		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsEmailPort+`</span><input type="text" id="cfg-email-port" class="s-input s-input-sm" autocomplete="off" readonly data-unlock-input="1" placeholder="587" value="%d"></div>`,
@@ -774,7 +791,7 @@ func buildSettingsNotifySection(c Config) string {
 
 	return fmt.Sprintf(
 		`<div class="s-row"><span class="s-label">`+phrases().SettingsNotifyEnabled+`</span><label class="s-checkbox-container"><input type="checkbox" id="cfg-notify-enabled" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
-		phrases().SettingsCheckboxActive, esc(phrases().SettingsCheckboxDeactive),
+		esc(phrases().SettingsCheckboxActive), esc(phrases().SettingsCheckboxDeactive),
 		checkedAttr(c.Notifications.Enabled),
 		checkboxLabel(c.Notifications.Enabled),
 	) +
@@ -818,6 +835,7 @@ type safeMQTTConfig struct {
 	QoS             byte   `json:"qos"`
 	Retain          bool   `json:"retain"`
 	Discovery       bool   `json:"discovery"`
+	Enabled         bool   `json:"enabled"`
 }
 
 type safeEmail struct {
@@ -829,6 +847,7 @@ type safeEmail struct {
 	SubjectPrefix string `json:"subject_prefix"`
 	TLSMode       string `json:"tls_mode"`
 	Port          int    `json:"port"`
+	Enabled       bool   `json:"enabled"`
 }
 
 type safeSystemConfig struct {
@@ -859,6 +878,10 @@ type safeSystemConfig struct {
 	HourlyRateLimit int            `json:"hourly_rate_limit"`
 	Interval        int            `json:"interval"`
 	NotifyEnabled   bool           `json:"notify_enabled"`
+	TelegramEnabled bool           `json:"telegram_enabled"`
+	GotifyEnabled   bool           `json:"gotify_enabled"`
+	NtfyEnabled     bool           `json:"ntfy_enabled"`
+	WebhookEnabled  bool           `json:"webhook_enabled"`
 	DebugHTTPRaw    bool           `json:"debug_http_raw"`
 	DebugEnabled    bool           `json:"debug_enabled"`
 	DryRun          bool           `json:"dry_run"`
@@ -925,6 +948,10 @@ func currentSystemConfig() safeSystemConfig {
 		Lang:            config.Lang,
 		NotifyEnabled:   config.Notifications.Enabled,
 		NotifyEvents:    config.Notifications.Events,
+		TelegramEnabled: notifierToggle(config.Notifications.Telegram.Enabled),
+		GotifyEnabled:   notifierToggle(config.Notifications.Gotify.Enabled),
+		NtfyEnabled:     notifierToggle(config.Notifications.Ntfy.Enabled),
+		WebhookEnabled:  notifierToggle(config.Notifications.Webhook.Enabled),
 		TelegramToken:   config.Notifications.Telegram.Token,
 		TelegramChatID:  config.Notifications.Telegram.ChatID,
 		GotifyURL:       config.Notifications.Gotify.URL,
@@ -944,6 +971,7 @@ func currentSystemConfig() safeSystemConfig {
 			Retain:          config.Notifications.MQTTConfig.Retain,
 			Discovery:       config.Notifications.MQTTConfig.Discovery,
 			DiscoveryPrefix: config.Notifications.MQTTConfig.DiscoveryPrefix,
+			Enabled:         notifierToggle(config.Notifications.MQTTConfig.Enabled),
 		},
 		Email: safeEmail{
 			Host:          config.Notifications.Email.Host,
@@ -954,6 +982,7 @@ func currentSystemConfig() safeSystemConfig {
 			To:            config.Notifications.Email.To,
 			SubjectPrefix: config.Notifications.Email.SubjectPrefix,
 			TLSMode:       config.Notifications.Email.TLSMode,
+			Enabled:       notifierToggle(config.Notifications.Email.Enabled),
 		},
 		IPv4Endpoints: config.IPv4Endpoints,
 		IPv6Endpoints: config.IPv6Endpoints,
@@ -1845,19 +1874,24 @@ func applyNotificationConfig(sys safeSystemConfig) {
 		cfg.Notifications.Events = sys.NotifyEvents
 	}
 
+	cfg.Notifications.Telegram.Enabled = new(sys.TelegramEnabled)
 	cfg.Notifications.Telegram.Token = preserveDashboardSecret(sys.TelegramToken, cfg.Notifications.Telegram.Token)
 	cfg.Notifications.Telegram.ChatID = sys.TelegramChatID
 
+	cfg.Notifications.Gotify.Enabled = new(sys.GotifyEnabled)
 	cfg.Notifications.Gotify.URL = sys.GotifyURL
 	cfg.Notifications.Gotify.Token = preserveDashboardSecret(sys.GotifyToken, cfg.Notifications.Gotify.Token)
 
+	cfg.Notifications.Ntfy.Enabled = new(sys.NtfyEnabled)
 	cfg.Notifications.Ntfy.URL = sys.NtfyURL
 	cfg.Notifications.Ntfy.Topic = sys.NtfyTopic
 	cfg.Notifications.Ntfy.Token = preserveDashboardSecret(sys.NtfyToken, cfg.Notifications.Ntfy.Token)
 
+	cfg.Notifications.Webhook.Enabled = new(sys.WebhookEnabled)
 	cfg.Notifications.Webhook.URL = sys.WebhookURL
 	cfg.Notifications.Webhook.Secret = preserveDashboardSecret(sys.WebhookSecret, cfg.Notifications.Webhook.Secret)
 
+	cfg.Notifications.MQTTConfig.Enabled = new(sys.MQTT.Enabled)
 	cfg.Notifications.MQTTConfig.Broker = sys.MQTT.Broker
 	cfg.Notifications.MQTTConfig.ClientID = sys.MQTT.ClientID
 	cfg.Notifications.MQTTConfig.Username = sys.MQTT.Username
@@ -1868,6 +1902,7 @@ func applyNotificationConfig(sys safeSystemConfig) {
 	cfg.Notifications.MQTTConfig.Discovery = sys.MQTT.Discovery
 	cfg.Notifications.MQTTConfig.DiscoveryPrefix = sys.MQTT.DiscoveryPrefix
 
+	cfg.Notifications.Email.Enabled = new(sys.Email.Enabled)
 	cfg.Notifications.Email.Host = sys.Email.Host
 	cfg.Notifications.Email.Port = sys.Email.Port
 	cfg.Notifications.Email.Username = sys.Email.Username
@@ -5644,12 +5679,12 @@ func diagnoseGlobalConfigWarnings(cfg Config) []string {
 
 func diagnoseNotifiers(cfg Config) map[string]bool {
 	return map[string]bool{
-		"telegram": cfg.Notifications.Telegram.Token != "" && cfg.Notifications.Telegram.ChatID != "",
-		"gotify":   cfg.Notifications.Gotify.URL != "" && cfg.Notifications.Gotify.Token != "",
-		"ntfy":     cfg.Notifications.Ntfy.URL != "" && cfg.Notifications.Ntfy.Topic != "",
-		"webhook":  cfg.Notifications.Webhook.URL != "",
-		"mqtt":     cfg.Notifications.MQTTConfig.Broker != "" && cfg.Notifications.MQTTConfig.Topic != "",
-		"email":    cfg.Notifications.Email.Host != "" && cfg.Notifications.Email.To != "",
+		"telegram": telegramActive(cfg),
+		"gotify":   gotifyActive(cfg),
+		"ntfy":     ntfyActive(cfg),
+		"webhook":  webhookActive(cfg),
+		"mqtt":     mqttActive(cfg),
+		"email":    emailActive(cfg),
 	}
 }
 

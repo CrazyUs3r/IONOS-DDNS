@@ -50,7 +50,7 @@ type Phrases struct {
 	AuditAdminOnly, AuditLogTitle, AuditRefreshBtn                                        string
 	DNSPropagationTitle, DNSPropagationHelp, DNSCheckBtn                                  string
 	DNSInvalidDomainName, DNSAdminEditorRequired, DNSNoNameserverFound                    string
-	DNSSystemResolver, DNSSystemResolverFormat                                            string
+	DNSSystemResolver, DNSSystemResolverFormat, SettingsNotifierEnabled                   string
 	SettingsDebugMode, SettingsDebugHTTPRaw, SettingsTTLPlaceholder                       string
 	SettingsIPModeGlobal, SettingsIPModeBoth, SettingsIPModeIPv4Only                      string
 	SettingsIPModeIPv6Only, SettingsHetznerDNSToken, SettingsHetznerCloudToken            string

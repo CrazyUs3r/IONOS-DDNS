@@ -97,10 +97,10 @@ func buildNotifyConfig(ctx context.Context, config Config) notifyConfig {
 }
 
 func appendTelegramNotifier(ctx context.Context, target *notifyConfig, config Config) {
-	telegram := config.Notifications.Telegram
-	if telegram.Token == "" || telegram.ChatID == "" {
+	if !telegramActive(config) {
 		return
 	}
+	telegram := config.Notifications.Telegram
 	tg := newTelegramNotifier(ctx, telegram.Token, telegram.ChatID)
 	target.notifiers = append(target.notifiers, tg)
 	tg.StartPolling()
@@ -109,40 +109,40 @@ func appendTelegramNotifier(ctx context.Context, target *notifyConfig, config Co
 }
 
 func appendGotifyNotifier(ctx context.Context, target *notifyConfig, config Config) {
-	gotify := config.Notifications.Gotify
-	if gotify.URL == "" || gotify.Token == "" {
+	if !gotifyActive(config) {
 		return
 	}
+	gotify := config.Notifications.Gotify
 	target.notifiers = append(target.notifiers, newGotifyNotifier(ctx, gotify.URL, gotify.Token))
 	debugLog(logCategoryNotify, "", fmt.Sprintf("%s %s", phrases().NotifyGotifyActive, gotify.URL))
 	log(LogContext{Level: LogInfo, Action: ActionConfig, Message: t(phrases().NotifyGotifyActive, "✅ Gotify active")})
 }
 
 func appendWebhookNotifier(target *notifyConfig, config Config) {
-	webhook := config.Notifications.Webhook
-	if webhook.URL == "" {
+	if !webhookActive(config) {
 		return
 	}
+	webhook := config.Notifications.Webhook
 	target.notifiers = append(target.notifiers, newWebhookNotifier(webhook.URL, webhook.Secret))
 	debugLog(logCategoryNotify, "", fmt.Sprintf("%s %s", phrases().NotifyWebhookActive, webhook.URL))
 	log(LogContext{Level: LogInfo, Action: ActionConfig, Message: t(phrases().NotifyWebhookActive, "✅ Webhook active")})
 }
 
 func appendNtfyNotifier(ctx context.Context, target *notifyConfig, config Config) {
-	ntfy := config.Notifications.Ntfy
-	if ntfy.URL == "" || ntfy.Topic == "" {
+	if !ntfyActive(config) {
 		return
 	}
+	ntfy := config.Notifications.Ntfy
 	target.notifiers = append(target.notifiers, newNtfyNotifier(ctx, ntfy.URL, ntfy.Topic, ntfy.Token))
 	debugLog(logCategoryNotify, "", fmt.Sprintf("%s %s", phrases().NotifyNtfyActive, ntfy.URL))
 	log(LogContext{Level: LogInfo, Action: ActionConfig, Message: t(phrases().NotifyNtfyActive, "✅ Ntfy active")})
 }
 
 func appendMQTTNotifier(target *notifyConfig, config Config) {
-	mqtt := config.Notifications.MQTTConfig
-	if mqtt.Broker == "" || mqtt.Topic == "" {
+	if !mqttActive(config) {
 		return
 	}
+	mqtt := config.Notifications.MQTTConfig
 	target.notifiers = append(target.notifiers, newMQTTNotifier(
 		mqtt.Broker,
 		mqtt.ClientID,
@@ -160,10 +160,10 @@ func appendMQTTNotifier(target *notifyConfig, config Config) {
 }
 
 func appendEmailNotifier(target *notifyConfig, config Config) {
-	email := config.Notifications.Email
-	if email.Host == "" || email.To == "" {
+	if !emailActive(config) {
 		return
 	}
+	email := config.Notifications.Email
 	target.notifiers = append(target.notifiers, newEmailNotifier(
 		email.Host,
 		email.Port,
@@ -326,6 +326,38 @@ func buildNotifyMessage(ctx LogContext) NotifyMessage {
 
 func normalizeNotifyEvent(action string) NotifyEvent {
 	return NotifyEvent(action)
+}
+
+func notifierToggle(p *bool) bool { return p == nil || *p }
+
+func telegramActive(c Config) bool {
+	n := c.Notifications.Telegram
+	return notifierToggle(n.Enabled) && n.Token != "" && n.ChatID != ""
+}
+
+func gotifyActive(c Config) bool {
+	n := c.Notifications.Gotify
+	return notifierToggle(n.Enabled) && n.URL != "" && n.Token != ""
+}
+
+func ntfyActive(c Config) bool {
+	n := c.Notifications.Ntfy
+	return notifierToggle(n.Enabled) && n.URL != "" && n.Topic != ""
+}
+
+func webhookActive(c Config) bool {
+	n := c.Notifications.Webhook
+	return notifierToggle(n.Enabled) && n.URL != ""
+}
+
+func mqttActive(c Config) bool {
+	n := c.Notifications.MQTTConfig
+	return notifierToggle(n.Enabled) && n.Broker != "" && n.Topic != ""
+}
+
+func emailActive(c Config) bool {
+	n := c.Notifications.Email
+	return notifierToggle(n.Enabled) && n.Host != "" && n.To != ""
 }
 
 func notifyIcon(msg NotifyMessage) string {
