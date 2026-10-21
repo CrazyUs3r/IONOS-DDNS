@@ -2195,6 +2195,12 @@ function _initSettingsFields() {
 		'cfg-debug': !!sys.debug_enabled,
 		'cfg-debug-http': !!sys.debug_http_raw,
 		'cfg-notify-enabled': !!sys.notify_enabled,
+		'cfg-tg-enabled': !!sys.telegram_enabled,
+		'cfg-gotify-enabled': !!sys.gotify_enabled,
+		'cfg-ntfy-enabled': !!sys.ntfy_enabled,
+		'cfg-webhook-enabled': !!sys.webhook_enabled,
+		'cfg-mqtt-enabled': !!mqtt.enabled,
+		'cfg-email-enabled': !!email.enabled,
 		'cfg-mqtt-retain': !!(mqtt.retain || false),
 		'cfg-mqtt-discovery': !!(mqtt.discovery || false)
 	};
@@ -2671,16 +2677,21 @@ function collectNotifyFieldsPayload() {
 	return {
 		notify_enabled: _isChecked('cfg-notify-enabled'),
 		notify_events: notifyEvents,
+		telegram_enabled: _isChecked('cfg-tg-enabled'),
 		telegram_token: _getVal('cfg-tg-token'),
 		telegram_chat_id: _getVal('cfg-tg-chat-id'),
+		gotify_enabled: _isChecked('cfg-gotify-enabled'),
 		gotify_url: _getVal('cfg-gotify-url'),
 		gotify_token: _getVal('cfg-gotify-token'),
+		ntfy_enabled: _isChecked('cfg-ntfy-enabled'),
 		ntfy_url: _getVal('cfg-ntfy-url'),
 		ntfy_topic: _getVal('cfg-ntfy-topic'),
 		ntfy_token: _getVal('cfg-ntfy-token'),
+		webhook_enabled: _isChecked('cfg-webhook-enabled'),
 		webhook_url: _getVal('cfg-webhook-url'),
 		webhook_secret: _getVal('cfg-webhook-secret'),
 		mqtt: {
+			enabled: _isChecked('cfg-mqtt-enabled'),
 			broker: _getVal('cfg-mqtt-broker'),
 			client_id: _getVal('cfg-mqtt-clientid'),
 			username: _getVal('cfg-mqtt-username'),
@@ -2692,6 +2703,7 @@ function collectNotifyFieldsPayload() {
 			discovery_prefix: _getVal('cfg-mqtt-discovery-prefix') || 'homeassistant'
 		},
 		email: {
+			enabled: _isChecked('cfg-email-enabled'),
 			host: _getVal('cfg-email-host'),
 			port: parseInt(_getVal('cfg-email-port'), 10) || 587,
 			username: _getVal('cfg-email-user'),
