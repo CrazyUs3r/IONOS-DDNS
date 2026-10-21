@@ -976,6 +976,7 @@
   "settings_mqtt_secret": "Geheim",
   "settings_mqtt_topic": "Topic",
   "settings_mqtt_username": "Gebruikersnaam",
+  "settings_notifier_enabled": "Service actief",
   "settings_notifier_hint": "Meldingen weergeven",
   "settings_notify": "🔔 Notificaties",
   "settings_notify_enabled": "Ingeschakeld",

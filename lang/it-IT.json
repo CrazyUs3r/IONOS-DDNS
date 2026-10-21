@@ -976,6 +976,7 @@
   "settings_mqtt_secret": "Segreto",
   "settings_mqtt_topic": "Topic",
   "settings_mqtt_username": "Nome utente",
+  "settings_notifier_enabled": "Servizio attivo",
   "settings_notifier_hint": "Mostra notifiche",
   "settings_notify": "🔔 Notifiche",
   "settings_notify_enabled": "Attivato",

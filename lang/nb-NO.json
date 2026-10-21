@@ -976,6 +976,7 @@
   "settings_mqtt_secret": "Hemmelighet",
   "settings_mqtt_topic": "Emne (Topic)",
   "settings_mqtt_username": "Brukernavn",
+  "settings_notifier_enabled": "Tjeneste aktiv",
   "settings_notifier_hint": "Vis varsler",
   "settings_notify": "🔔 Varsler",
   "settings_notify_enabled": "Aktivert",

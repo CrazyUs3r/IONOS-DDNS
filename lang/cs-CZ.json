@@ -976,6 +976,7 @@
   "settings_mqtt_secret": "Tajný klíč",
   "settings_mqtt_topic": "Topic",
   "settings_mqtt_username": "Uživatelské jméno",
+  "settings_notifier_enabled": "Služba aktivní",
   "settings_notifier_hint": "Zobrazit oznámení",
   "settings_notify": "🔔 Oznámení",
   "settings_notify_enabled": "Aktivováno",

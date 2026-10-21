@@ -976,6 +976,7 @@
   "settings_mqtt_secret": "Hemlighet",
   "settings_mqtt_topic": "Topic",
   "settings_mqtt_username": "Användarnamn",
+  "settings_notifier_enabled": "Tjänst aktiv",
   "settings_notifier_hint": "Visa aviseringar",
   "settings_notify": "🔔 Aviseringar",
   "settings_notify_enabled": "Aktiverad",

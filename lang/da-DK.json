@@ -976,6 +976,7 @@
   "settings_mqtt_secret": "Hemmelig nøgle",
   "settings_mqtt_topic": "Topic",
   "settings_mqtt_username": "Brugernavn",
+  "settings_notifier_enabled": "Tjeneste aktiv",
   "settings_notifier_hint": "Vis notifikationer",
   "settings_notify": "🔔 Notifikationer",
   "settings_notify_enabled": "Aktiveret",

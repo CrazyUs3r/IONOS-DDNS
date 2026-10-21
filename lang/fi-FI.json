@@ -976,6 +976,7 @@
   "settings_mqtt_secret": "Salaisuus",
   "settings_mqtt_topic": "Aihe",
   "settings_mqtt_username": "Käyttäjätunnus",
+  "settings_notifier_enabled": "Palvelu aktiivinen",
   "settings_notifier_hint": "Näytä ilmoitukset",
   "settings_notify": "🔔 Ilmoitukset",
   "settings_notify_enabled": "Aktivoitu",
