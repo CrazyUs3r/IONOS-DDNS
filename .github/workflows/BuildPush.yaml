@@ -28,7 +28,7 @@ on:
 
 jobs:
   build-and-release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     permissions:
       contents: write
@@ -281,8 +281,10 @@ jobs:
             linux/arm/v6
             linux/386
             linux/riscv64
+
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/ionos-ddns:${{ env.VERSION }}${{ inputs.docker_latest == 'true' && format('{0}/ionos-ddns:latest', secrets.DOCKERHUB_USERNAME) || '' }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/ionos-ddns:${{ env.VERSION }}
+            ${{ inputs.docker_latest == 'true' && format('{0}/ionos-ddns:latest', secrets.DOCKERHUB_USERNAME) || '' }}
           build-args: |
             VERSION=${{ env.VERSION }}
             BUILD_DATE=${{ env.BUILD_DATE }}
