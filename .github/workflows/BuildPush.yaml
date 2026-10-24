@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release-Version (z.B. 2.5.12)"
+        description: "Release-Version (z.B. 2.5.14)"
         required: true
-        default: "2.5.12"
+        default: "2.5.14"
 
       prerelease:
         description: "Als Prerelease veröffentlichen?"
@@ -48,7 +48,7 @@ jobs:
           VERSION="${{ inputs.version }}"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "TAG_NAME=v$VERSION" >> "$GITHUB_ENV"
-          echo "BUILD_DATE=$(date -u +'\%Y-\%m-\%dT\%H:\%M:\%SZ')" >> "$GITHUB_ENV"
+          echo "BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
           echo "VCS_REF=${{ github.sha }}" >> "$GITHUB_ENV"
           echo "✅ Version gesetzt auf $VERSION"
 
