@@ -28,7 +28,7 @@ on:
 
 jobs:
   build-and-release:
-    runs-on: ubuntu-24.04
+    runs-on: ububuntu-26.04
 
     permissions:
       contents: write
