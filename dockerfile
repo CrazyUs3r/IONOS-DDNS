@@ -1,7 +1,7 @@
 ﻿# =============================================================================
 # Builder Stage
 # =============================================================================
-FROM --platform=${BUILDPLATFORM} golang:1.27.2-alpine AS builder
+FROM --platform=${BUILDPLATFORM} golang:1.27.3-alpine AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
