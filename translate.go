@@ -64,6 +64,8 @@ type Phrases struct {
 	SettingsEmailSubject, SettingsEmailTLSMode, SettingsEmailTLSStartTLS                  string
 	SettingsEmailTLSDirectTLS, SettingsEmailTLSPlain, LogGenCurrent, LogGenArchive        string
 	DebugDisabledNote, LogoutLabel, PageLoading, UnsupportedPage                          string
+	SelectAll, DeleteSelectedN, LogDeleteSelectedConfirm, LogEntriesDeleted               string
+	AuditDeleteSelectedConfirm, AuditEntriesDeleted                                       string
 
 	// Diagnose / Backup
 	NavOverview, NavMonitoring, NavTools, NavConfig, NavDiagnoseJS, NavBackupJS string
@@ -131,27 +133,30 @@ type Phrases struct {
 	SystemStatsLiveWithTimeFormat                                                             string
 
 	// Validierung & allgemeine Fehler
-	NoDomains, InvalidPort, IntervalTooSmall, ShortIntervalWarning                             string
-	InvalidIPMode, InvalidToken, ConfigErrorPrefix                                             string
-	DomainIsEmpty, DomainTooLong, InvalidDomainFormat, LabelTooLong, InvalidLabel              string
-	APIErrorBadRequest, APIErrorUnauthorized, APIErrorPaymentRequired                          string
-	APIErrorForbidden, APIErrorNotFound, APIErrorMethodNotAllowed                              string
-	APIErrorNotAcceptable, APIErrorProxyAuthenticationRequired, APIErrorRequestTimeout         string
-	APIErrorConflict, APIErrorGone, APIErrorLengthRequired                                     string
-	APIErrorPreconditionFailed, APIErrorPayloadTooLarge, APIErrorURITooLong                    string
-	APIErrorUnsupportedMediaType, APIErrorRangeNotSatisfiable, APIErrorExpectationFailed       string
-	APIErrorImATeapot, APIErrorMisdirectedRequest, APIErrorUnprocessableEntity                 string
-	APIErrorLocked, APIErrorFailedDependency, APIErrorTooEarly                                 string
-	APIErrorUpgradeRequired, APIErrorPreconditionRequired, APIErrorRateLimitExceeded           string
-	APIErrorRequestHeaderFieldsTooLarge, APIErrorUnavailableForLegalReasons                    string
-	APIErrorInternalServerError, APIErrorNotImplemented, APIErrorBadGateway                    string
-	APIErrorServiceUnavailable, APIErrorGatewayTimeout, APIErrorHTTPVersionNotSupported        string
-	APIErrorVariantAlsoNegotiates, APIErrorInsufficientStorage, APIErrorLoopDetected           string
-	APIErrorBandwidthLimitExceeded, APIErrorNotExtended, APIErrorNetworkAuthenticationRequired string
-	APIErrorWebServerUnknownError, APIErrorWebServerDown, APIErrorConnectionTimedOut           string
-	APIErrorOriginUnreachable, APIErrorTimeoutOccurred, APIErrorSSLHandshakeFailed             string
-	APIErrorInvalidSSLCertificate, APIErrorOriginDNSError                                      string
-	APIErrorServerErrorGeneric, APIErrorClientErrorGeneric                                     string
+	NoDomains, InvalidPort, IntervalTooSmall, ShortIntervalWarning                                  string
+	InvalidIPMode, InvalidToken, ConfigErrorPrefix                                                  string
+	DomainIsEmpty, DomainTooLong, InvalidDomainFormat, LabelTooLong, InvalidLabel                   string
+	APIErrorBadRequest, APIErrorUnauthorized, APIErrorPaymentRequired                               string
+	APIErrorForbidden, APIErrorNotFound, APIErrorMethodNotAllowed                                   string
+	APIErrorNotAcceptable, APIErrorProxyAuthenticationRequired, APIErrorRequestTimeout              string
+	APIErrorConflict, APIErrorGone, APIErrorLengthRequired                                          string
+	APIErrorPreconditionFailed, APIErrorPayloadTooLarge, APIErrorURITooLong                         string
+	APIErrorUnsupportedMediaType, APIErrorRangeNotSatisfiable, APIErrorExpectationFailed            string
+	APIErrorImATeapot, APIErrorMisdirectedRequest, APIErrorUnprocessableEntity                      string
+	APIErrorLocked, APIErrorFailedDependency, APIErrorTooEarly                                      string
+	APIErrorUpgradeRequired, APIErrorPreconditionRequired, APIErrorRateLimitExceeded                string
+	APIErrorRequestHeaderFieldsTooLarge, APIErrorUnavailableForLegalReasons                         string
+	APIErrorInternalServerError, APIErrorNotImplemented, APIErrorBadGateway                         string
+	APIErrorServiceUnavailable, APIErrorGatewayTimeout, APIErrorHTTPVersionNotSupported             string
+	APIErrorVariantAlsoNegotiates, APIErrorInsufficientStorage, APIErrorLoopDetected                string
+	APIErrorBandwidthLimitExceeded, APIErrorNotExtended, APIErrorNetworkAuthenticationRequired      string
+	APIErrorWebServerUnknownError, APIErrorWebServerDown, APIErrorConnectionTimedOut                string
+	APIErrorOriginUnreachable, APIErrorTimeoutOccurred, APIErrorSSLHandshakeFailed                  string
+	APIErrorInvalidSSLCertificate, APIErrorOriginDNSError                                           string
+	APIErrorServerErrorGeneric, APIErrorClientErrorGeneric                                          string
+	APIErrorAuthenticationTimeout, APIErrorLoginTimeout, APIErrorRetryWith                          string
+	APIErrorRequestHeaderTooLargeNginx, APIErrorSSLCertificateError, APIErrorSSLCertificateRequired string
+	APIErrorHTTPToHTTPSPort                                                                         string
 
 	// Logging
 	LogQueueFull, LogCannotOpenFile, LogWriteFailed string

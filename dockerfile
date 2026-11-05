@@ -1,13 +1,14 @@
-# =============================================================================
+﻿# =============================================================================
 # Builder Stage
 # =============================================================================
 FROM --platform=${BUILDPLATFORM} golang:1.27.3-alpine AS builder
 
-ARG TARGETOS
-ARG TARGETARCH
-ARG VERSION=2.5.14
-ARG BUILD_DATE
-ARG VCS_REF
+ARG \
+    TARGETOS \
+    TARGETARCH \
+    VERSION=2.5.15 \
+    BUILD_DATE \
+    VCS_REF
 
 WORKDIR /src
 
@@ -63,9 +64,10 @@ RUN apk add --no-cache \
 # =============================================================================
 FROM busybox:stable-musl
 
-ARG VERSION=2.5.14
-ARG BUILD_DATE
-ARG VCS_REF
+ARG \
+    VERSION=2.5.15 \
+    BUILD_DATE \
+    VCS_REF
 
 LABEL org.opencontainers.image.title="Go-DynDNS" \
     org.opencontainers.image.description="Multi-Provider DynDNS-Client" \

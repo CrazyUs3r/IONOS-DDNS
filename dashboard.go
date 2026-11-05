@@ -1038,11 +1038,13 @@ func registerAPIroutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/logs", handleAPILogs)
 	mux.HandleFunc("/api/logs/export", handleAPILogExport)
 	mux.HandleFunc("/api/logs/delete", handleAPILogDelete)
+	mux.HandleFunc("/api/logs/delete-batch", handleAPILogDeleteBatch)
 
 	mux.HandleFunc("/api/diagnose", handleAPIDiagnose)
 	mux.HandleFunc("/api/audit", handleAPIAudit)
 	mux.HandleFunc("/api/audit/export", handleAPIAuditExport)
 	mux.HandleFunc("/api/audit/delete", handleAPIAuditDelete)
+	mux.HandleFunc("/api/audit/delete-batch", handleAPIAuditDeleteBatch)
 	mux.HandleFunc("/api/dns/propagation", handleAPIDNSPropagation)
 	mux.HandleFunc("/api/backup/download", handleAPIBackupDownload)
 	mux.HandleFunc("/api/backup/restore", handleAPIBackupRestore)
@@ -3356,6 +3358,66 @@ func handleAPILogDelete(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+const maxBatchDeleteIDs = 5000
+
+func handleAPILogDeleteBatch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
+		return
+	}
+	if !requireAdminAPI(w, r) {
+		return
+	}
+
+	var body struct {
+		IDs []string `json:"ids"`
+		Gen int      `json:"gen"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body); err != nil ||
+		len(body.IDs) == 0 || len(body.IDs) > maxBatchDeleteIDs {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid ids"})
+
+		return
+	}
+
+	gen := body.Gen
+	if gen < 0 || gen > logMaxBackups() {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid generation"})
+
+		return
+	}
+
+	logMutex.Lock()
+	defer logMutex.Unlock()
+
+	if gen == 0 {
+		if logWriter != nil {
+			_ = logWriter.Flush()
+			logWriter = nil
+		}
+		if logFile != nil {
+			_ = logFile.Close()
+			logFile = nil
+		}
+	}
+
+	deleted, err := deleteLogEntriesStreaming(logGenerationPath(gen), toIDSet(body.IDs))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+
+		return
+	}
+
+	logMemCacheMu.Lock()
+	logMemCache = nil
+	logMemCacheTime = time.Time{}
+	logMemCacheMu.Unlock()
+	invalidateLogViewCache()
+
+	writeJSON(w, http.StatusOK, map[string]any{"status": "deleted", "deleted": deleted})
+}
+
 func loadLogsFromMainFile() ([]LogEntry, string) {
 	return loadLogView(0, "ALL")
 }
@@ -4235,6 +4297,11 @@ func writeLogsCard(w io.Writer, logs []LogEntry, logTimeRange string, gen int, g
 						<option value="CONFIG">`+phrases().FilterConfig+`</option>
 						<option value="INFO">`+phrases().FilterInfo+`</option>
 					</select>
+					<label class="log-select-all">
+					<input type="checkbox" id="logSelectAll" data-change="toggleLogSelectAll(this)">
+					<span id="logSelectAllLabel"></span>
+					</label>
+					<button id="logDeleteSelectedBtn" class="filter-btn filter-btn--danger" data-click="deleteSelectedLogs()" hidden></button>
 					<button class="filter-btn filter-btn--export" data-click="exportLogs('txt')">📄 TXT</button>
 					<button class="filter-btn" data-click="exportLogs('json')">📋 JSON</button>
 					<button class="filter-btn filter-btn--export" data-click="exportLogsAll('txt')" title="`+esc(phrases().LogExportAllTitle)+`">📦 TXT</button>
@@ -4266,6 +4333,7 @@ func writeLogsCard(w io.Writer, logs []LogEntry, logTimeRange string, gen int, g
 		_, _ = fmt.Fprintf(
 			w, `
 				<div class="log-entry log-entry-row" data-action="%s" data-level="%s" data-copy="%s" data-log-id="%s" data-gen="%d">
+					<input type="checkbox" class="log-select-cb" data-change="updateLogSelection()">
 					<span class="log-entry-icon">%s</span>
 					<span class="log-entry-time">%s</span>
 					<div class="log-entry-body">%s<span class="log-entry-message">%s</span></div>
@@ -6010,6 +6078,15 @@ func writeAuditDNSSection(w io.Writer, isAdmin bool) {
 				<div class="card-header card-header--space-between">
 				<span>`+phrases().AuditLogTitle+` <span class="logs-summary-meta" id="audit-summary-meta"></span></span>
 				<span class="audit-header-actions">
+					<select id="audit-status-filter" class="log-filter-select" data-change="filterAuditStatus(this.value)">
+						<option value="all">`+phrases().FilterAll+`</option>
+						<option value="err">≥ 400</option>
+						<option value="2xx">2xx</option>
+						<option value="3xx">3xx</option>
+						<option value="4xx">4xx</option>
+						<option value="5xx">5xx</option>
+					</select>
+					<button id="auditDeleteSelectedBtn" class="action-btn topbar-action-btn" data-click="deleteSelectedAudit()" hidden></button>
 					<select id="audit-gen-select" class="log-filter-select" data-change="onAuditGenChange(this.value)" hidden></select>
 					<button class="action-btn topbar-action-btn" data-click="exportAuditAll('txt')" title="`+esc(phrases().AuditExportAllTitle)+`">📦 TXT</button>
 					<button class="action-btn topbar-action-btn" data-click="exportAuditAll('json')" title="`+esc(phrases().AuditExportAllTitle)+`">📦 JSON</button>

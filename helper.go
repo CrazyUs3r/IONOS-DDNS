@@ -1089,6 +1089,8 @@ func dashboardI18NJSON() string {
 		"audit_col_time":                        t(phrases().AuditColTimeJS, "Zeit"),
 		"audit_col_user":                        t(phrases().AuditColUserJS, "Benutzer"),
 		"audit_delete_failed":                   t(phrases().AuditDeleteFailed, "Löschen fehlgeschlagen"),
+		"audit_delete_selected_confirm":         t(phrases().AuditDeleteSelectedConfirm, " ausgewählte Audit-Einträge wirklich löschen?"),
+		"audit_entries_deleted":                 t(phrases().AuditEntriesDeleted, "Audit-Einträge gelöscht"),
 		"audit_empty":                           t(phrases().AuditEmptyJS, "Noch keine Audit-Einträge vorhanden."),
 		"audit_entry_deleted":                   t(phrases().AuditEntryDeleted, "Audit-Eintrag gelöscht"),
 		"audit_load_failed":                     t(phrases().AuditLoadFailedJS, "Audit-Log konnte nicht geladen werden."),
@@ -1117,6 +1119,7 @@ func dashboardI18NJSON() string {
 		"cname_target_missing":                  t(phrases().CNAMETargetMissing, "CNAME-Ziel fehlt"),
 		"delete_domain_confirm":                 t(phrases().DeleteDomainConfirmJS, `Domain "{domain}" remove from status?`),
 		"delete_entry_title":                    t(phrases().DeleteEntryTitle, "Eintrag löschen"),
+		"delete_selected_n":                     t(phrases().DeleteSelectedN, "Auswahl löschen"),
 		"delete_failed":                         t(phrases().DeleteFailedJS, "Deletion failed"),
 		"diagnose_active_updates":               t(phrases().DiagnoseActiveUpdates, "Active updates"),
 		"diagnose_api_metrics_title":            t(phrases().DiagnoseAPIMetricsTitle, "API metrics"),
@@ -1197,6 +1200,8 @@ func dashboardI18NJSON() string {
 		"loading_slow":                          t(phrases().LoadingSlowJS, "⚠️ Taking longer than expected..."),
 		"log_delete_failed":                     t(phrases().LogDeleteFailedJS, "Löschen fehlgeschlagen"),
 		"log_entry_deleted":                     t(phrases().LogEntryDeletedJS, "Eintrag gelöscht:"),
+		"log_delete_selected_confirm":           t(phrases().LogDeleteSelectedConfirm, " ausgewählte Log-Einträge wirklich löschen?"),
+		"log_entries_deleted":                   t(phrases().LogEntriesDeleted, " Einträge gelöscht"),
 		"metrics_reset_failed":                  t(phrases().MetricsResetFailedJS, "❌ Reset failed"),
 		"metrics_reset_ok":                      t(phrases().MetricsResetOKJS, "✅ Metrics reset"),
 		"metric_no_provider_activity":           t(phrases().MetricNoProviderActivity, "Heute noch keine Provider-Aktivität"),
@@ -1242,6 +1247,7 @@ func dashboardI18NJSON() string {
 		"role_viewer":                           t(phrases().RoleViewerJS, "Viewer"),
 		"save_config_confirm":                   t(phrases().SaveConfigConfirmJS, "Save all settings to config.json?"),
 		"saved_reload":                          t(phrases().SavedReloadJS, "✅ Saved! Reloading..."),
+		"select_all":                            t(phrases().SelectAll, "Alle auswählen"),
 		"settings_add_btn":                      t(phrases().SettingsAddBtnJS, "➕ Add to list"),
 		"settings_checkbox_active":              t(phrases().SettingsCheckboxActiveJS, "Aktiv"),
 		"settings_checkbox_inactive":            t(phrases().SettingsCheckboxInactiveJS, "Inaktiv"),
@@ -1536,9 +1542,26 @@ func writeFileAtomic(path string, data []byte) (err error) {
 }
 
 func deleteLogEntryStreaming(path, wantedID string) (bool, error) {
+	n, err := deleteLogEntriesStreaming(path, map[string]struct{}{wantedID: {}})
+
+	return n > 0, err
+}
+
+func toIDSet(ids []string) map[string]struct{} {
+	set := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		if id = strings.TrimSpace(id); id != "" {
+			set[id] = struct{}{}
+		}
+	}
+
+	return set
+}
+
+func deleteLogEntriesStreaming(path string, wanted map[string]struct{}) (int, error) {
 	source, err := openFileWithinDir(path)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 
 	dir := filepath.Dir(path)
@@ -1548,7 +1571,7 @@ func deleteLogEntryStreaming(path, wantedID string) (bool, error) {
 	if err != nil {
 		_ = source.Close()
 
-		return false, err
+		return 0, err
 	}
 
 	tempPath := temp.Name()
@@ -1564,13 +1587,13 @@ func deleteLogEntryStreaming(path, wantedID string) (bool, error) {
 	}()
 
 	if err := temp.Chmod(0o600); err != nil {
-		return false, err
+		return 0, err
 	}
 
 	reader := bufio.NewReaderSize(source, 64*1024)
 	writer := bufio.NewWriterSize(temp, 64*1024)
 
-	deleted := false
+	deleted := 0
 
 	for {
 		line, readErr := reader.ReadBytes('\n')
@@ -1587,20 +1610,20 @@ func deleteLogEntryStreaming(path, wantedID string) (bool, error) {
 						entry.Timestamp,
 					)
 
-					remove = logEntryID(entry) == wantedID
+					_, remove = wanted[logEntryID(entry)]
 				}
 			}
 
 			if remove {
-				deleted = true
+				deleted++
 			} else {
 				if _, err := writer.Write(line); err != nil {
-					return false, err
+					return 0, err
 				}
 
 				if readErr == io.EOF && line[len(line)-1] != '\n' {
 					if err := writer.WriteByte('\n'); err != nil {
-						return false, err
+						return 0, err
 					}
 				}
 			}
@@ -1611,28 +1634,28 @@ func deleteLogEntryStreaming(path, wantedID string) (bool, error) {
 				break
 			}
 
-			return false, readErr
+			return 0, readErr
 		}
 	}
 
 	if err := writer.Flush(); err != nil {
-		return false, err
+		return 0, err
 	}
 
 	if err := temp.Sync(); err != nil {
-		return false, err
+		return 0, err
 	}
 
 	if err := temp.Close(); err != nil {
-		return false, err
+		return 0, err
 	}
 
 	if err := source.Close(); err != nil {
-		return false, err
+		return 0, err
 	}
 
 	if err := os.Rename(tempPath, path); err != nil {
-		return false, err
+		return 0, err
 	}
 
 	keepTemp = false

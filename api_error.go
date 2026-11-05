@@ -43,6 +43,7 @@ var apiErrorSpecs = map[int]apiErrorSpec{
 	416: {func() string { return phrases().APIErrorRangeNotSatisfiable }, "Range Not Satisfiable", LogError, ActionError, false, false, 0},
 	417: {func() string { return phrases().APIErrorExpectationFailed }, "Expectation Failed", LogError, ActionError, false, false, 0},
 	418: {func() string { return phrases().APIErrorImATeapot }, "I'm a teapot", LogWarn, ActionError, false, false, 0},
+	419: {func() string { return phrases().APIErrorAuthenticationTimeout }, "Authentication Timeout - session expired", LogWarn, ActionConfig, false, false, 0},
 	421: {func() string { return phrases().APIErrorMisdirectedRequest }, "Misdirected Request", LogWarn, ActionRetry, true, false, ServerErrorRetryDelay},
 	422: {func() string { return phrases().APIErrorUnprocessableEntity }, "Validation error (TTL/Format)", LogError, ActionError, false, false, 0},
 	423: {func() string { return phrases().APIErrorLocked }, "Locked", LogWarn, ActionRetry, true, true, ServerErrorRetryDelay},
@@ -52,8 +53,14 @@ var apiErrorSpecs = map[int]apiErrorSpec{
 	428: {func() string { return phrases().APIErrorPreconditionRequired }, "Precondition Required", LogError, ActionError, false, false, 0},
 	429: {func() string { return phrases().APIErrorRateLimitExceeded }, "Rate limit exceeded", LogWarn, ActionRetry, true, true, RateLimitRetryDelay},
 	431: {func() string { return phrases().APIErrorRequestHeaderFieldsTooLarge }, "Request Header Fields Too Large", LogError, ActionError, false, false, 0},
+	440: {func() string { return phrases().APIErrorLoginTimeout }, "Login Time-out - session expired", LogWarn, ActionConfig, false, false, 0},
+	449: {func() string { return phrases().APIErrorRetryWith }, "Retry With - request must be corrected", LogWarn, ActionError, false, false, 0},
 	451: {func() string { return phrases().APIErrorUnavailableForLegalReasons }, "Unavailable For Legal Reasons", LogError, ActionError, false, false, 0},
-	500: {func() string { return phrases().APIErrorInternalServerError }, "API server error", LogError, ActionError, true, false, ServerErrorRetryDelay},
+	494: {func() string { return phrases().APIErrorRequestHeaderTooLargeNginx }, "Nginx - Request Header Too Large", LogError, ActionError, false, false, 0},
+	495: {func() string { return phrases().APIErrorSSLCertificateError }, "Nginx - SSL Certificate Error", LogError, ActionConfig, false, false, 0},
+	496: {func() string { return phrases().APIErrorSSLCertificateRequired }, "Nginx - SSL Certificate Required", LogError, ActionConfig, false, false, 0},
+	497: {func() string { return phrases().APIErrorHTTPToHTTPSPort }, "Nginx - HTTP Request Sent to HTTPS Port", LogError, ActionConfig, false, false, 0},
+	500: {func() string { return phrases().APIErrorInternalServerError }, "API server error", LogError, ActionRetry, true, false, ServerErrorRetryDelay},
 	501: {func() string { return phrases().APIErrorNotImplemented }, "Not Implemented", LogError, ActionError, false, false, 0},
 	502: {func() string { return phrases().APIErrorBadGateway }, "Gateway error", LogError, ActionRetry, true, false, ServerErrorRetryDelay},
 	503: {func() string { return phrases().APIErrorServiceUnavailable }, "Service unavailable", LogError, ActionRetry, true, true, ServerErrorRetryDelay},
@@ -61,7 +68,7 @@ var apiErrorSpecs = map[int]apiErrorSpec{
 	505: {func() string { return phrases().APIErrorHTTPVersionNotSupported }, "HTTP Version Not Supported", LogError, ActionError, false, false, 0},
 	506: {func() string { return phrases().APIErrorVariantAlsoNegotiates }, "Variant Also Negotiates", LogError, ActionError, false, false, 0},
 	507: {func() string { return phrases().APIErrorInsufficientStorage }, "Insufficient Storage", LogError, ActionRetry, true, false, ServerErrorRetryDelay},
-	508: {func() string { return phrases().APIErrorLoopDetected }, "Loop Detected", LogError, ActionRetry, true, false, 0},
+	508: {func() string { return phrases().APIErrorLoopDetected }, "Loop Detected", LogError, ActionError, false, false, 0},
 	509: {func() string { return phrases().APIErrorBandwidthLimitExceeded }, "Bandwidth Limit Exceeded", LogWarn, ActionRetry, true, true, ServerErrorRetryDelay},
 	510: {func() string { return phrases().APIErrorNotExtended }, "Not Extended", LogError, ActionError, false, false, 0},
 	511: {func() string { return phrases().APIErrorNetworkAuthenticationRequired }, "Network Authentication Required", LogError, ActionConfig, false, false, 0},
@@ -97,7 +104,11 @@ func parseRetryAfter(h http.Header) (time.Duration, bool) {
 		if secs < 0 {
 			return 0, false
 		}
-		return min(time.Duration(secs)*time.Second, maxRetryAfter), true
+		maxSeconds := int64(maxRetryAfter / time.Second)
+		if int64(secs) >= maxSeconds {
+			return maxRetryAfter, true
+		}
+		return time.Duration(secs) * time.Second, true
 	}
 
 	if t, err := http.ParseTime(ra); err == nil {

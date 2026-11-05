@@ -2245,9 +2245,15 @@ func streamAuditExport(w *bufio.Writer, files []*os.File, asJSON bool, extend fu
 }
 
 func deleteAuditEntry(id string) error {
+	_, err := deleteAuditEntries(map[string]struct{}{id: {}})
+
+	return err
+}
+
+func deleteAuditEntries(ids map[string]struct{}) (int, error) {
 	path := auditLogFilePath()
 	if path == "" {
-		return errors.New("audit path unavailable")
+		return 0, errors.New("audit path unavailable")
 	}
 
 	auditLogMu.Lock()
@@ -2258,14 +2264,15 @@ func deleteAuditEntry(id string) error {
 	data, err := readFileWithinDir(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil
+			return 0, nil
 		}
 
-		return err
+		return 0, err
 	}
 
+	deleted := 0
 	var kept []string
-	for line := range strings.SplitSeq(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
@@ -2276,17 +2283,27 @@ func deleteAuditEntry(id string) error {
 
 			continue
 		}
-		if entry.ID != id {
-			kept = append(kept, line)
+		if _, drop := ids[entry.ID]; drop {
+			deleted++
+
+			continue
 		}
+		kept = append(kept, line)
+	}
+
+	if deleted == 0 {
+		return 0, nil
 	}
 
 	output := ""
 	if len(kept) > 0 {
-		output = strings.Join(kept, "\n") + "\n"
+		output = strings.Join(kept, "\\n") + "\\n"
+	}
+	if err := writeFileAtomic(path, []byte(output)); err != nil {
+		return 0, err
 	}
 
-	return writeFileAtomic(path, []byte(output))
+	return deleted, nil
 }
 
 func handleAPIAuditDelete(w http.ResponseWriter, r *http.Request) {
@@ -2315,6 +2332,36 @@ func handleAPIAuditDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+func handleAPIAuditDeleteBatch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+
+		return
+	}
+	if !requireAdminAPI(w, r) {
+		return
+	}
+
+	var body struct {
+		IDs []string `json:"ids"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body); err != nil ||
+		len(body.IDs) == 0 || len(body.IDs) > maxBatchDeleteIDs {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid ids"})
+
+		return
+	}
+
+	deleted, err := deleteAuditEntries(toIDSet(body.IDs))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"status": "deleted", "deleted": deleted})
 }
 
 // ============================================================================
