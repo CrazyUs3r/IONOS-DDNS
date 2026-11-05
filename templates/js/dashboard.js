@@ -93,6 +93,13 @@ const DECLARATIVE_ACTIONS = Object.freeze({
 	deleteLogEntry: ({ element }) => deleteLogEntry(element),
 	copyAuditEntry: ({ element }) => copyAuditEntry(element),
 	deleteAuditEntry: ({ element }) => deleteAuditEntry(element),
+	toggleLogSelectAll: ({ element }) => toggleLogSelectAll(element.checked),
+	updateLogSelection: () => updateLogSelection(),
+	deleteSelectedLogs: () => deleteSelectedLogs(),
+	filterAuditStatus: ({ element }) => filterAuditStatus(element.value),
+	toggleAuditSelectAll: ({ element }) => toggleAuditSelectAll(element.checked),
+	updateAuditSelection: () => updateAuditSelection(),
+	deleteSelectedAudit: () => deleteSelectedAudit(),
 	deleteDomain: ({ args, element }) => deleteDomain(args[0], element),
 	deleteUser: ({ args }) => deleteUser(args[0], args[1]),
 	editDomain: ({ args }) => editDomain(Number(args[0])),
@@ -416,6 +423,7 @@ function initializeLoadedPage(page, section, state) {
 	if (page === 'logs') {
 		const select = section.querySelector('#logFilterSelect');
 		if (select) select.value = logFilter;
+		updateLogSelection();
 		return;
 	}
 
@@ -425,6 +433,8 @@ function initializeLoadedPage(page, section, state) {
 	}
 
 	if (page === 'audit') {
+		const statusSelect = section.querySelector('#audit-status-filter');
+		if (statusSelect) statusSelect.value = auditStatusFilter;
 		refreshAuditLog();
 		return;
 	}
@@ -2833,11 +2843,69 @@ function deleteLogEntry(btn) {
 			setTimeout(() => {
 				row.remove();
 				if (next) next.classList.remove('no-hover');
+				updateLogSelection();
 			}, 270);
 			showToast('🗑️ ' + tr('log_entry_deleted', 'Eintrag gelöscht'), 'success');
 		})
 		.catch(err => {
 			console.error('Log delete failed:', err);
+			showToast('❌ ' + (err.message || tr('log_delete_failed', 'Löschen fehlgeschlagen')), 'error');
+		});
+}
+
+function logSelectedRows() {
+	return [...document.querySelectorAll('#logContainer .log-select-cb:checked')]
+		.map(cb => cb.closest('.log-entry-row'))
+		.filter(Boolean);
+}
+
+function updateLogSelection() {
+	const boxes = document.querySelectorAll('#logContainer .log-select-cb');
+	const selected = logSelectedRows().length;
+
+	const label = document.getElementById('logSelectAllLabel');
+	if (label) label.textContent = tr('select_all', 'Alle auswählen');
+
+	const master = document.getElementById('logSelectAll');
+	if (master) {
+		master.checked = boxes.length > 0 && selected === boxes.length;
+		master.indeterminate = selected > 0 && selected < boxes.length;
+		master.disabled = boxes.length === 0;
+	}
+
+	const btn = document.getElementById('logDeleteSelectedBtn');
+	if (btn) {
+		btn.hidden = selected === 0;
+		btn.textContent = '🗑️ ' + trf('delete_selected_n', { n: selected }, 'Auswahl löschen ({n})');
+	}
+}
+
+function toggleLogSelectAll(checked) {
+	document.querySelectorAll('#logContainer .log-select-cb').forEach(cb => { cb.checked = checked; });
+	updateLogSelection();
+}
+
+function deleteSelectedLogs() {
+	const rows = logSelectedRows();
+	if (rows.length === 0) return;
+	if (!confirm(trf('log_delete_selected_confirm', { n: rows.length }, '{n} ausgewählte Log-Einträge wirklich löschen?'))) return;
+
+	fetch('/api/logs/delete-batch', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({
+			ids: rows.map(r => r.dataset.logId).filter(Boolean),
+			gen: parseInt(rows[0].dataset.gen, 10) || 0,
+		}),
+	})
+		.then(async r => {
+			if (!r.ok) throw new Error(await r.text());
+			const data = await r.json().catch(() => ({}));
+			showToast('🗑️ ' + trf('log_entries_deleted', { n: data.deleted ?? rows.length }, '{n} Einträge gelöscht'), 'success');
+			return refreshPageSection('logs');
+		})
+		.catch(err => {
+			console.error('Log batch delete failed:', err);
 			showToast('❌ ' + (err.message || tr('log_delete_failed', 'Löschen fehlgeschlagen')), 'error');
 		});
 }
@@ -3930,6 +3998,7 @@ function renderAuditEntries(entries, gen = 0) {
 	if (!box) return;
 	if (!Array.isArray(entries) || entries.length === 0) {
 		box.innerHTML = '<div class="audit-empty">' + escHtml(tr('audit_empty', 'Noch keine Audit-Einträge vorhanden.')) + '</div>';
+		updateAuditSelection();
 		return;
 	}
 
@@ -3955,14 +4024,18 @@ function renderAuditEntries(entries, gen = 0) {
 		const deleteBtn = gen === 0
 			? `<button class="copy-btn log-delete-btn" data-click="deleteAuditEntry(this)" title="${escHtml(tr('delete_entry_title', 'Eintrag löschen'))}">🗑️</button>`
 			: '';
+		const selectCb = gen === 0
+			? '<input type="checkbox" class="audit-select-cb" data-change="updateAuditSelection()">'
+			: '';
 
-		return `<tr class="audit-entry-row" data-audit-id="${escHtml(entry.id || '')}" data-copy="${escHtml(copyText)}">
+		return `<tr class="audit-entry-row" data-audit-id="${escHtml(entry.id || '')}" data-status="${status}" data-copy="${escHtml(copyText)}">
 			<td title="${escHtml(time)}">${escHtml(time)}</td>
 			<td><span class="audit-user-value"><strong>${escHtml(actor)}</strong>${role ? `<small>${escHtml(role)}</small>` : ''}</span></td>
 			<td title="${escHtml(actionTitle)}"><span class="audit-action-value"><code class="audit-method">${escHtml(method)}</code><span class="audit-path">${escHtml(path)}</span></span></td>
 			<td><span class="audit-result ${resultClass}">${escHtml(status || '-')}</span></td>
 			<td><code class="audit-ip">${escHtml(ip)}</code></td>
-			<td class="audit-actions"><span class="audit-action-buttons">
+			   <td class="audit-actions"><span class="audit-action-buttons">
+				${selectCb}
 				<button class="copy-btn log-copy-btn" data-click="copyAuditEntry(this)" title="${escHtml(tr('copy_title', 'Kopieren'))}">📋</button>
 				${deleteBtn}
 			</span></td>
@@ -3970,9 +4043,10 @@ function renderAuditEntries(entries, gen = 0) {
 	}).join('');
 
 	box.innerHTML = `<div class="audit-table-wrap audit-log-scroll"><table class="audit-table">
-		<thead><tr><th>${escHtml(labels.time)}</th><th>${escHtml(labels.user)}</th><th>${escHtml(labels.action)}</th><th>${escHtml(labels.status)}</th><th>${escHtml(labels.ip)}</th><th></th></tr></thead>
+		<thead><tr><th>${escHtml(labels.time)}</th><th>${escHtml(labels.user)}</th><th>${escHtml(labels.action)}</th><th>${escHtml(labels.status)}</th><th>${escHtml(labels.ip)}</th><th>${gen === 0 ? '<input type="checkbox" id="auditSelectAll" data-change="toggleAuditSelectAll(this)">' : ''}</th></tr></thead>
  		<tbody>${rows}</tbody>
 	</table></div>`;
+	applyAuditStatusFilter();
 }
 
 function copyAuditEntry(button) {
@@ -4001,7 +4075,9 @@ function deleteAuditEntry(btn) {
 			setTimeout(() => {
 				row.remove();
 				if (next) next.classList.remove('no-hover');
+				updateAuditSelection();
 			}, 220);
+
 			showToast('🗑️ ' + tr('audit_entry_deleted', 'Audit-Eintrag gelöscht'), 'success');
 			const meta = document.getElementById('audit-summary-meta');
 			if (meta) {
@@ -4011,6 +4087,92 @@ function deleteAuditEntry(btn) {
 		})
 		.catch(err => {
 			console.error('Audit delete failed:', err);
+			showToast('❌ ' + (err.message || tr('audit_delete_failed', 'Löschen fehlgeschlagen')), 'error');
+		});
+}
+
+
+let auditStatusFilter = 'all';
+
+function auditStatusMatches(status, filter) {
+	switch (filter) {
+		case '2xx': return status >= 200 && status < 300;
+		case '3xx': return status >= 300 && status < 400;
+		case '4xx': return status >= 400 && status < 500;
+		case '5xx': return status >= 500 && status < 600;
+		case 'err': return status >= 400;
+		default: return true;
+	}
+}
+
+function filterAuditStatus(value) {
+	auditStatusFilter = value || 'all';
+	applyAuditStatusFilter();
+}
+
+function applyAuditStatusFilter() {
+	document.querySelectorAll('#audit-log-content .audit-entry-row').forEach(row => {
+		const visible = auditStatusMatches(Number(row.dataset.status) || 0, auditStatusFilter);
+		row.classList.toggle('audit-row-filtered', !visible);
+		if (!visible) {
+			const cb = row.querySelector('.audit-select-cb');
+			if (cb) cb.checked = false;
+		}
+	});
+	updateAuditSelection();
+}
+
+function visibleAuditCheckboxes() {
+	return [...document.querySelectorAll('#audit-log-content .audit-entry-row:not(.audit-row-filtered) .audit-select-cb')];
+}
+
+function auditSelectedRows() {
+	return [...document.querySelectorAll('#audit-log-content .audit-select-cb:checked')]
+		.map(cb => cb.closest('.audit-entry-row'))
+		.filter(Boolean);
+}
+
+function updateAuditSelection() {
+	const boxes = visibleAuditCheckboxes();
+	const selected = boxes.filter(cb => cb.checked).length;
+
+	const master = document.getElementById('auditSelectAll');
+	if (master) {
+		master.checked = boxes.length > 0 && selected === boxes.length;
+		master.indeterminate = selected > 0 && selected < boxes.length;
+		master.disabled = boxes.length === 0;
+	}
+
+	const btn = document.getElementById('auditDeleteSelectedBtn');
+	if (btn) {
+		btn.hidden = selected === 0;
+		btn.textContent = '🗑️ ' + trf('delete_selected_n', { n: selected }, 'Auswahl löschen ({n})');
+	}
+}
+
+function toggleAuditSelectAll(checked) {
+	visibleAuditCheckboxes().forEach(cb => { cb.checked = checked; });
+	updateAuditSelection();
+}
+
+function deleteSelectedAudit() {
+	const rows = auditSelectedRows();
+	if (rows.length === 0) return;
+	if (!confirm(trf('audit_delete_selected_confirm', { n: rows.length }, '{n} ausgewählte Audit-Einträge wirklich löschen?'))) return;
+
+	fetch('/api/audit/delete-batch', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ ids: rows.map(r => r.dataset.auditId).filter(Boolean) }),
+	})
+		.then(async r => {
+			if (!r.ok) throw new Error(await r.text());
+			const data = await r.json().catch(() => ({}));
+			showToast('🗑️ ' + trf('audit_entries_deleted', { n: data.deleted ?? rows.length }, '{n} Audit-Einträge gelöscht'), 'success');
+			return refreshAuditLog();
+		})
+		.catch(err => {
+			console.error('Audit batch delete failed:', err);
 			showToast('❌ ' + (err.message || tr('audit_delete_failed', 'Löschen fehlgeschlagen')), 'error');
 		});
 }
