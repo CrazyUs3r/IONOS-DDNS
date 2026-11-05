@@ -757,6 +757,34 @@ summary:focus-visible {
   color: white;
 }
 
+.log-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.log-select-cb,
+.audit-select-cb,
+#auditSelectAll,
+#logSelectAll {
+  flex-shrink: 0;
+  align-self: center;
+  cursor: pointer;
+}
+
+.filter-btn--danger:hover {
+  background: var(--error);
+  border-color: var(--error);
+  color: white;
+}
+
+.log-entry-row:has(.log-select-cb:checked) {
+  background: rgba(56, 189, 248, 0.1);
+}
+
 .log-filter-select {
   padding: 6px 12px;
   background: var(--border);
@@ -3888,8 +3916,13 @@ body.auth-page .dashboard-footer {
 
 .page-section[data-section="audit"] .audit-log-card-fixed table.audit-table th:nth-child(6),
 .page-section[data-section="audit"] .audit-log-card-fixed table.audit-table td:nth-child(6) {
-  width: 85px;
+  width: 112px;
 }
+
+.page-section[data-section="audit"] .audit-log-card-fixed table.audit-table tr.audit-row-filtered {
+  display: none;
+}
+
 
 @media (max-width: 1050px) {
   .page-section[data-section="audit"] .audit-dns-grid {
@@ -4025,17 +4058,17 @@ body.auth-page .dashboard-footer {
 }
 
 .audit-actions {
-  width: 82px;
-  min-width: 82px;
+  width: 112px;
+  min-width: 112px;
   white-space: nowrap;
-  text-align: right;
+  text-align: left;
   vertical-align: middle;
 }
 
 .audit-action-buttons {
   display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 4px;
   white-space: nowrap;
 }
