@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"slices"
@@ -320,6 +319,15 @@ func validateIPv64ResponseBody(
 		}
 
 		return fmt.Errorf("%s: %w", phrases().IPv64ParseError, err)
+	}
+
+	if st := strings.TrimSpace(ipv64Resp.Status); st != "" && !strings.EqualFold(st, "success") {
+		if code, convErr := strconv.Atoi(strings.Fields(st)[0]); convErr == nil && code >= 400 {
+			apiErr := &APIError{StatusCode: code, Message: ipv64Resp.Info}
+			apiMetrics.RecordError(string(ProviderIPv64), method, statusCode, apiErr, duration)
+
+			return apiErr
+		}
 	}
 
 	infoLower := strings.ToLower(ipv64Resp.Info)
@@ -1037,11 +1045,17 @@ func performIPv64NICUpdate(
 		}
 	}()
 
-	body, err := io.ReadAll(res.Body)
+	body, err := readResponseBody(res)
 	if err != nil {
 		apiMetrics.RecordError(string(ProviderIPv64), MethodNIC, res.StatusCode, err, duration)
 
 		return fmt.Errorf("%s: %w", phrases().IPv64ParseError, err)
+	}
+
+	if res.StatusCode == http.StatusTooManyRequests {
+		apiMetrics.RecordError(string(ProviderIPv64), MethodNIC, res.StatusCode, errors.New(phrases().ErrRateLimit), duration)
+
+		return fmt.Errorf("%s (retry in %v)", phrases().ErrRateLimit, ipv64RateLimitWait(res.Header, 0))
 	}
 
 	if err := validateIPv64NICResponse(res.StatusCode, body); err != nil {
@@ -1325,6 +1339,11 @@ func deleteIPv64Record(
 	baseDomain string,
 	record IPv64Record,
 ) error {
+
+	if record.RecordID <= 0 {
+		return fmt.Errorf("refusing to delete ipv64 record without ID (%s.%s)", record.Praefix, baseDomain)
+	}
+
 	params := map[string]string{
 		"del_record": strconv.Itoa(record.RecordID),
 	}
