@@ -1339,7 +1339,6 @@ func deleteIPv64Record(
 	baseDomain string,
 	record IPv64Record,
 ) error {
-
 	if record.RecordID <= 0 {
 		return fmt.Errorf("refusing to delete ipv64 record without ID (%s.%s)", record.Praefix, baseDomain)
 	}
