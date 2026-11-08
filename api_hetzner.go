@@ -248,8 +248,28 @@ func loadHetznerDNSZoneRecords(ctx context.Context, dc *DomainConfig, zoneID str
 // ZONES & RECORD LOADING - NEW HETZNER CLOUD DNS API
 // ============================================================================
 
+const (
+	hetznerCloudPerPage  = 50 // Maximum laut Hetzner Cloud API
+	hetznerCloudMaxPages = 200 // Sicherheitsgrenze gegen Endlosschleifen
+)
+
+type hetznerCloudMeta struct {
+	Pagination struct {
+		NextPage *int `json:"next_page"`
+	} `json:"pagination"`
+}
+
+func (m hetznerCloudMeta) nextPage() (int, bool) {
+	if m.Pagination.NextPage == nil || *m.Pagination.NextPage <= 0 {
+		return 0, false
+	}
+
+	return *m.Pagination.NextPage, true
+}
+
 type hetznerCloudZonesResponse struct {
 	Zones []hetznerCloudZone `json:"zones"`
+	Meta  hetznerCloudMeta   `json:"meta"`
 }
 
 type hetznerCloudZone struct {
@@ -259,6 +279,7 @@ type hetznerCloudZone struct {
 
 type hetznerCloudRRSetsResponse struct {
 	RRSets []hetznerCloudRRSet `json:"rrsets"`
+	Meta   hetznerCloudMeta    `json:"meta"`
 }
 
 type hetznerCloudRRSet struct {
@@ -275,57 +296,83 @@ type hetznerCloudRRRecord struct {
 }
 
 func loadHetznerCloudZones(ctx context.Context, dc *DomainConfig) ([]Zone, error) {
-	data, err := hetznerCloudAPI(ctx, dc, MethodGET, hetznerCloudBaseURL+"/zones", nil)
-	if err != nil {
-		return nil, err
-	}
+	zones := make([]Zone, 0)
 
-	var resp hetznerCloudZonesResponse
-	if err := json.Unmarshal(data, &resp); err != nil {
-		return nil, err
-	}
+	page := 1
+	for range hetznerCloudMaxPages {
+		endpoint := fmt.Sprintf("%s/zones?page=%d&per_page=%d", hetznerCloudBaseURL, page, hetznerCloudPerPage)
 
-	zones := make([]Zone, 0, len(resp.Zones))
-	for _, z := range resp.Zones {
-		name := strings.TrimSuffix(strings.ToLower(z.Name), ".")
-		id := normalizeHetznerID(z.ID)
-		if id == "" {
-			id = name
+		data, err := hetznerCloudAPI(ctx, dc, MethodGET, endpoint, nil)
+		if err != nil {
+			return nil, err
 		}
-		if name == "" {
-			continue
+
+		var resp hetznerCloudZonesResponse
+		if err := json.Unmarshal(data, &resp); err != nil {
+			return nil, err
 		}
-		zones = append(zones, Zone{ID: id, Name: name})
+
+		for _, z := range resp.Zones {
+			name := strings.TrimSuffix(strings.ToLower(z.Name), ".")
+			id := normalizeHetznerID(z.ID)
+			if id == "" {
+				id = name
+			}
+			if name == "" {
+				continue
+			}
+			zones = append(zones, Zone{ID: id, Name: name})
+		}
+
+		next, ok := resp.Meta.nextPage()
+		if !ok {
+			break
+		}
+		page = next
 	}
 
 	return zones, nil
 }
 
 func loadHetznerCloudZoneRecords(ctx context.Context, dc *DomainConfig, zoneID string) ([]Record, error) {
-	endpoint := fmt.Sprintf("%s/zones/%s/rrsets", hetznerCloudBaseURL, escapePathSegment(zoneID))
-	data, err := hetznerCloudAPI(ctx, dc, MethodGET, endpoint, nil)
-	if err != nil {
-		return nil, err
-	}
+	records := make([]Record, 0)
 
-	var resp hetznerCloudRRSetsResponse
-	if err := json.Unmarshal(data, &resp); err != nil {
-		return nil, err
-	}
+	page := 1
+	for range hetznerCloudMaxPages {
+		endpoint := fmt.Sprintf(
+			"%s/zones/%s/rrsets?page=%d&per_page=%d",
+			hetznerCloudBaseURL, escapePathSegment(zoneID), page, hetznerCloudPerPage,
+		)
 
-	records := make([]Record, 0, len(resp.RRSets))
-	for _, rr := range resp.RRSets {
-		if rr.Type != RecordTypeA && rr.Type != RecordTypeAAAA {
-			continue
+		data, err := hetznerCloudAPI(ctx, dc, MethodGET, endpoint, nil)
+		if err != nil {
+			return nil, err
 		}
-		for idx, rec := range rr.Records {
-			records = append(records, Record{
-				ID:      fmt.Sprintf("%s/%s/%d", normalizeHetznerRelativeName(rr.Name), rr.Type, idx),
-				Name:    normalizeHetznerRelativeName(rr.Name),
-				Type:    rr.Type,
-				Content: rec.Value,
-			})
+
+		var resp hetznerCloudRRSetsResponse
+		if err := json.Unmarshal(data, &resp); err != nil {
+			return nil, err
 		}
+
+		for _, rr := range resp.RRSets {
+			if rr.Type != RecordTypeA && rr.Type != RecordTypeAAAA {
+				continue
+			}
+			for idx, rec := range rr.Records {
+				records = append(records, Record{
+					ID:      fmt.Sprintf("%s/%s/%d", normalizeHetznerRelativeName(rr.Name), rr.Type, idx),
+					Name:    normalizeHetznerRelativeName(rr.Name),
+					Type:    rr.Type,
+					Content: rec.Value,
+				})
+			}
+		}
+
+		next, ok := resp.Meta.nextPage()
+		if !ok {
+			break
+		}
+		page = next
 	}
 
 	return records, nil
