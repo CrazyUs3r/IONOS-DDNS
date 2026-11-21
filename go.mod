@@ -1,6 +1,6 @@
 module github.com/CrazyUs3r/IONOS-DDNS/v2
 
-go 1.27.3
+go 1.27.4
 
 require (
 	github.com/eclipse/paho.mqtt.golang v1.5.1
@@ -9,8 +9,8 @@ require (
 	github.com/shirou/gopsutil/v4 v4.26.10
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/vishvananda/netlink v1.3.1
-	golang.org/x/sync v0.24.0
-	golang.org/x/sys v0.49.0
+	golang.org/x/sync v0.25.0
+	golang.org/x/sys v0.50.0
 )
 
 require (
@@ -23,5 +23,5 @@ require (
 	github.com/tklauser/numcpus v0.12.0 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	golang.org/x/net v0.62.0 // indirect
+	golang.org/x/net v0.63.0 // indirect
 )

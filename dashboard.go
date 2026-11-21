@@ -465,7 +465,7 @@ func checkboxLabel(v bool) string {
 
 func notifierEnabledRow(id string, on bool) string {
 	return fmt.Sprintf(
-		`<div class="s-row"><span class="s-label">`+phrases().SettingsNotifierEnabled+`</span><label class="s-checkbox-container"><input type="checkbox" id="%s" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
+		`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsNotifierEnabled)+`</span><label class="s-checkbox-container"><input type="checkbox" id="%s" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
 		id,
 		esc(phrases().SettingsCheckboxActive),
 		esc(phrases().SettingsCheckboxDeactive),
@@ -555,27 +555,27 @@ func buildSettingsSystemSection(c Config) string {
 		`</select></div>` +
 
 		fmt.Sprintf(
-			`<div class="s-row"><span class="s-label">`+phrases().SettingsDNS+` <small class="s-label-hint-inline">(`+phrases().SettingsDNSHint+`)</small></span><input type="text" id="cfg-dns" class="s-input s-input-lg" placeholder="1.1.1.1, 8.8.8.8:53" value="%s"></div>`,
+			`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsDNS)+` <small class="s-label-hint-inline">(`+esc(phrases().SettingsDNSHint)+`)</small></span><input type="text" id="cfg-dns" class="s-input s-input-lg" placeholder="1.1.1.1, 8.8.8.8:53" value="%s"></div>`,
 			esc(strings.Join(c.DNSServers, ", ")),
 		) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMaxLog+`</span><input type="number" id="cfg-max-log" class="s-input s-input-sm-right" min="1" max="50" value="%d"></div>`, c.MaxLogMB) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsMaxLog)+`</span><input type="number" id="cfg-max-log" class="s-input s-input-sm-right" min="1" max="50" value="%d"></div>`, c.MaxLogMB) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMaxLogBackups+`</span><input type="number" id="cfg-max-log-backups" class="s-input s-input-sm-right" min="1" max="20" value="%d"></div>`, c.MaxLogBackups) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsMaxLogBackups)+`</span><input type="number" id="cfg-max-log-backups" class="s-input s-input-sm-right" min="1" max="20" value="%d"></div>`, c.MaxLogBackups) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMaxRetries+`</span><input type="number" id="cfg-max-retries" class="s-input s-input-sm-right" min="0" max="20" value="%d"></div>`, c.MaxAPIRetries) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsMaxRetries)+`</span><input type="number" id="cfg-max-retries" class="s-input s-input-sm-right" min="0" max="20" value="%d"></div>`, c.MaxAPIRetries) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMaxConcurrent+`</span><input type="number" id="cfg-max-concurrent" class="s-input s-input-sm-right" min="1" max="20" value="%d"></div>`, c.MaxConcurrent) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsMaxConcurrent)+`</span><input type="number" id="cfg-max-concurrent" class="s-input s-input-sm-right" min="1" max="20" value="%d"></div>`, c.MaxConcurrent) +
 
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsHourlyLimit+`</span><input type="number" id="cfg-hourly-limit" class="s-input s-input-sm-right" min="100" max="100000" value="%d"></div>`, c.HourlyRateLimit) +
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsHourlyLimit)+`</span><input type="number" id="cfg-hourly-limit" class="s-input s-input-sm-right" min="100" max="100000" value="%d"></div>`, c.HourlyRateLimit) +
 
 		fmt.Sprintf(
-			`<div class="s-row"><span class="s-label">`+phrases().SettingsIPv4Endpoints+`<small class="s-label-hint-block">(`+phrases().SettingsDNSHint+`)</small></span><input type="text" id="cfg-ipv4_endpoints" class="s-input s-input-lg" placeholder="https://4.ident.me/, https://4.tnedi.me/" value="%s"></div>`,
+			`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsIPv4Endpoints)+`<small class="s-label-hint-block">(`+esc(phrases().SettingsDNSHint)+`)</small></span><input type="text" id="cfg-ipv4_endpoints" class="s-input s-input-lg" placeholder="https://4.ident.me/, https://4.tnedi.me/" value="%s"></div>`,
 			esc(strings.Join(c.IPv4Endpoints, ", ")),
 		) +
 
 		fmt.Sprintf(
-			`<div class="s-row"><span class="s-label">`+phrases().SettingsIPv6Endpoints+`<small class="s-label-hint-block">(`+phrases().SettingsDNSHint+`)</small></span><input type="text" id="cfg-ipv6_endpoints" class="s-input s-input-lg" placeholder="https://6.ident.me/, https://6.tnedi.me/" value="%s"></div>`,
+			`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsIPv6Endpoints)+`<small class="s-label-hint-block">(`+esc(phrases().SettingsDNSHint)+`)</small></span><input type="text" id="cfg-ipv6_endpoints" class="s-input s-input-lg" placeholder="https://6.ident.me/, https://6.tnedi.me/" value="%s"></div>`,
 			esc(strings.Join(c.IPv6Endpoints, ", ")),
 		) +
 
@@ -584,22 +584,22 @@ func buildSettingsSystemSection(c Config) string {
 		`</select></div>` +
 
 		fmt.Sprintf(
-			`<div class="s-row"><span class="s-label">`+phrases().SettingsDryRun+`<small class="s-label-hint-block">`+phrases().SettingsDryRunHint+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-dry-run" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
-			phrases().SettingsCheckboxActive, esc(phrases().SettingsCheckboxDeactive),
+			`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsDryRun)+`<small class="s-label-hint-block">`+esc(phrases().SettingsDryRunHint)+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-dry-run" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
+			esc(phrases().SettingsCheckboxActive), esc(phrases().SettingsCheckboxDeactive),
 			checkedAttr(c.DryRun),
 			checkboxLabel(c.DryRun),
 		) +
 
 		fmt.Sprintf(
-			`<div class="s-row"><span class="s-label">`+phrases().SettingsDebugMode+` <small class="s-label-hint-block">`+phrases().SettingsDebugVerboseHint+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-debug" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
-			phrases().SettingsCheckboxActive, esc(phrases().SettingsCheckboxDeactive),
+			`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsDebugMode)+` <small class="s-label-hint-block">`+esc(phrases().SettingsDebugVerboseHint)+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-debug" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
+			esc(phrases().SettingsCheckboxActive), esc(phrases().SettingsCheckboxDeactive),
 			checkedAttr(c.DebugEnabled),
 			checkboxLabel(c.DebugEnabled),
 		) +
 
 		fmt.Sprintf(
-			`<div class="s-row"><span class="s-label">`+phrases().SettingsDebugHTTPRaw+` <small class="s-label-hint-block">`+phrases().SettingsDebugHTTPHint+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-debug-http" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
-			phrases().SettingsCheckboxActive, esc(phrases().SettingsCheckboxDeactive),
+			`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsDebugHTTPRaw)+` <small class="s-label-hint-block">`+esc(phrases().SettingsDebugHTTPHint)+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-debug-http" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
+			esc(phrases().SettingsCheckboxActive), esc(phrases().SettingsCheckboxDeactive),
 			checkedAttr(c.DebugHTTPRaw),
 			checkboxLabel(c.DebugHTTPRaw),
 		)
@@ -696,88 +696,88 @@ func buildSettingsNotifySection(c Config) string {
 
 	telegramSection := `<div class="notify-box notify-telegram">` +
 		notifierEnabledRow("cfg-tg-enabled", notifierToggle(c.Notifications.Telegram.Enabled)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsTGChatID+`<small class="s-label-hint-block">(`+phrases().SettingsDNSHint+`)</small></span><input type="text" id="cfg-tg-chat-id" class="s-input s-input-lg" placeholder="123456789, -100xxxxxxxxx" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsTGChatID)+`<small class="s-label-hint-block">(`+esc(phrases().SettingsDNSHint)+`)</small></span><input type="text" id="cfg-tg-chat-id" class="s-input s-input-lg" placeholder="123456789, -100xxxxxxxxx" value="%s"></div>`,
 			esc(c.Notifications.Telegram.ChatID)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsTGToken+`</span><div class="input-with-action"><input type="password" id="cfg-tg-token" class="s-input s-input-lg" placeholder="`+phrases().SettingsTokenUnchanged+`" value="%s">`+passwordToggleButton("cfg-tg-token")+`</div></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsTGToken)+`</span><div class="input-with-action"><input type="password" id="cfg-tg-token" class="s-input s-input-lg" placeholder="`+esc(phrases().SettingsTokenUnchanged)+`" value="%s">`+passwordToggleButton("cfg-tg-token")+`</div></div>`,
 			esc(c.Notifications.Telegram.Token)) +
 		`</div>`
 
 	gotifySection := `<div class="notify-box notify-gotify">` +
 		notifierEnabledRow("cfg-gotify-enabled", notifierToggle(c.Notifications.Gotify.Enabled)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsGotifyURL+`</span><input type="text" id="cfg-gotify-url" class="s-input s-input-lg" placeholder="https://gotify.example.com" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsGotifyURL)+`</span><input type="text" id="cfg-gotify-url" class="s-input s-input-lg" placeholder="https://gotify.example.com" value="%s"></div>`,
 			esc(c.Notifications.Gotify.URL)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsGotifyToken+`</span><div class="input-with-action"><input type="password" id="cfg-gotify-token" class="s-input s-input-lg" placeholder="`+phrases().SettingsTokenUnchanged+`" value="%s">`+passwordToggleButton("cfg-gotify-token")+`</div></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsGotifyToken)+`</span><div class="input-with-action"><input type="password" id="cfg-gotify-token" class="s-input s-input-lg" placeholder="`+esc(phrases().SettingsTokenUnchanged)+`" value="%s">`+passwordToggleButton("cfg-gotify-token")+`</div></div>`,
 			esc(c.Notifications.Gotify.Token)) +
 		`</div>`
 
 	ntfySection := `<div class="notify-box notify-ntfy">` +
 		notifierEnabledRow("cfg-ntfy-enabled", notifierToggle(c.Notifications.Ntfy.Enabled)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsNtfyURL+`</span><input type="text" id="cfg-ntfy-url" class="s-input s-input-lg" placeholder="https://ntfy.sh" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsNtfyURL)+`</span><input type="text" id="cfg-ntfy-url" class="s-input s-input-lg" placeholder="https://ntfy.sh" value="%s"></div>`,
 			esc(c.Notifications.Ntfy.URL)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsNtfyTopic+`</span><input type="text" id="cfg-ntfy-topic" class="s-input s-input-lg" placeholder="ddns" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsNtfyTopic)+`</span><input type="text" id="cfg-ntfy-topic" class="s-input s-input-lg" placeholder="ddns" value="%s"></div>`,
 			esc(c.Notifications.Ntfy.Topic)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsNtfyToken+`</span><div class="input-with-action"><input type="password" id="cfg-ntfy-token" class="s-input s-input-lg" placeholder="`+phrases().SettingsTokenUnchanged+`" value="%s">`+passwordToggleButton("cfg-ntfy-token")+`</div></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsNtfyToken)+`</span><div class="input-with-action"><input type="password" id="cfg-ntfy-token" class="s-input s-input-lg" placeholder="`+esc(phrases().SettingsTokenUnchanged)+`" value="%s">`+passwordToggleButton("cfg-ntfy-token")+`</div></div>`,
 			esc(c.Notifications.Ntfy.Token)) +
 		`</div>`
 
 	webhookSection := `<div class="notify-box notify-webhook">` +
 		notifierEnabledRow("cfg-webhook-enabled", notifierToggle(c.Notifications.Webhook.Enabled)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsWebhookURL+`</span><input type="text" id="cfg-webhook-url" class="s-input s-input-lg" placeholder="https://your-endpoint.com/api" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsWebhookURL)+`</span><input type="text" id="cfg-webhook-url" class="s-input s-input-lg" placeholder="https://your-endpoint.com/api" value="%s"></div>`,
 			esc(c.Notifications.Webhook.URL)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsWebhookSecret+` <small class="s-label-hint-inline">`+phrases().SettingsOptional+`</small></span><div class="input-with-action"><input type="password" id="cfg-webhook-secret" class="s-input s-input-lg" placeholder="`+phrases().SettingsTokenUnchanged+`" value="%s">`+passwordToggleButton("cfg-webhook-secret")+`</div></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsWebhookSecret)+` <small class="s-label-hint-inline">`+esc(phrases().SettingsOptional)+`</small></span><div class="input-with-action"><input type="password" id="cfg-webhook-secret" class="s-input s-input-lg" placeholder="`+esc(phrases().SettingsTokenUnchanged)+`" value="%s">`+passwordToggleButton("cfg-webhook-secret")+`</div></div>`,
 			esc(c.Notifications.Webhook.Secret)) +
 		`</div>`
 
 	mqttSection := `<div class="notify-box notify-mqtt">` +
 		notifierEnabledRow("cfg-mqtt-enabled", notifierToggle(c.Notifications.MQTTConfig.Enabled)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMQTTBroker+`</span><input type="text" id="cfg-mqtt-broker" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" placeholder="tcp://192.168.1.10:1883" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsMQTTBroker)+`</span><input type="text" id="cfg-mqtt-broker" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" placeholder="tcp://192.168.1.10:1883" value="%s"></div>`,
 			esc(c.Notifications.MQTTConfig.Broker)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMQTTClientID+`</span><input type="text" id="cfg-mqtt-clientid" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" placeholder="go-dyndns" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsMQTTClientID)+`</span><input type="text" id="cfg-mqtt-clientid" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" placeholder="go-dyndns" value="%s"></div>`,
 			esc(c.Notifications.MQTTConfig.ClientID)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMQTTUsername+`</span><input type="text" id="cfg-mqtt-username" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" placeholder="`+phrases().SettingsOptionalPlaceholder+`" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsMQTTUsername)+`</span><input type="text" id="cfg-mqtt-username" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" placeholder="`+esc(phrases().SettingsOptionalPlaceholder)+`" value="%s"></div>`,
 			esc(c.Notifications.MQTTConfig.Username)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMQTTSecret+` <small class="s-label-hint-inline">`+phrases().SettingsMQTTPassword+`</small></span><div class="input-with-action"><input type="password" id="cfg-mqtt-password" class="s-input s-input-lg" autocomplete="new-password" readonly data-unlock-input="1" placeholder="`+phrases().SettingsTokenUnchanged+`" value="%s">`+passwordToggleButton("cfg-mqtt-password")+`</div></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsMQTTSecret)+` <small class="s-label-hint-inline">`+esc(phrases().SettingsMQTTPassword)+`</small></span><div class="input-with-action"><input type="password" id="cfg-mqtt-password" class="s-input s-input-lg" autocomplete="new-password" readonly data-unlock-input="1" placeholder="`+esc(phrases().SettingsTokenUnchanged)+`" value="%s">`+passwordToggleButton("cfg-mqtt-password")+`</div></div>`,
 			esc(c.Notifications.MQTTConfig.Password)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMQTTTopic+`</span><input type="text" id="cfg-mqtt-topic" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" placeholder="dyndns/ip" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsMQTTTopic)+`</span><input type="text" id="cfg-mqtt-topic" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" placeholder="dyndns/ip" value="%s"></div>`,
 			esc(c.Notifications.MQTTConfig.Topic)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMQTTQoS+`</span><input type="number" min="0" max="2" id="cfg-mqtt-qos" class="s-input s-input-sm" autocomplete="off" value="%d"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsMQTTQoS)+`</span><input type="number" min="0" max="2" id="cfg-mqtt-qos" class="s-input s-input-sm" autocomplete="off" value="%d"></div>`,
 			c.Notifications.MQTTConfig.QoS) +
 		fmt.Sprintf(
-			`<div class="s-row"><span class="s-label">`+phrases().SettingsMQTTRetain+`</span><label class="s-checkbox-container"><input type="checkbox" id="cfg-mqtt-retain" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
+			`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsMQTTRetain)+`</span><label class="s-checkbox-container"><input type="checkbox" id="cfg-mqtt-retain" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
 			esc(phrases().SettingsCheckboxActive),
 			esc(phrases().SettingsCheckboxDeactive),
 			checkedAttr(c.Notifications.MQTTConfig.Retain),
 			checkboxLabel(c.Notifications.MQTTConfig.Retain),
 		) +
 		fmt.Sprintf(
-			`<div class="s-row"><span class="s-label">`+phrases().SettingsMQTTDiscovery+` <small class="s-label-hint-inline">`+phrases().SettingsMQTTHomeAssistant+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-mqtt-discovery" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
+			`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsMQTTDiscovery)+` <small class="s-label-hint-inline">`+esc(phrases().SettingsMQTTHomeAssistant)+`</small></span><label class="s-checkbox-container"><input type="checkbox" id="cfg-mqtt-discovery" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
 			esc(phrases().SettingsCheckboxActive),
 			esc(phrases().SettingsCheckboxDeactive),
 			checkedAttr(c.Notifications.MQTTConfig.Discovery),
 			checkboxLabel(c.Notifications.MQTTConfig.Discovery),
 		) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsMQTTDiscoveryPrefix+`</span><input type="text" id="cfg-mqtt-discovery-prefix" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" placeholder="homeassistant" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsMQTTDiscoveryPrefix)+`</span><input type="text" id="cfg-mqtt-discovery-prefix" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" placeholder="homeassistant" value="%s"></div>`,
 			esc(c.Notifications.MQTTConfig.DiscoveryPrefix)) +
 		`</div>`
 
 	emailSection := `<div class="notify-box notify-email">` +
 		notifierEnabledRow("cfg-email-enabled", notifierToggle(c.Notifications.Email.Enabled)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsEmailSMTPHost+`</span><input type="text" id="cfg-email-host" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" placeholder="smtp.gmail.com" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsEmailSMTPHost)+`</span><input type="text" id="cfg-email-host" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" placeholder="smtp.gmail.com" value="%s"></div>`,
 			esc(c.Notifications.Email.Host)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsEmailPort+`</span><input type="text" id="cfg-email-port" class="s-input s-input-sm" autocomplete="off" readonly data-unlock-input="1" placeholder="587" value="%d"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsEmailPort)+`</span><input type="text" id="cfg-email-port" class="s-input s-input-sm" autocomplete="off" readonly data-unlock-input="1" placeholder="587" value="%d"></div>`,
 			c.Notifications.Email.Port) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsEmailUser+`</span><input type="text" id="cfg-email-user" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsEmailUser)+`</span><input type="text" id="cfg-email-user" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" value="%s"></div>`,
 			esc(c.Notifications.Email.Username)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsEmailPassword+`</span><div class="input-with-action"><input type="password" id="cfg-email-pass" class="s-input s-input-lg" autocomplete="new-password" readonly data-unlock-input="1" placeholder="***" value="%s">`+passwordToggleButton("cfg-email-pass")+`</div></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsEmailPassword)+`</span><div class="input-with-action"><input type="password" id="cfg-email-pass" class="s-input s-input-lg" autocomplete="new-password" readonly data-unlock-input="1" placeholder="***" value="%s">`+passwordToggleButton("cfg-email-pass")+`</div></div>`,
 			esc(c.Notifications.Email.Password)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsEmailSender+`</span><input type="text" id="cfg-email-from" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsEmailSender)+`</span><input type="text" id="cfg-email-from" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" value="%s"></div>`,
 			esc(c.Notifications.Email.From)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsEmailRecipient+`</span><input type="text" id="cfg-email-to" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" placeholder="mail1@test.de, mail2@test.de" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsEmailRecipient)+`</span><input type="text" id="cfg-email-to" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" placeholder="mail1@test.de, mail2@test.de" value="%s"></div>`,
 			esc(c.Notifications.Email.To)) +
-		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+phrases().SettingsEmailSubject+`</span><input type="text" id="cfg-email-subject-prefix" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" placeholder="[DynDNS]" value="%s"></div>`,
+		fmt.Sprintf(`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsEmailSubject)+`</span><input type="text" id="cfg-email-subject-prefix" class="s-input s-input-lg" autocomplete="off" readonly data-unlock-input="1" placeholder="[DynDNS]" value="%s"></div>`,
 			esc(c.Notifications.Email.SubjectPrefix)) +
 		fmt.Sprintf(
-			`<div class="s-row"><span class="s-label">`+phrases().SettingsEmailTLSMode+`</span><select id="cfg-email-tls-mode" class="s-input s-input-lg"><option value="starttls" %s>`+phrases().SettingsEmailTLSStartTLS+`</option><option value="tls" %s>`+phrases().SettingsEmailTLSDirectTLS+`</option><option value="plain" %s>`+phrases().SettingsEmailTLSPlain+`</option></select></div>`,
+			`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsEmailTLSMode)+`</span><select id="cfg-email-tls-mode" class="s-input s-input-lg"><option value="starttls" %s>`+esc(phrases().SettingsEmailTLSStartTLS)+`</option><option value="tls" %s>`+esc(phrases().SettingsEmailTLSDirectTLS)+`</option><option value="plain" %s>`+esc(phrases().SettingsEmailTLSPlain)+`</option></select></div>`,
 			selected(c.Notifications.Email.TLSMode == emailTLSModeStartTLS || c.Notifications.Email.TLSMode == ""),
 			selected(c.Notifications.Email.TLSMode == emailTLSModeTLS),
 			selected(c.Notifications.Email.TLSMode == emailTLSModePlain),
@@ -785,12 +785,12 @@ func buildSettingsNotifySection(c Config) string {
 		`</div>`
 
 	testSection := `<div class="notify-test-box"><p>` + esc(phrases().NotifyTestDesc) + `</p><button class="s-btn notify-test-btn" id="notify-test-btn" data-click="sendNotifyTest()">` +
-		phrases().NotifyBtnTest +
+		esc(phrases().NotifyBtnTest) +
 		`</button><div id="notify-test-result" class="notify-test-result"></div>
 		</div>`
 
 	return fmt.Sprintf(
-		`<div class="s-row"><span class="s-label">`+phrases().SettingsNotifyEnabled+`</span><label class="s-checkbox-container"><input type="checkbox" id="cfg-notify-enabled" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
+		`<div class="s-row"><span class="s-label">`+esc(phrases().SettingsNotifyEnabled)+`</span><label class="s-checkbox-container"><input type="checkbox" id="cfg-notify-enabled" class="s-checkbox-dynamic" data-change="updateCheckboxLabel(this)" data-label-on="%s" data-label-off="%s"%s><span class="s-checkbox-text">%s</span></label></div>`,
 		esc(phrases().SettingsCheckboxActive), esc(phrases().SettingsCheckboxDeactive),
 		checkedAttr(c.Notifications.Enabled),
 		checkboxLabel(c.Notifications.Enabled),
@@ -1324,7 +1324,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		debugLog(logCategoryWebsocket, "", fmt.Sprintf(phrases().WSUpgradeFailed, err))
+		debugLog(logCategoryWebsocket, "", fmt.Sprintf(esc(phrases().WSUpgradeFailed), err))
 
 		return
 	}
@@ -1367,7 +1367,7 @@ func handleAPIPageSection(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodGET {
 		http.Error(
 			w,
-			phrases().APIErrorMethodNotAllowed,
+			esc(phrases().APIErrorMethodNotAllowed),
 			http.StatusMethodNotAllowed,
 		)
 
@@ -2382,7 +2382,7 @@ func handleAPIDomainDelete(w http.ResponseWriter, r *http.Request) {
 	lastCleanupNano.Store(0)
 
 	debugLog(logCategoryAPI, getClientIP(r), fmt.Sprintf("Removed %s from update.json; provider cleanup queued", statusKey))
-	broadcastNotification(tf(phrases().ProviderCleanupQueued, "Provider cleanup queued for %s", statusKey), "info")
+	broadcastNotification(tf(esc(phrases().ProviderCleanupQueued), "Provider cleanup queued for %s", statusKey), "info")
 
 	writeJSON(w, http.StatusAccepted, map[string]string{
 		"status": "cleanup_queued",
@@ -2456,7 +2456,7 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 			"status": esc(phrases().TriggerStatusBusy),
 		})
 		debugLog(logCategoryAPI, clientIP, esc(phrases().TriggerBlockedUpdateRunning))
-		broadcastNotification(phrases().UpdateAlreadyRunningNotification, "info")
+		broadcastNotification(esc(phrases().UpdateAlreadyRunningNotification), "info")
 
 		return
 	}
@@ -2473,7 +2473,7 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 			"remaining":           remaining,
 		})
 		debugLog(logCategoryAPI, clientIP, esc(phrases().TriggerBlockedIPRateLimit))
-		broadcastNotification(phrases().TooManyUpdateRequestsWait, "warning")
+		broadcastNotification(esc(phrases().TooManyUpdateRequestsWait), "warning")
 
 		return
 	}
@@ -2486,7 +2486,7 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 			"retry_after_seconds": retryAfter,
 		})
 		debugLog(logCategoryAPI, clientIP, esc(phrases().TriggerBlockedGlobalRateLimit))
-		broadcastNotification(phrases().RateLimitGlobal, "warning")
+		broadcastNotification(esc(phrases().RateLimitGlobal), "warning")
 
 		return
 	}
@@ -2497,7 +2497,7 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 			"status": esc(phrases().TriggerStatusBusy),
 		})
 		debugLog(logCategoryAPI, clientIP, esc(phrases().TriggerBlockedUpdateRunning))
-		broadcastNotification(phrases().UpdateAlreadyRunningNotification, "info")
+		broadcastNotification(esc(phrases().UpdateAlreadyRunningNotification), "info")
 
 		return
 	}
@@ -2511,7 +2511,7 @@ func handleAPITrigger(w http.ResponseWriter, r *http.Request) {
 			}
 
 			debugLog(logCategoryAPI, clientIP, esc(phrases().ManualUpdateTriggeredLog))
-			broadcastNotification(phrases().ManualUpdateStartedNotification, "info")
+			broadcastNotification(esc(phrases().ManualUpdateStartedNotification), "info")
 
 			forceNextUpdate.Store(true)
 			runClaimedUpdate(ctx, false)
@@ -2568,7 +2568,7 @@ func handleAPINotifyTest(w http.ResponseWriter, r *http.Request) {
 	testMsg := NotifyMessage{
 		Action:  ActionConfig,
 		Domain:  "",
-		Message: t(phrases().NotifyTestBody, "🔔 Test Notification: Your dashboard notification system is working perfectly!"),
+		Message: t(esc(phrases().NotifyTestBody), "🔔 Test Notification: Your dashboard notification system is working perfectly!"),
 		Level:   LogInfo,
 	}
 
@@ -2727,7 +2727,7 @@ func streamDomainsJSON(w io.Writer) error {
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			debugLog(logCategoryDashboard, "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
+			debugLog(logCategoryDashboard, "", fmt.Sprintf(esc(phrases().ErrBodyClose)+": %v", err))
 		}
 	}()
 
@@ -2747,7 +2747,7 @@ func streamLogEntriesJSON(w io.Writer) error {
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			debugLog(logCategoryDashboard, "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
+			debugLog(logCategoryDashboard, "", fmt.Sprintf(esc(phrases().ErrBodyClose)+": %v", err))
 		}
 	}()
 
@@ -3002,7 +3002,7 @@ func writePagePlaceholder(w io.Writer, page string) {
 		<div class="card lazy-page-card">
 			<div class="card-content page-loading">%s</div>
 		</div>
-	</div>`, esc(page), t(phrases().PageLoading, "⏳ Loading..."))
+	</div>`, esc(page), t(esc(phrases().PageLoading), "⏳ Loading..."))
 }
 
 func writeDebugSection(w io.Writer, config Config) {
@@ -3015,9 +3015,9 @@ func writeDebugSection(w io.Writer, config Config) {
 	_, _ = fmt.Fprint(w, `
 	<div class="page-section" data-section="debug">
 		<div class="card">
-			<div class="card-header">🐞 `+phrases().DebugLogTitle+`</div>
+			<div class="card-header">🐞 `+esc(phrases().DebugLogTitle)+`</div>
 			<div class="card-content">
-				<p class="debug-disabled-note">`+phrases().DebugDisabledNote+`</p>
+				<p class="debug-disabled-note">`+esc(phrases().DebugDisabledNote)+`</p>
 			</div>
 		</div>
 	</div>`)
@@ -3229,54 +3229,7 @@ func streamLogExport(w *bufio.Writer, files []*os.File, asJSON bool, filter stri
 	for _, f := range files {
 		extend()
 
-		scanner := bufio.NewScanner(f)
-		scanner.Buffer(make([]byte, 64*1024), 8*1024*1024)
-
-		for scanner.Scan() {
-			line := bytes.TrimSpace(scanner.Bytes())
-			if len(line) == 0 {
-				continue
-			}
-
-			var e LogEntry
-			if json.Unmarshal(line, &e) != nil || !logEntryMatchesFilter(e, filter) {
-				continue
-			}
-
-			ts := formatDashboardLogTimestamp(e.Timestamp)
-			action := strings.ToUpper(e.Action)
-
-			if asJSON {
-				data, err := json.Marshal(logExportEntry{
-					Time: ts, Action: action, Level: e.Level, Domain: e.Domain, Message: e.Message,
-				})
-				if err != nil {
-					continue
-				}
-				if !first {
-					if _, err := w.WriteString(",\n"); err != nil {
-						return err
-					}
-				}
-				if _, err := w.Write(data); err != nil {
-					return err
-				}
-			} else {
-				parts := make([]string, 0, 4)
-				oneLine := strings.NewReplacer("\r", " ", "\n", " ")
-				for _, p := range []string{ts, action, e.Domain, e.Message} {
-					if p != "" {
-						parts = append(parts, oneLine.Replace(p))
-					}
-				}
-				if _, err := w.WriteString(strings.Join(parts, " | ") + "\n"); err != nil {
-					return err
-				}
-			}
-			first = false
-		}
-
-		if err := scanner.Err(); err != nil {
+		if err := streamLogFile(w, f, asJSON, filter, &first); err != nil {
 			return err
 		}
 	}
@@ -3288,6 +3241,74 @@ func streamLogExport(w *bufio.Writer, files []*os.File, asJSON bool, filter stri
 	}
 
 	return w.Flush()
+}
+
+func streamLogFile(w *bufio.Writer, f *os.File, asJSON bool, filter string, first *bool) error {
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 64*1024), 8*1024*1024)
+
+	for scanner.Scan() {
+		line := bytes.TrimSpace(scanner.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+
+		var e LogEntry
+		if json.Unmarshal(line, &e) != nil || !logEntryMatchesFilter(e, filter) {
+			continue
+		}
+
+		wrote, err := writeExportEntry(w, e, asJSON, *first)
+		if err != nil {
+			return err
+		}
+		if wrote {
+			*first = false
+		}
+	}
+
+	return scanner.Err()
+}
+
+func writeExportEntry(w *bufio.Writer, e LogEntry, asJSON bool, isFirst bool) (bool, error) {
+	ts := formatDashboardLogTimestamp(e.Timestamp)
+	action := strings.ToUpper(e.Action)
+
+	if asJSON {
+		data, marshalErr := json.Marshal(logExportEntry{
+			Time: ts, Action: action, Level: e.Level, Domain: e.Domain, Message: e.Message,
+		})
+		if marshalErr != nil {
+			return false, marshalErr
+		}
+
+		if !isFirst {
+			if _, err := w.WriteString(",\n"); err != nil {
+				return false, err
+			}
+		}
+
+		if _, err := w.Write(data); err != nil {
+			return false, err
+		}
+
+		return true, nil
+	}
+
+	oneLine := strings.NewReplacer("\r", " ", "\n", " ")
+	parts := make([]string, 0, 4)
+
+	for _, p := range []string{ts, action, e.Domain, e.Message} {
+		if p != "" {
+			parts = append(parts, oneLine.Replace(p))
+		}
+	}
+
+	if _, err := w.WriteString(strings.Join(parts, " | ") + "\n"); err != nil {
+		return false, err
+	}
+
+	return true, nil
 }
 
 func handleAPILogDelete(w http.ResponseWriter, r *http.Request) {
@@ -3485,7 +3506,7 @@ func collectLogEntriesNewestFirst(path string, gen, want int, filter string) []L
 				Level:    LogError,
 				Category: logCategoryFile,
 				Action:   ActionError,
-				Message:  fmt.Sprintf("%s: %v", t(phrases().FileCloseError, "Failed to close file"), err),
+				Message:  fmt.Sprintf("%s: %v", t(esc(phrases().FileCloseError), "Failed to close file"), err),
 			})
 		}
 	}()
@@ -3511,7 +3532,7 @@ func collectLogEntriesNewestFirst(path string, gen, want int, filter string) []L
 				Level:    LogError,
 				Category: logCategoryFile,
 				Action:   ActionError,
-				Message:  fmt.Sprintf("%s: %v", t(phrases().ScannerError, "Scanner error"), err),
+				Message:  fmt.Sprintf("%s: %v", t(esc(phrases().ScannerError), "Scanner error"), err),
 			})
 
 			break
@@ -3885,40 +3906,40 @@ func writeDashboardTop(w io.Writer, statusClass, statusText string) {
 
 		<div class="card system-stats-card" id="system-stats-card">
 			<div class="card-header card-header--space-between">
-				<span>🖥️ `+t(phrases().SystemStatsTitle, "System load")+`</span>
-				<span id="systemStatsUpdated" class="system-stats-updated">`+t(phrases().SystemStatsLoading, "Loading …")+`</span>
+				<span>🖥️ `+esc(t(phrases().SystemStatsTitle, "System load"))+`</span>
+				<span id="systemStatsUpdated" class="system-stats-updated">`+esc(t(phrases().SystemStatsLoading, "Loading …"))+`</span>
 			</div>
 			<div class="card-content">
 				<div class="system-metrics-grid">
 					<div class="system-metric">
-						<div class="system-metric-head"><span>`+t(phrases().SystemStatsCPU, "CPU")+`</span><strong id="sysCpu">--</strong></div>
+						<div class="system-metric-head"><span>`+esc(t(phrases().SystemStatsCPU, "CPU"))+`</span><strong id="sysCpu">--</strong></div>
 						<div class="system-progress"><div id="sysCpuBar" class="system-progress-bar"></div></div>
-						<div id="sysCpuSub" class="system-metric-sub">`+t(phrases().SystemStatsCPUDetecting, "Detecting CPU usage")+`</div>
+						<div id="sysCpuSub" class="system-metric-sub">`+esc(t(phrases().SystemStatsCPUDetecting, "Detecting CPU usage"))+`</div>
 					</div>
 					<div class="system-metric">
-						<div class="system-metric-head"><span>`+t(phrases().SystemStatsMemory, "RAM")+`</span><strong id="sysMem">--</strong></div>
+						<div class="system-metric-head"><span>`+esc(t(phrases().SystemStatsMemory, "RAM"))+`</span><strong id="sysMem">--</strong></div>
 						<div class="system-progress"><div id="sysMemBar" class="system-progress-bar"></div></div>
-						<div id="sysMemSub" class="system-metric-sub">`+t(phrases().SystemStatsMemoryDetecting, "Detecting memory usage")+`</div>
+						<div id="sysMemSub" class="system-metric-sub">`+esc(t(phrases().SystemStatsMemoryDetecting, "Detecting memory usage"))+`</div>
 					</div>
 					<div class="system-metric">
-						<div class="system-metric-head"><span>`+t(phrases().SystemStatsNetwork, "Network")+`</span><strong id="sysNet">--</strong></div>
-						<div id="sysNetSub" class="system-metric-sub">`+t(phrases().SystemStatsNetworkContainer, "RX / TX in the container network")+`</div>
+						<div class="system-metric-head"><span>`+esc(t(phrases().SystemStatsNetwork, "Network"))+`</span><strong id="sysNet">--</strong></div>
+						<div id="sysNetSub" class="system-metric-sub">`+esc(t(phrases().SystemStatsNetworkContainer, "RX / TX in the container network"))+`</div>
 					</div>
 					<div class="system-metric">
-						<div class="system-metric-head"><span>`+t(phrases().SystemStatsBlockIO, "Block I/O")+`</span><strong id="sysIO">--</strong></div>
-						<div id="sysIOSub" class="system-metric-sub">`+t(phrases().SystemStatsIOCgroup, "Read / write via cgroup")+`</div>
+						<div class="system-metric-head"><span>`+esc(t(phrases().SystemStatsBlockIO, "Block I/O"))+`</span><strong id="sysIO">--</strong></div>
+						<div id="sysIOSub" class="system-metric-sub">`+esc(t(phrases().SystemStatsIOCgroup, "Read / write via cgroup"))+`</div>
 					</div>
 				</div>
 
 				<div class="system-details-grid">
-					<div><span>`+t(phrases().SystemStatsEnvironment, "Environment")+`</span><strong id="sysEnvironment">--</strong></div>
-					<div><span>`+t(phrases().SystemStatsCPULimit, "CPU limit")+`</span><strong id="sysCpuLimit">--</strong></div>
-					<div><span>`+t(phrases().SystemStatsPIDs, "PIDs")+`</span><strong id="sysPids">--</strong></div>
-					<div><span>`+t(phrases().SystemStatsGoProcess, "Go process")+`</span><strong id="sysProcess">--</strong></div>
-					<div><span>`+t(phrases().SystemStatsCPUThrottling, "CPU throttling")+`</span><strong id="sysThrottle">--</strong></div>
-					<div><span>`+t(phrases().SystemStatsPressureAvg10, "Pressure avg10")+`</span><strong id="sysPressure">--</strong></div>
-					<div><span>`+t(phrases().SystemStatsNetworkTotal, "Network total")+`</span><strong id="sysNetTotal">--</strong></div>
-					<div><span>`+t(phrases().SystemStatsIOTotal, "I/O total")+`</span><strong id="sysIOTotal">--</strong></div>
+					<div><span>`+esc(t(phrases().SystemStatsEnvironment, "Environment"))+`</span><strong id="sysEnvironment">--</strong></div>
+					<div><span>`+esc(t(phrases().SystemStatsCPULimit, "CPU limit"))+`</span><strong id="sysCpuLimit">--</strong></div>
+					<div><span>`+esc(t(phrases().SystemStatsPIDs, "PIDs"))+`</span><strong id="sysPids">--</strong></div>
+					<div><span>`+esc(t(phrases().SystemStatsGoProcess, "Go process"))+`</span><strong id="sysProcess">--</strong></div>
+					<div><span>`+esc(t(phrases().SystemStatsCPUThrottling, "CPU throttling"))+`</span><strong id="sysThrottle">--</strong></div>
+					<div><span>`+esc(t(phrases().SystemStatsPressureAvg10, "Pressure avg10"))+`</span><strong id="sysPressure">--</strong></div>
+					<div><span>`+esc(t(phrases().SystemStatsNetworkTotal, "Network total"))+`</span><strong id="sysNetTotal">--</strong></div>
+					<div><span>`+esc(t(phrases().SystemStatsIOTotal, "I/O total"))+`</span><strong id="sysIOTotal">--</strong></div>
 				</div>
 			</div>
 		</div>
@@ -3926,7 +3947,7 @@ func writeDashboardTop(w io.Writer, statusClass, statusText string) {
 	`,
 		statusClass,
 		statusText,
-		phrases().LastUpdate,
+		esc(phrases().LastUpdate),
 		time.Now().Format("15:04:05"),
 		buildNotifierStatusHTML(),
 	)
@@ -4017,22 +4038,22 @@ func writeDashboardMetricsCard(
 				<!-- TOP STATS -->
 				<div class="metrics-top-grid">
 					<div>
-						<strong>`+phrases().TotalRequests+`:</strong>
+						<strong>`+esc(phrases().TotalRequests)+`:</strong>
 						<span id="mTotal">%v</span>
 					</div>
 
 					<div>
-						<strong>`+phrases().SuccessRate+`:</strong>
+						<strong>`+esc(phrases().SuccessRate)+`:</strong>
 						<span id="mSuccess" class="metric-success">%v</span>
 					</div>
 
 					<div>
-						<strong>`+phrases().AvgLatency+`:</strong>
+						<strong>`+esc(phrases().AvgLatency)+`:</strong>
 						<span id="mLatency">%v</span>
 					</div>
 
-					<div title="`+phrases().ClientErrors+` / `+phrases().ServerErrors+`">
-						<strong>`+phrases().Errors+`:</strong>
+					<div title="`+esc(phrases().ClientErrors)+` / `+esc(phrases().ServerErrors)+`">
+						<strong>`+esc(phrases().Errors)+`:</strong>
 						<span id="mErrors">%v / %v</span>
 					</div>
 				</div>
@@ -4040,7 +4061,7 @@ func writeDashboardMetricsCard(
 				<!-- LATENCY PERCENTILES -->
 				<div class="latency-box">
 					<div class="latency-box-label">
-						`+phrases().MetricLatencyPercentile+`
+						`+esc(phrases().MetricLatencyPercentile)+`
 					</div>
 
 					<div class="latency-grid">
@@ -4065,11 +4086,11 @@ func writeDashboardMetricsCard(
 				<div class="usage-section">
 					<div class="usage-header">
 						<span class="usage-limit-label">
-							`+phrases().HourlyLimitEst+`
+							`+esc(phrases().HourlyLimitEst)+`
 						</span>
 
 						<span id="mUsage" class="usage-count">
-							%v / %v `+phrases().RequestsLabel+`
+							%v / %v `+esc(phrases().RequestsLabel)+`
 						</span>
 					</div>
 
@@ -4082,7 +4103,7 @@ func writeDashboardMetricsCard(
 					</div>
 
 					<div class="usage-hint">
-						`+phrases().UsageLast60Min+`
+						`+esc(phrases().UsageLast60Min)+`
 					</div>
 				</div>
 
@@ -4092,7 +4113,7 @@ func writeDashboardMetricsCard(
 					<!-- HTTP METHODS -->
 					<div class="http-methods-box">
 						<div class="http-methods-label">
-							`+phrases().MetricHTTPMethods+`
+							`+esc(phrases().MetricHTTPMethods)+`
 						</div>
 
 						<div class="http-methods-grid">
@@ -4135,7 +4156,7 @@ func writeDashboardMetricsCard(
 					<!-- IP LATENCY -->
 					<div class="ip-latency-box">
 						<div class="ip-latency-label">
-							`+phrases().MetricIPLatency+`
+							`+esc(phrases().MetricIPLatency)+`
 						</div>
 
 						<div class="ip-latency-center">
@@ -4144,13 +4165,13 @@ func writeDashboardMetricsCard(
 							</div>
 
 							<div class="ip-latency-meta">
-								`+phrases().MetricAvgFrom+`
+								`+esc(phrases().MetricAvgFrom)+`
 								<span id="mIPCount">%v</span>
-								`+phrases().ChecksLabel+`
+								`+esc(phrases().ChecksLabel)+`
 							</div>
 
 							<div class="ip-latency-meta">
-								`+phrases().MetricLastCheck+`
+								`+esc(phrases().MetricLastCheck)+`
 								<span id="mLastIPCheck">%v</span>
 							</div>
 						</div>
@@ -4166,7 +4187,7 @@ func writeDashboardMetricsCard(
 	</div>
 	`,
 		stats["generated_at"],
-		phrases().APIPerformance,
+		esc(phrases().APIPerformance),
 
 		stats["total_requests"],
 		stats["success_rate"],
@@ -4216,19 +4237,19 @@ func writeDebugCard(w io.Writer) {
 	<div class="page-section" data-section="debug">
 		<div class="card">
 			<div class="card-header card-header--flex">
-				🐞 `+phrases().DebugLogTitle+` <span class="debug-badge">`+phrases().DebugLogLive+`</span>
+				🐞 `+esc(phrases().DebugLogTitle)+` <span class="debug-badge">`+esc(phrases().DebugLogLive)+`</span>
 			</div>
 			<div class="card-content">
 				<div class="debug-toolbar">
-					<input type="text" id="debug-filter" placeholder="`+phrases().DebugFilterPlaceholder+`"
+					<input type="text" id="debug-filter" placeholder="`+esc(phrases().DebugFilterPlaceholder)+`"
 						data-input="filterDebugLog(this.value)" class="debug-filter-input">
-					<button data-click="clearDebugLog()" class="action-btn debug-clear-btn">`+phrases().DebugClearBtn+`</button>
+					<button data-click="clearDebugLog()" class="action-btn debug-clear-btn">`+esc(phrases().DebugClearBtn)+`</button>
 					<label class="debug-autoscroll-label">
-						<input type="checkbox" id="debug-autoscroll" checked> `+phrases().DebugAutoscroll+`
+						<input type="checkbox" id="debug-autoscroll" checked> `+esc(phrases().DebugAutoscroll)+`
 					</label>
 				</div>
 				<div id="debug-log-container" class="debug-log-box">
-					<span class="debug-placeholder">`+phrases().DebugWaitingMsg+`</span>
+					<span class="debug-placeholder">`+esc(phrases().DebugWaitingMsg)+`</span>
 				</div>
 			</div>
 		</div>
@@ -4250,15 +4271,15 @@ func writeLogsCard(w io.Writer, logs []LogEntry, logTimeRange string, gen int, g
 		var sb strings.Builder
 		sb.WriteString(`<select id="logGenSelect" class="log-filter-select" data-change="onLogGenChange(this.value)">`)
 		for _, g := range gens {
-			label := phrases().LogGenCurrent
+			label := esc(phrases().LogGenCurrent)
 			if g.Gen > 0 {
-				label = fmt.Sprintf("%s .%d (%s)", phrases().LogGenArchive, g.Gen, g.ModTime.Local().Format(statusTimestampLayout))
+				label = esc(fmt.Sprintf("%s .%d (%s)", phrases().LogGenArchive, g.Gen, g.ModTime.Local().Format(statusTimestampLayout)))
 			}
 			selected := ""
 			if g.Gen == gen {
 				selected = " selected"
 			}
-			fmt.Fprintf(&sb, `<option value="%d"%s>%s</option>`, g.Gen, selected, esc(label))
+			fmt.Fprintf(&sb, `<option value="%d"%s>%s</option>`, g.Gen, selected, label)
 		}
 		sb.WriteString(`</select>`)
 		genSelectHTML = sb.String()
@@ -4274,7 +4295,7 @@ func writeLogsCard(w io.Writer, logs []LogEntry, logTimeRange string, gen int, g
 			<div class="card-header card-header--flex-wrap">
 				🧾 %s
 				<span class="logs-summary-meta">
-					(%d `+phrases().EntriesLabel+`)
+					(%d `+esc(phrases().EntriesLabel)+`)
 					%s
 				</span>
 			</div>
@@ -4282,20 +4303,20 @@ func writeLogsCard(w io.Writer, logs []LogEntry, logTimeRange string, gen int, g
        			<div class="log-filters">
 					%s
 					<select id="logFilterSelect" class="log-filter-select" data-change="filterLogs(this.value)">
-						<option value="all">`+phrases().FilterAll+`</option>
-						<option value="ERR">`+phrases().FilterErrors+`</option>
-						<option value="WARN">`+phrases().FilterWarnings+`</option>
-						<option value="LOGIN">`+phrases().FilterLogin+`</option>
-						<option value="LOGOUT">`+phrases().FilterLogout+`</option>
-						<option value="LOGINFAILED">`+phrases().FilterLoginFailed+`</option>
-						<option value="UPDATE">`+phrases().FilterUpdates+`</option>
-						<option value="START">`+phrases().FilterStarts+`</option>
-						<option value="STOP">`+phrases().FilterStop+`</option>
-						<option value="CREATE">`+phrases().FilterCreated+`</option>
-						<option value="CLEANUP">`+phrases().FilterCleanup+`</option>
-						<option value="SKIP">`+phrases().FilterSkip+`</option>
-						<option value="CONFIG">`+phrases().FilterConfig+`</option>
-						<option value="INFO">`+phrases().FilterInfo+`</option>
+						<option value="all">`+esc(phrases().FilterAll)+`</option>
+						<option value="ERR">`+esc(phrases().FilterErrors)+`</option>
+						<option value="WARN">`+esc(phrases().FilterWarnings)+`</option>
+						<option value="LOGIN">`+esc(phrases().FilterLogin)+`</option>
+						<option value="LOGOUT">`+esc(phrases().FilterLogout)+`</option>
+						<option value="LOGINFAILED">`+esc(phrases().FilterLoginFailed)+`</option>
+						<option value="UPDATE">`+esc(phrases().FilterUpdates)+`</option>
+						<option value="START">`+esc(phrases().FilterStarts)+`</option>
+						<option value="STOP">`+esc(phrases().FilterStop)+`</option>
+						<option value="CREATE">`+esc(phrases().FilterCreated)+`</option>
+						<option value="CLEANUP">`+esc(phrases().FilterCleanup)+`</option>
+						<option value="SKIP">`+esc(phrases().FilterSkip)+`</option>
+						<option value="CONFIG">`+esc(phrases().FilterConfig)+`</option>
+						<option value="INFO">`+esc(phrases().FilterInfo)+`</option>
 					</select>
 					<label class="log-select-all">
 					<input type="checkbox" id="logSelectAll" data-change="toggleLogSelectAll(this)">
@@ -4394,7 +4415,7 @@ func writeDomainsCard(w io.Writer, data map[string]any) {
 	_, _ = fmt.Fprint(w, `
 	<div class="page-section" data-section="domains">
 		<input type="text" class="search-box" id="domainSearch" inputmode="search" autocomplete="off"
-			placeholder="`+phrases().DomainSearchPlaceholder+`" data-input="filterDomains(this.value)">
+			placeholder="`+esc(phrases().DomainSearchPlaceholder)+`" data-input="filterDomains(this.value)">
 	`)
 
 	_, _ = fmt.Fprint(w, `<div id="domainContainer">`)
@@ -4422,7 +4443,7 @@ func writeSettingsSecuritySubpage(w io.Writer) {
 	_, _ = fmt.Fprint(w, `
 	<div class="page-section" data-section="settings-security">
 		<div class="card card--no-cv">
-			<div class="card-header">`+phrases().SettingsSecurity+`</div>
+			<div class="card-header">`+esc(phrases().SettingsSecurity)+`</div>
 			<div class="card-content">
 				`+securitySection+`
 			</div>
@@ -4437,7 +4458,7 @@ func writeSettingsSystemSubpage(w io.Writer, c Config) {
 	_, _ = fmt.Fprint(w, `
 	<div class="page-section" data-section="settings-system">
 		<div class="card card--no-cv">
-			<div class="card-header">`+phrases().SettingsSystem+`</div>
+			<div class="card-header">`+esc(phrases().SettingsSystem)+`</div>
 			<div class="card-content">
 				`+systemSection+`
 			</div>
@@ -4478,7 +4499,7 @@ func writeSettingsNotifySubpage(w io.Writer, c Config) {
 	_, _ = fmt.Fprint(w, `
 	<div class="page-section" data-section="settings-notify">
 		<div class="card card--no-cv">
-			<div class="card-header">`+phrases().SettingsNotify+`</div>
+			<div class="card-header">`+esc(phrases().SettingsNotify)+`</div>
 			<div class="card-content">
 				`+notifySection+`
 			</div>
@@ -4497,7 +4518,7 @@ func writeTOTPSection(w io.Writer, sess *Session, enabled bool) {
 	_, _ = fmt.Fprint(w, `
 	<div class="page-section" data-section="totp">
 		<div class="card totp-settings-card">
-			<div class="card-header">`+phrases().NavTotpJS+`</div>
+			<div class="card-header">`+esc(phrases().NavTotpJS)+`</div>
 			<div class="card-content totp-settings-wrap" id="totp-settings-content">
 				`+build2FASettingsFragmentForSession(sess, "", "")+`
 			</div>
@@ -4515,7 +4536,7 @@ func writeUsersSection(w io.Writer, isAdmin bool) {
 	_, _ = fmt.Fprint(w, `
 	<div class="page-section" data-section="users">
 		<div class="card">
-			<div class="card-header">`+phrases().SettingsUserManagement+`</div>
+			<div class="card-header">`+esc(phrases().SettingsUserManagement)+`</div>
 			<div class="card-content">
 				`+buildUsersSection()+`
 			</div>
@@ -4653,7 +4674,7 @@ func writeSingleDomainCard(
 						</div>
 					</div>
 					<div class="domain-card-meta" data-last-changed="%s" data-last-changed-unix="%d" data-uptime-id="%s">
-						<small>`+phrases().LastShort+` <span id="last-change-%s">%s</span></small>
+						<small>`+esc(phrases().LastShort)+` <span id="last-change-%s">%s</span></small>
 						<small class="domain-uptime-small">⏱️ <span id="uptime-%s">—</span></small>
 					</div>
 				</div>
@@ -4799,14 +4820,14 @@ func writeDomainHistoryRows(w io.Writer, h DomainHistory) {
 			w,
 			`<tr class="domain-history-more">
 				<td colspan="2">
-					`+fmt.Sprintf(phrases().HiddenEntriesFormat, end)+`
+					`+fmt.Sprintf(esc(phrases().HiddenEntriesFormat), end)+`
 				</td>
 			</tr>`,
 		)
 	}
 
 	if len(h.IPs) < 2 {
-		_, _ = fmt.Fprint(w, `<tr class="empty-history-row"><td colspan="2">`+phrases().NoMoreEntries+`</td></tr>`)
+		_, _ = fmt.Fprint(w, `<tr class="empty-history-row"><td colspan="2">`+esc(phrases().NoMoreEntries)+`</td></tr>`)
 	}
 }
 
@@ -4832,7 +4853,7 @@ func appFooterHTML() string {
 	return `
 <footer class="dashboard-footer dashboard-footer--positioned">
 	<div>
-		<span>` + esc(fmt.Sprintf(phrases().FooterMadeWithByFormat, time.Now().Year())) + `</span>
+		<span>` + esc(fmt.Sprintf(esc(phrases().FooterMadeWithByFormat), time.Now().Year())) + `</span>
 		<span class="dashboard-footer-sep">|</span>
 		<a href="https://github.com/CrazyUs3r/IONOS-DDNS"
 		   target="_blank"
@@ -4867,10 +4888,10 @@ func writeBackupSection(w io.Writer, isAdmin bool) {
 		_, _ = fmt.Fprint(w, `
 		<div class="page-section" data-section="backup">
 			<div class="card">
-				<div class="card-header">💾 `+t(phrases().BackupTitle, "Backup & Restore")+`</div>
+				<div class="card-header">💾 `+esc(t(phrases().BackupTitle, "Backup & Restore"))+`</div>
 				<div class="card-content">
 					<div class="backup-warning">
-						🔒 `+t(phrases().BackupAdminOnly, "Backup & Restore is only available for admins.")+`
+						🔒 `+esc(t(phrases().BackupAdminOnly, "Backup & Restore is only available for admins."))+`
 					</div>
 				</div>
 			</div>
@@ -4883,41 +4904,41 @@ func writeBackupSection(w io.Writer, isAdmin bool) {
 	_, _ = fmt.Fprint(w, `
 	<div class="page-section" data-section="backup">
 		<div class="card">
-			<div class="card-header">💾 `+t(phrases().BackupTitle, "Backup & Restore")+`</div>
+			<div class="card-header">💾 `+esc(t(phrases().BackupTitle, "Backup & Restore"))+`</div>
 			<div class="card-content">
 				<div class="backup-grid">
 					<div class="backup-box">
-						<h3>`+t(phrases().BackupCreateTitle, "Create backup")+`</h3>
-						<p>`+t(phrases().BackupCreateDesc, "Exports config, status, users, logs and current metrics as JSON.")+`</p>
-						<button class="action-btn" data-click="downloadFullBackup()">`+t(phrases().BackupDownloadBtn, "⬇️ Download backup")+`</button>
+						<h3>`+esc(t(phrases().BackupCreateTitle, "Create backup"))+`</h3>
+						<p>`+esc(t(phrases().BackupCreateDesc, "Exports config, status, users, logs and current metrics as JSON."))+`</p>
+						<button class="action-btn" data-click="downloadFullBackup()">`+esc(t(phrases().BackupDownloadBtn, "⬇️ Download backup"))+`</button>
 						<div class="backup-hint">
-							`+t(phrases().BackupSecretsHint, "Warning: The backup contains secrets and password hashes. Store it safely.")+`
+							`+esc(t(phrases().BackupSecretsHint, "Warning: The backup contains secrets and password hashes. Store it safely."))+`
 						</div>
 					</div>
 
 					<div class="backup-box">
-						<h3>`+t(phrases().BackupRestoreTitle, "Restore backup")+`</h3>
-						<p>`+t(phrases().BackupRestoreDesc, "Select a previously created backup and choose which areas should be restored.")+`</p>
+						<h3>`+esc(t(phrases().BackupRestoreTitle, "Restore backup"))+`</h3>
+						<p>`+esc(t(phrases().BackupRestoreDesc, "Select a previously created backup and choose which areas should be restored."))+`</p>
 
 						<input type="file" id="backup-file" class="search-box" accept="application/json,.json">
 
 						<label class="inline-check">
 							<input type="checkbox" id="restore-config" checked>
-							`+t(phrases().BackupRestoreConfig, "Restore config")+`
+							`+esc(t(phrases().BackupRestoreConfig, "Restore config"))+`
 						</label>
 
 						<label class="inline-check">
 							<input type="checkbox" id="restore-status" checked>
-							`+t(phrases().BackupRestoreStatus, "Restore domain status / history")+`
+							`+esc(t(phrases().BackupRestoreStatus, "Restore domain status / history"))+`
 						</label>
 
 						<label class="inline-check">
 							<input type="checkbox" id="restore-users">
-							`+t(phrases().BackupRestoreUsers, "Restore users")+`
+							`+esc(t(phrases().BackupRestoreUsers, "Restore users"))+`
 						</label>
 
 						<button class="action-btn btn-danger-soft backup-restore-btn" data-click="restoreFullBackup()">
-							`+t(phrases().BackupRestoreStartBtn, "♻️ Start restore")+`
+							`+esc(t(phrases().BackupRestoreStartBtn, "♻️ Start restore"))+`
 						</button>
 
 						<div id="backup-result" class="backup-result"></div>
@@ -4925,7 +4946,6 @@ func writeBackupSection(w io.Writer, isAdmin bool) {
 				</div>
 			</div>
 		</div>
-	</div>
 	`)
 }
 
@@ -4937,7 +4957,7 @@ func requireAdminAPI(w http.ResponseWriter, r *http.Request) bool {
 	sess, ok := sessionFromRequest(r)
 	if !ok || sess == nil || sess.Role != RoleAdmin {
 		writeJSON(w, http.StatusForbidden, map[string]string{
-			"error": t(phrases().BackupAdminRequired, "admin required"),
+			"error": esc(t(phrases().BackupAdminRequired, "admin required")),
 		})
 
 		return false
@@ -5074,16 +5094,16 @@ func parseBackupRestoreRequest(w http.ResponseWriter, r *http.Request) (backupRe
 
 	selection := backupRestoreSelectionFromForm(r)
 	if !selection.any() {
-		return backupRestoreRequest{}, http.StatusBadRequest, fmt.Errorf("%s", t(phrases().BackupNothingSelected, "nothing selected"))
+		return backupRestoreRequest{}, http.StatusBadRequest, fmt.Errorf("%s", esc(t(phrases().BackupNothingSelected, "nothing selected")))
 	}
 
 	file, _, err := r.FormFile("backup")
 	if err != nil {
-		return backupRestoreRequest{}, http.StatusBadRequest, fmt.Errorf("%s", t(phrases().BackupFileMissing, "backup file missing"))
+		return backupRestoreRequest{}, http.StatusBadRequest, fmt.Errorf("%s", esc(t(phrases().BackupFileMissing, "backup file missing")))
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			debugLog(logCategoryDashboard, "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
+			debugLog(logCategoryDashboard, "", fmt.Sprintf(esc(t(phrases().ErrBodyClose, "failed to close request body"))+": %v", err))
 		}
 	}()
 
@@ -5117,7 +5137,7 @@ func decodeDashboardBackup(file io.Reader) (dashboardBackup, error) {
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&backup); err != nil {
 		return dashboardBackup{}, fmt.Errorf(
-			t(phrases().BackupInvalidJSONFormat, "invalid backup json: %w"),
+			esc(t(phrases().BackupInvalidJSONFormat, "invalid backup json: %w")),
 			err,
 		)
 	}
@@ -5128,7 +5148,7 @@ func decodeDashboardBackup(file io.Reader) (dashboardBackup, error) {
 		}
 
 		return dashboardBackup{}, fmt.Errorf(
-			t(phrases().BackupInvalidJSONFormat, "invalid backup json: %w"),
+			esc(t(phrases().BackupInvalidJSONFormat, "invalid backup json: %w")),
 			err,
 		)
 	}
@@ -5375,7 +5395,7 @@ func restoreBackupConfig(ctx context.Context, backup dashboardBackup) (int, erro
 	defer configUpdateMu.Unlock()
 
 	if backup.Config == nil {
-		return http.StatusBadRequest, fmt.Errorf("%s", t(phrases().BackupContainsNoConfig, "backup contains no config"))
+		return http.StatusBadRequest, fmt.Errorf("%s", esc(t(phrases().BackupContainsNoConfig, "backup contains no config")))
 	}
 
 	oldCfg, err := applyBackupConfig(*backup.Config)
@@ -5389,7 +5409,7 @@ func restoreBackupConfig(ctx context.Context, backup dashboardBackup) (int, erro
 		invalidateSecretReplacer()
 
 		return http.StatusInternalServerError, fmt.Errorf(
-			t(phrases().BackupConfigSaveFailedFormat, "config save failed: %w"),
+			esc(t(phrases().BackupConfigSaveFailedFormat, "config save failed: %w")),
 			err,
 		)
 	}
@@ -5444,10 +5464,7 @@ func restoreBackupStatus(backup dashboardBackup) (int, error) {
 	if backup.Status == nil {
 		return http.StatusBadRequest, fmt.Errorf(
 			"%s",
-			t(
-				phrases().BackupContainsNoStatus,
-				"backup contains no status",
-			),
+			esc(t(phrases().BackupContainsNoStatus, "backup contains no status")),
 		)
 	}
 
@@ -5462,11 +5479,11 @@ func restoreBackupStatus(backup dashboardBackup) (int, error) {
 	statusMutex.Unlock()
 
 	if err != nil {
-		return http.StatusInternalServerError, fmt.Errorf(t(phrases().BackupStatusRestoreFailedFormat, "status restore failed: %w"), err)
+		return http.StatusInternalServerError, fmt.Errorf(esc(t(phrases().BackupStatusRestoreFailedFormat, "status restore failed: %w")), err)
 	}
 
 	if err := updateDomainsCache(); err != nil {
-		debugLog(logCategoryCache, "", fmt.Sprintf(t(phrases().ErrUpdateDomainsCache, "updateDomainsCache failed: %v"), err))
+		debugLog(logCategoryCache, "", fmt.Sprintf(esc(t(phrases().ErrUpdateDomainsCache, "updateDomainsCache failed: %v")), err))
 	}
 
 	return http.StatusOK, nil
@@ -5479,7 +5496,7 @@ func restoreBackupUsers(backup dashboardBackup) (int, error) {
 
 	if err := saveUsers(backup.Users); err != nil {
 		return http.StatusInternalServerError, fmt.Errorf(
-			t(phrases().BackupUsersRestoreFailedFormat, "users restore failed: %w"),
+			esc(t(phrases().BackupUsersRestoreFailedFormat, "users restore failed: %w")),
 			err,
 		)
 	}
@@ -5494,7 +5511,7 @@ func logBackupRestore(restored []string) {
 		Level:  LogWarn,
 		Action: ActionConfig,
 		Message: fmt.Sprintf(
-			t(phrases().BackupRestoredLogFormat, "Backup restored: %s"),
+			esc(t(phrases().BackupRestoredLogFormat, "Backup restored: %s")),
 			strings.Join(restored, ", "),
 		),
 	})
@@ -5509,12 +5526,12 @@ func writeDiagnoseSection(w io.Writer) {
 	<div class="page-section" data-section="diagnose">
 		<div class="card">
 			<div class="card-header card-header--space-between">
-				<span>🩺 `+t(phrases().DiagnoseTitle, "Diagnose / Health Center")+`</span>
-				<button class="action-btn topbar-action-btn" data-click="refreshDiagnosis()">`+t(phrases().DiagnoseRefreshBtn, "🔄 Refresh")+`</button>
+				<span>🩺 `+esc(t(phrases().DiagnoseTitle, "Diagnose / Health Center"))+`</span>
+				<button class="action-btn topbar-action-btn" data-click="refreshDiagnosis()">`+esc(t(phrases().DiagnoseRefreshBtn, "🔄 Refresh"))+`</button>
 			</div>
 			<div class="card-content">
 				<div id="diagnose-content" class="diag-loading">
-					`+t(phrases().DiagnoseLoading, "Loading diagnosis...")+`
+					`+esc(t(phrases().DiagnoseLoading, "Loading diagnosis..."))+`
 				</div>
 			</div>
 		</div>
@@ -5634,7 +5651,7 @@ func diagnoseDomainWarnings(domains []DomainConfig) []string {
 	}
 
 	if len(domains) == 0 {
-		warnings = append(warnings, t(phrases().DiagnoseNoDomainsConfigured, "No domains configured."))
+		warnings = append(warnings, esc(t(phrases().DiagnoseNoDomainsConfigured, "No domains configured.")))
 	}
 
 	return warnings
@@ -5644,12 +5661,12 @@ func diagnoseSingleDomainWarnings(dc DomainConfig) []string {
 	warnings := make([]string, 0)
 
 	if strings.TrimSpace(dc.FQDN) == "" {
-		warnings = append(warnings, t(phrases().DiagnoseDomainWithoutFQDN, "A domain without FQDN is configured."))
+		warnings = append(warnings, esc(t(phrases().DiagnoseDomainWithoutFQDN, "A domain without FQDN is configured.")))
 	}
 
 	if dc.TTL > 0 && dc.TTL < 60 {
 		warnings = append(warnings, fmt.Sprintf(
-			t(phrases().DiagnoseTTLTooLowFormat, "%s: TTL is very low."),
+			esc(t(phrases().DiagnoseTTLTooLowFormat, "%s: TTL is very low.")),
 			diagnosisDomainName(dc),
 		))
 	}
@@ -5664,7 +5681,7 @@ func diagnoseSingleDomainWarnings(dc DomainConfig) []string {
 func diagnosisDomainName(dc DomainConfig) string {
 	fqdn := strings.TrimSpace(dc.FQDN)
 	if fqdn == "" {
-		return t(phrases().DiagnoseUnknownDomain, "Unknown domain")
+		return esc(t(phrases().DiagnoseUnknownDomain, "Unknown domain"))
 	}
 
 	return fqdn
@@ -5677,7 +5694,7 @@ func providerCredentialWarning(dc DomainConfig) string {
 	case ProviderIONOS:
 		if dc.APIPrefix == "" || dc.APISecret == "" {
 			return fmt.Sprintf(
-				t(phrases().DiagnoseIonosCredentialsIncompleteFormat, "%s: IONOS credentials incomplete."),
+				esc(t(phrases().DiagnoseIonosCredentialsIncompleteFormat, "%s: IONOS credentials incomplete.")),
 				fqdn,
 			)
 		}
@@ -5685,7 +5702,7 @@ func providerCredentialWarning(dc DomainConfig) string {
 	case ProviderCloudflare:
 		if dc.CFToken == "" && (dc.CFEmail == "" || dc.CFSecret == "") {
 			return fmt.Sprintf(
-				t(phrases().DiagnoseCloudflareCredentialsIncompleteFormat, "%s: Cloudflare credentials incomplete."),
+				esc(t(phrases().DiagnoseCloudflareCredentialsIncompleteFormat, "%s: Cloudflare credentials incomplete.")),
 				fqdn,
 			)
 		}
@@ -5693,7 +5710,7 @@ func providerCredentialWarning(dc DomainConfig) string {
 	case ProviderIPv64:
 		if dc.IPv64Token == "" {
 			return fmt.Sprintf(
-				t(phrases().DiagnoseIpv64TokenMissingFormat, "%s: IPv64 token missing."),
+				esc(t(phrases().DiagnoseIpv64TokenMissingFormat, "%s: IPv64 token missing.")),
 				fqdn,
 			)
 		}
@@ -5706,7 +5723,7 @@ func providerCredentialWarning(dc DomainConfig) string {
 	case ProviderDNScale:
 		if strings.TrimSpace(dc.APIKey) == "" {
 			return fmt.Sprintf(
-				t(phrases().DiagnoseDNScaleAPIKeyMissingFormat, "%s: DNScale API Key missing."),
+				esc(t(phrases().DiagnoseDNScaleAPIKeyMissingFormat, "%s: DNScale API Key missing.")),
 				fqdn,
 			)
 		}
@@ -5714,7 +5731,7 @@ func providerCredentialWarning(dc DomainConfig) string {
 	case ProviderHetzner, ProviderHetznerCloud:
 		if hetznerToken(&dc) == "" {
 			return fmt.Sprintf(
-				t(phrases().DiagnoseHetznerTokenMissingFormat, "%s: Hetzner token missing."),
+				esc(t(phrases().DiagnoseHetznerTokenMissingFormat, "%s: Hetzner token missing.")),
 				fqdn,
 			)
 		}
@@ -5727,19 +5744,19 @@ func diagnoseGlobalConfigWarnings(cfg Config) []string {
 	warnings := make([]string, 0)
 
 	if cfg.DryRun {
-		warnings = append(warnings, t(phrases().DiagnoseDryRunActive, "Dry-run is active: DNS changes are not written."))
+		warnings = append(warnings, esc(t(phrases().DiagnoseDryRunActive, "Dry-run is active: DNS changes are not written.")))
 	}
 
 	if cfg.DebugEnabled {
-		warnings = append(warnings, t(phrases().DiagnoseDebugActive, "Debug mode is active."))
+		warnings = append(warnings, esc(t(phrases().DiagnoseDebugActive, "Debug mode is active.")))
 	}
 
 	if cfg.DebugHTTPRaw {
-		warnings = append(warnings, t(phrases().DiagnoseHTTPRawDebugActive, "HTTP raw debug is active. Sensitive data may appear in logs."))
+		warnings = append(warnings, esc(t(phrases().DiagnoseHTTPRawDebugActive, "HTTP raw debug is active. Sensitive data may appear in logs.")))
 	}
 
 	if cfg.Interval > 0 && cfg.Interval < 60 {
-		warnings = append(warnings, t(phrases().DiagnoseIntervalLow, "Update interval is very low."))
+		warnings = append(warnings, esc(t(phrases().DiagnoseIntervalLow, "Update interval is very low.")))
 	}
 
 	return warnings
@@ -5772,18 +5789,18 @@ func diagnoseConfigInfo(cfg Config) map[string]any {
 
 func diagnosisMainStatus(warnings []string, logWarnings int) (string, string) {
 	if !schedulerRanOnce.Load() {
-		return "starting", t(phrases().DiagnoseReasonSchedulerNotRun, "Scheduler has not run yet.")
+		return "starting", esc(t(phrases().DiagnoseReasonSchedulerNotRun, "Scheduler has not run yet."))
 	}
 
 	if !lastOk.Load() {
-		return "unhealthy", t(phrases().DiagnoseReasonLastSchedulerFailed, "The last scheduler run failed.")
+		return "unhealthy", esc(t(phrases().DiagnoseReasonLastSchedulerFailed, "The last scheduler run failed."))
 	}
 
 	if len(warnings) > 0 || logWarnings > 0 {
-		return "degraded", t(phrases().DiagnoseReasonWarningsButRunning, "There are warnings, but the service is running.")
+		return "degraded", esc(t(phrases().DiagnoseReasonWarningsButRunning, "There are warnings, but the service is running."))
 	}
 
-	return "healthy", t(phrases().DiagnoseReasonAllGood, "Everything looks good.")
+	return "healthy", esc(t(phrases().DiagnoseReasonAllGood, "Everything looks good."))
 }
 
 func formatDiagnosisTime(t time.Time) string {
@@ -5812,14 +5829,14 @@ func diagnoseFileInfo(name, path string) map[string]any {
 	}
 
 	if strings.TrimSpace(path) == "" {
-		out["error"] = t(phrases().DiagnosePathEmpty, "path empty")
+		out["error"] = esc(t(phrases().DiagnosePathEmpty, "path empty"))
 
 		return out
 	}
 
 	st, err := os.Stat(path)
 	if err != nil {
-		out["error"] = err.Error()
+		out["error"] = esc(t(phrases().DiagnosePathNotFound, "path not found"))
 
 		return out
 	}
@@ -5856,15 +5873,15 @@ type dnsPropagationResult struct {
 func normalizeDNSName(raw string) (string, error) {
 	name := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(raw)), ".")
 	if len(name) == 0 || len(name) > 253 {
-		return "", errors.New(t(phrases().DNSInvalidDomainName, "invalid domain name"))
+		return "", errors.New(esc(t(phrases().DNSInvalidDomainName, "invalid domain name")))
 	}
 	for label := range strings.SplitSeq(name, ".") {
 		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
-			return "", errors.New(t(phrases().DNSInvalidDomainName, "invalid domain name"))
+			return "", errors.New(esc(t(phrases().DNSInvalidDomainName, "invalid domain name")))
 		}
 		for _, r := range label {
 			if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' && r != '_' {
-				return "", errors.New(t(phrases().DNSInvalidDomainName, "invalid domain name"))
+				return "", errors.New(esc(t(phrases().DNSInvalidDomainName, "invalid domain name")))
 			}
 		}
 	}
@@ -5895,7 +5912,7 @@ func firstSystemNameserver() (string, error) {
 		return "", err
 	}
 
-	return "", errors.New(t(phrases().DNSNoNameserverFound, "no nameserver found in /etc/resolv.conf"))
+	return "", errors.New(esc(t(phrases().DNSNoNameserverFound, "no nameserver found in /etc/resolv.conf")))
 }
 
 func dnsResolverTargets() []dnsResolverTarget {
@@ -5906,12 +5923,12 @@ func dnsResolverTargets() []dnsResolverTarget {
 		key := strings.ToLower(addr)
 		seen[key] = struct{}{}
 		targets = append(targets, dnsResolverTarget{
-			Name:    fmt.Sprintf(t(phrases().DNSSystemResolverFormat, "System resolver (%s)"), addr),
+			Name:    fmt.Sprintf(esc(t(phrases().DNSSystemResolverFormat, "System resolver (%s)")), addr),
 			Address: addr,
 		})
 	} else {
 		seen["system"] = struct{}{}
-		targets = append(targets, dnsResolverTarget{Name: t(phrases().DNSSystemResolver, "System resolver"), System: true})
+		targets = append(targets, dnsResolverTarget{Name: esc(t(phrases().DNSSystemResolver, "System resolver")), System: true})
 	}
 
 	add := func(name, raw string) {
@@ -6059,7 +6076,7 @@ func handleAPIDNSPropagation(w http.ResponseWriter, r *http.Request) {
 
 func writeAuditDNSSection(w io.Writer, isAdmin bool) {
 	if !isAdmin {
-		_, _ = fmt.Fprint(w, `<div class="page-section" data-section="audit"><div class="card"><div class="card-header">`+phrases().NavAuditJS+`</div><div class="card-content"><div class="backup-warning">🔒 `+phrases().AuditAdminOnly+`</div></div></div></div>`)
+		_, _ = fmt.Fprint(w, `<div class="page-section" data-section="audit"><div class="card"><div class="card-header">`+esc(phrases().NavAuditJS)+`</div><div class="card-content"><div class="backup-warning">🔒 `+esc(phrases().AuditAdminOnly)+`</div></div></div></div>`)
 
 		return
 	}
@@ -6076,10 +6093,10 @@ func writeAuditDNSSection(w io.Writer, isAdmin bool) {
 		<div class="audit-dns-grid">
 			<div class="card audit-log-card audit-log-card-fixed">
 				<div class="card-header card-header--space-between">
-				<span>`+phrases().AuditLogTitle+` <span class="logs-summary-meta" id="audit-summary-meta"></span></span>
+				<span>`+esc(phrases().AuditLogTitle)+` <span class="logs-summary-meta" id="audit-summary-meta"></span></span>
 				<span class="audit-header-actions">
 					<select id="audit-status-filter" class="log-filter-select" data-change="filterAuditStatus(this.value)">
-						<option value="all">`+phrases().FilterAll+`</option>
+						<option value="all">`+esc(phrases().FilterAll)+`</option>
 						<option value="err">≥ 400</option>
 						<option value="2xx">2xx</option>
 						<option value="3xx">3xx</option>
@@ -6090,16 +6107,16 @@ func writeAuditDNSSection(w io.Writer, isAdmin bool) {
 					<select id="audit-gen-select" class="log-filter-select" data-change="onAuditGenChange(this.value)" hidden></select>
 					<button class="action-btn topbar-action-btn" data-click="exportAuditAll('txt')" title="`+esc(phrases().AuditExportAllTitle)+`">📦 TXT</button>
 					<button class="action-btn topbar-action-btn" data-click="exportAuditAll('json')" title="`+esc(phrases().AuditExportAllTitle)+`">📦 JSON</button>
-					<button class="action-btn topbar-action-btn" data-click="refreshAuditLog()">`+phrases().AuditRefreshBtn+`</button>
+					<button class="action-btn topbar-action-btn" data-click="refreshAuditLog()">`+esc(phrases().AuditRefreshBtn)+`</button>
 				</span>
 				</div>
-				<div class="card-content"><div id="audit-log-content" class="audit-log-container audit-loading">`+phrases().AuditLoadingJS+`</div></div>
+				<div class="card-content"><div id="audit-log-content" class="audit-log-container audit-loading">`+esc(phrases().AuditLoadingJS)+`</div></div>
 			</div>
 			<div class="card card--no-cv dns-propagation-card">
-				<div class="card-header">`+phrases().DNSPropagationTitle+`</div>
+				<div class="card-header">`+esc(phrases().DNSPropagationTitle)+`</div>
 				<div class="card-content">
-					<p class="audit-help">`+phrases().DNSPropagationHelp+`</p>
-					<div class="dns-check-controls"><input id="dns-propagation-domain" class="search-box" list="dns-domain-list" placeholder="host.example.com"><datalist id="dns-domain-list">%s</datalist><button class="action-btn" data-click="runDNSPropagation()">`+phrases().DNSCheckBtn+`</button></div>
+					<p class="audit-help">`+esc(phrases().DNSPropagationHelp)+`</p>
+					<div class="dns-check-controls"><input id="dns-propagation-domain" class="search-box" list="dns-domain-list" placeholder="host.example.com"><datalist id="dns-domain-list">%s</datalist><button class="action-btn" data-click="runDNSPropagation()">`+esc(phrases().DNSCheckBtn)+`</button></div>
 					<div id="dns-propagation-result" class="dns-propagation-result"></div>
 				</div>
 			</div>

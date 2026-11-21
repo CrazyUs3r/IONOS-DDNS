@@ -272,7 +272,7 @@ func cleanupTOTPStores(now time.Time) {
 func handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
-		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		http.Error(w, esc(t(phrases().APIErrorMethodNotAllowed, "Method not allowed")), http.StatusMethodNotAllowed)
 
 		return
 	}
@@ -330,7 +330,7 @@ func pendingTOTPTokenFromRequest(r *http.Request) string {
 
 func handleLoginTOTPPost(w http.ResponseWriter, r *http.Request, pendingToken string, pending pendingTOTPSession) (string, bool) {
 	if !loginLimiter.GetLimiter("totp:" + pending.UserID).Allow() {
-		return t(phrases().TotpLoginInvalidCode, "Too many attempts"), false
+		return esc(t(phrases().TotpLoginInvalidCode, "Too many attempts")), false
 	}
 	code := strings.TrimSpace(r.FormValue("totp_code"))
 	if foundUser, ok := validPendingTOTPUser(pending, code); ok {
@@ -390,7 +390,7 @@ func handleInvalidTOTPLogin(w http.ResponseWriter, r *http.Request, pendingToken
 		Action:  ActionConfig,
 		Message: fmt.Sprintf("🔐 2FA failed: %s from %s", pending.Username, getClientIP(r)),
 	})
-	errMsg := fmt.Sprintf("%s (%d attempts remaining)", t(phrases().TotpLoginInvalidCode, "Invalid code — please try again"), remaining)
+	errMsg := fmt.Sprintf("%s (%d attempts remaining)", esc(t(phrases().TotpLoginInvalidCode, "Invalid code — please try again")), remaining)
 
 	return errMsg, false
 }
@@ -426,7 +426,7 @@ func clearPendingTOTPCookie(w http.ResponseWriter, r *http.Request) {
 func handleSettings2FA(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != MethodGET && r.Method != MethodPOST {
-		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		http.Error(w, esc(t(phrases().APIErrorMethodNotAllowed, "Method not allowed")), http.StatusMethodNotAllowed)
 
 		return
 	}
@@ -446,7 +446,7 @@ func handleSettings2FA(w http.ResponseWriter, r *http.Request) {
 	users := loadUsers()
 	currentUser, ok := findDashboardUser(users, sess.UserID)
 	if !ok {
-		http.Error(w, t(phrases().TotpUserNotFound, "User not found"), http.StatusInternalServerError)
+		http.Error(w, esc(t(phrases().TotpUserNotFound, "User not found")), http.StatusInternalServerError)
 
 		return
 	}
@@ -474,7 +474,7 @@ func handleSettings2FA(w http.ResponseWriter, r *http.Request) {
 		users = loadUsers()
 		currentUser, ok = findDashboardUser(users, sess.UserID)
 		if !ok {
-			http.Error(w, t(phrases().TotpUserNotFound, "User not found"), http.StatusInternalServerError)
+			http.Error(w, esc(t(phrases().TotpUserNotFound, "User not found")), http.StatusInternalServerError)
 
 			return
 		}
@@ -509,6 +509,8 @@ func handleSettings2FAPost(r *http.Request, currentUser *DashboardUser) totpFlas
 		return handle2FAGenerate(r, currentUser)
 	case "confirm":
 		return handle2FAConfirm(r, currentUser)
+	case "cancel":
+		return handle2FACancel(currentUser)
 	case "disable":
 		return handle2FADisable(r, currentUser)
 	default:
@@ -519,42 +521,27 @@ func handleSettings2FAPost(r *http.Request, currentUser *DashboardUser) totpFlas
 func handle2FAGenerate(r *http.Request, currentUser *DashboardUser) totpFlash {
 	if totpEnabledForUser(currentUser) &&
 		!validateTOTPCode(currentUser.TOTPSecret, r.FormValue("totp_code")) {
-		return totpFlash{Message: t(
-			phrases().TotpFlashDisableInvalid,
-			"Invalid code — cannot replace secret",
-		), Type: flashTypeError}
+		return totpFlash{Message: esc(t(phrases().TotpFlashDisableInvalid, "Invalid code — cannot replace secret")), Type: flashTypeError}
 	}
 
 	secret, err := generateTOTPSecret()
 	if err != nil {
-		return totpFlash{Message: fmt.Sprintf(
-			t(phrases().TotpFlashGenerateSecretFailed, "Failed to generate secret: %s"),
-			err.Error(),
-		), Type: flashTypeError}
+		return totpFlash{Message: fmt.Sprintf(esc(t(phrases().TotpFlashGenerateSecretFailed, "Failed to generate secret: %s")), err.Error()), Type: flashTypeError}
 	}
 	storeTOTPPending(currentUser.ID, secret)
 
-	return totpFlash{Message: t(
-		phrases().TotpFlashScanConfirm,
-		"Scan the QR code and confirm with your current code",
-	), Type: flashTypeInfo}
+	return totpFlash{Message: esc(t(phrases().TotpFlashScanConfirm, "Scan the QR code and confirm with your current code")), Type: flashTypeInfo}
 }
 
 func handle2FAConfirm(r *http.Request, currentUser *DashboardUser) totpFlash {
 	pendingSecret, hasPending := loadTOTPPending(currentUser.ID)
 	if !hasPending {
-		return totpFlash{Message: t(
-			phrases().TotpFlashSetupExpired,
-			"Setup expired — please start again",
-		), Type: flashTypeError}
+		return totpFlash{Message: esc(t(phrases().TotpFlashSetupExpired, "Setup expired — please start again")), Type: flashTypeError}
 	}
 
 	code := strings.TrimSpace(r.FormValue("totp_code"))
 	if !validateTOTPCode(pendingSecret, code) {
-		return totpFlash{Message: t(
-			phrases().TotpFlashCodeInvalid,
-			"Code invalid — please try again",
-		), Type: flashTypeError}
+		return totpFlash{Message: esc(t(phrases().TotpFlashCodeInvalid, "Code invalid — please try again")), Type: flashTypeError}
 	}
 
 	err := mutateUsers(func(users []DashboardUser) ([]DashboardUser, error) {
@@ -570,26 +557,23 @@ func handle2FAConfirm(r *http.Request, currentUser *DashboardUser) totpFlash {
 		return nil, errUserNotFound
 	})
 	if err != nil {
-		return totpFlash{Message: fmt.Sprintf(
-			t(phrases().TotpFlashSaveFailed, "Could not save: %s"),
-			err.Error(),
-		), Type: flashTypeError}
+		return totpFlash{Message: fmt.Sprintf(esc(t(phrases().TotpFlashSaveFailed, "Could not save: %s")), err.Error()), Type: flashTypeError}
 	}
 	deleteTOTPPending(currentUser.ID)
 
-	return totpFlash{Message: t(
-		phrases().TotpFlashEnabled,
-		"✅ Two-factor authentication is now active",
-	), Type: flashTypeSuccess}
+	return totpFlash{Message: esc(t(phrases().TotpFlashEnabled, "✅ Two-factor authentication is now active")), Type: flashTypeSuccess}
+}
+
+func handle2FACancel(currentUser *DashboardUser) totpFlash {
+	deleteTOTPPending(currentUser.ID)
+
+	return totpFlash{Message: esc(t(phrases().TotpFlashCancel, "Setup cancelled - 2FA setup cancelled")), Type: flashTypeInfo}
 }
 
 func handle2FADisable(r *http.Request, currentUser *DashboardUser) totpFlash {
 	code := strings.TrimSpace(r.FormValue("totp_code"))
 	if !totpEnabledForUser(currentUser) || !validateTOTPCode(currentUser.TOTPSecret, code) {
-		return totpFlash{Message: t(
-			phrases().TotpFlashDisableInvalid,
-			"Invalid code — cannot disable 2FA",
-		), Type: flashTypeError}
+		return totpFlash{Message: esc(t(phrases().TotpFlashDisableInvalid, "Invalid code — cannot disable 2FA")), Type: flashTypeError}
 	}
 
 	err := mutateUsers(func(users []DashboardUser) ([]DashboardUser, error) {
@@ -605,17 +589,11 @@ func handle2FADisable(r *http.Request, currentUser *DashboardUser) totpFlash {
 		return nil, errUserNotFound
 	})
 	if err != nil {
-		return totpFlash{Message: fmt.Sprintf(
-			t(phrases().TotpFlashSaveFailed, "Could not save: %s"),
-			err.Error(),
-		), Type: flashTypeError}
+		return totpFlash{Message: fmt.Sprintf(esc(t(phrases().TotpFlashSaveFailed, "Could not save: %s")), err.Error()), Type: flashTypeError}
 	}
 	deleteTOTPPending(currentUser.ID)
 
-	return totpFlash{Message: t(
-		phrases().TotpFlashDisabled,
-		"🔓 Two-factor authentication has been disabled",
-	), Type: flashTypeSuccess}
+	return totpFlash{Message: esc(t(phrases().TotpFlashDisabled, "🔓 Two-factor authentication has been disabled")), Type: flashTypeSuccess}
 }
 
 func render2FASettings(w http.ResponseWriter, fragment bool, currentUser *DashboardUser, pendingSecret string, hasPending bool, flash totpFlash) {
@@ -634,7 +612,7 @@ func render2FASettings(w http.ResponseWriter, fragment bool, currentUser *Dashbo
 
 func handleAPI2FAStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodGET {
-		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		http.Error(w, esc(t(phrases().APIErrorMethodNotAllowed, "Method not allowed")), http.StatusMethodNotAllowed)
 
 		return
 	}
@@ -668,19 +646,19 @@ func handleAPI2FAStatus(w http.ResponseWriter, r *http.Request) {
 
 func handleSettings2FAQRCode(w http.ResponseWriter, r *http.Request) {
 	if r.Method != MethodGET {
-		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		http.Error(w, esc(t(phrases().APIErrorMethodNotAllowed, "Method not allowed")), http.StatusMethodNotAllowed)
 
 		return
 	}
 	if !authEnabled {
-		http.Error(w, phrases().AuthDisabled, http.StatusNotFound)
+		http.Error(w, esc(t(phrases().AuthDisabled, "Authentication is disabled")), http.StatusNotFound)
 
 		return
 	}
 
 	sess, ok := sessionFromRequest(r)
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		http.Error(w, esc(t(phrases().TotpUnauthorized, "Unauthorized")), http.StatusUnauthorized)
 
 		return
 	}
@@ -695,14 +673,14 @@ func handleSettings2FAQRCode(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if currentUser == nil {
-		http.Error(w, phrases().ErrUserNotFound, http.StatusInternalServerError)
+		http.Error(w, esc(t(phrases().ErrUserNotFound, "User not found")), http.StatusInternalServerError)
 
 		return
 	}
 
 	pendingSecret, hasPending := loadTOTPPending(currentUser.ID)
 	if !hasPending {
-		http.Error(w, "no pending 2FA setup", http.StatusNotFound)
+		http.Error(w, esc(t(phrases().TotpNoPendingSetup, "No pending 2FA setup")), http.StatusNotFound)
 
 		return
 	}
@@ -710,7 +688,7 @@ func handleSettings2FAQRCode(w http.ResponseWriter, r *http.Request) {
 	uri := totpProvisioningURI(pendingSecret, currentUser.Username, totpIssuer)
 	png, err := qrcode.Encode(uri, qrcode.Medium, 220)
 	if err != nil {
-		http.Error(w, "could not generate QR code", http.StatusInternalServerError)
+		http.Error(w, esc(t(phrases().TotpQRCodeGenerationFailed, "Could not generate QR code")), http.StatusInternalServerError)
 
 		return
 	}
@@ -765,7 +743,7 @@ func handleLoginPost2FA(w http.ResponseWriter, r *http.Request, user *DashboardU
 	log(LogContext{
 		Level:   LogInfo,
 		Action:  ActionLogin,
-		Message: fmt.Sprintf(phrases().LoginSuccessLog, user.Username, user.Role, getClientIP(r)),
+		Message: fmt.Sprintf(esc(t(phrases().LoginSuccessLog, "Login successful for user %s (Role: %s) from IP %s")), user.Username, user.Role, getClientIP(r)),
 	})
 
 	// #nosec G710 -- Redirect target is validated as a local URL.
@@ -843,10 +821,7 @@ func build2FASettingsFragment(user *DashboardUser, pendingSecret string, hasPend
 		uri := totpProvisioningURI(pendingSecret, user.Username, issuer)
 		mainContent = `
 <p class="totp-help">
-	` + esc(t(
-			phrases().TotpScanQrInstruction,
-			"Scan this QR code with Google Authenticator, Authy, Microsoft Authenticator or any TOTP app, then enter the 6-digit code below to confirm.",
-		)) + `
+	` + esc(t(phrases().TotpScanQrInstruction, "Scan this QR code with Google Authenticator, Authy, Microsoft Authenticator or any TOTP app, then enter the 6-digit code below to confirm.")) + `
 </p>
 ` + qrCodeImgTag(uri) + `
 <details class="totp-uri-details">
@@ -870,13 +845,16 @@ func build2FASettingsFragment(user *DashboardUser, pendingSecret string, hasPend
 	<button class="auth-btn totp-btn-muted" type="submit">
 		` + esc(t(phrases().TotpGenerateNewSecretButton, "🔄 Generate new secret")) + `
 	</button>
+</form>
+<form method="POST" action="` + formAction + `" data-totp-form class="totp-secondary-form">
+	<input type="hidden" name="action" value="cancel">
+	<button class="auth-btn totp-btn-muted" type="submit" formnovalidate>
+		` + esc(t(phrases().TotpCancelSetupButton, "❌ Cancel setup")) + `
+	</button>
 </form>`
 
 	case totpEnabledForUser(user):
-		activeSubtitle := fmt.Sprintf(
-			t(phrases().TotpActiveSubtitle, "Your account is protected with TOTP (%s)"),
-			issuer,
-		)
+		activeSubtitle := fmt.Sprintf(esc(t(phrases().TotpActiveSubtitle, "Your account is protected with TOTP (%s)")), issuer)
 
 		mainContent = `
 <div class="totp-status-box">
@@ -925,11 +903,7 @@ func build2FASettingsFragment(user *DashboardUser, pendingSecret string, hasPend
 </form>`
 	}
 
-	accountMeta := fmt.Sprintf(
-		t(phrases().TotpAccountMeta, "Account: %s · Role: %s"),
-		user.Username,
-		string(user.Role),
-	)
+	accountMeta := fmt.Sprintf(esc(t(phrases().TotpAccountMeta, "Account: %s · Role: %s")), user.Username, string(user.Role))
 
 	return `
 <div class="totp-settings-inline">
@@ -950,7 +924,7 @@ func build2FAPage(user *DashboardUser, pendingSecret string, hasPending bool, fl
 	<a href="/" class="totp-page-link">` + esc(t(phrases().TotpBackToDashboard, "← Back to Dashboard")) + `</a>
 </div>`
 
-	return authPageShell(t(phrases().TotpSettingsPageTitle, "2FA Settings"), body)
+	return authPageShell(esc(t(phrases().TotpSettingsPageTitle, "2FA Settings")), body)
 }
 
 func buildTOTPLoginPage(errMsg string) string {
@@ -979,7 +953,7 @@ func buildTOTPLoginPage(errMsg string) string {
 	</a>
 </div>`
 
-	return authPageShell(t(phrases().TotpVerificationPageTitle, "2FA Verification"), body)
+	return authPageShell(esc(t(phrases().TotpVerificationPageTitle, "2FA Verification")), body)
 }
 
 // ============================================================================

@@ -82,6 +82,7 @@ type Phrases struct {
 	DiagnoseDNScaleAPIKeyMissingFormat, DiagnoseHetznerTokenMissingFormat          string
 	DiagnoseUnknownDomain, DiagnoseDryRunActive, DiagnoseDebugActive               string
 	DiagnoseHTTPRawDebugActive, DiagnoseIntervalLow, DiagnosePathEmpty             string
+	DiagnosePathNotFound                                                           string
 
 	DiagnoseStatusHealthy, DiagnoseStatusDegraded, DiagnoseStatusStarting          string
 	DiagnoseStatusUnhealthy                                                        string
@@ -481,15 +482,16 @@ type Phrases struct {
 	WaitingForLogQueue, Providers, LogExportAllTitle, AuditExportAllTitle                                  string
 
 	// TOTP
-	TotpSettingsPageTitle, TotpVerificationPageTitle, TotpTitle, TotpAccountMeta                      string
-	TotpScanQrInstruction, TotpShowURIManually, TotpCodeFromAppLabel, TotpConfirmActivateButton       string
-	TotpGenerateNewSecretButton, TotpActiveTitle, TotpActiveSubtitle, TotpDisableInstruction          string
-	TotpCurrentCodeLabel, TotpDisableButton, TotpReplaceSecretButton, TotpInactiveTitle               string
-	TotpInactiveSubtitle, TotpSetupButton, TotpBackToDashboard, TotpLoginSubtitle, TotpLoginCodeLabel string
-	TotpVerifyButton, TotpBackToLogin, TotpQRAlt, TotpFlashGenerateSecretFailed, TotpFlashScanConfirm string
-	TotpFlashSetupExpired, TotpFlashCodeInvalid, TotpFlashSaveFailed, TotpFlashEnabled                string
-	TotpFlashDisableInvalid, TotpFlashDisabled, TotpLoginInvalidCode, TotpUserNotFound                string
-	NavTotpJS, TotpSettingsLoadFailedJS, TotpActionFailedJS, TotpBadgeActiveJS, TotpBadgeInactiveJS   string
+	TotpSettingsPageTitle, TotpVerificationPageTitle, TotpTitle, TotpAccountMeta                             string
+	TotpScanQrInstruction, TotpShowURIManually, TotpCodeFromAppLabel, TotpConfirmActivateButton              string
+	TotpGenerateNewSecretButton, TotpActiveTitle, TotpActiveSubtitle, TotpDisableInstruction                 string
+	TotpCurrentCodeLabel, TotpDisableButton, TotpReplaceSecretButton, TotpInactiveTitle                      string
+	TotpInactiveSubtitle, TotpSetupButton, TotpBackToDashboard, TotpLoginSubtitle, TotpLoginCodeLabel        string
+	TotpVerifyButton, TotpBackToLogin, TotpQRAlt, TotpFlashGenerateSecretFailed, TotpFlashScanConfirm        string
+	TotpFlashSetupExpired, TotpFlashCodeInvalid, TotpFlashSaveFailed, TotpFlashEnabled                       string
+	TotpFlashDisableInvalid, TotpFlashDisabled, TotpLoginInvalidCode, TotpUserNotFound                       string
+	NavTotpJS, TotpSettingsLoadFailedJS, TotpActionFailedJS, TotpBadgeActiveJS, TotpBadgeInactiveJS          string
+	TotpUnauthorized, TotpNoPendingSetup, TotpQRCodeGenerationFailed, TotpCancelSetupButton, TotpFlashCancel string
 
 	// Misc
 	ExportBtn string

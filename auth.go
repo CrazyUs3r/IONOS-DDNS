@@ -102,7 +102,7 @@ func initAuth(logsDir string) error {
 		log(LogContext{
 			Level:   LogWarn,
 			Action:  ActionConfig,
-			Message: phrases().AuthDisabled,
+			Message: esc(phrases().AuthDisabled),
 		})
 
 		return nil
@@ -125,9 +125,9 @@ func initAuth(logsDir string) error {
 			}
 
 			ip := getLocalIP()
-			titleLine := phrases().SetupRequired
-			tokenLine := fmt.Sprintf("%s: %s", phrases().SetupTokenLabel, setupToken)
-			urlLine := fmt.Sprintf("%s: http://%s:%s/setup", phrases().SetupOpenURL, ip, cfg.HTTPPort)
+			titleLine := esc(phrases().SetupRequired)
+			tokenLine := fmt.Sprintf("%s: %s", esc(phrases().SetupTokenLabel), setupToken)
+			urlLine := fmt.Sprintf("%s: http://%s:%s/setup", esc(phrases().SetupOpenURL), ip, cfg.HTTPPort)
 			width := maxLen(titleLine, tokenLine, urlLine)
 
 			logBoxBorder := func(left, mid, right string) {
@@ -781,7 +781,7 @@ func closeAuditWriterUnsafe() {
 	}
 	if auditFile != nil {
 		if err := auditFile.Close(); err != nil {
-			debugLog(logCategoryDashboard, "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
+			debugLog(logCategoryDashboard, "", fmt.Sprintf(esc(phrases().ErrBodyClose)+": %v", err))
 		}
 		auditFile = nil
 	}
@@ -1103,7 +1103,7 @@ func hasPermission(role UserRole, method, path string) bool {
 func handleLogin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
-		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
 
 		return
 	}
@@ -1171,11 +1171,11 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		errMsg = phrases().ErrInvalidLogin
+		errMsg = esc(phrases().ErrInvalidLogin)
 		log(LogContext{
 			Level:   LogWarn,
 			Action:  ActionLoginFail,
-			Message: fmt.Sprintf(phrases().LoginFailedLog, safeAuthLogValue(username), getClientIP(r)),
+			Message: fmt.Sprintf(esc(phrases().LoginFailedLog), safeAuthLogValue(username), getClientIP(r)),
 		})
 	}
 
@@ -1193,7 +1193,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 
 func handleLogout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
 
 		return
 	}
@@ -1203,7 +1203,7 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 		log(LogContext{
 			Level:   LogInfo,
 			Action:  ActionLogout,
-			Message: fmt.Sprintf(phrases().LogoutLog, sess.Username, sess.Role, getClientIP(r)),
+			Message: fmt.Sprintf(esc(phrases().LogoutLog), sess.Username, sess.Role, getClientIP(r)),
 		})
 	}
 	clearSessionCookie(w, r)
@@ -1222,7 +1222,7 @@ type setupForm struct {
 func handleSetup(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
-		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
 
 		return
 	}
@@ -1272,12 +1272,12 @@ func handleSetupPost(w http.ResponseWriter, r *http.Request) (string, bool) {
 	log(LogContext{
 		Level:   LogInfo,
 		Action:  ActionStart,
-		Message: fmt.Sprintf(phrases().FirstAdminCreatedLog, form.username),
+		Message: fmt.Sprintf(esc(phrases().FirstAdminCreatedLog), form.username),
 	})
 
 	sess := sessionStore.Create(&newUser, DefaultSessionMaxAge)
 	if sess == nil {
-		return phrases().ErrAccountCreate, false
+		return esc(phrases().ErrAccountCreate), false
 	}
 	setSessionCookie(w, r, sess)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -1295,13 +1295,13 @@ func validateSetupForm(r *http.Request) (setupForm, string) {
 
 	switch {
 	case setupToken == "" || subtle.ConstantTimeCompare([]byte(token), []byte(setupToken)) != 1:
-		return setupForm{}, phrases().ErrInvalidSetupToken
+		return setupForm{}, esc(phrases().ErrInvalidSetupToken)
 	case !validDashboardUsername(form.username):
-		return setupForm{}, phrases().ErrUsernameTooShort
+		return setupForm{}, esc(phrases().ErrUsernameTooShort)
 	case len(form.password) < 8:
-		return setupForm{}, phrases().ErrPasswordTooShort
+		return setupForm{}, esc(phrases().ErrPasswordTooShort)
 	case form.password != passwordConfirmation:
-		return setupForm{}, phrases().ErrPasswordsMismatch
+		return setupForm{}, esc(phrases().ErrPasswordsMismatch)
 	default:
 		return form, ""
 	}
@@ -1310,12 +1310,12 @@ func validateSetupForm(r *http.Request) (setupForm, string) {
 func createInitialAdmin(form setupForm) (DashboardUser, string) {
 	hash, err := hashPassword(form.password)
 	if err != nil {
-		return DashboardUser{}, phrases().ErrAccountCreate
+		return DashboardUser{}, esc(phrases().ErrAccountCreate)
 	}
 
 	userID, err := generateUserID()
 	if err != nil {
-		return DashboardUser{}, phrases().ErrAccountCreate
+		return DashboardUser{}, esc(phrases().ErrAccountCreate)
 	}
 
 	newUser := DashboardUser{
@@ -1326,7 +1326,7 @@ func createInitialAdmin(form setupForm) (DashboardUser, string) {
 		CreatedAt:    time.Now(),
 	}
 	if err := saveInitialAdmin(newUser); err != nil {
-		return DashboardUser{}, phrases().ErrAccountSave
+		return DashboardUser{}, esc(phrases().ErrAccountSave)
 	}
 
 	return newUser, ""
@@ -1373,7 +1373,7 @@ func handleAPIUsers(w http.ResponseWriter, r *http.Request) {
 	case MethodPOST:
 		handleCreateUser(w, r, sess)
 	default:
-		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
 	}
 }
 
@@ -1404,7 +1404,7 @@ func handleCreateUser(w http.ResponseWriter, r *http.Request, sess *Session) {
 	hash, err := hashPassword(req.Password)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{
-			"error": phrases().ErrHash,
+			"error": esc(phrases().ErrHash),
 		})
 
 		return
@@ -1420,7 +1420,7 @@ func handleCreateUser(w http.ResponseWriter, r *http.Request, sess *Session) {
 		Level:  LogInfo,
 		Action: ActionConfig,
 		Message: fmt.Sprintf(
-			phrases().UserCreatedLog,
+			esc(phrases().UserCreatedLog),
 			req.Username,
 			req.Role,
 			sess.Username,
@@ -1428,7 +1428,7 @@ func handleCreateUser(w http.ResponseWriter, r *http.Request, sess *Session) {
 	})
 
 	writeJSON(w, http.StatusOK, map[string]string{
-		"status": phrases().StatusCreated,
+		"status": esc(phrases().StatusCreated),
 	})
 }
 
@@ -1440,7 +1440,7 @@ func decodeCreateUserRequest(
 
 	if err := decodeJSONBody(w, r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": phrases().ErrInvalidJSON,
+			"error": esc(phrases().ErrInvalidJSON),
 		})
 
 		return createUserRequest{}, false
@@ -1450,7 +1450,7 @@ func decodeCreateUserRequest(
 
 	if !validDashboardUsername(req.Username) || len(req.Password) < 8 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": phrases().ErrUsernamePasswordMin,
+			"error": esc(phrases().ErrUsernamePasswordMin),
 		})
 
 		return createUserRequest{}, false
@@ -1458,7 +1458,7 @@ func decodeCreateUserRequest(
 
 	if !isValidRole(req.Role) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": phrases().ErrInvalidRole,
+			"error": esc(phrases().ErrInvalidRole),
 		})
 
 		return createUserRequest{}, false
@@ -1504,14 +1504,14 @@ func usernameExists(users []DashboardUser, username string) bool {
 func writeCreateUserError(w http.ResponseWriter, err error) {
 	if errors.Is(err, errUsernameTaken) {
 		writeJSON(w, http.StatusConflict, map[string]string{
-			"error": phrases().ErrUsernameTaken,
+			"error": esc(phrases().ErrUsernameTaken),
 		})
 
 		return
 	}
 
 	writeJSON(w, http.StatusInternalServerError, map[string]string{
-		"error": phrases().ErrSave,
+		"error": esc(phrases().ErrSave),
 	})
 }
 
@@ -1523,7 +1523,7 @@ func handleAPIUsersID(w http.ResponseWriter, r *http.Request) {
 
 	id := strings.TrimPrefix(r.URL.Path, "/api/users/")
 	if id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": phrases().ErrMissingID})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": esc(phrases().ErrMissingID)})
 
 		return
 	}
@@ -1534,7 +1534,7 @@ func handleAPIUsersID(w http.ResponseWriter, r *http.Request) {
 	case MethodDELETE:
 		handleDeleteUser(w, id, sess.UserID)
 	default:
-		http.Error(w, phrases().APIErrorMethodNotAllowed, http.StatusMethodNotAllowed)
+		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
 	}
 }
 
@@ -1545,7 +1545,7 @@ func handleUpdateUser(w http.ResponseWriter, r *http.Request, id string) {
 	}
 
 	if err := decodeJSONBody(w, r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": phrases().ErrInvalidJSON})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": esc(phrases().ErrInvalidJSON)})
 
 		return
 	}
@@ -1553,21 +1553,21 @@ func handleUpdateUser(w http.ResponseWriter, r *http.Request, id string) {
 	err := updateUserByID(id, req.Role, req.Password)
 	switch {
 	case errors.Is(err, errUserNotFound):
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": phrases().ErrUserNotFound})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": esc(phrases().ErrUserNotFound)})
 
 		return
 	case errors.Is(err, errLastAdmin), errors.Is(err, errInvalidRole),
 		errors.Is(err, errPasswordShort), errors.Is(err, errNoUserChanges):
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": esc(phrases().ErrSave)})
 
 		return
 	case err != nil:
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": phrases().ErrSave})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": esc(phrases().ErrSave)})
 
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": phrases().StatusUpdated})
+	writeJSON(w, http.StatusOK, map[string]string{"status": esc(phrases().StatusUpdated)})
 }
 
 type userUpdate struct {
@@ -1691,12 +1691,12 @@ func isValidRole(role UserRole) bool {
 
 func requireAdmin(w http.ResponseWriter, r *http.Request) (*Session, bool) {
 	if !authEnabled {
-		return &Session{Username: t(phrases().AuthDisabledActor, "auth-disabled"), Role: RoleAdmin}, true
+		return &Session{Username: esc(t(phrases().AuthDisabledActor, "auth-disabled")), Role: RoleAdmin}, true
 	}
 
 	sess, ok := sessionFromRequest(r)
 	if !ok || sess.Role != RoleAdmin {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": phrases().ErrForbidden})
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": esc(phrases().ErrForbidden)})
 
 		return nil, false
 	}
@@ -1706,7 +1706,7 @@ func requireAdmin(w http.ResponseWriter, r *http.Request) (*Session, bool) {
 
 func handleDeleteUser(w http.ResponseWriter, id, currentUserID string) {
 	if id == currentUserID {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": phrases().ErrOwnAccountDelete})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": esc(phrases().ErrOwnAccountDelete)})
 
 		return
 	}
@@ -1718,18 +1718,18 @@ func handleDeleteUser(w http.ResponseWriter, id, currentUserID string) {
 		return
 	}
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": phrases().ErrSave})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": esc(phrases().ErrSave)})
 
 		return
 	}
 
 	if !found {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": phrases().ErrUserNotFound})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": esc(phrases().ErrUserNotFound)})
 
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": phrases().StatusDeleted})
+	writeJSON(w, http.StatusOK, map[string]string{"status": esc(phrases().StatusDeleted)})
 }
 
 func removeUserByID(id string) (bool, error) {
@@ -1978,7 +1978,7 @@ func readAuditEntries(path string, limit int) ([]auditEntry, int, string, string
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			debugLog(logCategoryDashboard, "", fmt.Sprintf(phrases().ErrBodyClose+": %v", err))
+			debugLog(logCategoryDashboard, "", fmt.Sprintf(esc(phrases().ErrBodyClose)+": %v", err))
 		}
 	}()
 
@@ -2055,7 +2055,7 @@ func listAuditGenerations() []auditGenerationInfo {
 
 func handleAPIAudit(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, esc(phrases().APIErrorMethodNotAllowed), http.StatusMethodNotAllowed)
+		http.Error(w, esc(esc(phrases().APIErrorMethodNotAllowed)), http.StatusMethodNotAllowed)
 
 		return
 	}
@@ -2079,7 +2079,7 @@ func handleAPIAudit(w http.ResponseWriter, r *http.Request) {
 	entries, total, oldestTimestamp, latestTimestamp, err := readAuditEntries(path, auditReadLimit)
 	if err != nil {
 		debugLog(logCategoryAudit, "", fmt.Sprintf("audit read failed: %v", err))
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": phrases().ErrSave})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": esc(phrases().ErrSave)})
 
 		return
 	}
@@ -2416,26 +2416,26 @@ func buildLoginPage(errMsg, redirect string) string {
 	action := "/login?redirect=" + url.QueryEscape(safeLocalRedirect(redirect))
 	body := `
 	<div class="auth-logo">🌐</div>
-	<div class="auth-title">` + phrases().DashboardTitle + `</div>
-	<div class="auth-sub">` + phrases().LoginSubtitle + `</div>
+	<div class="auth-title">` + esc(phrases().DashboardTitle) + `</div>
+	<div class="auth-sub">` + esc(phrases().LoginSubtitle) + `</div>
 	` + errHTML + `
 	<form method="POST" action="` + esc(action) + `">
 		<div class="auth-field">
-			<label class="auth-label">` + phrases().Username + `</label>
+			<label class="auth-label">` + esc(phrases().Username) + `</label>
 			<input class="auth-input" type="text" name="username" autofocus autocomplete="username" required>
 		</div>
 		<div class="auth-field">
-			<label class="auth-label">` + phrases().Password + `</label>
+			<label class="auth-label">` + esc(phrases().Password) + `</label>
 			<div class="input-with-action">
 				<input id="login-password" class="auth-input" type="password" name="password" autocomplete="current-password" required>
 				` + passwordToggleButton("login-password") + `
 			</div>
 		</div>
-		<button class="auth-btn" type="submit">🔐 ` + phrases().LoginButton + `</button>
+		<button class="auth-btn" type="submit">🔐 ` + esc(phrases().LoginButton) + `</button>
 	</form>
-	<div class="auth-hint">` + phrases().LoginHint + `</div>`
+	<div class="auth-hint">` + esc(phrases().LoginHint) + `</div>`
 
-	return authPageShell(phrases().LoginTitle, body)
+	return authPageShell(esc(phrases().LoginTitle), body)
 }
 
 func buildSetupPage(errMsg string) string {
@@ -2446,36 +2446,36 @@ func buildSetupPage(errMsg string) string {
 
 	body := `
 	<div class="auth-logo">🔐</div>
-	<div class="auth-title">` + phrases().SetupHeading + `</div>
-	<div class="auth-sub">` + phrases().SetupSubtitle + `</div>
+	<div class="auth-title">` + esc(phrases().SetupHeading) + `</div>
+	<div class="auth-sub">` + esc(phrases().SetupSubtitle) + `</div>
 	` + errHTML + `
 	<form method="POST" action="/setup">
 		<div class="auth-field">
-			<label class="auth-label">` + phrases().SetupToken + `</label>
+			<label class="auth-label">` + esc(phrases().SetupToken) + `</label>
 			<input class="auth-input" type="text" name="setup_token" autofocus autocomplete="off" required
 				style="font-family:monospace;font-size:0.8rem;">
 		</div>
 		<div class="auth-field">
-			<label class="auth-label">` + phrases().Username + `</label>
+			<label class="auth-label">` + esc(phrases().Username) + `</label>
 			<input class="auth-input" type="text" name="username" autocomplete="username" required>
 		</div>
 		<div class="auth-field">
-			<label class="auth-label">` + phrases().Password + ` <small style="opacity:0.5">(` + phrases().PasswordMinHint + `)</small></label>
+			<label class="auth-label">` + esc(phrases().Password) + ` <small style="opacity:0.5">(` + esc(phrases().PasswordMinHint) + `)</small></label>
 			<div class="input-with-action">
 				<input id="setup-password" class="auth-input" type="password" name="password" autocomplete="new-password" required>
 				` + passwordToggleButton("setup-password") + `
 			</div>
 		</div>
 		<div class="auth-field">
-			<label class="auth-label">` + phrases().PasswordConfirm + `</label>
+			<label class="auth-label">` + esc(phrases().PasswordConfirm) + `</label>
 			<div class="input-with-action">
 				<input id="setup-password2" class="auth-input" type="password" name="password2" autocomplete="new-password" required>
 				` + passwordToggleButton("setup-password2") + `
 			</div>
 		</div>
-		<button class="auth-btn" type="submit">✅ ` + phrases().SetupButton + `</button>
+		<button class="auth-btn" type="submit">✅ ` + esc(phrases().SetupButton) + `</button>
 	</form>
-	<div class="auth-hint">` + phrases().SetupHint + `</div>`
+	<div class="auth-hint">` + esc(phrases().SetupHint) + `</div>`
 
-	return authPageShell(phrases().SetupTitle, body)
+	return authPageShell(esc(phrases().SetupTitle), body)
 }
